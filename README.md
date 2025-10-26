@@ -45,5 +45,7 @@ See [SPEC.md](./SPEC.md) for detailed product and engineering specifications.
 
 ## License
 
-Private project - All rights reserved
+Copyright © 2025. All rights reserved.
+
+This is a private project. Unauthorized copying, distribution, or use of this software is strictly prohibited.
 
