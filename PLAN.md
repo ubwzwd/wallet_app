@@ -22,9 +22,9 @@ This plan covers the complete implementation of M1 milestone:
 ## Phase 1: Backend Foundation
 
 ### 1.1 Project Setup & Docker Environment
-- [ ] Create `backend/` directory structure
-- [ ] Initialize Python project with `pyproject.toml` (Poetry or pip)
-- [ ] Setup dependencies:
+- [x] Create `backend/` directory structure
+- [x] Initialize Python project with `pyproject.toml` (Poetry or pip)
+- [x] Setup dependencies:
   - FastAPI, Uvicorn
   - SQLAlchemy 2.0, Alembic
   - Pydantic v2
@@ -33,19 +33,19 @@ This plan covers the complete implementation of M1 milestone:
   - httpx (for API calls)
   - psycopg2-binary (PostgreSQL driver)
   - python-multipart (file upload support)
-- [ ] Create `Dockerfile` for FastAPI app
-- [ ] Create `docker-compose.yml` with PostgreSQL service
-- [ ] Create `.env.example` with required environment variables:
+- [x] Create `Dockerfile` for FastAPI app
+- [x] Create `docker-compose.yml` with PostgreSQL service
+- [x] Create `env.example` with required environment variables:
   ```
   DATABASE_URL=postgresql://user:password@localhost:5432/wallet_db
   SECRET_KEY=your-secret-key-here
   ALGORITHM=HS256
   ACCESS_TOKEN_EXPIRE_MINUTES=30
   ```
-- [ ] Add `.gitignore` for Python (.env, __pycache__, .venv, etc.)
-- [ ] Test: `docker-compose up` should start PostgreSQL
+- [x] Add `.gitignore` for Python (.env, __pycache__, .venv, etc.)
+- [ ] Test: `docker-compose up` should start PostgreSQL (requires Docker Desktop WSL2 integration)
 
-**Deliverable**: Working Docker environment with PostgreSQL
+**Deliverable**: Working Docker environment with PostgreSQL (ready to test when Docker is configured)
 
 ---
 
