@@ -43,9 +43,9 @@ This plan covers the complete implementation of M1 milestone:
   ACCESS_TOKEN_EXPIRE_MINUTES=30
   ```
 - [x] Add `.gitignore` for Python (.env, __pycache__, .venv, etc.)
-- [ ] Test: `docker-compose up` should start PostgreSQL (requires Docker Desktop WSL2 integration)
+- [x] Test: `docker-compose up` should start PostgreSQL (requires Docker Desktop WSL2 integration)
 
-**Deliverable**: Working Docker environment with PostgreSQL (ready to test when Docker is configured)
+**Deliverable**: ✅ Working Docker environment with PostgreSQL
 
 ---
 
