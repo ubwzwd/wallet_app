@@ -10,9 +10,43 @@ import { useState } from 'react';
  * Main App Content
  */
 function AppContent() {
-  const { isLoading, isAuthenticated, user } = useAuth();
-  const [testInput, setTestInput] = useState('');
-  const [testPassword, setTestPassword] = useState('');
+  const { isLoading, isAuthenticated, user, login, logout } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setLoginError('Please enter email and password');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    try {
+      await login({ email, password });
+      Alert.alert('Success', 'Login successful!');
+      setEmail('');
+      setPassword('');
+    } catch (error: any) {
+      const errorMessage = error.message || 'Login failed. Please try again.';
+      setLoginError(errorMessage);
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      Alert.alert('Logged Out', 'You have been logged out successfully.');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -36,55 +70,69 @@ function AppContent() {
         {isAuthenticated && user ? (
           <>
             <Text style={styles.statusText}>✅ Logged in as: {user.email}</Text>
-            <Text style={styles.statusText}>Currency: {user.base_currency}</Text>
+            <Text style={styles.statusText}>💰 Currency: {user.base_currency}</Text>
+            <Text style={styles.statusText}>🆔 User ID: {user.id.substring(0, 8)}...</Text>
+            <Button
+              title="Logout"
+              variant="secondary"
+              size="small"
+              onPress={handleLogout}
+              style={styles.logoutButton}
+            />
           </>
         ) : (
           <Text style={styles.statusText}>❌ Not logged in</Text>
         )}
       </Card>
 
-      {/* Components Demo Card */}
-      <Card variant="outlined" style={styles.demoCard}>
-        <Text style={styles.cardTitle}>Components Demo</Text>
-        
-        <Input
-          label="Email Input"
-          placeholder="Enter your email"
-          value={testInput}
-          onChangeText={setTestInput}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-
-        <Input
-          label="Password Input"
-          placeholder="Enter your password"
-          value={testPassword}
-          onChangeText={setTestPassword}
-          isPassword
-        />
-
-        <View style={styles.buttonRow}>
-          <Button
-            title="Primary"
-            onPress={() => Alert.alert('Primary Button', 'You pressed the primary button!')}
-            style={styles.button}
+      {/* Login Form (shown when not authenticated) */}
+      {!isAuthenticated && (
+        <Card variant="outlined" style={styles.loginCard}>
+          <Text style={styles.cardTitle}>Login</Text>
+          <Text style={styles.loginHint}>
+            Test with existing user or create one in backend
+          </Text>
+          
+          <Input
+            label="Email"
+            placeholder="Enter your email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            error={loginError}
           />
-          <Button
-            title="Secondary"
-            variant="secondary"
-            onPress={() => Alert.alert('Secondary', 'Secondary button pressed!')}
-            style={styles.button}
-          />
-        </View>
 
-        <Button
-          title="Danger Button"
-          variant="danger"
-          size="large"
-          onPress={() => Alert.alert('Danger', 'Danger button pressed!')}
-        />
-      </Card>
+          <Input
+            label="Password"
+            placeholder="Enter your password"
+            value={password}
+            onChangeText={setPassword}
+            isPassword
+          />
+
+          <Button
+            title={isLoggingIn ? "Logging in..." : "Login"}
+            onPress={handleLogin}
+            loading={isLoggingIn}
+            disabled={!email || !password}
+            size="large"
+          />
+        </Card>
+      )}
+
+      {/* User Info (shown when authenticated) */}
+      {isAuthenticated && user && (
+        <Card variant="outlined" style={styles.userCard}>
+          <Text style={styles.cardTitle}>Welcome Back! 👋</Text>
+          <Text style={styles.welcomeText}>
+            You are successfully logged in and ready to manage your finances.
+          </Text>
+          <Text style={styles.comingSoonText}>
+            🚧 Transaction screens coming next...
+          </Text>
+        </Card>
+      )}
 
       <StatusBar style="auto" />
     </Screen>
@@ -134,7 +182,10 @@ const styles = StyleSheet.create({
   statusCard: {
     marginBottom: 16,
   },
-  demoCard: {
+  loginCard: {
+    marginBottom: 16,
+  },
+  userCard: {
     marginBottom: 16,
   },
   cardTitle: {
@@ -146,14 +197,27 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     color: '#4b5563',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
+  loginHint: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  logoutButton: {
+    marginTop: 12,
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: '#4b5563',
     marginBottom: 12,
+    lineHeight: 20,
   },
-  button: {
-    flex: 1,
+  comingSoonText: {
+    fontSize: 14,
+    color: '#0ea5e9',
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
