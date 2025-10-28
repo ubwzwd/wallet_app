@@ -328,27 +328,39 @@ This plan covers the complete implementation of M1 milestone:
 
 ---
 
-### 2.5 Account Management Screens
+### 2.5 Finance Source Management Screens
 
-- [ ] Create `src/api/accounts.ts`:
-  - `getAccounts()`, `createAccount()`, `updateAccount()`
-- [ ] Create `src/screens/AccountsScreen.tsx`:
-  - List all user accounts (use TanStack Query)
-  - Show account name, type, currency
-  - "Add Account" button
-  - Pull-to-refresh
-  - Navigate to account details
-- [ ] Create `src/screens/AddAccountScreen.tsx`:
-  - Form: name, type (dropdown: checking/savings/credit), currency (searchable picker)
-  - Submit and navigate back
-- [ ] Create `src/screens/AccountDetailScreen.tsx`:
-  - Show account info
-  - Edit button (modal or navigation)
-  - Archive button
-  - List recent transactions for this account
-- [ ] Test: Create, view, edit accounts
+- [x] Create `src/api/financeSources.ts`:
+  - `getFinanceSources()`, `createFinanceSource()`, `updateFinanceSource()`
+  - Support for includeArchived parameter
+- [x] Create `src/screens/FinanceSourcesScreen.tsx`:
+  - List all finance sources with TanStack Query
+  - Show name, type, currency in cards
+  - Show/hide archived toggle
+  - Edit and Archive/Unarchive buttons
+  - "Add New" button
+  - Pull-to-refresh support
+  - Empty state with helpful message
+- [x] Create `src/screens/FinanceSourceFormScreen.tsx`:
+  - Combined add/edit form
+  - Name, type, currency fields
+  - Type selection (checking, savings, credit, cash, investment, other)
+  - Currency selection (USD, EUR, GBP, CNY, SGD, HKD)
+  - Form validation
+  - Success/error handling
+- [x] Integrate into HomeScreen:
+  - Quick actions button
+  - Simple navigation between screens
+  - View state management
+- [x] Test: Create, view, edit, archive finance sources
 
-**Deliverable**: Account management UI
+**Deliverable**: ✅ Complete Finance Source management with CRUD operations
+
+**Implementation Notes**:
+- Using TanStack Query for data fetching and caching
+- Automatic query invalidation after mutations
+- Optimistic UI updates
+- Type and currency cannot be changed after creation (by design)
 
 ---
 
