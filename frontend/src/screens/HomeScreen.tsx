@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import { Screen, Card, Button } from '@/components';
 import { useAuth } from '@/store/AuthContext';
+import { FinanceSourcesScreen } from './FinanceSourcesScreen';
+import { FinanceSourceFormScreen } from './FinanceSourceFormScreen';
+import type { FinanceSource } from '@/types/api';
+
+type HomeView = 'main' | 'finance-sources' | 'add-source' | 'edit-source';
 
 export function HomeScreen() {
   const { user, logout, isAuthenticated } = useAuth();
+  const [currentView, setCurrentView] = useState<HomeView>('main');
+  const [selectedSource, setSelectedSource] = useState<FinanceSource | undefined>();
 
   const handleLogout = async () => {
     Alert.alert(
@@ -37,6 +44,47 @@ export function HomeScreen() {
     );
   }
 
+  // Show Finance Sources screen
+  if (currentView === 'finance-sources') {
+    return (
+      <FinanceSourcesScreen
+        onCreatePress={() => setCurrentView('add-source')}
+        onEditPress={(source) => {
+          setSelectedSource(source);
+          setCurrentView('edit-source');
+        }}
+      />
+    );
+  }
+
+  // Show Add Finance Source form
+  if (currentView === 'add-source') {
+    return (
+      <FinanceSourceFormScreen
+        onSuccess={() => setCurrentView('finance-sources')}
+        onCancel={() => setCurrentView('finance-sources')}
+      />
+    );
+  }
+
+  // Show Edit Finance Source form
+  if (currentView === 'edit-source' && selectedSource) {
+    return (
+      <FinanceSourceFormScreen
+        source={selectedSource}
+        onSuccess={() => {
+          setSelectedSource(undefined);
+          setCurrentView('finance-sources');
+        }}
+        onCancel={() => {
+          setSelectedSource(undefined);
+          setCurrentView('finance-sources');
+        }}
+      />
+    );
+  }
+
+  // Main Home Screen
   return (
     <Screen>
       <View style={styles.container}>
@@ -73,15 +121,24 @@ export function HomeScreen() {
           </View>
         </Card>
 
-        {/* Coming Soon Card */}
+        {/* Quick Actions Card */}
         <Card variant="outlined" style={styles.card}>
-          <Text style={styles.cardTitle}>🚧 Coming Soon</Text>
-          <Text style={styles.comingSoonText}>
-            • Finance Sources Management{'\n'}
-            • Transaction Tracking{'\n'}
-            • Reports & Analytics{'\n'}
-            • Multi-currency Support
-          </Text>
+          <Text style={styles.cardTitle}>Quick Actions</Text>
+          
+          <Button
+            title="💳 Manage Finance Sources"
+            variant="secondary"
+            onPress={() => setCurrentView('finance-sources')}
+            style={styles.quickButton}
+          />
+
+          <Button
+            title="💰 Transactions (Coming Soon)"
+            variant="secondary"
+            onPress={() => Alert.alert('Coming Soon', 'Transaction management is coming in Phase 2.6!')}
+            style={styles.quickButton}
+            disabled
+          />
         </Card>
 
         {/* Logout Button */}
@@ -140,6 +197,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 24,
+  },
+  quickButton: {
+    marginBottom: 8,
   },
   logoutButton: {
     marginTop: 'auto',
