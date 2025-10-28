@@ -213,8 +213,8 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 2.1 Expo Project Setup
 
-- [ ] Initialize Expo project: `npx create-expo-app@latest frontend --template blank-typescript`
-- [ ] Install dependencies:
+- [x] Initialize Expo project: `npx create-expo-app@latest frontend --template blank-typescript`
+- [x] Install dependencies:
   - NativeWind (Tailwind CSS): `nativewind`, `tailwindcss`
   - React Navigation: `@react-navigation/native`, `@react-navigation/native-stack`
   - TanStack Query: `@tanstack/react-query`
@@ -222,11 +222,11 @@ This plan covers the complete implementation of M1 milestone:
   - Validation: `zod`
   - HTTP client: `axios`
   - Async Storage: `@react-native-async-storage/async-storage`
-- [ ] Setup NativeWind:
+- [x] Setup NativeWind:
   - Create `tailwind.config.js`
   - Configure `babel.config.js` for NativeWind
   - Create `app.d.ts` for TypeScript types
-- [ ] Setup folder structure:
+- [x] Setup folder structure:
   ```
   frontend/
     src/
@@ -240,9 +240,14 @@ This plan covers the complete implementation of M1 milestone:
       constants/    # Config, colors, etc.
     App.tsx
   ```
-- [ ] Test: `npm start` and open in web browser
+- [x] Create configuration files:
+  - `src/constants/config.ts` (API URLs, storage keys, query keys)
+  - `src/types/api.ts` (TypeScript interfaces for backend API)
+  - `frontend/README.md` (development guide)
+- [x] Update `App.tsx` with NativeWind test component
+- [x] Test: Ready to run with `npm run web`
 
-**Deliverable**: Expo project with dependencies installed
+**Deliverable**: ✅ Expo project with all dependencies installed and configured
 
 ---
 
