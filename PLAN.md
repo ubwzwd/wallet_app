@@ -158,9 +158,13 @@ This plan covers the complete implementation of M1 milestone:
   - `POST /transactions` - create transaction with tags
     - Auto-use default_source_id if source_id not provided
     - Validate source belongs to user
+    - Support `transfer_pair_id` for linking transfer transactions
   - `GET /transactions` - list with filters (source_id, from/to date, tag, pagination)
   - `GET /transactions/{id}` - get single transaction (owner check)
   - `PATCH /transactions/{id}` - update transaction
+  - `DELETE /transactions/{id}` - delete transaction
+    - Single transaction: delete 1 record
+    - Transfer transaction (has `transfer_pair_id`): delete all paired records
 - [x] Implement pagination (offset/limit, max 100)
 - [x] Test: CRUD operations
   - Created income transaction (+$5000, positive amount) ✅
@@ -168,6 +172,9 @@ This plan covers the complete implementation of M1 milestone:
   - Listed all transactions (2 records, date ordered) ✅
   - Retrieved single transaction ✅
   - Updated transaction (description and tags) ✅
+  - Created transfer (2 paired transactions with shared `transfer_pair_id`) ✅
+  - Deleted transfer (automatically deleted both paired transactions) ✅
+  - Deleted single transaction (only 1 deleted) ✅
 - [ ] Add real-time currency conversion logic (TODO for future):
   - Fetch current exchange rate from Frankfurter API
   - Convert `tx.amount` (in `tx.currency`) to `user.base_currency`
@@ -177,7 +184,9 @@ This plan covers the complete implementation of M1 milestone:
 
 **Design Notes**:
 - Amount sign determines income/expense (no separate `type` field)
-- Transfers = two transactions with "transfer" tag
+- Transfers = two transactions with "transfer" tag + shared `transfer_pair_id`
+  - Deleting one transfer transaction automatically deletes all paired transactions
+  - Database has indexed `transfer_pair_id` column for efficient queries
 - Tags normalized (lowercase, trimmed)
 - Conversion fields present in schema (currently null, to be implemented)
 - Default source handling working correctly
