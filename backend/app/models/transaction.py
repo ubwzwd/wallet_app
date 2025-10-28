@@ -22,6 +22,7 @@ class Transaction(Base):
     occurred_at = Column(Date, nullable=False, index=True)  # Transaction date
     description = Column(String, nullable=True)
     merchant = Column(String, nullable=True)
+    transfer_pair_id = Column(UUID(as_uuid=True), nullable=True, index=True)  # Links paired transfer transactions
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships

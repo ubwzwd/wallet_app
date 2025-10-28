@@ -63,7 +63,8 @@ def create_transaction(
         currency=transaction_data.currency.upper(),
         occurred_at=transaction_data.occurred_at,
         description=transaction_data.description,
-        merchant=transaction_data.merchant
+        merchant=transaction_data.merchant,
+        transfer_pair_id=transaction_data.transfer_pair_id  # For transfer linking
     )
     
     db.add(new_transaction)
@@ -91,6 +92,7 @@ def create_transaction(
         occurred_at=new_transaction.occurred_at,
         description=new_transaction.description,
         merchant=new_transaction.merchant,
+        transfer_pair_id=new_transaction.transfer_pair_id,
         created_at=new_transaction.created_at,
         tags=[tag.tag for tag in new_transaction.tags],
         converted_amount=None,  # TODO: Add conversion logic
@@ -99,6 +101,61 @@ def create_transaction(
     )
     
     return response
+
+
+@router.delete("/{transaction_id}")
+def delete_transaction(
+    transaction_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a transaction.
+    
+    If the transaction is part of a transfer (has transfer_pair_id), 
+    all paired transactions will be deleted together.
+    
+    Only the owner can delete their transactions.
+    
+    Returns:
+        - deleted_count: Number of transactions deleted (1 for regular, 2 for transfers)
+        - message: Success message
+    """
+    # Fetch transaction with owner check
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.user_id == current_user.id  # Security: owner check
+    ).first()
+    
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction {transaction_id} not found"
+        )
+    
+    # Check if this is a transfer (has transfer_pair_id)
+    if transaction.transfer_pair_id:
+        # Delete all transactions with the same transfer_pair_id
+        deleted_count = db.query(Transaction).filter(
+            Transaction.transfer_pair_id == transaction.transfer_pair_id,
+            Transaction.user_id == current_user.id  # Security: ensure all belong to user
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "deleted_count": deleted_count,
+            "message": f"Transfer deleted successfully ({deleted_count} transactions)"
+        }
+    else:
+        # Delete single transaction
+        db.delete(transaction)
+        db.commit()
+        
+        return {
+            "deleted_count": 1,
+            "message": "Transaction deleted successfully"
+        }
 
 
 @router.get("", response_model=List[TransactionResponse])
@@ -186,6 +243,7 @@ def list_transactions(
             occurred_at=tx.occurred_at,
             description=tx.description,
             merchant=tx.merchant,
+            transfer_pair_id=tx.transfer_pair_id,
             created_at=tx.created_at,
             tags=[tag_obj.tag for tag_obj in tx.tags],
             converted_amount=None,  # TODO: Add conversion logic
@@ -229,6 +287,7 @@ def get_transaction(
         occurred_at=transaction.occurred_at,
         description=transaction.description,
         merchant=transaction.merchant,
+        transfer_pair_id=transaction.transfer_pair_id,
         created_at=transaction.created_at,
         tags=[tag.tag for tag in transaction.tags],
         converted_amount=None,  # TODO: Add conversion logic
@@ -237,6 +296,61 @@ def get_transaction(
     )
     
     return response
+
+
+@router.delete("/{transaction_id}")
+def delete_transaction(
+    transaction_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a transaction.
+    
+    If the transaction is part of a transfer (has transfer_pair_id), 
+    all paired transactions will be deleted together.
+    
+    Only the owner can delete their transactions.
+    
+    Returns:
+        - deleted_count: Number of transactions deleted (1 for regular, 2 for transfers)
+        - message: Success message
+    """
+    # Fetch transaction with owner check
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.user_id == current_user.id  # Security: owner check
+    ).first()
+    
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction {transaction_id} not found"
+        )
+    
+    # Check if this is a transfer (has transfer_pair_id)
+    if transaction.transfer_pair_id:
+        # Delete all transactions with the same transfer_pair_id
+        deleted_count = db.query(Transaction).filter(
+            Transaction.transfer_pair_id == transaction.transfer_pair_id,
+            Transaction.user_id == current_user.id  # Security: ensure all belong to user
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "deleted_count": deleted_count,
+            "message": f"Transfer deleted successfully ({deleted_count} transactions)"
+        }
+    else:
+        # Delete single transaction
+        db.delete(transaction)
+        db.commit()
+        
+        return {
+            "deleted_count": 1,
+            "message": "Transaction deleted successfully"
+        }
 
 
 @router.patch("/{transaction_id}", response_model=TransactionResponse)
@@ -308,6 +422,7 @@ def update_transaction(
         occurred_at=transaction.occurred_at,
         description=transaction.description,
         merchant=transaction.merchant,
+        transfer_pair_id=transaction.transfer_pair_id,
         created_at=transaction.created_at,
         tags=[tag.tag for tag in transaction.tags],
         converted_amount=None,  # TODO: Add conversion logic
@@ -316,4 +431,59 @@ def update_transaction(
     )
     
     return response
+
+
+@router.delete("/{transaction_id}")
+def delete_transaction(
+    transaction_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a transaction.
+    
+    If the transaction is part of a transfer (has transfer_pair_id), 
+    all paired transactions will be deleted together.
+    
+    Only the owner can delete their transactions.
+    
+    Returns:
+        - deleted_count: Number of transactions deleted (1 for regular, 2 for transfers)
+        - message: Success message
+    """
+    # Fetch transaction with owner check
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.user_id == current_user.id  # Security: owner check
+    ).first()
+    
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction {transaction_id} not found"
+        )
+    
+    # Check if this is a transfer (has transfer_pair_id)
+    if transaction.transfer_pair_id:
+        # Delete all transactions with the same transfer_pair_id
+        deleted_count = db.query(Transaction).filter(
+            Transaction.transfer_pair_id == transaction.transfer_pair_id,
+            Transaction.user_id == current_user.id  # Security: ensure all belong to user
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "deleted_count": deleted_count,
+            "message": f"Transfer deleted successfully ({deleted_count} transactions)"
+        }
+    else:
+        # Delete single transaction
+        db.delete(transaction)
+        db.commit()
+        
+        return {
+            "deleted_count": 1,
+            "message": "Transaction deleted successfully"
+        }
 

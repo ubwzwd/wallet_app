@@ -48,6 +48,10 @@ class TransactionCreate(BaseModel):
         example=["food", "groceries"],
         description="List of tags for categorization"
     )
+    transfer_pair_id: Optional[UUID] = Field(
+        None,
+        description="If this is a transfer, this ID links it to the paired transaction"
+    )
 
 
 class TransactionUpdate(BaseModel):
@@ -93,6 +97,7 @@ class TransactionResponse(BaseModel):
     occurred_at: date = Field(..., description="Transaction date")
     description: Optional[str] = Field(None, description="Transaction description")
     merchant: Optional[str] = Field(None, description="Merchant name")
+    transfer_pair_id: Optional[UUID] = Field(None, description="If this is a transfer, links to paired transaction")
     created_at: datetime = Field(..., description="Record creation timestamp")
     
     # Currency conversion fields (calculated at query time)
