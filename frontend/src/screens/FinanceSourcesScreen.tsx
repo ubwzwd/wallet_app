@@ -9,9 +9,10 @@ import type { FinanceSource } from '@/types/api';
 interface FinanceSourcesScreenProps {
   onCreatePress: () => void;
   onEditPress: (source: FinanceSource) => void;
+  onBackPress: () => void;
 }
 
-export function FinanceSourcesScreen({ onCreatePress, onEditPress }: FinanceSourcesScreenProps) {
+export function FinanceSourcesScreen({ onCreatePress, onEditPress, onBackPress }: FinanceSourcesScreenProps) {
   const queryClient = useQueryClient();
   const [includeArchived, setIncludeArchived] = useState(false);
 
@@ -127,7 +128,16 @@ export function FinanceSourcesScreen({ onCreatePress, onEditPress }: FinanceSour
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Finance Sources</Text>
+          <View style={styles.headerTop}>
+            <Button
+              title="← Home"
+              variant="secondary"
+              size="small"
+              onPress={onBackPress}
+              style={styles.backButton}
+            />
+            <Text style={styles.title}>Finance Sources</Text>
+          </View>
           <Text style={styles.subtitle}>Manage your accounts and payment methods</Text>
         </View>
 
@@ -176,11 +186,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 4,
+  },
+  backButton: {
+    minWidth: 80,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1f2937',
-    marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,

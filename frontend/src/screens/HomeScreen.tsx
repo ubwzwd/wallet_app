@@ -56,6 +56,7 @@ export function HomeScreen() {
           setSelectedSource(source);
           setCurrentView('edit-source');
         }}
+        onBackPress={() => setCurrentView('main')}
       />
     );
   }
@@ -96,6 +97,7 @@ export function HomeScreen() {
           setSelectedTransaction(transaction);
           setCurrentView('edit-transaction');
         }}
+        onBackPress={() => setCurrentView('main')}
       />
     );
   }

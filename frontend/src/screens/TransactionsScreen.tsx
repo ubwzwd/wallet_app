@@ -9,9 +9,10 @@ import type { Transaction } from '@/types/api';
 interface TransactionsScreenProps {
   onCreatePress: () => void;
   onEditPress: (transaction: Transaction) => void;
+  onBackPress: () => void;
 }
 
-export function TransactionsScreen({ onCreatePress, onEditPress }: TransactionsScreenProps) {
+export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: TransactionsScreenProps) {
   const queryClient = useQueryClient();
   const [limit] = useState(50);
 
@@ -170,7 +171,16 @@ export function TransactionsScreen({ onCreatePress, onEditPress }: TransactionsS
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Transactions</Text>
+          <View style={styles.headerLeft}>
+            <Button
+              title="← Home"
+              variant="secondary"
+              size="small"
+              onPress={onBackPress}
+              style={styles.backButton}
+            />
+            <Text style={styles.title}>Transactions</Text>
+          </View>
           <Button
             title="Add New"
             size="small"
@@ -211,6 +221,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backButton: {
+    minWidth: 80,
   },
   title: {
     fontSize: 24,
