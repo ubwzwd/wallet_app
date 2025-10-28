@@ -1,9 +1,12 @@
 """Pydantic schemas for currency and exchange rate operations."""
 from decimal import Decimal
-from typing import Dict
+from typing import Dict, Annotated
 from datetime import date
 
 from pydantic import BaseModel, Field
+
+# Type alias for ISO 4217 currency codes
+CurrencyCode = Annotated[str, Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")]
 
 
 class CurrencyList(BaseModel):
