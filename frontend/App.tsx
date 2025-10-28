@@ -1,14 +1,18 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, Alert } from 'react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/store/AuthContext';
 import { queryClient } from '@/utils/queryClient';
+import { Screen, Card, Button, Input } from '@/components';
+import { useState } from 'react';
 
 /**
  * Main App Content
  */
 function AppContent() {
   const { isLoading, isAuthenticated, user } = useAuth();
+  const [testInput, setTestInput] = useState('');
+  const [testPassword, setTestPassword] = useState('');
 
   if (isLoading) {
     return (
@@ -20,27 +24,70 @@ function AppContent() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
+    <Screen>
+      <View style={styles.header}>
         <Text style={styles.title}>🎉 Wallet App</Text>
-        <Text style={styles.subtitle}>Frontend environment is ready!</Text>
-        <Text style={styles.description}>
-          Expo + TypeScript + Auth Context ✅
-        </Text>
-        
-        {isAuthenticated && user && (
-          <View style={styles.userInfo}>
-            <Text style={styles.userText}>Logged in as: {user.email}</Text>
-            <Text style={styles.userText}>Currency: {user.base_currency}</Text>
-          </View>
-        )}
-        
-        {!isAuthenticated && (
-          <Text style={styles.statusText}>Not logged in</Text>
-        )}
+        <Text style={styles.subtitle}>UI Components Demo</Text>
       </View>
+
+      {/* Auth Status Card */}
+      <Card variant="elevated" style={styles.statusCard}>
+        <Text style={styles.cardTitle}>Auth Status</Text>
+        {isAuthenticated && user ? (
+          <>
+            <Text style={styles.statusText}>✅ Logged in as: {user.email}</Text>
+            <Text style={styles.statusText}>Currency: {user.base_currency}</Text>
+          </>
+        ) : (
+          <Text style={styles.statusText}>❌ Not logged in</Text>
+        )}
+      </Card>
+
+      {/* Components Demo Card */}
+      <Card variant="outlined" style={styles.demoCard}>
+        <Text style={styles.cardTitle}>Components Demo</Text>
+        
+        <Input
+          label="Email Input"
+          placeholder="Enter your email"
+          value={testInput}
+          onChangeText={setTestInput}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
+        <Input
+          label="Password Input"
+          placeholder="Enter your password"
+          value={testPassword}
+          onChangeText={setTestPassword}
+          isPassword
+        />
+
+        <View style={styles.buttonRow}>
+          <Button
+            title="Primary"
+            onPress={() => Alert.alert('Primary Button', 'You pressed the primary button!')}
+            style={styles.button}
+          />
+          <Button
+            title="Secondary"
+            variant="secondary"
+            onPress={() => Alert.alert('Secondary', 'Secondary button pressed!')}
+            style={styles.button}
+          />
+        </View>
+
+        <Button
+          title="Danger Button"
+          variant="danger"
+          size="large"
+          onPress={() => Alert.alert('Danger', 'Danger button pressed!')}
+        />
+      </Card>
+
       <StatusBar style="auto" />
-    </View>
+    </Screen>
   );
 }
 
@@ -65,59 +112,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
   },
-  card: {
-    backgroundColor: '#0ea5e9',
-    padding: 24,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    minWidth: 300,
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  description: {
-    color: '#ffffff',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    opacity: 0.9,
-  },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: '#666',
   },
-  userInfo: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+  header: {
+    marginBottom: 24,
+    alignItems: 'center',
   },
-  userText: {
-    color: '#ffffff',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 4,
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  statusCard: {
+    marginBottom: 16,
+  },
+  demoCard: {
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 12,
   },
   statusText: {
-    color: '#ffffff',
     fontSize: 14,
-    textAlign: 'center',
-    marginTop: 16,
-    fontStyle: 'italic',
-    opacity: 0.8,
+    color: '#4b5563',
+    marginBottom: 4,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  button: {
+    flex: 1,
   },
 });
