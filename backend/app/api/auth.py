@@ -16,14 +16,16 @@ from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """
-    Register a new user.
+    Register a new user and return access token.
     
     - **email**: Valid email address (must be unique)
     - **password**: At least 8 characters
     - **base_currency**: ISO 4217 currency code (e.g., USD, EUR, GBP)
+    
+    Returns JWT access token for immediate login.
     """
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
@@ -53,7 +55,10 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
     
-    return new_user
+    # Create access token for immediate login
+    access_token = create_access_token(data={"sub": str(new_user.id)})
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/login", response_model=Token)
