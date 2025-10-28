@@ -69,23 +69,23 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 1.3 Core Security & Auth
 
-- [ ] Create `backend/app/core/security.py`:
+- [x] Create `backend/app/core/security.py`:
   - Password hashing functions (bcrypt)
   - JWT token generation and verification
   - Current user dependency (extract from Bearer token)
-- [ ] Create `backend/app/core/config.py`:
+- [x] Create `backend/app/core/config.py`:
   - Pydantic Settings for environment variables
   - Database URL, JWT secret, etc.
-- [ ] Create Pydantic schemas in `backend/app/schemas/`:
+- [x] Create Pydantic schemas in `backend/app/schemas/`:
   - `UserCreate`, `UserLogin`, `UserResponse`
   - `Token`, `TokenData`
-- [ ] Implement auth router in `backend/app/api/auth.py`:
+- [x] Implement auth router in `backend/app/api/auth.py`:
   - `POST /auth/register` - create user with hashed password
   - `POST /auth/login` - verify credentials, return JWT
   - `GET /auth/me` - get current user (protected)
-- [ ] Test auth endpoints with curl/httpie
+- [x] Test auth endpoints with curl/httpie
 
-**Deliverable**: Working authentication system
+**Deliverable**: ✅ Working authentication system (tested with register, login, and protected endpoint)
 
 ---
 
