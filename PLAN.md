@@ -89,32 +89,30 @@ This plan covers the complete implementation of M1 milestone:
 
 ---
 
-### 1.4 Currency & Exchange Rate Service
+### 1.4 Currency & Real-time Exchange Rate Service
 
 - [ ] Create `backend/app/services/rates.py`:
-  - `fetch_rates_from_api(date: str)` - call exchangerate.host API
-  - `store_rates(date: str, rates: dict)` - save to database
-  - `get_rate(base: str, symbol: str, date: str)` - query with fallback to prior date
-  - `sync_latest_rates()` - fetch and store today's rates
+  - `fetch_latest_rates(base: str, symbols: list[str])` - call exchangerate.host `/latest` API
+  - `convert_amount(amount: Decimal, from_currency: str, to_currency: str)` - convert using live rates
+  - Optional: Add simple in-memory cache (dict with TTL) for rate responses
 - [ ] Create Pydantic schemas:
-  - `CurrencyList`, `ExchangeRateResponse`
+  - `CurrencyList`, `ExchangeRateResponse`, `ConversionResult`
 - [ ] Implement rates router in `backend/app/api/rates.py`:
-  - `GET /currencies` - return supported ISO 4217 list (hardcoded or from DB)
-  - `GET /rates?date=YYYY-MM-DD` - get rates for date
-  - `POST /rates/refresh` - trigger manual sync (rate limited)
-- [ ] Test: Fetch rates from exchangerate.host manually
-- [ ] Verify rates stored in database
+  - `GET /currencies` - return supported ISO 4217 list (hardcoded)
+  - `GET /rates/latest?base=USD&symbols=EUR,GBP` - proxy to exchangerate.host
+- [ ] Test: Fetch real-time rates from exchangerate.host API
+- [ ] Verify conversion logic works correctly
 
-**Deliverable**: Exchange rate fetching and storage working
+**Deliverable**: Real-time exchange rate service working
 
 ---
 
 ### 1.5 Account Management
 
 - [ ] Create Pydantic schemas in `backend/app/schemas/account.py`:
-  - `AccountCreate` (name, type, currency)
+  - `AccountCreate` (name, type, default_currency)
   - `AccountUpdate` (name?, archived?)
-  - `AccountResponse` (id, user_id, name, type, currency, archived, created_at)
+  - `AccountResponse` (id, user_id, name, type, default_currency, archived, created_at)
 - [ ] Implement accounts router in `backend/app/api/accounts.py`:
   - `POST /accounts` - create account (user-scoped)
   - `GET /accounts` - list user's accounts
@@ -372,22 +370,7 @@ This plan covers the complete implementation of M1 milestone:
 
 ---
 
-### 3.2 Exchange Rate Sync & Backfill
-
-- [ ] Add a cron job or scheduled task to sync rates daily:
-  - Option 1: Simple `while True` loop in FastAPI startup with `asyncio.sleep`
-  - Option 2: Separate script run by cron/systemd timer
-  - Option 3: AWS EventBridge (for production)
-- [ ] Implement on-demand backfill logic:
-  - When querying a transaction, if rate is missing for that date, fetch it
-- [ ] Add admin endpoint (optional): `POST /admin/sync-rates-range?from=YYYY-MM-DD&to=YYYY-MM-DD`
-- [ ] Test: Missing rate triggers backfill
-
-**Deliverable**: Automated rate syncing
-
----
-
-### 3.3 Testing
+### 3.2 Testing
 
 - [ ] Backend unit tests (pytest):
   - Test auth: register, login, JWT validation
@@ -406,7 +389,7 @@ This plan covers the complete implementation of M1 milestone:
 
 ---
 
-### 3.4 Documentation & README Updates
+### 3.3 Documentation & README Updates
 
 - [ ] Update main README.md:
   - Add "Getting Started" section

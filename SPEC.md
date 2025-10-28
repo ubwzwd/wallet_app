@@ -119,7 +119,7 @@ base_currency char(3) not null, created_at timestamptz not null default now()
 
 -- accounts
 id uuid pk, user_id uuid not null references users(id), name text not null,
-type varchar(32) not null, currency char(3) not null,
+type varchar(32) not null, default_currency char(3) not null,
 archived boolean not null default false, created_at timestamptz not null default now()
 
 -- transactions
@@ -132,12 +132,6 @@ created_at timestamptz not null default now()
 -- transaction_tags
 transaction_id uuid not null references transactions(id) on delete cascade,
 tag varchar(64) not null, primary key (transaction_id, tag)
-
--- exchange_rates (daily snapshot)
-id bigserial primary key, source varchar(32) not null,
-base char(3) not null, symbol char(3) not null,
-rate numeric(18,8) not null, date date not null,
-unique (base, symbol, date)
 ```
 
 ### 2.5 API Surface (M1)
@@ -147,13 +141,12 @@ Auth
 - POST /auth/login { email, password } → { access_token, token_type }
 - GET /auth/me → current user
 
-Currency & Rates
+Currency
 - GET /currencies → supported ISO 4217 list
-- GET /rates?date=YYYY-MM-DD → daily rates (from DB)
-- POST /rates/refresh → trigger refresh (rate limited)
+- GET /rates/latest?base=USD&symbols=EUR,GBP → real-time rates from exchangerate.host API
 
 Accounts
-- POST /accounts { name, type, currency }
+- POST /accounts { name, type, default_currency }
 - GET /accounts
 - PATCH /accounts/:id { name?, archived? }
 
@@ -176,20 +169,22 @@ OCR/LLM (M3)
 - POST /transactions/batch → bulk create confirmed transactions
 
 ### 2.6 Conversion Logic (Server)
-1) Persist original amount/currency.
-2) To display: find daily rate for (base, tx.currency, tx.occurred_at).
-3) If missing: backfill nearest prior day; if still missing, use most recent and flag approximation in response.
-4) Optional cache: store converted_amount_base at write-time for faster reads.
+1) Persist original amount/currency for each transaction.
+2) To display: call exchangerate.host `/latest` API for real-time conversion rates.
+3) Convert amounts to user's base_currency (or requested display_currency).
+4) Response includes both original amount/currency and converted amount.
+5) For performance: consider short-lived caching (5-15 min) of latest rates in memory/Redis.
 
 ### 2.7 Security
 - Password hashing (bcrypt/argon2), JWT with exp/iat, refresh strategy (simple re-login for MVP).
 - Per-user row scoping on all queries.
 - Basic rate limiting on auth and refresh endpoints.
 
-### 2.8 FX Sync Strategy
-- Cron (e.g., daily 00:30 UTC) to pull latest day rates, insert into exchange_rates.
-- On-demand backfill when querying a date with missing rate.
-- Source attribution stored in table (`source = exchangerate.host`).
+### 2.8 FX Rate Strategy
+- Real-time API calls to exchangerate.host `/latest` endpoint
+- No persistent storage of rates (always use current market rates)
+- Optional: Short-lived in-memory cache (5-15 min TTL) to reduce API calls
+- Rate limiting on external API to prevent abuse
 
 ### 2.9 AWS Deployment Architecture
 
