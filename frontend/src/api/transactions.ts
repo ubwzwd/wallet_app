@@ -7,18 +7,11 @@ import type { Transaction, TransactionCreate, TransactionUpdate } from '@/types/
 
 export interface TransactionListParams {
   source_id?: string;
-  start_date?: string;
-  end_date?: string;
-  tags?: string[];
+  from_date?: string;
+  to_date?: string;
+  tag?: string;
   limit?: number;
   offset?: number;
-}
-
-export interface TransactionListResponse {
-  transactions: Transaction[];
-  total: number;
-  limit: number;
-  offset: number;
 }
 
 /**
@@ -26,12 +19,9 @@ export interface TransactionListResponse {
  */
 export const getTransactions = async (
   params?: TransactionListParams
-): Promise<TransactionListResponse> => {
-  const response = await apiClient.get<TransactionListResponse>('/transactions', {
-    params: {
-      ...params,
-      tags: params?.tags?.join(','), // Convert array to comma-separated string
-    },
+): Promise<Transaction[]> => {
+  const response = await apiClient.get<Transaction[]>('/transactions', {
+    params,
   });
   return response.data;
 };

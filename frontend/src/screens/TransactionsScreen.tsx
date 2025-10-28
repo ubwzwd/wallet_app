@@ -16,7 +16,7 @@ export function TransactionsScreen({ onCreatePress, onEditPress }: TransactionsS
   const [limit] = useState(50);
 
   // Fetch transactions
-  const { data, isLoading, refetch } = useQuery({
+  const { data: transactions, isLoading, refetch } = useQuery({
     queryKey: [QUERY_KEYS.TRANSACTIONS],
     queryFn: () => transactionsApi.getTransactions({ limit }),
   });
@@ -157,9 +157,9 @@ export function TransactionsScreen({ onCreatePress, onEditPress }: TransactionsS
   const renderHeader = () => (
     <View style={styles.summaryCard}>
       <Text style={styles.summaryTitle}>Recent Transactions</Text>
-      {data && (
+      {transactions && (
         <Text style={styles.summaryCount}>
-          {data.total} transaction{data.total !== 1 ? 's' : ''}
+          {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
         </Text>
       )}
     </View>
@@ -180,7 +180,7 @@ export function TransactionsScreen({ onCreatePress, onEditPress }: TransactionsS
 
         {/* Transactions List */}
         <FlatList
-          data={data?.transactions}
+          data={transactions}
           renderItem={renderTransaction}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
