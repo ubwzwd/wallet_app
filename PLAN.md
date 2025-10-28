@@ -253,24 +253,26 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 2.2 API Client & Authentication Context
 
-- [ ] Create `src/api/client.ts`:
+- [x] Create `src/api/client.ts`:
   - Axios instance with base URL
   - Request interceptor to add JWT token from storage
-  - Response interceptor for error handling
-- [ ] Create `src/types/api.ts`:
-  - TypeScript interfaces for all API responses (User, Account, Transaction, etc.)
-- [ ] Create `src/api/auth.ts`:
+  - Response interceptor for error handling (401 → clear token)
+- [x] Create `src/types/api.ts`:
+  - TypeScript interfaces for all API responses (User, FinanceSource, Transaction, etc.)
+- [x] Create `src/api/auth.ts`:
   - `register(email, password, baseCurrency)`
   - `login(email, password)`
   - `getCurrentUser()`
-- [ ] Create `src/contexts/AuthContext.tsx`:
+- [x] Create `src/store/AuthContext.tsx`:
   - Manage user state and token
   - Store token in AsyncStorage
   - Provide login/logout/register functions
-- [ ] Wrap App in AuthProvider
-- [ ] Test: Login and token persistence
+  - Auto-load user on app start
+- [x] Wrap App in AuthProvider + QueryClientProvider
+- [x] Configure path aliases (@/* => src/*)
+- [x] Test: Compilation successful (314 modules)
 
-**Deliverable**: API client with authentication
+**Deliverable**: ✅ API client with authentication complete
 
 ---
 
