@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:8081,http://localhost:19006,http://localhost:3000"
     
     # Exchange Rate API
-    EXCHANGE_RATE_API_URL: str = "https://api.exchangerate.host"
+    EXCHANGE_RATE_API_URL: str = "https://api.frankfurter.app"
     
     # Environment
     ENVIRONMENT: str = "development"

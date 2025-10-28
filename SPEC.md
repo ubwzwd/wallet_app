@@ -142,8 +142,8 @@ Auth
 - GET /auth/me → current user
 
 Currency
-- GET /currencies → supported ISO 4217 list
-- GET /rates/latest?base=USD&symbols=EUR,GBP → real-time rates from exchangerate.host API
+- GET /currencies → supported ISO 4217 list (31 currencies from Frankfurter/ECB)
+- GET /rates/latest?base=USD&symbols=EUR,GBP → real-time rates from Frankfurter API
 
 Accounts
 - POST /accounts { name, type, default_currency }
@@ -181,10 +181,12 @@ OCR/LLM (M3)
 - Basic rate limiting on auth and refresh endpoints.
 
 ### 2.8 FX Rate Strategy
-- Real-time API calls to exchangerate.host `/latest` endpoint
+- Real-time API calls to **api.frankfurter.app** `/latest` endpoint
+- Data source: European Central Bank (ECB) official rates
+- Supports 31 currencies including USD, EUR, CNY, SGD, HKD, GBP, JPY
 - No persistent storage of rates (always use current market rates)
 - Optional: Short-lived in-memory cache (5-15 min TTL) to reduce API calls
-- Rate limiting on external API to prevent abuse
+- No API key required, no rate limits for reasonable usage
 
 ### 2.9 AWS Deployment Architecture
 
