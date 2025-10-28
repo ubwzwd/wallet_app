@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, Alert, FlatList, TouchableOpacity, RefreshControl, Platform } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Screen, Card, Button } from '@/components';
 import { QUERY_KEYS } from '@/constants/config';
@@ -33,25 +33,42 @@ export function FinanceSourcesScreen({ onCreatePress, onEditPress }: FinanceSour
       });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to update finance source');
+      const errorMessage = error.message || 'Failed to update finance source';
+      if (Platform.OS === 'web') {
+        window.alert(`Error\n\n${errorMessage}`);
+      } else {
+        Alert.alert('Error', errorMessage);
+      }
     },
   });
 
   const handleArchiveToggle = (source: FinanceSource) => {
     const action = source.archived ? 'unarchive' : 'archive';
-    Alert.alert(
-      `${action.charAt(0).toUpperCase() + action.slice(1)} Finance Source`,
-      `Are you sure you want to ${action} "${source.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: action.charAt(0).toUpperCase() + action.slice(1),
-          onPress: () => {
-            archiveMutation.mutate({ id: source.id, archived: !source.archived });
+    const actionCapitalized = action.charAt(0).toUpperCase() + action.slice(1);
+    
+    // Use window.confirm for web, Alert.alert for native
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `${actionCapitalized} Finance Source\n\nAre you sure you want to ${action} "${source.name}"?`
+      );
+      if (confirmed) {
+        archiveMutation.mutate({ id: source.id, archived: !source.archived });
+      }
+    } else {
+      Alert.alert(
+        `${actionCapitalized} Finance Source`,
+        `Are you sure you want to ${action} "${source.name}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: actionCapitalized,
+            onPress: () => {
+              archiveMutation.mutate({ id: source.id, archived: !source.archived });
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const renderFinanceSource = ({ item }: { item: FinanceSource }) => (
