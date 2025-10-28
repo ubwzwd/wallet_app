@@ -278,22 +278,26 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 2.3 UI Components Library
 
-- [ ] Create base components in `src/components/`:
-  - `Button.tsx` (primary, secondary, danger variants)
-  - `Input.tsx` (text, email, password, number, date)
-  - `Card.tsx` (container with shadow)
-  - `LoadingSpinner.tsx`
-  - `ErrorMessage.tsx`
-  - `EmptyState.tsx`
-  - `Badge.tsx` (for tags)
-  - `Select.tsx` / `Picker.tsx` (for currency/account selection)
-- [ ] Use NativeWind classes for styling
-- [ ] Create a simple design system in `src/constants/theme.ts`:
-  - Colors (primary, secondary, danger, etc.)
-  - Spacing, typography
-- [ ] Test: Storybook or simple test screen with all components
+- [x] Create base components in `src/components/`:
+  - `Button.tsx` (primary, secondary, danger variants + loading state)
+  - `Input.tsx` (text input with label, error, hint, password toggle)
+  - `Card.tsx` (default, outlined, elevated variants)
+  - `Screen.tsx` (SafeAreaView wrapper with scroll support)
+- [x] Use StyleSheet for styling (NativeWind deferred for stability)
+- [x] Create `src/components/index.ts` for unified exports
+- [x] Test: Component demo in App.tsx
+  - Interactive inputs (email, password)
+  - Button variants (primary, secondary, danger)
+  - Card variants display
+  - Auth status display
 
-**Deliverable**: Reusable UI component library
+**Deliverable**: ✅ Core UI component library complete
+
+**Future Enhancements** (as needed):
+- LoadingSpinner, ErrorMessage, EmptyState
+- Badge component for tags
+- Select/Picker for currency selection
+- Design system constants
 
 ---
 
