@@ -26,7 +26,14 @@ export function FinanceSourcesScreen({ onCreatePress, onEditPress }: FinanceSour
     mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
       financeSourcesApi.updateFinanceSource(id, { archived }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.FINANCE_SOURCES] });
+      // Invalidate all finance sources queries (both with and without archived)
+      queryClient.invalidateQueries({ 
+        queryKey: [QUERY_KEYS.FINANCE_SOURCES],
+        refetchType: 'all'
+      });
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'Failed to update finance source');
     },
   });
 
