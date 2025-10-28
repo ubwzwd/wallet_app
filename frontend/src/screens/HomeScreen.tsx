@@ -4,14 +4,17 @@ import { Screen, Card, Button } from '@/components';
 import { useAuth } from '@/store/AuthContext';
 import { FinanceSourcesScreen } from './FinanceSourcesScreen';
 import { FinanceSourceFormScreen } from './FinanceSourceFormScreen';
-import type { FinanceSource } from '@/types/api';
+import { TransactionsScreen } from './TransactionsScreen';
+import { TransactionFormScreen } from './TransactionFormScreen';
+import type { FinanceSource, Transaction } from '@/types/api';
 
-type HomeView = 'main' | 'finance-sources' | 'add-source' | 'edit-source';
+type HomeView = 'main' | 'finance-sources' | 'add-source' | 'edit-source' | 'transactions' | 'add-transaction' | 'edit-transaction';
 
 export function HomeScreen() {
   const { user, logout, isAuthenticated } = useAuth();
   const [currentView, setCurrentView] = useState<HomeView>('main');
   const [selectedSource, setSelectedSource] = useState<FinanceSource | undefined>();
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
 
   const handleLogout = async () => {
     Alert.alert(
@@ -84,6 +87,46 @@ export function HomeScreen() {
     );
   }
 
+  // Show Transactions screen
+  if (currentView === 'transactions') {
+    return (
+      <TransactionsScreen
+        onCreatePress={() => setCurrentView('add-transaction')}
+        onEditPress={(transaction) => {
+          setSelectedTransaction(transaction);
+          setCurrentView('edit-transaction');
+        }}
+      />
+    );
+  }
+
+  // Show Add Transaction form
+  if (currentView === 'add-transaction') {
+    return (
+      <TransactionFormScreen
+        onSuccess={() => setCurrentView('transactions')}
+        onCancel={() => setCurrentView('transactions')}
+      />
+    );
+  }
+
+  // Show Edit Transaction form
+  if (currentView === 'edit-transaction' && selectedTransaction) {
+    return (
+      <TransactionFormScreen
+        transaction={selectedTransaction}
+        onSuccess={() => {
+          setSelectedTransaction(undefined);
+          setCurrentView('transactions');
+        }}
+        onCancel={() => {
+          setSelectedTransaction(undefined);
+          setCurrentView('transactions');
+        }}
+      />
+    );
+  }
+
   // Main Home Screen
   return (
     <Screen>
@@ -133,11 +176,10 @@ export function HomeScreen() {
           />
 
           <Button
-            title="💰 Transactions (Coming Soon)"
+            title="💰 View Transactions"
             variant="secondary"
-            onPress={() => Alert.alert('Coming Soon', 'Transaction management is coming in Phase 2.6!')}
+            onPress={() => setCurrentView('transactions')}
             style={styles.quickButton}
-            disabled
           />
         </Card>
 
