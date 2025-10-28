@@ -21,7 +21,7 @@ class User(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
-    accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+    finance_sources = relationship("FinanceSource", back_populates="user", cascade="all, delete-orphan")
     transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):

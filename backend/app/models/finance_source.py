@@ -1,4 +1,4 @@
-"""Account model for managing user's accounts (checking, credit cards, etc.)."""
+"""FinanceSource model for managing user's payment sources and accounts."""
 import uuid
 from datetime import datetime
 
@@ -9,10 +9,10 @@ from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
-class Account(Base):
-    """Account table for user's financial accounts."""
+class FinanceSource(Base):
+    """FinanceSource table for user's financial accounts and payment sources."""
     
-    __tablename__ = "accounts"
+    __tablename__ = "finance_sources"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
@@ -23,9 +23,9 @@ class Account(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="accounts")
-    transactions = relationship("Transaction", back_populates="account", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="finance_sources")
+    transactions = relationship("Transaction", back_populates="source", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<Account(id={self.id}, name={self.name}, currency={self.default_currency})>"
+        return f"<FinanceSource(id={self.id}, name={self.name}, currency={self.default_currency})>"
 

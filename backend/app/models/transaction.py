@@ -16,7 +16,7 @@ class Transaction(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False, index=True)
+    source_id = Column(UUID(as_uuid=True), ForeignKey("finance_sources.id"), nullable=False, index=True)
     amount = Column(Numeric(18, 4), nullable=False)  # Original amount
     currency = Column(String(3), nullable=False)  # ISO 4217 code
     occurred_at = Column(Date, nullable=False, index=True)  # Transaction date
@@ -26,7 +26,7 @@ class Transaction(Base):
     
     # Relationships
     user = relationship("User", back_populates="transactions")
-    account = relationship("Account", back_populates="transactions")
+    source = relationship("FinanceSource", back_populates="transactions")
     tags = relationship("TransactionTag", back_populates="transaction", cascade="all, delete-orphan")
     
     def __repr__(self):
