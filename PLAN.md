@@ -51,19 +51,19 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 1.2 Database Models & Migrations
 
-- [ ] Setup Alembic in `backend/migrations/`
-- [ ] Create SQLAlchemy base and database session management
-- [ ] Implement models in `backend/app/models/`:
+- [x] Setup Alembic in `backend/migrations/`
+- [x] Create SQLAlchemy base and database session management
+- [x] Implement models in `backend/app/models/`:
   - `User` (id, email, password_hash, base_currency, created_at)
   - `Account` (id, user_id, name, type, currency, archived, created_at)
   - `Transaction` (id, user_id, account_id, amount, currency, occurred_at, description, merchant, created_at)
   - `TransactionTag` (transaction_id, tag) - many-to-many
   - `ExchangeRate` (id, source, base, symbol, rate, date, unique constraint)
-- [ ] Create initial migration: `alembic revision --autogenerate -m "Initial schema"`
-- [ ] Run migration: `alembic upgrade head`
-- [ ] Test: PostgreSQL tables created successfully
+- [x] Create initial migration: `alembic revision --autogenerate -m "Initial schema"`
+- [x] Run migration: `alembic upgrade head`
+- [x] Test: PostgreSQL tables created successfully
 
-**Deliverable**: Database schema with all tables
+**Deliverable**: ✅ Database schema with all tables (6 tables created with proper indexes and foreign keys)
 
 ---
 
