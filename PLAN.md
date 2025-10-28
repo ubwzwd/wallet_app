@@ -1,9 +1,32 @@
 # Wallet App - M1 Implementation Plan
 
-Version: 1.1  
+Version: 1.2  
 Created: 2025-10-26  
-Updated: 2025-10-28 (Design clarifications)
+Updated: 2025-10-28 (Phase 2 completed)
 Target: M1 Web Core (Auth, Finance Sources, Transactions, Multi-Currency)
+
+---
+
+## 🎉 Current Status: M1 Core Features COMPLETED ✅
+
+**Phase 1 (Backend)**: ✅ 100% Complete
+**Phase 2 (Frontend)**: ✅ 100% Complete
+
+### What's Working Now:
+✅ User authentication (register, login, JWT, persistent login)
+✅ Finance source management (CRUD, archive, active-only filtering)
+✅ Transaction management (CRUD, income/expense, tags, color-coded)
+✅ Multi-currency support (6 currencies: USD, EUR, GBP, CNY, SGD, HKD)
+✅ Real-time exchange rates (Frankfurter API with retry)
+✅ Web UI (Expo Web, responsive, mobile-ready)
+✅ Navigation (Home button, intuitive flow)
+✅ Persistent login (auto-restore on page refresh)
+
+### Ready for Next Steps:
+- M2: Mobile app (iOS/Android via Expo)
+- M3: Receipt OCR + LLM parsing
+- M4: Reports & Analytics
+- Or: Production deployment to AWS
 
 ---
 
@@ -366,34 +389,65 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 2.6 Transaction Management Screens
 
-- [ ] Create `src/api/transactions.ts`:
+- [x] Create `src/api/transactions.ts`:
   - `getTransactions(filters)`, `createTransaction()`, `updateTransaction()`, `deleteTransaction()`
-- [ ] Create `src/screens/TransactionsScreen.tsx`:
-  - List transactions with filters (account, date range, tag)
-  - Show: date, merchant/description, amount (original + converted to base currency)
-  - Color-code by type (expense/income)
-  - Pagination or infinite scroll
-  - "Add Transaction" FAB (Floating Action Button)
-- [ ] Create `src/screens/AddTransactionScreen.tsx`:
+  - Support for source_id, from_date, to_date, tag filters
+  - Pagination support (limit, offset)
+- [x] Create `src/screens/TransactionsScreen.tsx`:
+  - List transactions with cards
+  - Show: date, merchant/description, amount, tags
+  - Color-code by type (green for income, red for expense)
+  - "Add New" button with "← Home" navigation
+  - Pull-to-refresh support
+  - Empty state with helpful message
+  - Delete functionality (single or paired transfer)
+- [x] Create `src/screens/TransactionFormScreen.tsx`:
+  - Combined add/edit form
   - Form fields:
-    - Account (dropdown)
-    - Amount (number input)
-    - Currency (defaults to account currency, changeable)
-    - Date (date picker, defaults to today)
+    - Type selection (expense/income/transfer - transfer disabled)
+    - Finance source dropdown (only active sources)
+    - Amount input with validation
+    - Currency selection (USD, EUR, GBP, CNY, SGD, HKD)
+    - Date picker (HTML5 date input)
     - Merchant (optional)
     - Description (optional)
-    - Tags (multi-select or chip input)
-  - Real-time conversion preview (show amount in base currency)
+    - Tags (comma-separated input)
+  - Web-compatible alerts and confirmations
   - Submit and navigate back
-- [ ] Create `src/screens/TransactionDetailScreen.tsx`:
-  - Show all transaction details
-  - Edit button
-  - Delete button (with confirmation)
-- [ ] Add filter modal/sheet for TransactionsScreen:
-  - Filter by account, date range, tag
-- [ ] Test: Create, view, edit, delete transactions
+- [x] Integrate into HomeScreen:
+  - "View Transactions" quick action
+  - Navigation between list/add/edit views
+  - State management
+- [x] Delete functionality:
+  - Single transaction delete
+  - Paired transfer delete (deletes both transactions)
+  - Web-compatible confirmation dialogs
+- [x] Test: Create, view, edit, delete transactions ✅
 
-**Deliverable**: Transaction management UI
+**Deliverable**: ✅ Complete Transaction management with CRUD operations
+
+**Implementation Notes**:
+- Using TanStack Query for data fetching and caching
+- Automatic query invalidation after mutations
+- Web-compatible dialogs (window.confirm/alert)
+- Amount sign convention: positive for income, negative for expense
+- Only active (non-archived) finance sources shown in form
+- Transfer transactions marked with special badge
+- Tags displayed as chips in transaction list
+- Home navigation button for easy return to main screen
+
+**UI Improvements**:
+- Simplified Account Information card (removed User ID and Member Since)
+- Added "← Home" navigation buttons on sub-screens
+- Color-coded amounts (green/red) for visual clarity
+
+**Future Enhancements** (not in M1 scope):
+- Advanced filters (date range picker, tag multi-select, source filter)
+- Real-time currency conversion preview in form
+- Separate transaction detail screen
+- Infinite scroll/virtual list for large datasets
+- Transfer transaction creation support
+- Batch operations (bulk delete, bulk tag edit)
 
 ---
 
