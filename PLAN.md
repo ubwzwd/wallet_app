@@ -1,8 +1,9 @@
 # Wallet App - M1 Implementation Plan
 
-Version: 1.0  
+Version: 1.1  
 Created: 2025-10-26  
-Target: M1 Web Core (Auth, Accounts, Transactions, Multi-Currency)
+Updated: 2025-10-28 (Design clarifications)
+Target: M1 Web Core (Auth, Finance Sources, Transactions, Multi-Currency)
 
 ---
 
@@ -10,12 +11,19 @@ Target: M1 Web Core (Auth, Accounts, Transactions, Multi-Currency)
 
 This plan covers the complete implementation of M1 milestone:
 - Multi-user authentication (email + password, JWT)
-- Account management (multi-account, multi-currency)
-- Transaction CRUD with tags
-- Real-time currency conversion using exchangerate.host
+- Finance source management (payment sources: cards, bank accounts, e-wallets)
+- Transaction CRUD with tags (positive = income, negative = expense)
+- Real-time currency conversion using Frankfurter API (ECB data)
 - Web UI (Expo Web)
 - Local development with Docker Compose
 - AWS deployment ready
+
+### Key Design Decisions
+1. **finance_sources** (not "accounts"): Represents payment methods/sources
+2. **default_source_id** in users table: Auto-selected for transactions
+3. **Positive/negative amounts**: Income (positive) vs Expense (negative)
+4. **Transfers**: Two separate transactions with "transfer" tag
+5. **Real-time FX rates**: No persistent rate storage, query-time conversion
 
 ---
 
@@ -54,16 +62,19 @@ This plan covers the complete implementation of M1 milestone:
 - [x] Setup Alembic in `backend/migrations/`
 - [x] Create SQLAlchemy base and database session management
 - [x] Implement models in `backend/app/models/`:
-  - `User` (id, email, password_hash, base_currency, created_at)
-  - `Account` (id, user_id, name, type, currency, archived, created_at)
-  - `Transaction` (id, user_id, account_id, amount, currency, occurred_at, description, merchant, created_at)
+  - `User` (id, email, password_hash, base_currency, default_source_id, created_at)
+  - `FinanceSource` (id, user_id, name, type, default_currency, archived, created_at)
+  - `Transaction` (id, user_id, source_id, amount, currency, occurred_at, description, merchant, created_at)
   - `TransactionTag` (transaction_id, tag) - many-to-many
-  - `ExchangeRate` (id, source, base, symbol, rate, date, unique constraint)
 - [x] Create initial migration: `alembic revision --autogenerate -m "Initial schema"`
-- [x] Run migration: `alembic upgrade head`
+- [x] Rename accounts → finance_sources: Migration 026ee0aecb66
+- [x] Add default_source_id to users: Migration 76227e076393
+- [x] Run migrations: `alembic upgrade head`
 - [x] Test: PostgreSQL tables created successfully
 
-**Deliverable**: ✅ Database schema with all tables (6 tables created with proper indexes and foreign keys)
+**Deliverable**: ✅ Database schema with 4 core tables (users, finance_sources, transactions, transaction_tags)
+
+**Note**: Removed `exchange_rates` table - using real-time API calls instead
 
 ---
 
@@ -108,63 +119,82 @@ This plan covers the complete implementation of M1 milestone:
 
 ---
 
-### 1.5 Account Management
+### 1.5 Finance Source Management
 
-- [x] Create Pydantic schemas in `backend/app/schemas/account.py`:
-  - `AccountCreate` (name, type, default_currency)
-  - `AccountUpdate` (name?, archived?)
-  - `AccountResponse` (id, user_id, name, type, default_currency, archived, created_at)
-- [x] Implement accounts router in `backend/app/api/accounts.py`:
-  - `POST /accounts` - create account (user-scoped)
-  - `GET /accounts?include_archived=false` - list user's accounts with filter
-  - `GET /accounts/{id}` - get single account (owner check)
-  - `PATCH /accounts/{id}` - update account (owner check)
+- [x] Create Pydantic schemas in `backend/app/schemas/finance_source.py`:
+  - `FinanceSourceCreate` (name, type, default_currency)
+  - `FinanceSourceUpdate` (name?, archived?)
+  - `FinanceSourceResponse` (id, user_id, name, type, default_currency, archived, created_at)
+- [x] Implement finance_sources router in `backend/app/api/finance_sources.py`:
+  - `POST /finance-sources` - create finance source (user-scoped)
+  - `GET /finance-sources?include_archived=false` - list user's sources with filter
+  - `GET /finance-sources/{id}` - get single source (owner check)
+  - `PATCH /finance-sources/{id}` - update source (owner check)
 - [x] Add user_id filtering on all queries (security)
-- [x] Test: CRUD operations for accounts
-  - Created 3 accounts (checking, credit, savings)
-  - Updated account name
-  - Archived account
+- [x] Test: CRUD operations for finance sources
+  - Created 3 sources (checking, credit, savings)
+  - Updated source name
+  - Archived source
   - Verified filtering works
 
-**Deliverable**: ✅ Account management endpoints working (all tests passed)
+**Deliverable**: ✅ Finance source management endpoints working (all tests passed)
+
+**Implementation Notes**:
+- Renamed from "accounts" to "finance_sources" for clarity (payment sources/methods)
+- First finance source auto-set as default (can be implemented in Phase 1.6)
+- Users can update default via `PATCH /users/me` (future enhancement)
 
 ---
 
 ### 1.6 Transaction Management
 
 - [ ] Create Pydantic schemas in `backend/app/schemas/transaction.py`:
-  - `TransactionCreate` (account_id, amount, currency, occurred_at, description?, merchant?, tags?)
+  - `TransactionCreate` (source_id?, amount, currency, occurred_at, description?, merchant?, tags?)
+    - `source_id` optional: uses `user.default_source_id` if omitted
+    - `amount`: Positive for income, negative for expense
   - `TransactionUpdate` (partial fields)
-  - `TransactionResponse` (all fields + converted_amount_base, conversion_rate)
+  - `TransactionResponse` (all fields + converted_amount, conversion_rate, conversion_date)
 - [ ] Implement transactions router in `backend/app/api/transactions.py`:
   - `POST /transactions` - create transaction with tags
-  - `GET /transactions` - list with filters (account_id, from/to date, tag, pagination)
+    - Auto-use default_source_id if source_id not provided
+    - Validate source belongs to user
+  - `GET /transactions` - list with filters (source_id, from/to date, tag, pagination)
   - `GET /transactions/{id}` - get single transaction (owner check)
   - `PATCH /transactions/{id}` - update transaction
-- [ ] Add currency conversion logic:
-  - Query exchange rate for (user.base_currency, tx.currency, tx.occurred_at)
-  - Calculate converted amount
-  - Return in response with flag if rate is approximate
-- [ ] Implement pagination (offset/limit or cursor-based)
+- [ ] Add real-time currency conversion logic:
+  - Fetch current exchange rate from Frankfurter API
+  - Convert `tx.amount` (in `tx.currency`) to `user.base_currency`
+  - Return `converted_amount`, `conversion_rate`, `conversion_date` in response
+- [ ] Implement pagination (offset/limit)
 - [ ] Test: CRUD operations with conversion
+  - Create income transaction (positive amount)
+  - Create expense transaction (negative amount)
+  - Create transfer (two transactions with "transfer" tag)
+  - Verify currency conversion
 
-**Deliverable**: Transaction CRUD with currency conversion
+**Deliverable**: Transaction CRUD with real-time currency conversion
+
+**Design Notes**:
+- Amount sign determines income/expense (no separate `type` field)
+- Transfers = two transactions with "transfer" tag
+- Conversion happens at query time (not stored)
+- First finance source auto-set as default (implement in create logic)
 
 ---
 
 ### 1.7 Main App & API Router
 
-- [ ] Create `backend/app/main.py`:
+- [x] Create `backend/app/main.py`:
   - Initialize FastAPI app
   - Add CORS middleware (allow localhost for dev)
-  - Include all routers (auth, accounts, transactions, rates)
+  - Include all routers (auth, finance_sources, transactions, rates)
   - Add health check endpoint: `GET /health`
   - Add startup event to test DB connection
-- [ ] Create `backend/app/api/__init__.py` to aggregate routers
-- [ ] Test: Run locally with `uvicorn app.main:app --reload`
-- [ ] Verify all endpoints accessible via OpenAPI docs at `/docs`
+- [x] Create `backend/app/api/__init__.py` to aggregate routers
+- [x] Test: Run locally with `uvicorn app.main:app --reload`
+- [x] Verify all endpoints accessible via OpenAPI docs at `/docs`
 
-**Deliverable**: Complete backend API running locally
+**Deliverable**: ✅ Complete backend API running locally (auth, finance_sources, rates working)
 
 ---
 
