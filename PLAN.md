@@ -110,19 +110,23 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 1.5 Account Management
 
-- [ ] Create Pydantic schemas in `backend/app/schemas/account.py`:
+- [x] Create Pydantic schemas in `backend/app/schemas/account.py`:
   - `AccountCreate` (name, type, default_currency)
   - `AccountUpdate` (name?, archived?)
   - `AccountResponse` (id, user_id, name, type, default_currency, archived, created_at)
-- [ ] Implement accounts router in `backend/app/api/accounts.py`:
+- [x] Implement accounts router in `backend/app/api/accounts.py`:
   - `POST /accounts` - create account (user-scoped)
-  - `GET /accounts` - list user's accounts
+  - `GET /accounts?include_archived=false` - list user's accounts with filter
   - `GET /accounts/{id}` - get single account (owner check)
   - `PATCH /accounts/{id}` - update account (owner check)
-- [ ] Add user_id filtering on all queries (security)
-- [ ] Test: CRUD operations for accounts
+- [x] Add user_id filtering on all queries (security)
+- [x] Test: CRUD operations for accounts
+  - Created 3 accounts (checking, credit, savings)
+  - Updated account name
+  - Archived account
+  - Verified filtering works
 
-**Deliverable**: Account management endpoints working
+**Deliverable**: ✅ Account management endpoints working (all tests passed)
 
 ---
 
