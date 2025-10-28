@@ -364,8 +364,6 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 12,
     fontSize: 14,
-    border: 'none',
-    outline: 'none',
     backgroundColor: '#ffffff',
   },
   currencyList: {
@@ -382,7 +380,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
-    outline: 'none',
   },
   hint: {
     fontSize: 12,
