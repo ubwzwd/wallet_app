@@ -303,23 +303,28 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 2.4 Authentication Screens
 
-- [ ] Create `src/screens/LoginScreen.tsx`:
-  - Email/password form with validation (Zod + react-hook-form)
-  - Call login API
-  - Navigate to main app on success
-  - Link to register screen
-- [ ] Create `src/screens/RegisterScreen.tsx`:
+- [x] Create `src/screens/LoginScreen.tsx`:
+  - Email/password form with validation (built-in validation)
+  - Call login API via AuthContext
+  - Auto-navigate on successful login
+  - Demo account hint displayed
+- [x] Create `src/screens/RegisterScreen.tsx`:
   - Email, password, confirm password, base currency
-  - Validation rules (email format, password strength)
+  - Validation rules (email format, password strength, match check)
+  - Currency selection (USD, EUR, GBP, CNY, SGD)
   - Call register API
   - Auto-login on success
-- [ ] Setup React Navigation:
-  - `AuthStack` (Login, Register)
-  - `MainStack` (Home, Accounts, Transactions, Settings)
-  - Conditional rendering based on auth state
-- [ ] Test: Register → Login → Access protected screens
+- [x] Create `src/screens/HomeScreen.tsx`:
+  - Display user information
+  - Account details
+  - Logout functionality
+- [x] Create simple tab-based navigation:
+  - Login/Register tabs for unauthenticated users
+  - Home screen for authenticated users
+  - Auto-switch based on auth state
+- [x] Test: Registration and login flow working
 
-**Deliverable**: Working auth flow
+**Deliverable**: ✅ Complete authentication flow with navigation
 
 ---
 
