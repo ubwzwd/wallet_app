@@ -12,9 +12,9 @@ from app.schemas.currency import CurrencyCode
 class TransactionCreate(BaseModel):
     """Schema for creating a new transaction."""
     
-    account_id: UUID = Field(
-        ...,
-        description="Account ID this transaction belongs to"
+    source_id: Optional[UUID] = Field(
+        None,
+        description="Finance source ID (payment method). If omitted, uses user's default_source_id"
     )
     amount: Decimal = Field(
         ...,
@@ -81,3 +81,39 @@ class TransactionUpdate(BaseModel):
         description="Updated list of tags (replaces existing tags)"
     )
 
+
+class TransactionResponse(BaseModel):
+    """Schema for transaction response with currency conversion."""
+    
+    id: UUID = Field(..., description="Transaction unique identifier")
+    user_id: UUID = Field(..., description="Owner user ID")
+    source_id: UUID = Field(..., description="Finance source ID (payment method)")
+    amount: Decimal = Field(..., description="Original transaction amount")
+    currency: CurrencyCode = Field(..., description="Original transaction currency")
+    occurred_at: date = Field(..., description="Transaction date")
+    description: Optional[str] = Field(None, description="Transaction description")
+    merchant: Optional[str] = Field(None, description="Merchant name")
+    created_at: datetime = Field(..., description="Record creation timestamp")
+    
+    # Currency conversion fields (calculated at query time)
+    converted_amount: Optional[Decimal] = Field(
+        None, 
+        description="Amount converted to user's base_currency (null if same currency)"
+    )
+    conversion_rate: Optional[Decimal] = Field(
+        None,
+        description="Exchange rate used for conversion (null if same currency)"
+    )
+    conversion_date: Optional[date] = Field(
+        None,
+        description="Date of the exchange rate used (null if same currency)"
+    )
+    
+    # Tags
+    tags: List[str] = Field(
+        default_factory=list,
+        description="List of tags for this transaction"
+    )
+    
+    class Config:
+        from_attributes = True  # Pydantic v2 (was orm_mode in v1)

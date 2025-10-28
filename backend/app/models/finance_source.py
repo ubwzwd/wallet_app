@@ -23,7 +23,7 @@ class FinanceSource(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="finance_sources")
+    user = relationship("User", back_populates="finance_sources", foreign_keys=[user_id])
     transactions = relationship("Transaction", back_populates="source", cascade="all, delete-orphan")
     
     def __repr__(self):
