@@ -18,7 +18,7 @@ class Account(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False)  # e.g., "Chase Checking", "Amex Credit"
     type = Column(String(32), nullable=False)  # checking, savings, credit, other
-    currency = Column(String(3), nullable=False)  # ISO 4217 code
+    default_currency = Column(String(3), nullable=False)  # ISO 4217 code
     archived = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
@@ -27,5 +27,5 @@ class Account(Base):
     transactions = relationship("Transaction", back_populates="account", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<Account(id={self.id}, name={self.name}, currency={self.currency})>"
+        return f"<Account(id={self.id}, name={self.name}, currency={self.default_currency})>"
 
