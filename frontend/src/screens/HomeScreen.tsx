@@ -152,18 +152,6 @@ export function HomeScreen() {
             <Text style={styles.infoLabel}>Base Currency:</Text>
             <Text style={styles.infoValue}>{user.base_currency}</Text>
           </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>User ID:</Text>
-            <Text style={styles.infoValue}>{user.id.substring(0, 8)}...</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Member Since:</Text>
-            <Text style={styles.infoValue}>
-              {new Date(user.created_at).toLocaleDateString()}
-            </Text>
-          </View>
         </Card>
 
         {/* Quick Actions Card */}
