@@ -111,28 +111,63 @@ wallet_app/
     aws/                  # AWS deployment configs (ECS task definitions, etc.)
 ```
 
-### 2.4 Data Model (DDL sketch)
+### 2.4 Data Model
+
+#### Core Tables
+
+**users** - User accounts and global settings
 ```sql
--- users
-id uuid pk, email text unique not null, password_hash text not null,
-base_currency char(3) not null, created_at timestamptz not null default now()
-
--- accounts
-id uuid pk, user_id uuid not null references users(id), name text not null,
-type varchar(32) not null, default_currency char(3) not null,
-archived boolean not null default false, created_at timestamptz not null default now()
-
--- transactions
-id uuid pk, user_id uuid not null references users(id),
-account_id uuid not null references accounts(id),
-amount numeric(18,4) not null, currency char(3) not null,
-occurred_at date not null, description text, merchant text,
+id uuid pk, 
+email text unique not null, 
+password_hash text not null,
+base_currency char(3) not null default 'USD',  -- User's preferred currency for display
+default_source_id uuid references finance_sources(id) on delete set null,  -- Default payment source
 created_at timestamptz not null default now()
-
--- transaction_tags
-transaction_id uuid not null references transactions(id) on delete cascade,
-tag varchar(64) not null, primary key (transaction_id, tag)
 ```
+- Each user has isolated data
+- `base_currency`: Used for converting all transactions to a common currency for reporting
+- `default_source_id`: Auto-selected when creating transactions without specifying a source
+
+**finance_sources** - Payment sources and financial accounts
+```sql
+id uuid pk, 
+user_id uuid not null references users(id),
+name text not null,  -- e.g., "Chase Checking", "Amex Credit"
+type varchar(32) not null,  -- checking, savings, credit, other
+default_currency char(3) not null,  -- ISO 4217 code
+archived boolean not null default false,
+created_at timestamptz not null default now()
+```
+- Represents where money flows in/out (bank accounts, credit cards, e-wallets, cash)
+- Examples: "Chase Visa", "Cash USD", "Alipay CNY"
+- User must select a source for each transaction
+
+**transactions** - Income and expense records
+```sql
+id uuid pk, 
+user_id uuid not null references users(id),
+source_id uuid not null references finance_sources(id),  -- Where money came from/went to
+amount numeric(18,4) not null,  -- Positive = income, Negative = expense
+currency char(3) not null,  -- Original transaction currency
+occurred_at date not null,  -- Transaction date
+description text,
+merchant text,
+created_at timestamptz not null default now()
+```
+- Amount uses positive/negative to distinguish income/expense:
+  - `amount > 0`: Income (salary, refund, etc.)
+  - `amount < 0`: Expense (groceries, rent, etc.)
+- Original currency preserved; conversion to `base_currency` happens at query time
+- **Transfers**: Create two separate transactions (one negative, one positive) with tag "transfer"
+
+**transaction_tags** - Flexible categorization (many-to-many)
+```sql
+transaction_id uuid not null references transactions(id) on delete cascade,
+tag varchar(64) not null,
+primary key (transaction_id, tag)
+```
+- Examples: "food", "groceries", "essential", "salary", "transfer"
+- Multiple tags per transaction for flexible organization
 
 ### 2.5 API Surface (M1)
 
@@ -145,16 +180,19 @@ Currency
 - GET /currencies → supported ISO 4217 list (31 currencies from Frankfurter/ECB)
 - GET /rates/latest?base=USD&symbols=EUR,GBP → real-time rates from Frankfurter API
 
-Accounts
-- POST /accounts { name, type, default_currency }
-- GET /accounts
-- PATCH /accounts/:id { name?, archived? }
+Finance Sources
+- POST /finance-sources { name, type, default_currency }
+- GET /finance-sources?include_archived=false
+- GET /finance-sources/:id
+- PATCH /finance-sources/:id { name?, archived? }
 
 Transactions
-- POST /transactions { amount, currency, account_id, occurred_at, description?, merchant?, tags?[] }
-- GET /transactions?account_id&from&to&tag&page&size
+- POST /transactions { amount, currency, source_id?, occurred_at, description?, merchant?, tags?[] }
+  - If source_id omitted, uses user's default_source_id
+- GET /transactions?source_id&from&to&tag&page&size
 - GET /transactions/:id
 - PATCH /transactions/:id { fields… }
+- **Note**: Transfers = create two transactions (one debit, one credit) with "transfer" tag
 
 Stats (M4)
 - GET /stats/summary?from&to  // totals in base currency
