@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 import httpx
 from fastapi import HTTPException, status
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.core.config import settings
 
@@ -14,10 +15,18 @@ from app.core.config import settings
 _SUPPORTED_CURRENCIES_CACHE: Optional[Dict[str, str]] = None
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError),
+    reraise=True
+)
 def get_supported_currencies() -> Dict[str, str]:
     """
     Get list of supported currencies from Frankfurter API.
     Returns a dict mapping currency code to currency name.
+    
+    Retries up to 3 times on network errors with exponential backoff (1s, 2s, 4s).
     
     Example:
         {"USD": "United States Dollar", "EUR": "Euro", ...}
@@ -44,9 +53,17 @@ def get_supported_currencies() -> Dict[str, str]:
         )
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError),
+    reraise=True
+)
 def fetch_latest_rates(base: str, symbols: List[str]) -> Dict[str, Decimal]:
     """
     Fetch latest exchange rates from Frankfurter API.
+    
+    Retries up to 3 times on network errors with exponential backoff (1s, 2s, 4s).
     
     Args:
         base: Base currency code (e.g., "USD")
@@ -57,7 +74,7 @@ def fetch_latest_rates(base: str, symbols: List[str]) -> Dict[str, Decimal]:
         Example: {"EUR": Decimal("0.92"), "GBP": Decimal("0.79")}
     
     Raises:
-        HTTPException: If API call fails
+        HTTPException: If API call fails after retries
     """
     try:
         url = f"{settings.EXCHANGE_RATE_API_URL}/latest"
