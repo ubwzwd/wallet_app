@@ -91,19 +91,20 @@ This plan covers the complete implementation of M1 milestone:
 
 ### 1.4 Currency & Real-time Exchange Rate Service
 
-- [ ] Create `backend/app/services/rates.py`:
-  - `fetch_latest_rates(base: str, symbols: list[str])` - call exchangerate.host `/latest` API
+- [x] Create `backend/app/services/rates.py`:
+  - `fetch_latest_rates(base: str, symbols: list[str])` - call Frankfurter `/latest` API
   - `convert_amount(amount: Decimal, from_currency: str, to_currency: str)` - convert using live rates
-  - Optional: Add simple in-memory cache (dict with TTL) for rate responses
-- [ ] Create Pydantic schemas:
-  - `CurrencyList`, `ExchangeRateResponse`, `ConversionResult`
-- [ ] Implement rates router in `backend/app/api/rates.py`:
-  - `GET /currencies` - return supported ISO 4217 list (hardcoded)
-  - `GET /rates/latest?base=USD&symbols=EUR,GBP` - proxy to exchangerate.host
-- [ ] Test: Fetch real-time rates from exchangerate.host API
-- [ ] Verify conversion logic works correctly
+  - Currency list caching to reduce API calls
+- [x] Create Pydantic schemas:
+  - `CurrencyList`, `ExchangeRateResponse`, `ConversionResult`, `ConversionRequest`
+- [x] Implement rates router in `backend/app/api/rates.py`:
+  - `GET /currencies` - return supported ISO 4217 list (31 currencies from ECB)
+  - `GET /rates/latest?base=USD&symbols=EUR,GBP` - real-time rates from Frankfurter
+  - `POST /convert` - currency conversion with rate info
+- [x] Test: Fetch real-time rates from Frankfurter API
+- [x] Verify conversion logic works correctly (tested: 100 USD = 710.75 CNY)
 
-**Deliverable**: Real-time exchange rate service working
+**Deliverable**: ✅ Real-time exchange rate service working (all 3 endpoints tested successfully)
 
 ---
 
