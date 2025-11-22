@@ -3,10 +3,25 @@
  */
 
 // API Base URL - will point to backend API
-// 在移动设备上开发时，需要使用电脑的实际 IP 地址而不是 localhost
-export const API_BASE_URL = __DEV__ 
-  ? 'http://192.168.1.72:8000/api/v1'  // Local development (使用电脑IP，支持手机访问)
-  : 'https://api.yourapp.com/api/v1';  // Production
+// For mobile development: Set EXPO_PUBLIC_API_HOST in .env to your machine's IP
+// For web development: Uses localhost by default
+const getApiBaseUrl = () => {
+  if (!__DEV__) {
+    return 'https://api.yourapp.com/api/v1';  // Production
+  }
+  
+  // In development, check for custom API host from environment variable
+  // This allows each developer to set their own IP without committing it
+  const customHost = process.env.EXPO_PUBLIC_API_HOST;
+  if (customHost) {
+    return `http://${customHost}:8000/api/v1`;
+  }
+  
+  // Default to localhost for web development
+  return 'http://localhost:8000/api/v1';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 // Storage keys for AsyncStorage
 export const STORAGE_KEYS = {

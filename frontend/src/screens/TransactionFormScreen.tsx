@@ -107,6 +107,18 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
     }
     if (!date) {
       newErrors.date = 'Date is required';
+    } else {
+      // Validate date format (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(date)) {
+        newErrors.date = 'Date must be in YYYY-MM-DD format (e.g., 2025-01-15)';
+      } else {
+        // Additional validation: check if it's a valid date
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate.getTime())) {
+          newErrors.date = 'Invalid date';
+        }
+      }
     }
     if (type === 'transfer') {
       newErrors.type = 'Transfer transactions are not yet supported in this form';

@@ -8,14 +8,33 @@
 2. 搜索 "**Expo Go**"
 3. 安装应用（完全免费，无需会员）
 
-### 步骤 2：启动 Expo 开发服务器
+### 步骤 2：配置 API 地址（仅移动设备开发需要）
 
-在终端中运行以下命令：
+为了让手机能够连接到你电脑上的后端 API，需要配置你的电脑 IP 地址：
 
 ```bash
 # 进入前端目录
 cd /home/ubwzwd/code/wallet_app/frontend
 
+# 获取你的电脑 IP 地址
+hostname -I | awk '{print $1}'
+# 例如输出：192.168.1.72
+
+# 创建 .env 文件并设置 API host
+echo "EXPO_PUBLIC_API_HOST=192.168.1.72" > .env
+# 注意：替换为你自己的 IP 地址
+```
+
+**注意**：
+- Web 开发时不需要这个配置（会自动使用 localhost）
+- 每次电脑 IP 变化时需要更新 .env 文件
+- 确保 `.env` 文件在 `.gitignore` 中（不要提交个人 IP）
+
+### 步骤 3：启动 Expo 开发服务器
+
+在终端中运行以下命令：
+
+```bash
 # 加载 Node.js 环境
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -29,7 +48,7 @@ npx expo start
 - 局域网 URL: `exp://192.168.x.x:8081`
 - 按键说明（按 `a` 打开 Android，按 `w` 打开 Web 等）
 
-### 步骤 3：在手机上连接
+### 步骤 4：在手机上连接
 
 **方式 A：扫描二维码**
 1. 打开手机上的 Expo Go 应用
@@ -42,7 +61,7 @@ npx expo start
 3. 点击 "Enter URL manually"
 4. 输入终端中显示的 URL（类似：`exp://192.168.1.72:8081`）
 
-### 步骤 4：开始开发！
+### 步骤 5：开始开发！
 
 - ✅ 修改代码后，应用会自动刷新（热重载）
 - ✅ 摇动手机可以打开开发者菜单
