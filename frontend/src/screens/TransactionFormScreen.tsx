@@ -207,19 +207,20 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
           {!isEditing && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Finance Source *</Text>
-              <View style={styles.pickerContainer}>
-                <select
-                  value={sourceId}
-                  onChange={(e) => setSourceId(e.target.value)}
-                  style={styles.picker as any}
-                >
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.sourceList}>
                   {sources?.map((source) => (
-                    <option key={source.id} value={source.id}>
-                      {source.name} ({source.default_currency})
-                    </option>
+                    <Button
+                      key={source.id}
+                      title={`${source.name}\n(${source.default_currency})`}
+                      variant={sourceId === source.id ? 'primary' : 'secondary'}
+                      onPress={() => setSourceId(source.id)}
+                      style={styles.sourceButton}
+                      size="small"
+                    />
                   ))}
-                </select>
-              </View>
+                </View>
+              </ScrollView>
               {errors.sourceId && <Text style={styles.errorText}>{errors.sourceId}</Text>}
             </View>
           )}
@@ -257,19 +258,17 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
           </View>
 
           {/* Date Input */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Date *</Text>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setErrors((prev) => ({ ...prev, date: '' }));
-              }}
-              style={styles.dateInput as any}
-            />
-            {errors.date && <Text style={styles.errorText}>{errors.date}</Text>}
-          </View>
+          <Input
+            label="Date *"
+            placeholder="YYYY-MM-DD"
+            value={date}
+            onChangeText={(text) => {
+              setDate(text);
+              setErrors((prev) => ({ ...prev, date: '' }));
+            }}
+            error={errors.date}
+            hint="Format: YYYY-MM-DD (e.g., 2025-01-15)"
+          />
 
           {/* Description Input */}
           <Input
@@ -354,17 +353,12 @@ const styles = StyleSheet.create({
   typeButton: {
     flex: 1,
   },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    overflow: 'hidden',
+  sourceList: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  picker: {
-    width: '100%',
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: '#ffffff',
+  sourceButton: {
+    minWidth: 120,
   },
   currencyList: {
     flexDirection: 'row',
@@ -372,14 +366,6 @@ const styles = StyleSheet.create({
   },
   currencyButton: {
     minWidth: 60,
-  },
-  dateInput: {
-    width: '100%',
-    padding: 12,
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
   },
   hint: {
     fontSize: 12,

@@ -3,8 +3,9 @@
  */
 
 // API Base URL - will point to backend API
+// 在移动设备上开发时，需要使用电脑的实际 IP 地址而不是 localhost
 export const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:8000/api/v1'  // Local development
+  ? 'http://192.168.1.72:8000/api/v1'  // Local development (使用电脑IP，支持手机访问)
   : 'https://api.yourapp.com/api/v1';  // Production
 
 // Storage keys for AsyncStorage

@@ -167,7 +167,7 @@ export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: 
   );
 
   return (
-    <Screen padding={false}>
+    <Screen padding={false} scrollable={false}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
