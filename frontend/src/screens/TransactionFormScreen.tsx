@@ -114,9 +114,21 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
         newErrors.date = 'Date must be in YYYY-MM-DD format (e.g., 2025-01-15)';
       } else {
         // Additional validation: check if it's a valid date
-        const parsedDate = new Date(date);
+        // Parse the date and reformat to check if it matches the input
+        // This catches impossible dates like 2025-02-30 or 2025-13-01
+        const parsedDate = new Date(date + 'T00:00:00');
         if (isNaN(parsedDate.getTime())) {
           newErrors.date = 'Invalid date';
+        } else {
+          // Check if reformatting gives us back the original date
+          const year = parsedDate.getFullYear();
+          const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+          const day = String(parsedDate.getDate()).padStart(2, '0');
+          const reformattedDate = `${year}-${month}-${day}`;
+          
+          if (reformattedDate !== date) {
+            newErrors.date = 'Invalid date (e.g., month must be 01-12, day must exist in that month)';
+          }
         }
       }
     }
