@@ -1,0 +1,111 @@
+# Requirements: Wallet App
+
+**Defined:** 2026-04-05
+**Core Value:** Users can record and view financial activity across multiple sources in any currency, with automatic conversion to their preferred base currency.
+
+## v1 Requirements
+
+Requirements for Milestone 1: "Finish What's Started" — completing half-built features and fixing known defects.
+
+### Currency Conversion
+
+- [ ] **CONV-01**: Transaction responses include `converted_amount`, `conversion_rate`, and `conversion_date` when transaction currency differs from user's `base_currency`
+- [ ] **CONV-02**: All four transaction endpoints (create, get, list, update) populate conversion fields using the existing `rates_service.convert_amount`
+- [ ] **CONV-03**: Conversion gracefully falls back to `None` fields (no 503) when the Frankfurter API is unreachable
+
+### Transfers
+
+- [ ] **XFER-01**: User can create a transfer transaction via a two-step form (select destination source, enter amount)
+- [ ] **XFER-02**: Transfer creation links two transactions via a shared `transfer_pair_id` UUID
+- [ ] **XFER-03**: Transfer button in TransactionFormScreen is enabled and functional (not disabled/coming soon)
+
+### Currency Picker
+
+- [ ] **CURR-01**: TransactionFormScreen currency picker fetches available currencies from `/rates/currencies` at form load
+- [ ] **CURR-02**: FinanceSourceFormScreen currency picker fetches available currencies from `/rates/currencies` at form load
+- [ ] **CURR-03**: Both pickers display all 31+ ECB currencies, not a hardcoded 6-item list
+
+### User Profile
+
+- [ ] **PROF-01**: `PATCH /auth/me` endpoint accepts `base_currency` and `default_source_id` updates
+- [ ] **PROF-02**: Frontend settings screen (or profile section) allows user to update `base_currency`
+- [ ] **PROF-03**: `default_source_id` is auto-set when user's first finance source is created
+
+### Bug Fixes
+
+- [ ] **BUG-01**: Duplicate `delete_transaction` route handler removed (only one definition remains)
+- [ ] **BUG-02**: Transaction delete on native platforms (iOS/Android) shows `Alert.alert` confirmation before deleting
+- [ ] **BUG-03**: Finance source archive error on native platforms shows `Alert.alert` error feedback
+- [ ] **BUG-04**: `DEBUG` defaults to `False`; SQL echo and debug features gated on explicit `ENVIRONMENT=development`
+
+## v2 Requirements
+
+Deferred to future milestones.
+
+### Security Hardening
+
+- **SEC-01**: Rate limiting on `POST /auth/login` and `POST /auth/register`
+- **SEC-02**: Startup check rejects default `SECRET_KEY` in non-development environments
+- **SEC-03**: JWT token refresh mechanism (refresh tokens with rotation)
+- **SEC-04**: `extra="ignore"` (not `extra="allow"`) in Pydantic Settings
+- **SEC-05**: Replace `python-jose` with `PyJWT` (CVE exposure)
+- **SEC-06**: `CurrencyCode` validation for `base_currency` at registration
+
+### Performance
+
+- **PERF-01**: `selectinload(Transaction.tags)` eliminates N+1 query on transaction list
+- **PERF-02**: Exchange rate HTTP calls converted to async (`httpx.AsyncClient`)
+- **PERF-03**: Composite index `(user_id, occurred_at)` on transactions table
+
+### Testing
+
+- **TEST-01**: Backend route tests using `httpx.AsyncClient` and `pytest-asyncio`
+- **TEST-02**: Service-level unit tests for `rates_service`
+- **TEST-03**: Frontend component tests for critical screens
+
+### Features
+
+- **FEAT-01**: Budgets and spending limits
+- **FEAT-02**: Analytics / reports / charts
+- **FEAT-03**: Recurring transactions
+- **FEAT-04**: Transaction categories (beyond tags)
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Multi-user / shared wallets | Scope too large for M1; single-user model sufficient |
+| Push notifications | No mobile build pipeline yet |
+| OAuth / social login | Email+password sufficient for M1 |
+| CI/CD pipeline | Not blocking M1 delivery |
+| Redis / external cache | In-memory cache acceptable at current scale |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CONV-01 | Phase 1 | Pending |
+| CONV-02 | Phase 1 | Pending |
+| CONV-03 | Phase 1 | Pending |
+| XFER-01 | Phase 2 | Pending |
+| XFER-02 | Phase 2 | Pending |
+| XFER-03 | Phase 2 | Pending |
+| CURR-01 | Phase 1 | Pending |
+| CURR-02 | Phase 1 | Pending |
+| CURR-03 | Phase 1 | Pending |
+| PROF-01 | Phase 3 | Pending |
+| PROF-02 | Phase 3 | Pending |
+| PROF-03 | Phase 3 | Pending |
+| BUG-01 | Phase 1 | Pending |
+| BUG-02 | Phase 1 | Pending |
+| BUG-03 | Phase 1 | Pending |
+| BUG-04 | Phase 1 | Pending |
+
+**Coverage:**
+- v1 requirements: 16 total
+- Mapped to phases: 16
+- Unmapped: 0 ✓
+
+---
+*Requirements defined: 2026-04-05*
+*Last updated: 2026-04-05 after initial definition*
