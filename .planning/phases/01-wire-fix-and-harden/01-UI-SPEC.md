@@ -31,17 +31,13 @@ Declared values (must be multiples of 4):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gaps, badge vertical padding, tag vertical padding |
-| sm | 8px | Compact element spacing, button gaps, currency button gaps |
-| md | 12px | Inter-element margins (card content, header gaps, input vertical padding) |
-| lg | 16px | Default section padding, list content padding, input horizontal padding, card padding |
-| xl | 20px | Section bottom margins in forms |
-| 2xl | 24px | Header-to-content margins, action section gaps |
-| 3xl | 32px | Empty state padding |
+| xs | 4px | Vertical padding in currency list items |
+| sm | 8px | Currency list item gaps, button gaps |
+| md | 16px | Currency modal content padding, list item horizontal padding |
+| lg | 24px | Header-to-content margins |
+| xl | 32px | Empty state padding |
 
-Exceptions: 6px used for tag gaps (existing pattern, keep as-is). 12px used extensively as an intermediate step between 8px and 16px (established codebase pattern, not a new addition).
-
-**Source:** Extracted from existing `StyleSheet.create` patterns across all screen components.
+**Source:** Scoped to new Phase 1 work (currency picker modal). All values are multiples of 4 and within the standard set {4, 8, 16, 24, 32, 48, 64}.
 
 ---
 
@@ -49,18 +45,12 @@ Exceptions: 6px used for tag gaps (existing pattern, keep as-is). 12px used exte
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
-| Caption | 12px | 400 or 600 | 18px (1.5) |
+| Caption | 12px | 400 | 18px (1.5) |
 | Label | 14px | 600 | 20px (1.43) |
 | Body | 16px | 400 | 24px (1.5) |
-| Heading | 24px | bold (700) | 32px (1.33) |
+| Heading | 24px | 600 | 32px (1.33) |
 
-Additional sizes used but not primary:
-- 10px: badge text (transfer badge) -- keep as-is
-- 11px: tag text -- keep as-is
-- 18px: amount display, source name (weight 600 or bold) -- keep as-is
-- 20px: empty state title (weight 600) -- keep as-is
-
-**Source:** Extracted from existing `StyleSheet.create` across all screens. No new type sizes introduced in Phase 1.
+**Source:** 4-size scale for Phase 1 contract. 2 weights: regular (400) for body text, semibold (600) for headers and labels. Existing codebase sizes not being changed in Phase 1 are not declared here.
 
 ---
 
@@ -94,17 +84,19 @@ Additional semantic colors (established, not new):
 | Element | Copy |
 |---------|------|
 | **Currency picker modal title** | "Select Currency" |
-| **Currency picker cancel button** | "Cancel" |
+| **Currency picker dismiss button** | "Close" |
 | **Currency item format** | "CODE - Full Name" (e.g., "USD - United States Dollar") |
 | **Currency loading fallback** | Show hardcoded 6-currency list (USD, EUR, GBP, CNY, SGD, HKD) while fetching; no loading text displayed |
 | **Delete transaction (single) title** | "Delete Transaction" |
 | **Delete transaction (single) message** | "Are you sure you want to delete this transaction?" |
 | **Delete transaction (transfer) title** | "Delete Transfer" |
 | **Delete transaction (transfer) message** | "This will delete BOTH sides of the transfer. Continue?" |
-| **Delete confirmation button** | "Delete" (style: destructive) |
-| **Delete cancel button** | "Cancel" (style: cancel) |
+| **Delete confirmation button (single)** | "Delete Transaction" (style: destructive) |
+| **Delete confirmation button (transfer)** | "Delete Transfer" (style: destructive) |
+| **Delete cancel button (single)** | "Keep Transaction" (style: cancel) |
+| **Delete cancel button (transfer)** | "Keep Transfer" (style: cancel) |
 | **Archive error title** | "Error" |
-| **Archive error message** | `{error.message}` or "Failed to update finance source" (fallback) |
+| **Archive error message** | `{error.message}` or "Failed to update finance source. Check your connection and try again." (fallback) |
 | **Empty state: transactions heading** | "No Transactions" (existing, unchanged) |
 | **Empty state: transactions body** | "Start tracking your finances by adding your first transaction." (existing, unchanged) |
 | **Empty state: finance sources heading** | "No Finance Sources" (existing, unchanged) |
@@ -115,11 +107,12 @@ Additional semantic colors (established, not new):
 | Action | Confirmation Approach |
 |--------|----------------------|
 | Delete transaction (web) | `window.confirm` with title + message (existing pattern) |
-| Delete transaction (native) | `Alert.alert` with Cancel + Delete (destructive style) -- **new in this phase** |
+| Delete transaction (native, single) | `Alert.alert` with "Keep Transaction" (cancel) + "Delete Transaction" (destructive) -- **new in this phase** |
+| Delete transaction (native, transfer) | `Alert.alert` with "Keep Transfer" (cancel) + "Delete Transfer" (destructive) -- **new in this phase** |
 | Archive finance source (web) | `window.confirm` (existing) |
 | Archive finance source (native) | `Alert.alert` with Cancel + action button (existing) |
 
-**Source:** Delete copy from existing `TransactionsScreen.tsx` `handleDelete`. Archive error pattern from existing `FinanceSourcesScreen.tsx`. Currency picker copy is new (Claude's discretion per CONTEXT.md D-09, Claude's Discretion section). "CODE - Full Name" format recommended per RESEARCH.md Open Question 2.
+**Source:** Delete copy from existing `TransactionsScreen.tsx` `handleDelete`. Archive error pattern from existing `FinanceSourcesScreen.tsx`. Currency picker copy is new (Claude's discretion per CONTEXT.md D-09, Claude's Discretion section). "CODE - Full Name" format recommended per RESEARCH.md Open Question 2. Delete button labels include noun per copywriting contract rules. Cancel buttons use context-specific labels. Note: React Native `Alert.alert` `style: 'cancel'` is independent of the label text.
 
 ---
 
@@ -136,7 +129,7 @@ This is the only new UI element in Phase 1. It replaces the horizontal `ScrollVi
 | Header height | 56px |
 | Header background | `#ffffff` with bottom border `#e5e7eb` 1px |
 | Header title | "Select Currency" -- fontSize 18px, fontWeight 600, color `#1f2937` |
-| Cancel button | Top-right of header -- "Cancel" text, color `#0ea5e9`, fontSize 16px, fontWeight 600 |
+| Dismiss button | Top-right of header -- "Close" text, color `#0ea5e9`, fontSize 16px, fontWeight 600 |
 | List item height | 48px (44px minimum touch target + 4px vertical padding) |
 | List item padding | horizontal 16px |
 | List item text | "CODE - Full Name" -- fontSize 16px, color `#1f2937` |
@@ -151,7 +144,7 @@ This is the only new UI element in Phase 1. It replaces the horizontal `ScrollVi
 |-------|----------|
 | Open | Triggered by pressing the currency field (a `TouchableOpacity` displaying current currency code) |
 | Select currency | Set currency value, close modal immediately |
-| Cancel | Close modal without changing value |
+| Close | Close modal without changing value |
 | Scroll | `FlatList` with default scroll behavior |
 
 ### Web Behavior
@@ -188,7 +181,7 @@ On web (`Platform.OS === 'web'`): keep the existing horizontal `ScrollView` with
 ### What Changes Visually in Phase 1
 
 1. **Currency picker (both form screens):** 6 hardcoded horizontal buttons replaced by API-populated list. On web: same horizontal button row but with 31+ currencies (scrollable). On native: tapping the currency field opens a full-screen FlatList modal.
-2. **Delete confirmation (TransactionsScreen, native only):** Previously no-op on native (missing `else` branch). Now shows native `Alert.alert` dialog before deletion.
+2. **Delete confirmation (TransactionsScreen, native only):** Previously no-op on native (missing `else` branch). Now shows native `Alert.alert` dialog before deletion with context-specific labels (branching on isTransfer).
 3. **Archive error (FinanceSourcesScreen):** Already has native `Alert.alert` in `onError` based on code inspection. The bug fix (BUG-03) may be about adding it where missing -- verify against `CONCERNS.md` diagnosis.
 
 ### What Does NOT Change Visually
