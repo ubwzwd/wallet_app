@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Platform, Modal, TouchableOpacity, FlatList } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Screen, Card, Button, Input } from '@/components';
 import { QUERY_KEYS } from '@/constants/config';
 import * as transactionsApi from '@/api/transactions';
 import * as financeSourcesApi from '@/api/financeSources';
+import * as ratesApi from '@/api/rates';
 import type { Transaction, TransactionCreate } from '@/types/api';
 
 interface TransactionFormScreenProps {
@@ -14,8 +15,6 @@ interface TransactionFormScreenProps {
 }
 
 type TransactionType = 'expense' | 'income' | 'transfer';
-
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY', 'SGD', 'HKD'];
 
 export function TransactionFormScreen({ transaction, onSuccess, onCancel }: TransactionFormScreenProps) {
   const queryClient = useQueryClient();
@@ -31,12 +30,25 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
   const [merchant, setMerchant] = useState(transaction?.merchant || '');
   const [tagsInput, setTagsInput] = useState(transaction?.tags.join(', ') || '');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
 
   // Fetch active finance sources
   const { data: sources } = useQuery({
     queryKey: [QUERY_KEYS.FINANCE_SOURCES, false],
     queryFn: () => financeSourcesApi.getFinanceSources(false),
   });
+
+  // Fetch supported currencies from backend (per D-07)
+  const { data: currencyData } = useQuery({
+    queryKey: [QUERY_KEYS.CURRENCIES],
+    queryFn: () => ratesApi.getCurrencies(),
+    staleTime: Infinity, // Currencies rarely change
+  });
+
+  // Derive sorted currency list; fall back to 6-item hardcoded list while loading (per D-10)
+  const currencies = currencyData
+    ? Object.keys(currencyData.currencies).sort()
+    : ['USD', 'EUR', 'GBP', 'CNY', 'SGD', 'HKD'];
 
   // Set default source
   useEffect(() => {
@@ -240,20 +252,74 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
           {/* Currency Selection */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Currency *</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.currencyList}>
-                {CURRENCIES.map((c) => (
-                  <Button
-                    key={c}
-                    title={c}
-                    variant={currency === c ? 'primary' : 'secondary'}
-                    size="small"
-                    onPress={() => setCurrency(c)}
-                    style={styles.currencyButton}
-                  />
-                ))}
-              </View>
-            </ScrollView>
+            {Platform.OS === 'web' ? (
+              /* Web: horizontal scrollable button row (per D-08) */
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.currencyList}>
+                  {currencies.map((c) => (
+                    <Button
+                      key={c}
+                      title={c}
+                      variant={currency === c ? 'primary' : 'secondary'}
+                      size="small"
+                      onPress={() => setCurrency(c)}
+                      style={styles.currencyButton}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            ) : (
+              /* Native: TouchableOpacity opens FlatList modal (per D-09) */
+              <>
+                <TouchableOpacity
+                  style={styles.currencyTrigger}
+                  onPress={() => setCurrencyPickerVisible(true)}
+                >
+                  <Text style={styles.currencyTriggerText}>{currency}</Text>
+                </TouchableOpacity>
+
+                <Modal
+                  visible={currencyPickerVisible}
+                  animationType="slide"
+                  onRequestClose={() => setCurrencyPickerVisible(false)}
+                >
+                  <View style={styles.modalContainer}>
+                    {/* Modal header */}
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Select Currency</Text>
+                      <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
+                        <Text style={styles.modalClose}>Close</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Currency list */}
+                    <FlatList
+                      data={currencies}
+                      keyExtractor={(item) => item}
+                      renderItem={({ item }) => {
+                        const isSelected = item === currency;
+                        const fullName = currencyData?.currencies[item];
+                        return (
+                          <TouchableOpacity
+                            style={[styles.currencyItem, isSelected && styles.currencyItemSelected]}
+                            onPress={() => {
+                              setCurrency(item);
+                              setCurrencyPickerVisible(false);
+                            }}
+                          >
+                            <Text style={[styles.currencyItemText, isSelected && styles.currencyItemTextSelected]}>
+                              <Text style={styles.currencyCode}>{item}</Text>
+                              {fullName ? ` - ${fullName}` : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      }}
+                      ItemSeparatorComponent={() => <View style={styles.currencyDivider} />}
+                    />
+                  </View>
+                </Modal>
+              </>
+            )}
           </View>
 
           {/* Date Input */}
@@ -398,6 +464,64 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+  currencyTrigger: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#ffffff',
+  },
+  currencyTriggerText: {
+    fontSize: 16,
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  modalHeader: {
+    height: 56,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  modalClose: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0ea5e9',
+  },
+  currencyItem: {
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  currencyItemSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  currencyItemText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  currencyItemTextSelected: {
+    color: '#0ea5e9',
+  },
+  currencyCode: {
+    fontWeight: '600',
+  },
+  currencyDivider: {
+    height: 1,
+    backgroundColor: '#f3f4f6',
   },
 });
 

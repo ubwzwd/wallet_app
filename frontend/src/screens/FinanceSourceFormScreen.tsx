@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView } from 'react-native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { View, Text, StyleSheet, Alert, ScrollView, Modal, TouchableOpacity, FlatList, Platform } from 'react-native';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Screen, Card, Button, Input } from '@/components';
 import { QUERY_KEYS } from '@/constants/config';
 import * as financeSourcesApi from '@/api/financeSources';
+import * as ratesApi from '@/api/rates';
 import type { FinanceSource, FinanceSourceCreate } from '@/types/api';
 
 interface FinanceSourceFormScreenProps {
@@ -13,7 +14,6 @@ interface FinanceSourceFormScreenProps {
 }
 
 const SOURCE_TYPES = ['checking', 'savings', 'credit', 'cash', 'investment', 'other'];
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY', 'SGD', 'HKD'];
 
 export function FinanceSourceFormScreen({ source, onSuccess, onCancel }: FinanceSourceFormScreenProps) {
   const queryClient = useQueryClient();
@@ -23,6 +23,18 @@ export function FinanceSourceFormScreen({ source, onSuccess, onCancel }: Finance
   const [type, setType] = useState(source?.type || 'checking');
   const [currency, setCurrency] = useState(source?.default_currency || 'USD');
   const [errors, setErrors] = useState<{ name?: string }>({});
+  const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
+
+  // Fetch supported currencies from backend (per D-07)
+  const { data: currencyData } = useQuery({
+    queryKey: [QUERY_KEYS.CURRENCIES],
+    queryFn: () => ratesApi.getCurrencies(),
+    staleTime: Infinity,
+  });
+
+  const currencies = currencyData
+    ? Object.keys(currencyData.currencies).sort()
+    : ['USD', 'EUR', 'GBP', 'CNY', 'SGD', 'HKD'];
 
   // Create mutation
   const createMutation = useMutation({
@@ -141,20 +153,74 @@ export function FinanceSourceFormScreen({ source, onSuccess, onCancel }: Finance
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Currency *</Text>
               <Text style={styles.sectionHint}>Default currency for this source</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.currencyList}>
-                  {CURRENCIES.map((c) => (
-                    <Button
-                      key={c}
-                      title={c}
-                      variant={currency === c ? 'primary' : 'secondary'}
-                      size="small"
-                      onPress={() => setCurrency(c)}
-                      style={styles.currencyButton}
-                    />
-                  ))}
-                </View>
-              </ScrollView>
+              {Platform.OS === 'web' ? (
+                /* Web: horizontal scrollable button row (per D-08) */
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.currencyList}>
+                    {currencies.map((c) => (
+                      <Button
+                        key={c}
+                        title={c}
+                        variant={currency === c ? 'primary' : 'secondary'}
+                        size="small"
+                        onPress={() => setCurrency(c)}
+                        style={styles.currencyButton}
+                      />
+                    ))}
+                  </View>
+                </ScrollView>
+              ) : (
+                /* Native: TouchableOpacity opens FlatList modal (per D-09) */
+                <>
+                  <TouchableOpacity
+                    style={styles.currencyTrigger}
+                    onPress={() => setCurrencyPickerVisible(true)}
+                  >
+                    <Text style={styles.currencyTriggerText}>{currency}</Text>
+                  </TouchableOpacity>
+
+                  <Modal
+                    visible={currencyPickerVisible}
+                    animationType="slide"
+                    onRequestClose={() => setCurrencyPickerVisible(false)}
+                  >
+                    <View style={styles.modalContainer}>
+                      {/* Modal header */}
+                      <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Select Currency</Text>
+                        <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
+                          <Text style={styles.modalClose}>Close</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Currency list */}
+                      <FlatList
+                        data={currencies}
+                        keyExtractor={(item) => item}
+                        renderItem={({ item }) => {
+                          const isSelected = item === currency;
+                          const fullName = currencyData?.currencies[item];
+                          return (
+                            <TouchableOpacity
+                              style={[styles.currencyItem, isSelected && styles.currencyItemSelected]}
+                              onPress={() => {
+                                setCurrency(item);
+                                setCurrencyPickerVisible(false);
+                              }}
+                            >
+                              <Text style={[styles.currencyItemText, isSelected && styles.currencyItemTextSelected]}>
+                                <Text style={styles.currencyCode}>{item}</Text>
+                                {fullName ? ` - ${fullName}` : ''}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        }}
+                        ItemSeparatorComponent={() => <View style={styles.currencyDivider} />}
+                      />
+                    </View>
+                  </Modal>
+                </>
+              )}
             </View>
           )}
 
@@ -254,6 +320,64 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+  currencyTrigger: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#ffffff',
+  },
+  currencyTriggerText: {
+    fontSize: 16,
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  modalHeader: {
+    height: 56,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  modalClose: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0ea5e9',
+  },
+  currencyItem: {
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  currencyItemSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  currencyItemText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  currencyItemTextSelected: {
+    color: '#0ea5e9',
+  },
+  currencyCode: {
+    fontWeight: '600',
+  },
+  currencyDivider: {
+    height: 1,
+    backgroundColor: '#f3f4f6',
   },
 });
 
