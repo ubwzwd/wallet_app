@@ -6,7 +6,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Wire, Fix, and Harden** — Wire currency conversion into all transaction endpoints, replace hardcoded currency pickers with live API data, and eliminate four known bugs
+- [~] **Phase 1: Wire, Fix, and Harden** — Wire currency conversion into all transaction endpoints, replace hardcoded currency pickers with live API data, and eliminate four known bugs *(executed — awaiting human verification)*
 - [ ] **Phase 2: Complete Transfer Transactions** — Build the two-step transfer creation UI and link paired transactions via `transfer_pair_id`
 - [ ] **Phase 3: User Profile Management** — Add `PATCH /auth/me` endpoint, frontend profile screen for `base_currency`, and auto-set `default_source_id` on first source creation
 
@@ -22,8 +22,8 @@
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Currency Conversion Wiring (backend/app/api/transactions.py: wire rates_service into all 4 endpoints, remove duplicate delete handlers)
-- [ ] 01-02-PLAN.md — Live Currency Pickers and Bug Fixes (frontend: live currency picker with FlatList modal, native delete Alert, DEBUG=False)
+- [x] 01-01-PLAN.md — Currency Conversion Wiring (backend/app/api/transactions.py: wire rates_service into all 4 endpoints, remove duplicate delete handlers)
+- [x] 01-02-PLAN.md — Live Currency Pickers and Bug Fixes (frontend: live currency picker with FlatList modal, native delete Alert, DEBUG=False)
 
 **Delivers:**
 - CONV-01, CONV-02, CONV-03
@@ -38,6 +38,8 @@ Plans:
 - Deleting a transaction on iOS/Android shows a native confirmation dialog before the DELETE request is sent
 - Archiving a finance source that fails on native shows a native error dialog
 - Backend starts with `DEBUG=False` when `ENVIRONMENT` env var is absent
+
+**Verification status:** Static checks passed (13/13). Human verification pending — see .planning/phases/01-wire-fix-and-harden/01-VERIFICATION.md
 
 **UI hint**: yes
 
@@ -89,7 +91,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Wire, Fix, and Harden | 0/2 | Not started | - |
+| 1. Wire, Fix, and Harden | 2/2 | Awaiting human verification | - |
 | 2. Complete Transfer Transactions | 0/1 | Not started | - |
 | 3. User Profile Management | 0/2 | Not started | - |
 
@@ -122,4 +124,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-04-05*
-*Updated: 2026-04-05 — Phase 1 plans created*
+*Updated: 2026-04-05 — Phase 1 executed; static verification passed; human verification pending*
