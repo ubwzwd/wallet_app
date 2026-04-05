@@ -34,7 +34,7 @@ export function FinanceSourcesScreen({ onCreatePress, onEditPress, onBackPress }
       });
     },
     onError: (error: any) => {
-      const errorMessage = error.message || 'Failed to update finance source';
+      const errorMessage = error.message || 'Failed to update finance source. Check your connection and try again.';
       if (Platform.OS === 'web') {
         window.alert(`Error\n\n${errorMessage}`);
       } else {

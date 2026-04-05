@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControl, Platform, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Screen, Card, Button } from '@/components';
 import { QUERY_KEYS } from '@/constants/config';
@@ -41,15 +41,27 @@ export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: 
 
   const handleDelete = (transaction: Transaction) => {
     const isTransfer = !!transaction.transfer_pair_id;
+    const title = isTransfer ? 'Delete Transfer' : 'Delete Transaction';
     const message = isTransfer
-      ? `Delete Transfer\n\nThis will delete BOTH sides of the transfer. Continue?`
-      : `Delete Transaction\n\nAre you sure you want to delete this transaction?`;
+      ? 'This will delete BOTH sides of the transfer. Continue?'
+      : 'Are you sure you want to delete this transaction?';
+    const confirmLabel = isTransfer ? 'Delete Transfer' : 'Delete Transaction';
+    const cancelLabel = isTransfer ? 'Keep Transfer' : 'Keep Transaction';
 
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(message);
+      const confirmed = window.confirm(`${title}\n\n${message}`);
       if (confirmed) {
         deleteMutation.mutate(transaction.id);
       }
+    } else {
+      Alert.alert(title, message, [
+        { text: cancelLabel, style: 'cancel' },
+        {
+          text: confirmLabel,
+          style: 'destructive',
+          onPress: () => deleteMutation.mutate(transaction.id),
+        },
+      ]);
     }
   };
 
