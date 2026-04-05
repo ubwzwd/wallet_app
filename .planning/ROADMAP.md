@@ -19,9 +19,11 @@
 **Goal:** Transaction endpoints return real conversion data, currency pickers show all 31+ ECB currencies, and four known defects are eliminated
 **Depends on:** —
 
-**Plans:**
-1. Currency Conversion Wiring — In `backend/app/api/transactions.py`, call `rates_service.convert_amount` inside `create_transaction`, `get_transaction`, `list_transactions`, and `update_transaction`; populate `converted_amount`, `conversion_rate`, `conversion_date` on `TransactionResponse`; catch `httpx.HTTPError` / service unavailability and fall back to `None` fields without raising 503
-2. Live Currency Pickers and Bug Fixes — Add `GET /rates/currencies` fetch in `TransactionFormScreen.tsx` and `FinanceSourceFormScreen.tsx` (replacing hardcoded 6-item arrays); remove the duplicate `delete_transaction` handler from `transactions.py`; replace `window.confirm` in transaction delete with `Platform.OS`-guarded `Alert.alert`; add `Alert.alert` error feedback to finance source archive on native; set `DEBUG = False` as default in `backend/app/core/config.py` and gate SQLAlchemy echo on `ENVIRONMENT == "development"`
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Currency Conversion Wiring (backend/app/api/transactions.py: wire rates_service into all 4 endpoints, remove duplicate delete handlers)
+- [ ] 01-02-PLAN.md — Live Currency Pickers and Bug Fixes (frontend: live currency picker with FlatList modal, native delete Alert, DEBUG=False)
 
 **Delivers:**
 - CONV-01, CONV-02, CONV-03
@@ -97,16 +99,16 @@
 
 | Requirement | Phase | Plans |
 |-------------|-------|-------|
-| CONV-01 | 1 | Currency Conversion Wiring |
-| CONV-02 | 1 | Currency Conversion Wiring |
-| CONV-03 | 1 | Currency Conversion Wiring |
-| CURR-01 | 1 | Live Currency Pickers and Bug Fixes |
-| CURR-02 | 1 | Live Currency Pickers and Bug Fixes |
-| CURR-03 | 1 | Live Currency Pickers and Bug Fixes |
-| BUG-01 | 1 | Live Currency Pickers and Bug Fixes |
-| BUG-02 | 1 | Live Currency Pickers and Bug Fixes |
-| BUG-03 | 1 | Live Currency Pickers and Bug Fixes |
-| BUG-04 | 1 | Live Currency Pickers and Bug Fixes |
+| CONV-01 | 1 | 01-01-PLAN.md |
+| CONV-02 | 1 | 01-01-PLAN.md |
+| CONV-03 | 1 | 01-01-PLAN.md |
+| CURR-01 | 1 | 01-02-PLAN.md |
+| CURR-02 | 1 | 01-02-PLAN.md |
+| CURR-03 | 1 | 01-02-PLAN.md |
+| BUG-01 | 1 | 01-01-PLAN.md |
+| BUG-02 | 1 | 01-02-PLAN.md |
+| BUG-03 | 1 | 01-02-PLAN.md |
+| BUG-04 | 1 | 01-02-PLAN.md |
 | XFER-01 | 2 | Transfer Creation UI and API Integration |
 | XFER-02 | 2 | Transfer Creation UI and API Integration |
 | XFER-03 | 2 | Transfer Creation UI and API Integration |
@@ -120,3 +122,4 @@
 
 ---
 *Roadmap created: 2026-04-05*
+*Updated: 2026-04-05 — Phase 1 plans created*
