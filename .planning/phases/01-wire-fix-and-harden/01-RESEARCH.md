@@ -376,7 +376,7 @@ No state-of-the-art changes relevant to this phase. All libraries are already in
 
 **Note on A1:** The Frankfurter API documentation states rates are expressed as "1 base unit = X target units". This is standard FX convention. The `convert_amount()` function already works correctly for single conversions, confirming this. For batch: if we call `fetch_latest_rates("USD", ["EUR"])` and get `{"EUR": 0.92}`, that means 1 USD = 0.92 EUR. To convert 100 EUR to USD: `100 / 0.92 = 108.70 USD`. [ASSUMED -- direction logic should be verified with a test call]
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Batch conversion rate direction**
    - What we know: `convert_amount()` handles direction internally for single conversions. For batch, we call `fetch_latest_rates(base_currency, tx_currencies)`.
