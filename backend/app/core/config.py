@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "Wallet App API"
-    DEBUG: bool = True
+    DEBUG: bool = False
     
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:8081,http://localhost:19006,http://localhost:3000"

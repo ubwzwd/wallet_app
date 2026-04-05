@@ -13,7 +13,7 @@ engine = create_engine(
     pool_pre_ping=True,  # Verify connections before using
     pool_size=5,
     max_overflow=10,
-    echo=settings.DEBUG,  # Log SQL queries in debug mode
+    echo=(settings.ENVIRONMENT == "development" and settings.DEBUG),  # SQL logging only in dev
 )
 
 # Session factory
