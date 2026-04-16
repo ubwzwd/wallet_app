@@ -2,8 +2,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, ForeignKey, Uuid
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -14,11 +13,11 @@ class User(Base):
     
     __tablename__ = "users"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(String, nullable=False)
     base_currency = Column(String(3), nullable=False, default="USD")  # ISO 4217 code
-    default_source_id = Column(UUID(as_uuid=True), ForeignKey("finance_sources.id", ondelete="SET NULL"), nullable=True)
+    default_source_id = Column(Uuid(), ForeignKey("finance_sources.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships

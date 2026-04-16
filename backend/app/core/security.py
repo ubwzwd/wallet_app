@@ -1,6 +1,7 @@
 """
 Security utilities for password hashing and JWT token management.
 """
+import uuid as _uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -115,8 +116,8 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    # Query user from database
-    user = db.query(User).filter(User.id == user_id).first()
+    # Query user from database — convert string sub claim to uuid.UUID for Uuid() column
+    user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     
     if user is None:
         raise credentials_exception

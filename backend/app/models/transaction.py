@@ -2,8 +2,7 @@
 import uuid
 from datetime import datetime, date
 
-from sqlalchemy import Column, String, DateTime, Date, Numeric, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, Date, Numeric, ForeignKey, Uuid
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -14,15 +13,15 @@ class Transaction(Base):
     
     __tablename__ = "transactions"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    source_id = Column(UUID(as_uuid=True), ForeignKey("finance_sources.id"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(), ForeignKey("users.id"), nullable=False, index=True)
+    source_id = Column(Uuid(), ForeignKey("finance_sources.id"), nullable=False, index=True)
     amount = Column(Numeric(18, 4), nullable=False)  # Original amount
     currency = Column(String(3), nullable=False)  # ISO 4217 code
     occurred_at = Column(Date, nullable=False, index=True)  # Transaction date
     description = Column(String, nullable=True)
     merchant = Column(String, nullable=True)
-    transfer_pair_id = Column(UUID(as_uuid=True), nullable=True, index=True)  # Links paired transfer transactions
+    transfer_pair_id = Column(Uuid(), nullable=True, index=True)  # Links paired transfer transactions
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships

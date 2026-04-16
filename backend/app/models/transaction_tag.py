@@ -1,6 +1,5 @@
 """Transaction tag model for categorizing transactions."""
-from sqlalchemy import Column, String, ForeignKey, PrimaryKeyConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, ForeignKey, PrimaryKeyConstraint, Uuid
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -11,7 +10,7 @@ class TransactionTag(Base):
     
     __tablename__ = "transaction_tags"
     
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False)
+    transaction_id = Column(Uuid(), ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False)
     tag = Column(String(64), nullable=False)
     
     # Composite primary key
