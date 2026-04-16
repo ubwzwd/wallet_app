@@ -7,7 +7,7 @@
 ## Phases
 
 - [~] **Phase 1: Wire, Fix, and Harden** — Wire currency conversion into all transaction endpoints, replace hardcoded currency pickers with live API data, and eliminate four known bugs *(executed — awaiting human verification)*
-- [ ] **Phase 2: Complete Transfer Transactions** — Build the two-step transfer creation UI and link paired transactions via `transfer_pair_id`
+- [x] **Phase 2: Complete Transfer Transactions** — Build the two-step transfer creation UI and link paired transactions via `transfer_pair_id`
 - [ ] **Phase 3: User Profile Management** — Add `PATCH /auth/me` endpoint, frontend profile screen for `base_currency`, and auto-set `default_source_id` on first source creation
 
 ---
@@ -50,8 +50,11 @@ Plans:
 **Goal:** Users can create a transfer between two finance sources through a functional two-step UI, with both legs persisted and linked in the database
 **Depends on:** Phase 1
 
-**Plans:**
-1. Transfer Creation UI and API Integration — In `TransactionFormScreen.tsx`, enable the Transfer tab (remove disabled/coming-soon state); add step 1 (select destination `FinanceSource` from a picker) and step 2 (enter amount and confirm); call the existing `POST /api/v1/transactions` endpoint twice (debit leg then credit leg); pass the `transfer_pair_id` UUID (generated client-side or returned from first leg) in both payloads; update `frontend/src/types/api.ts` to include `transfer_pair_id` on `TransactionCreate` and `Transaction` if not already present
+**Plans:** 2 plans
+
+Plans:
+- [x] 02-01-PLAN.md — Transfer creation wizard: Nyquist tests + two-step wizard UI with sequential creation and rollback
+- [x] 02-02-PLAN.md — Transfer edit mode + human verification: simplified edit form for existing transfers, paired leg update via cache
 
 **Delivers:**
 - XFER-01, XFER-02, XFER-03
@@ -92,7 +95,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Wire, Fix, and Harden | 2/2 | Awaiting human verification | - |
-| 2. Complete Transfer Transactions | 0/1 | Not started | - |
+| 2. Complete Transfer Transactions | 2/2 | Complete | 2026-04-17 |
 | 3. User Profile Management | 0/2 | Not started | - |
 
 ---
@@ -111,17 +114,18 @@ Plans:
 | BUG-02 | 1 | 01-02-PLAN.md |
 | BUG-03 | 1 | 01-02-PLAN.md |
 | BUG-04 | 1 | 01-02-PLAN.md |
-| XFER-01 | 2 | Transfer Creation UI and API Integration |
-| XFER-02 | 2 | Transfer Creation UI and API Integration |
-| XFER-03 | 2 | Transfer Creation UI and API Integration |
+| XFER-01 | 2 | 02-01-PLAN.md, 02-02-PLAN.md |
+| XFER-02 | 2 | 02-01-PLAN.md, 02-02-PLAN.md |
+| XFER-03 | 2 | 02-01-PLAN.md |
 | PROF-01 | 3 | Profile Endpoint and Auto-Default Source |
 | PROF-02 | 3 | Profile Settings Screen |
 | PROF-03 | 3 | Profile Endpoint and Auto-Default Source |
 
 **v1 requirements:** 16 total
 **Covered:** 16
-**Gaps:** 0 ✓
+**Gaps:** 0
 
 ---
 *Roadmap created: 2026-04-05*
-*Updated: 2026-04-05 — Phase 1 executed; static verification passed; human verification pending*
+*Updated: 2026-04-14 — Phase 2 planned (2 plans, 2 waves)*
+*Updated: 2026-04-17 — Phase 2 complete (human-verified)*

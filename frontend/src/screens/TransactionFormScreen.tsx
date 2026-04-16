@@ -23,7 +23,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
   // Form state
   const [type, setType] = useState<TransactionType>('expense');
   const [sourceId, setSourceId] = useState(transaction?.source_id || '');
-  const [amount, setAmount] = useState(transaction ? Math.abs(parseFloat(transaction.amount)).toString() : '');
+  const [amount, setAmount] = useState(transaction ? Math.abs(Number(transaction.amount)).toString() : '');
   const [currency, setCurrency] = useState(transaction?.currency || 'USD');
   const [date, setDate] = useState(transaction?.occurred_at || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState(transaction?.description || '');
@@ -128,9 +128,9 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
     if (!sourceId) {
       newErrors.sourceId = 'Finance source is required';
     }
-    const parsedAmount = parseFloat(amount);
+    const parsedAmount = Number(amount);
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      newErrors.amount = isNaN(parsedAmount) && amount ? 'Amount must be a valid number' : 'Amount must be greater than 0';
+      newErrors.amount = isNaN(parsedAmount) ? 'Amount must be a valid number' : 'Amount must be greater than 0';
     }
     if (!date) {
       newErrors.date = 'Date is required';
@@ -153,7 +153,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
     if (!validate()) return;
 
     const pairId = crypto.randomUUID();
-    const absAmount = Math.abs(parseFloat(amount));
+    const absAmount = Math.abs(Number(amount));
     const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
     const commonFields = {
       currency: currency.toUpperCase(),
@@ -229,8 +229,8 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
 
     if (!transaction) return;
 
-    const absAmount = Math.abs(parseFloat(amount));
-    const signedAmount = parseFloat(transaction.amount) < 0 ? -absAmount : absAmount;
+    const absAmount = Math.abs(Number(amount));
+    const signedAmount = Number(transaction.amount) < 0 ? -absAmount : absAmount;
     const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
     setIsSubmitting(true);
@@ -255,7 +255,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
       );
 
       if (pairedLeg) {
-        const pairedSignedAmount = parseFloat(pairedLeg.amount) < 0 ? -absAmount : absAmount;
+        const pairedSignedAmount = Number(pairedLeg.amount) < 0 ? -absAmount : absAmount;
         await transactionsApi.updateTransaction(pairedLeg.id, {
           amount: pairedSignedAmount,
           occurred_at: date,
@@ -301,7 +301,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
       return;
     }
 
-    const numAmount = parseFloat(amount);
+    const numAmount = Number(amount);
     const signedAmount = type === 'income' ? numAmount : -numAmount;
     const tags = tagsInput
       .split(',')

@@ -361,9 +361,12 @@ def update_transaction(
     # Handle tags separately
     new_tags = update_data.pop('tags', None)
 
-    # Update basic fields
+    # Update basic fields; skip None for non-nullable DB columns
+    _non_nullable = {'amount', 'currency', 'occurred_at'}
     for field, value in update_data.items():
-        if field == 'currency':
+        if value is None and field in _non_nullable:
+            continue
+        if field == 'currency' and value is not None:
             value = value.upper()
         setattr(transaction, field, value)
 

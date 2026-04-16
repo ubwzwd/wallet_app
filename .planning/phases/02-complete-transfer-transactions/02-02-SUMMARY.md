@@ -35,16 +35,20 @@ explanatory note. On submit, `handleTransferUpdate` updates both legs sequential
 lookup (`queryClient.getQueryData`) with a fetch fallback for the paired leg. 22 static analysis
 tests pass (16 from plan 02-01 + 6 new D-10/D-11 assertions).
 
-## Checkpoint: Human Verification Pending
+## Checkpoint: PASSED
 
 **Type:** human-verify
-**Awaiting:** Visual confirmation of transfer creation + edit flow in the running app.
+**Verified:** 2026-04-17 — Transfer creation wizard and edit mode confirmed working in browser.
 
-**Tests to run after starting dev server** (`cd frontend && npx expo start --web`):
-
-1. Transfer creation: Transfer tab enabled, two-step wizard, paired transactions appear in list
-2. Transfer edit: Simplified form, read-only source/currency note, both legs updated on submit
-3. Single-source guard: Transfer tab disabled with hint when only one source exists
+**Bugs fixed during verification:**
+- Backend: SQLite UUID compatibility — replaced `sqlalchemy.dialects.postgresql.UUID` with `sqlalchemy.Uuid()` in all models
+- Backend: PATCH /transactions 500 — `amount=None` reaching DB when frontend sent NaN as null; added non-nullable field guard in update loop
+- Backend: Exchange rate API URL updated (`api.frankfurter.dev/v1`)
+- Frontend: Amount validation — switched `parseFloat()` to `Number()` to reject mixed strings like "123fdas"
+- Frontend: "Unexpected text node" warnings — fixed empty-string coercion in Input.tsx (`&&` → ternary)
+- Frontend: Removed blank lines between JSX siblings in HomeScreen.tsx, Navigation.tsx
+- Frontend: Card.tsx shadow deprecation — replaced `shadow*` props with `boxShadow`
+- Frontend: Require cycle — removed Navigation from components barrel export
 
 ## Self-Check: PASSED
 

@@ -142,12 +142,10 @@ export function HomeScreen() {
         {/* User Info Card */}
         <Card variant="elevated" style={styles.card}>
           <Text style={styles.cardTitle}>Account Information</Text>
-          
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Email:</Text>
             <Text style={styles.infoValue}>{user.email}</Text>
           </View>
-
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Base Currency:</Text>
             <Text style={styles.infoValue}>{user.base_currency}</Text>
@@ -157,14 +155,12 @@ export function HomeScreen() {
         {/* Quick Actions Card */}
         <Card variant="outlined" style={styles.card}>
           <Text style={styles.cardTitle}>Quick Actions</Text>
-          
           <Button
             title="💳 Manage Finance Sources"
             variant="secondary"
             onPress={() => setCurrentView('finance-sources')}
             style={styles.quickButton}
           />
-
           <Button
             title="💰 View Transactions"
             variant="secondary"

@@ -28,13 +28,13 @@ export function Input({
 
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={styles.inputContainer}>
         <TextInput
           style={[
             styles.input,
             isFocused && styles.inputFocused,
-            error && styles.inputError,
+            !!error && styles.inputError,
             style,
           ]}
           placeholderTextColor="#9ca3af"
@@ -54,8 +54,8 @@ export function Input({
           </TouchableOpacity>
         )}
       </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
-      {hint && !error && <Text style={styles.hintText}>{hint}</Text>}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {hint && !error ? <Text style={styles.hintText}>{hint}</Text> : null}
     </View>
   );
 }

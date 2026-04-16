@@ -30,7 +30,6 @@ export function Navigation() {
             Login
           </Text>
         </TouchableOpacity>
-        
         <TouchableOpacity
           style={[styles.tab, activeScreen === 'register' && styles.activeTab]}
           onPress={() => setActiveScreen('register')}

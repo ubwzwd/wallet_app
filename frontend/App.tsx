@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/store/AuthContext';
 import { queryClient } from '@/utils/queryClient';
-import { Navigation } from '@/components';
+import { Navigation } from '@/components/Navigation';
 
 /**
  * Main App Content
