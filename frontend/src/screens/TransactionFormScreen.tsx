@@ -128,8 +128,9 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
     if (!sourceId) {
       newErrors.sourceId = 'Finance source is required';
     }
-    if (!amount || parseFloat(amount) <= 0) {
-      newErrors.amount = 'Amount must be greater than 0';
+    const parsedAmount = parseFloat(amount);
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      newErrors.amount = isNaN(parsedAmount) && amount ? 'Amount must be a valid number' : 'Amount must be greater than 0';
     }
     if (!date) {
       newErrors.date = 'Date is required';
