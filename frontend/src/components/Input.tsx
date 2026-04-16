@@ -29,7 +29,6 @@ export function Input({
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      
       <View style={styles.inputContainer}>
         <TextInput
           style={[
@@ -44,7 +43,6 @@ export function Input({
           onBlur={() => setIsFocused(false)}
           {...textInputProps}
         />
-        
         {isPassword && (
           <TouchableOpacity
             style={styles.passwordToggle}
