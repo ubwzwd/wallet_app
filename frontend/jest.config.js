@@ -3,6 +3,9 @@ module.exports = {
   // Uses a lightweight node environment that avoids expo/winter and
   // react-native-worklets setup failures on this machine.
   testEnvironment: 'node',
+  // Minimal setupFiles: only define __DEV__ without loading expo/winter
+  // (which fails due to missing react-native-worklets peer dep).
+  setupFiles: ['<rootDir>/jest.setup.js'],
   transform: {
     '\\.[jt]sx?$': ['babel-jest', {
       caller: { name: 'metro', bundler: 'metro', platform: 'ios' },
