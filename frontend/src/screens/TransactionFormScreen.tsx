@@ -134,7 +134,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
     if (!date) {
       newErrors.date = 'Date is required';
     }
-    if (type === 'transfer') {
+    if (type === 'transfer' && !isEditing) {
       if (!destinationSourceId) {
         newErrors.destinationSourceId = 'Destination source is required';
       }
@@ -223,10 +223,76 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
     }
   };
 
+  const handleTransferUpdate = async () => {
+    if (!validate()) return;
+
+    if (!transaction) return;
+
+    const absAmount = Math.abs(parseFloat(amount));
+    const signedAmount = parseFloat(transaction.amount) < 0 ? -absAmount : absAmount;
+    const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
+    setIsSubmitting(true);
+
+    try {
+      // Update current leg
+      await transactionsApi.updateTransaction(transaction.id, {
+        amount: signedAmount,
+        occurred_at: date,
+        description: description.trim() || undefined,
+        merchant: merchant.trim() || undefined,
+        tags,
+      });
+
+      // Find paired leg from cache, fallback to fetch
+      let allTransactions = queryClient.getQueryData<Transaction[]>([QUERY_KEYS.TRANSACTIONS]);
+      if (!allTransactions) {
+        allTransactions = await transactionsApi.getTransactions();
+      }
+      const pairedLeg = allTransactions?.find(
+        t => t.transfer_pair_id === transaction.transfer_pair_id && t.id !== transaction.id
+      );
+
+      if (pairedLeg) {
+        const pairedSignedAmount = parseFloat(pairedLeg.amount) < 0 ? -absAmount : absAmount;
+        await transactionsApi.updateTransaction(pairedLeg.id, {
+          amount: pairedSignedAmount,
+          occurred_at: date,
+          description: description.trim() || undefined,
+          merchant: merchant.trim() || undefined,
+          tags,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.TRANSACTIONS] });
+      setIsSubmitting(false);
+      if (Platform.OS === 'web') {
+        window.alert('Success\n\nTransfer updated successfully!');
+      } else {
+        Alert.alert('Success', 'Transfer updated successfully!');
+      }
+      onSuccess();
+    } catch (err: any) {
+      setIsSubmitting(false);
+      const errorMessage = err.message || 'Failed to update transfer';
+      if (Platform.OS === 'web') {
+        window.alert(`Error\n\n${errorMessage}`);
+      } else {
+        Alert.alert('Error', errorMessage);
+      }
+    }
+  };
+
   const handleSubmit = () => {
     // Route to transfer handler for new transfer transactions
     if (type === 'transfer' && !isEditing) {
       handleTransferSubmit();
+      return;
+    }
+
+    // Route to transfer update handler for editing existing transfers
+    if (type === 'transfer' && isEditing) {
+      handleTransferUpdate();
       return;
     }
 
@@ -590,8 +656,89 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
             </View>
           )}
 
-          {/* Standard form fields: shown for expense/income (new) or any edit */}
-          {(type !== 'transfer' || isEditing) && (
+          {/* Transfer edit mode: simplified form for editing existing transfers */}
+          {isEditing && type === 'transfer' && (
+            <View>
+              {/* Read-only note per D-11 */}
+              <Text style={styles.hint}>Source and currency cannot be changed on an existing transfer.</Text>
+
+              {/* Amount Input */}
+              <Input
+                label="Amount *"
+                placeholder="0.00"
+                value={amount}
+                onChangeText={(text) => {
+                  setAmount(text);
+                  setErrors((prev) => ({ ...prev, amount: '' }));
+                }}
+                keyboardType="decimal-pad"
+                error={errors.amount}
+              />
+
+              {/* Date Input */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Date *</Text>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e: any) => {
+                    setDate(e.target.value);
+                    setErrors((prev) => ({ ...prev, date: '' }));
+                  }}
+                  style={styles.dateInput as any}
+                />
+                {errors.date && <Text style={styles.errorText}>{errors.date}</Text>}
+              </View>
+
+              {/* Description */}
+              <Input
+                label="Description"
+                placeholder="e.g., Grocery shopping, Salary, etc."
+                value={description}
+                onChangeText={setDescription}
+                hint="Optional: Add a description for this transaction"
+              />
+
+              {/* Merchant */}
+              <Input
+                label="Merchant"
+                placeholder="e.g., Whole Foods, Amazon, etc."
+                value={merchant}
+                onChangeText={setMerchant}
+                hint="Optional: Where did this transaction occur?"
+              />
+
+              {/* Tags */}
+              <Input
+                label="Tags"
+                placeholder="e.g., food, groceries, essentials"
+                value={tagsInput}
+                onChangeText={setTagsInput}
+                hint="Optional: Comma-separated tags for categorization"
+              />
+
+              {/* Action Buttons */}
+              <View style={styles.actions}>
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={onCancel}
+                  disabled={isLoading}
+                  style={styles.actionButton}
+                />
+                <Button
+                  title={isLoading ? 'Saving...' : 'Update Transfer'}
+                  onPress={handleSubmit}
+                  loading={isLoading}
+                  disabled={isLoading}
+                  style={styles.actionButton}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Standard form fields: shown for expense/income only (not transfer) */}
+          {type !== 'transfer' && (
             <>
               {/* Finance Source Selection */}
               {!isEditing && (

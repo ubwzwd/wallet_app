@@ -91,3 +91,31 @@ describe('XFER-02: Paired transfer creation', () => {
     expect(SOURCE).toContain('Transfer created successfully!');
   });
 });
+
+// ─── D-10/D-11: Transfer edit mode ───────────────────────────────────────────
+
+describe('D-10/D-11: Transfer edit mode', () => {
+  it('shows "Update Transfer" button text for edit mode', () => {
+    expect(SOURCE).toContain('Update Transfer');
+  });
+
+  it('shows read-only note about source and currency', () => {
+    expect(SOURCE).toContain('Source and currency cannot be changed on an existing transfer.');
+  });
+
+  it('uses queryClient.getQueryData to find paired leg from cache', () => {
+    expect(SOURCE).toContain('getQueryData');
+  });
+
+  it('calls updateTransaction for the paired leg', () => {
+    expect(SOURCE).toContain('updateTransaction(pairedLeg.id');
+  });
+
+  it('shows "Transfer updated successfully!" on success', () => {
+    expect(SOURCE).toContain('Transfer updated successfully!');
+  });
+
+  it('has a fallback fetch when cache is empty', () => {
+    expect(SOURCE).toContain('getTransactions()');
+  });
+});
