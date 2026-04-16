@@ -54,7 +54,6 @@ export function Input({
           </TouchableOpacity>
         )}
       </View>
-
       {error && <Text style={styles.errorText}>{error}</Text>}
       {hint && !error && <Text style={styles.hintText}>{hint}</Text>}
     </View>
