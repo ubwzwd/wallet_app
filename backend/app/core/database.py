@@ -7,14 +7,21 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
 
+# SQLite doesn't support pool_size/max_overflow — detect by URL scheme
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+_engine_kwargs: dict = {
+    "echo": settings.ENVIRONMENT == "development" and settings.DEBUG,
+}
+if not _is_sqlite:
+    _engine_kwargs["pool_pre_ping"] = True
+    _engine_kwargs["pool_size"] = 5
+    _engine_kwargs["max_overflow"] = 10
+if _is_sqlite:
+    # SQLite requires check_same_thread=False for multi-threaded FastAPI
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+
 # Create database engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,  # Verify connections before using
-    pool_size=5,
-    max_overflow=10,
-    echo=(settings.ENVIRONMENT == "development" and settings.DEBUG),  # SQL logging only in dev
-)
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 # Session factory
 SessionLocal = sessionmaker(
