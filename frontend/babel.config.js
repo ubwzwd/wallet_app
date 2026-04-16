@@ -1,6 +1,18 @@
 module.exports = function(api) {
   api.cache(() => process.env.NODE_ENV);
   const isTest = process.env.NODE_ENV === 'test';
+
+  // Skip reanimated plugin if react-native-worklets peer dep is absent or in test mode.
+  let reanimatedAvailable = false;
+  if (!isTest) {
+    try {
+      require.resolve('react-native-worklets/plugin');
+      reanimatedAvailable = true;
+    } catch (_) {
+      reanimatedAvailable = false;
+    }
+  }
+
   const plugins = [
     [
       'module-resolver',
@@ -12,17 +24,14 @@ module.exports = function(api) {
       },
     ],
   ];
-  // Skip reanimated plugin in test environment — react-native-worklets peer dep
-  // is not installed; static analysis tests do not need the Babel transform.
-  if (!isTest) {
+  if (reanimatedAvailable) {
     plugins.push('react-native-reanimated/plugin');
   }
   return {
     presets: [
       [
         'babel-preset-expo',
-        // Disable automatic reanimated plugin injection in test mode
-        isTest ? { reanimated: false } : {},
+        (!isTest && reanimatedAvailable) ? {} : { reanimated: false },
       ],
     ],
     plugins,
