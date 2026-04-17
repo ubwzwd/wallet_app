@@ -74,9 +74,11 @@ Plans:
 **Goal:** Users can update their base currency from the app, and the system automatically assigns a default finance source on first creation
 **Depends on:** Phase 1
 
-**Plans:**
-1. Profile Endpoint and Auto-Default Source — Add `PATCH /api/v1/auth/me` route in `backend/app/api/auth.py` accepting `base_currency` and `default_source_id` fields (new `UserUpdate` Pydantic schema in `backend/app/schemas/user.py`); in `backend/app/api/finance_sources.py` `create_finance_source` handler, detect when the user has no existing sources and set `current_user.default_source_id` to the new source's ID; update `frontend/src/types/api.ts` with `UserUpdate` type
-2. Profile Settings Screen — Create `frontend/src/screens/ProfileScreen.tsx` with a `base_currency` picker (fetched from `/rates/currencies`); wire a `PATCH /auth/me` call via a new `updateMe` function in `frontend/src/api/auth.ts`; add `ProfileScreen` to `HomeScreen.tsx` `HomeView` union and navigation; call `refreshUser()` from `AuthContext` on successful save
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Backend PATCH /auth/me + UserUpdate schema + UserResponse.default_source_id + auto-default source on first finance source creation (PROF-01, PROF-03)
+- [ ] 03-02-PLAN.md — Frontend UserUpdate type, updateMe API, ProfileScreen with Modal+FlatList currency picker, HomeScreen Quick Actions wiring + human verification (PROF-02)
 
 **Delivers:**
 - PROF-01, PROF-02, PROF-03
@@ -117,9 +119,9 @@ Plans:
 | XFER-01 | 2 | 02-01-PLAN.md, 02-02-PLAN.md |
 | XFER-02 | 2 | 02-01-PLAN.md, 02-02-PLAN.md |
 | XFER-03 | 2 | 02-01-PLAN.md |
-| PROF-01 | 3 | Profile Endpoint and Auto-Default Source |
-| PROF-02 | 3 | Profile Settings Screen |
-| PROF-03 | 3 | Profile Endpoint and Auto-Default Source |
+| PROF-01 | 3 | 03-01-PLAN.md |
+| PROF-02 | 3 | 03-02-PLAN.md |
+| PROF-03 | 3 | 03-01-PLAN.md |
 
 **v1 requirements:** 16 total
 **Covered:** 16
@@ -129,3 +131,4 @@ Plans:
 *Roadmap created: 2026-04-05*
 *Updated: 2026-04-14 — Phase 2 planned (2 plans, 2 waves)*
 *Updated: 2026-04-17 — Phase 2 complete (human-verified)*
+*Updated: 2026-04-17 — Phase 3 planned (2 plans, 2 waves)*
