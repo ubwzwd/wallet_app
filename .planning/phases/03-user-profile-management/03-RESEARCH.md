@@ -339,7 +339,7 @@ export const updateMe = async (data: UserUpdate): Promise<User> => {
 
 **All other claims verified by direct codebase read.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`auth.py` import of `FinanceSource` creates a cross-module dependency**
    - What we know: `auth.py` currently only imports `User`. The D-07 ownership check requires `FinanceSource`.

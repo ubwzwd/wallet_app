@@ -36,14 +36,20 @@ Declared values (must be multiples of 4):
 | xs | 4px | Label-to-field gap (`marginBottom: 4` in hint/subtitle) |
 | sm | 8px | Inline button gaps (`gap: 8` in typeButtons, currencyList) |
 | md | 16px | Default section padding, card padding, horizontal modal padding |
-| lg | 20px | Section bottom margin (`marginBottom: 20` in form sections) |
 | xl | 24px | Header bottom margin (`marginBottom: 24`), button horizontal padding (medium) |
 | 2xl | 32px | Large button horizontal padding |
-| 3xl | 56px | Modal header height (`height: 56`) |
+| 3xl | 48px | Touch target height for FlatList items (see also Exceptions) |
 
 > Source: Extracted from `TransactionFormScreen.tsx` StyleSheet — these exact values are already in use and must be matched by new step wizard markup.
 
-Exceptions: Touch targets for Modal FlatList items are 48px tall (`currencyItem: { height: 48 }`) — this also applies to the new destination source picker FlatList items. Minimum 44px touch target rule satisfied.
+Exceptions (non-standard values extracted from existing code — not introduced for new markup):
+
+| Value | Usage | Justification |
+|-------|-------|---------------|
+| 20px | Section bottom margin (`marginBottom: 20` in form sections) | Extracted from existing `TransactionFormScreen.tsx` StyleSheet — must match to avoid layout regression. Not introduced for new markup. |
+| 56px | Modal header height (`height: 56`) | Extracted from existing `TransactionFormScreen.tsx` StyleSheet — must match to avoid layout regression. Not introduced for new markup. |
+
+Touch targets for Modal FlatList items are 48px tall (`currencyItem: { height: 48 }`) — this also applies to the new destination source picker FlatList items. Minimum 44px touch target rule satisfied.
 
 ---
 
@@ -51,25 +57,27 @@ Exceptions: Touch targets for Modal FlatList items are 48px tall (`currencyItem:
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
-| Display (screen title) | 24px | bold (700) | 1.2 |
-| Heading (modal title, section label) | 18px / 14px | semibold (600) | 1.2 |
-| Body (form fields, picker items, trigger text) | 16px | regular (400) | 1.5 |
-| Caption (hint text, error text, subtitle) | 12px / 14px | regular (400) | 1.4 |
+| Display (screen title) | 24px | emphasis (600) | 1.2 |
+| Body (form fields, picker items, trigger text, modal title) | 16px | regular (400) or emphasis (600) | 1.5 |
+| Label (section label, step indicator, subtitle) | 14px | regular (400) or emphasis (600) | 1.2 |
+| Caption (hint text, error text) | 12px | regular (400) | 1.4 |
+
+Two weights only — `fontWeight: '400'` (regular) and `fontWeight: '600'` (emphasis):
 
 Exact mappings (source: `TransactionFormScreen.tsx` StyleSheet):
 
-- `title`: 24px, bold, `#1f2937`
+- `title`: 24px, emphasis (600), `#1f2937`
 - `subtitle`: 14px, regular (400), `#6b7280`
-- `sectionLabel`: 14px, semibold (600), `#374151`
-- `modalTitle`: 18px, semibold (600), `#1f2937`
-- `modalClose`: 16px, semibold (600), `#0ea5e9`
-- `currencyTriggerText` / picker item text: 16px, semibold (600) for code, regular for full name
+- `sectionLabel`: 14px, emphasis (600), `#374151`
+- `modalTitle`: 16px, emphasis (600), `#1f2937` — picker heading, not a screen-level heading
+- `modalClose`: 16px, emphasis (600), `#0ea5e9`
+- `currencyTriggerText` / picker item text: 16px, emphasis (600) for code, regular (400) for full name
 - `hint`: 12px, regular (400), `#6b7280`
 - `errorText`: 12px, regular (400), `#ef4444`
 
-**Step indicator text** (new — D-02 from CONTEXT.md): 14px, semibold (600), `#374151` — matches `sectionLabel` style exactly. Content: "Step 1 of 2 — Select Accounts" and "Step 2 of 2 — Enter Amount".
+**Step indicator text** (new — D-02 from CONTEXT.md): 14px, emphasis (600), `#374151` — matches `sectionLabel` style exactly. Content: "Step 1 of 2 — Select Accounts" and "Step 2 of 2 — Enter Amount".
 
-> Source: Codebase scan of `TransactionFormScreen.tsx` lines 390–526. All four sizes (12, 14, 16, 24) and two weights (400, 600) pre-populated from existing StyleSheet.
+> Source: Codebase scan of `TransactionFormScreen.tsx` lines 390–526. Four sizes (12, 14, 16, 24) and two weights (400, 600) pre-populated from existing StyleSheet. 18px `modalTitle` collapsed to 16px (body/modal title) — modal title is a picker heading, not a screen-level heading. bold/700 collapsed into emphasis/600 — `fontWeight: '600'` is visually distinct from `'400'` in React Native and covers all emphasis roles including the Display title.
 
 ---
 
