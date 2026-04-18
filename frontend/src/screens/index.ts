@@ -9,4 +9,5 @@ export { FinanceSourcesScreen } from './FinanceSourcesScreen';
 export { FinanceSourceFormScreen } from './FinanceSourceFormScreen';
 export { TransactionsScreen } from './TransactionsScreen';
 export { TransactionFormScreen } from './TransactionFormScreen';
+export { ProfileScreen } from './ProfileScreen';
 
