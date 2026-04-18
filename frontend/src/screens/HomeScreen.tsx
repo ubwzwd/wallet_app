@@ -6,9 +6,10 @@ import { FinanceSourcesScreen } from './FinanceSourcesScreen';
 import { FinanceSourceFormScreen } from './FinanceSourceFormScreen';
 import { TransactionsScreen } from './TransactionsScreen';
 import { TransactionFormScreen } from './TransactionFormScreen';
+import { ProfileScreen } from './ProfileScreen';
 import type { FinanceSource, Transaction } from '@/types/api';
 
-type HomeView = 'main' | 'finance-sources' | 'add-source' | 'edit-source' | 'transactions' | 'add-transaction' | 'edit-transaction';
+type HomeView = 'main' | 'finance-sources' | 'add-source' | 'edit-source' | 'transactions' | 'add-transaction' | 'edit-transaction' | 'profile';
 
 export function HomeScreen() {
   const { user, logout, isAuthenticated } = useAuth();
@@ -129,6 +130,11 @@ export function HomeScreen() {
     );
   }
 
+  // Show Profile screen
+  if (currentView === 'profile') {
+    return <ProfileScreen onBack={() => setCurrentView('main')} />;
+  }
+
   // Main Home Screen
   return (
     <Screen>
@@ -165,6 +171,12 @@ export function HomeScreen() {
             title="💰 View Transactions"
             variant="secondary"
             onPress={() => setCurrentView('transactions')}
+            style={styles.quickButton}
+          />
+          <Button
+            title="⚙️ Edit Profile"
+            variant="secondary"
+            onPress={() => setCurrentView('profile')}
             style={styles.quickButton}
           />
         </Card>
