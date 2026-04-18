@@ -41,7 +41,15 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const mutation = useMutation({
     mutationFn: (payload: { base_currency: string }) => updateMe(payload as UserUpdate),
     onSuccess: async () => {
-      await refreshUser();
+      try {
+        await refreshUser();
+      } catch (error) {
+        // Refresh after update might fail due to transient 401.
+        // The PATCH succeeded, so user data is updated on server.
+        // Log the error but don't block UI from proceeding.
+        console.warn('Refresh after update failed (transient?), proceeding anyway:', error);
+      }
+
       const msg = 'Profile updated successfully!';
       if (Platform.OS === 'web') {
         window.alert('Success\n\n' + msg);

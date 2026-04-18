@@ -1,6 +1,7 @@
 """
 Security utilities for password hashing and JWT token management.
 """
+import logging
 import uuid as _uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 # HTTP Bearer token scheme
 security = HTTPBearer()
@@ -104,24 +107,40 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
         token = credentials.credentials
-        payload = decode_access_token(token)
-        user_id: str = payload.get("sub")
-        
-        if user_id is None:
+        try:
+            payload = decode_access_token(token)
+        except JWTError as jwt_err:
+            logger.error(f"DIAG_CREDENTIALS_EXCEPTION reason=jwt_decode_failed error={jwt_err!r}")
             raise credentials_exception
-            
-    except JWTError:
+
+        user_id: str = payload.get("sub")
+        logger.info(f"DIAG_TOKEN_DECODE user_id={user_id}")
+
+        if user_id is None:
+            logger.error("DIAG_CREDENTIALS_EXCEPTION reason=sub_claim_missing")
+            raise credentials_exception
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(f"DIAG_DB_ERROR unexpected error before user lookup: {exc!r}")
         raise credentials_exception
-    
+
     # Query user from database — convert string sub claim to uuid.UUID for Uuid() column
-    user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
-    
-    if user is None:
+    try:
+        user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
+        logger.info(f"DIAG_USER_LOOKUP found={user is not None} user_id={user_id}")
+    except Exception as exc:
+        logger.exception(f"DIAG_DB_ERROR user query failed: {exc!r}")
         raise credentials_exception
-    
+
+    if user is None:
+        logger.error(f"DIAG_CREDENTIALS_EXCEPTION reason=user_not_found user_id={user_id}")
+        raise credentials_exception
+
     return user
 
 

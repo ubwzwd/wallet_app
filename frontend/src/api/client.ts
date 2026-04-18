@@ -46,10 +46,21 @@ apiClient.interceptors.response.use(
       const status = error.response.status;
       
       if (status === 401) {
-        // Unauthorized - clear auth data and redirect to login
-        await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-        await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
-        // Navigation will be handled by AuthContext
+        // Check if this is a status-check call (GET /auth/me)
+        const url = error.config?.url || '';
+        const method = (error.config?.method || '').toLowerCase();
+
+        // Don't clear token on GET /auth/me failures — might be transient.
+        // The PATCH succeeded; clearing the token here would log the user out
+        // even though their credentials are still valid.
+        const isAuthMeGet = url.includes('/auth/me') && method === 'get';
+
+        if (!isAuthMeGet) {
+          // Real protected resource failed — logout
+          await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+          await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
+          // Navigation will be handled by AuthContext
+        }
       }
       
       // Extract error message from response

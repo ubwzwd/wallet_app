@@ -130,5 +130,10 @@ def update_current_user(
 
     db.commit()
     db.refresh(current_user)
+
+    # Force load all fields before session closes to avoid lazy-loading after close
+    _ = (current_user.id, current_user.email, current_user.base_currency,
+         current_user.default_source_id, current_user.created_at)
+
     return current_user
 
