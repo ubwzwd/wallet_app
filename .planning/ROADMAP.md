@@ -8,7 +8,7 @@
 
 - [~] **Phase 1: Wire, Fix, and Harden** — Wire currency conversion into all transaction endpoints, replace hardcoded currency pickers with live API data, and eliminate four known bugs *(executed — awaiting human verification)*
 - [x] **Phase 2: Complete Transfer Transactions** — Build the two-step transfer creation UI and link paired transactions via `transfer_pair_id`
-- [ ] **Phase 3: User Profile Management** — Add `PATCH /auth/me` endpoint, frontend profile screen for `base_currency`, and auto-set `default_source_id` on first source creation
+- [x] **Phase 3: User Profile Management** — Add `PATCH /auth/me` endpoint, frontend profile screen for `base_currency`, and auto-set `default_source_id` on first source creation *(completed 2026-04-19)*
 
 ---
 
@@ -98,7 +98,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Wire, Fix, and Harden | 2/2 | Awaiting human verification | - |
 | 2. Complete Transfer Transactions | 2/2 | Complete | 2026-04-17 |
-| 3. User Profile Management | 0/2 | Not started | - |
+| 3. User Profile Management | 3/3 | Complete | 2026-04-19 |
 
 ---
 
