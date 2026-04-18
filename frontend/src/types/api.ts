@@ -12,6 +12,11 @@ export interface User {
   created_at: string;
 }
 
+export interface UserUpdate {
+  base_currency?: string;
+  default_source_id?: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;

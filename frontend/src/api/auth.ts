@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import type {
   User,
+  UserUpdate,
   LoginRequest,
   RegisterRequest,
   AuthResponse,
@@ -31,6 +32,14 @@ export const login = async (data: LoginRequest): Promise<AuthResponse> => {
  */
 export const getCurrentUser = async (): Promise<User> => {
   const response = await apiClient.get<User>('/auth/me');
+  return response.data;
+};
+
+/**
+ * Update current user profile (requires authentication)
+ */
+export const updateMe = async (data: UserUpdate): Promise<User> => {
+  const response = await apiClient.patch<User>('/auth/me', data);
   return response.data;
 };
 
