@@ -11,7 +11,8 @@ from app.core.security import (
     get_current_user,
 )
 from app.models.user import User
-from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
+from app.models.finance_source import FinanceSource
+from app.schemas.user import UserCreate, UserLogin, UserResponse, Token, UserUpdate
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -91,8 +92,43 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     """
     Get current authenticated user information.
-    
+
     Requires valid JWT token in Authorization header.
     """
+    return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_current_user(
+    user_data: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update current user profile (partial update).
+
+    - **base_currency**: ISO 4217 currency code (normalized to uppercase)
+    - **default_source_id**: ID of the user's default finance source (must be owned by user)
+    """
+    # D-07: ownership check when default_source_id is provided
+    if user_data.default_source_id is not None:
+        source = db.query(FinanceSource).filter(
+            FinanceSource.id == user_data.default_source_id,
+            FinanceSource.user_id == current_user.id,
+        ).first()
+        if not source:
+            raise HTTPException(status_code=404, detail="Finance source not found")
+
+    update_fields = user_data.model_dump(exclude_unset=True)
+
+    # D-08: normalize base_currency to uppercase
+    if "base_currency" in update_fields and update_fields["base_currency"]:
+        update_fields["base_currency"] = update_fields["base_currency"].upper()
+
+    for field, value in update_fields.items():
+        setattr(current_user, field, value)
+
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
