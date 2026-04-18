@@ -39,7 +39,15 @@ def create_finance_source(
     db.add(new_source)
     db.commit()
     db.refresh(new_source)
-    
+
+    # PROF-03 / D-09: auto-set default_source_id when this is the user's first finance source
+    source_count = db.query(FinanceSource).filter(
+        FinanceSource.user_id == current_user.id
+    ).count()
+    if source_count == 1:
+        current_user.default_source_id = new_source.id
+        db.commit()
+
     return new_source
 
 
