@@ -23,10 +23,25 @@ class UserResponse(BaseModel):
     id: UUID
     email: str
     base_currency: str
+    default_source_id: UUID | None = None
     created_at: datetime
-    
+
     class Config:
         from_attributes = True  # Pydantic v2: enable ORM mode
+
+
+class UserUpdate(BaseModel):
+    """Schema for partial user profile update (PATCH /auth/me)."""
+    base_currency: str | None = Field(
+        None,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 currency code",
+    )
+    default_source_id: UUID | None = Field(
+        None,
+        description="ID of user's default finance source",
+    )
 
 
 class Token(BaseModel):
