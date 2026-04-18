@@ -77,8 +77,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Backend PATCH /auth/me + UserUpdate schema + UserResponse.default_source_id + auto-default source on first finance source creation (PROF-01, PROF-03)
-- [ ] 03-02-PLAN.md — Frontend UserUpdate type, updateMe API, ProfileScreen with Modal+FlatList currency picker, HomeScreen Quick Actions wiring + human verification (PROF-02)
+- [x] 03-01-PLAN.md — Backend PATCH /auth/me + UserUpdate schema + UserResponse.default_source_id + auto-default source on first finance source creation (PROF-01, PROF-03)
+- [x] 03-02-PLAN.md — Frontend UserUpdate type, updateMe API, ProfileScreen with Modal+FlatList currency picker, HomeScreen Quick Actions wiring + human verification (PROF-02)
 
 **Delivers:**
 - PROF-01, PROF-02, PROF-03
