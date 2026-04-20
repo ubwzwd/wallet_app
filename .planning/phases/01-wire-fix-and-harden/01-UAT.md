@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 01-wire-fix-and-harden
 source: 01-01-SUMMARY.md, 01-02-SUMMARY.md
 started: 2026-04-20T00:00:00Z
