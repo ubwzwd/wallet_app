@@ -531,20 +531,19 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Currency *</Text>
                 {Platform.OS === 'web' ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.currencyList}>
+                  <View style={styles.pickerContainer}>
+                    <select
+                      value={currency}
+                      onChange={(e: any) => setCurrency(e.target.value)}
+                      style={styles.picker as any}
+                    >
                       {currencies.map((c) => (
-                        <Button
-                          key={c}
-                          title={c}
-                          variant={currency === c ? 'primary' : 'secondary'}
-                          size="small"
-                          onPress={() => setCurrency(c)}
-                          style={styles.currencyButton}
-                        />
+                        <option key={c} value={c}>
+                          {c} - {currencyData?.currencies[c] || ''}
+                        </option>
                       ))}
-                    </View>
-                  </ScrollView>
+                    </select>
+                  </View>
                 ) : (
                   <>
                     <TouchableOpacity
@@ -779,21 +778,20 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Currency *</Text>
                 {Platform.OS === 'web' ? (
-                  /* Web: horizontal scrollable button row (per D-08) */
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.currencyList}>
+                  /* Web: dropdown select (consistent with finance source) */
+                  <View style={styles.pickerContainer}>
+                    <select
+                      value={currency}
+                      onChange={(e: any) => setCurrency(e.target.value)}
+                      style={styles.picker as any}
+                    >
                       {currencies.map((c) => (
-                        <Button
-                          key={c}
-                          title={c}
-                          variant={currency === c ? 'primary' : 'secondary'}
-                          size="small"
-                          onPress={() => setCurrency(c)}
-                          style={styles.currencyButton}
-                        />
+                        <option key={c} value={c}>
+                          {c} - {currencyData?.currencies[c] || ''}
+                        </option>
                       ))}
-                    </View>
-                  </ScrollView>
+                    </select>
+                  </View>
                 ) : (
                   /* Native: TouchableOpacity opens FlatList modal (per D-09) */
                   <>
