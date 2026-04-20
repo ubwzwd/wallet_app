@@ -31,6 +31,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
   const [tagsInput, setTagsInput] = useState(transaction?.tags.join(', ') || '');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState('');
 
   // Transfer wizard state
   const [step, setStep] = useState<1 | 2>(1);
@@ -52,9 +53,17 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
   });
 
   // Derive sorted currency list; fall back to 6-item hardcoded list while loading (per D-10)
-  const currencies = currencyData
+  const allCurrencies = currencyData
     ? Object.keys(currencyData.currencies).sort()
     : ['USD', 'EUR', 'GBP', 'CNY', 'SGD', 'HKD'];
+
+  const filteredCurrencies = currencySearch
+    ? allCurrencies.filter(
+        (c) =>
+          c.toLowerCase().includes(currencySearch.toLowerCase()) ||
+          (currencyData?.currencies[c]?.toLowerCase() || '').includes(currencySearch.toLowerCase())
+      )
+    : allCurrencies;
 
   // Set default source
   useEffect(() => {
@@ -530,85 +539,13 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
               {/* Currency Selection */}
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Currency *</Text>
-                {Platform.OS === 'web' ? (
-                  <View style={styles.pickerContainer}>
-                    <input
-                      type="text"
-                      list="currencies-transfer"
-                      value={currency}
-                      onChange={(e: any) => setCurrency(e.target.value.toUpperCase())}
-                      onBlur={(e: any) => {
-                        const val = e.target.value.toUpperCase();
-                        if (currencies.includes(val)) {
-                          setCurrency(val);
-                        }
-                      }}
-                      placeholder="Search or select currency..."
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        fontSize: '14px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '8px',
-                        fontFamily: 'inherit',
-                      } as any}
-                    />
-                    <datalist id="currencies-transfer">
-                      {currencies.map((c) => (
-                        <option key={c} value={c}>
-                          {c} - {currencyData?.currencies[c] || ''}
-                        </option>
-                      ))}
-                    </datalist>
-                  </View>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.currencyTrigger}
-                      onPress={() => setCurrencyPickerVisible(true)}
-                    >
-                      <Text style={styles.currencyTriggerText}>{currency}</Text>
-                    </TouchableOpacity>
-
-                    <Modal
-                      visible={currencyPickerVisible}
-                      animationType="slide"
-                      onRequestClose={() => setCurrencyPickerVisible(false)}
-                    >
-                      <View style={styles.modalContainer}>
-                        <View style={styles.modalHeader}>
-                          <Text style={styles.modalTitle}>Select Currency</Text>
-                          <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
-                            <Text style={styles.modalClose}>Close</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <FlatList
-                          data={currencies}
-                          keyExtractor={(item) => item}
-                          renderItem={({ item }) => {
-                            const isSelected = item === currency;
-                            const fullName = currencyData?.currencies[item];
-                            return (
-                              <TouchableOpacity
-                                style={[styles.currencyItem, isSelected && styles.currencyItemSelected]}
-                                onPress={() => {
-                                  setCurrency(item);
-                                  setCurrencyPickerVisible(false);
-                                }}
-                              >
-                                <Text style={[styles.currencyItemText, isSelected && styles.currencyItemTextSelected]}>
-                                  <Text style={styles.currencyCode}>{item}</Text>
-                                  {fullName ? ` - ${fullName}` : ''}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          }}
-                          ItemSeparatorComponent={() => <View style={styles.currencyDivider} />}
-                        />
-                      </View>
-                    </Modal>
-                  </>
-                )}
+                <TouchableOpacity
+                  style={styles.currencyTrigger}
+                  onPress={() => setCurrencyPickerVisible(true)}
+                >
+                  <Text style={styles.currencyTriggerText}>{currency}</Text>
+                </TouchableOpacity>
+                {Platform.OS === 'web' && <Text style={styles.hint}>Tap to search</Text>}
               </View>
 
               {/* Date Input */}
@@ -794,90 +731,13 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
               {/* Currency Selection */}
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Currency *</Text>
-                {Platform.OS === 'web' ? (
-                  /* Web: searchable input with datalist */
-                  <View style={styles.pickerContainer}>
-                    <input
-                      type="text"
-                      list="currencies"
-                      value={currency}
-                      onChange={(e: any) => setCurrency(e.target.value.toUpperCase())}
-                      onBlur={(e: any) => {
-                        const val = e.target.value.toUpperCase();
-                        if (currencies.includes(val)) {
-                          setCurrency(val);
-                        }
-                      }}
-                      placeholder="Search or select currency..."
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        fontSize: '14px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '8px',
-                        fontFamily: 'inherit',
-                      } as any}
-                    />
-                    <datalist id="currencies">
-                      {currencies.map((c) => (
-                        <option key={c} value={c}>
-                          {c} - {currencyData?.currencies[c] || ''}
-                        </option>
-                      ))}
-                    </datalist>
-                  </View>
-                ) : (
-                  /* Native: TouchableOpacity opens FlatList modal (per D-09) */
-                  <>
-                    <TouchableOpacity
-                      style={styles.currencyTrigger}
-                      onPress={() => setCurrencyPickerVisible(true)}
-                    >
-                      <Text style={styles.currencyTriggerText}>{currency}</Text>
-                    </TouchableOpacity>
-
-                    <Modal
-                      visible={currencyPickerVisible}
-                      animationType="slide"
-                      onRequestClose={() => setCurrencyPickerVisible(false)}
-                    >
-                      <View style={styles.modalContainer}>
-                        {/* Modal header */}
-                        <View style={styles.modalHeader}>
-                          <Text style={styles.modalTitle}>Select Currency</Text>
-                          <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
-                            <Text style={styles.modalClose}>Close</Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Currency list */}
-                        <FlatList
-                          data={currencies}
-                          keyExtractor={(item) => item}
-                          renderItem={({ item }) => {
-                            const isSelected = item === currency;
-                            const fullName = currencyData?.currencies[item];
-                            return (
-                              <TouchableOpacity
-                                style={[styles.currencyItem, isSelected && styles.currencyItemSelected]}
-                                onPress={() => {
-                                  setCurrency(item);
-                                  setCurrencyPickerVisible(false);
-                                }}
-                              >
-                                <Text style={[styles.currencyItemText, isSelected && styles.currencyItemTextSelected]}>
-                                  <Text style={styles.currencyCode}>{item}</Text>
-                                  {fullName ? ` - ${fullName}` : ''}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          }}
-                          ItemSeparatorComponent={() => <View style={styles.currencyDivider} />}
-                        />
-                      </View>
-                    </Modal>
-                  </>
-                )}
+                <TouchableOpacity
+                  style={styles.currencyTrigger}
+                  onPress={() => setCurrencyPickerVisible(true)}
+                >
+                  <Text style={styles.currencyTriggerText}>{currency}</Text>
+                </TouchableOpacity>
+                {Platform.OS === 'web' && <Text style={styles.hint}>Tap to search</Text>}
               </View>
 
               {/* Date Input */}
@@ -943,6 +803,66 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
           )}
         </Card>
       </ScrollView>
+
+      {/* Currency picker modal (consistent with ProfileScreen) */}
+      <Modal
+        visible={currencyPickerVisible}
+        animationType="slide"
+        onRequestClose={() => {
+          setCurrencyPickerVisible(false);
+          setCurrencySearch('');
+        }}
+      >
+        <View style={styles.modalContainer}>
+          {/* Modal header */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Currency</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setCurrencyPickerVisible(false);
+                setCurrencySearch('');
+              }}
+            >
+              <Text style={styles.modalClose}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Search input */}
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search currencies..."
+            placeholderTextColor="#9ca3af"
+            value={currencySearch}
+            onChangeText={setCurrencySearch}
+          />
+
+          {/* Currency list */}
+          <FlatList
+            data={filteredCurrencies}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => {
+              const isSelected = item === currency;
+              const fullName = currencyData?.currencies[item];
+              return (
+                <TouchableOpacity
+                  style={[styles.currencyItem, isSelected && styles.currencyItemSelected]}
+                  onPress={() => {
+                    setCurrency(item);
+                    setCurrencyPickerVisible(false);
+                    setCurrencySearch('');
+                  }}
+                >
+                  <Text style={[styles.currencyItemText, isSelected && styles.currencyItemTextSelected]}>
+                    <Text style={styles.currencyCode}>{item}</Text>
+                    {fullName ? ` - ${fullName}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+            ItemSeparatorComponent={() => <View style={styles.currencyDivider} />}
+          />
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -1063,6 +983,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#0ea5e9',
+  },
+  searchInput: {
+    margin: 12,
+    padding: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
   },
   currencyItem: {
     height: 48,
