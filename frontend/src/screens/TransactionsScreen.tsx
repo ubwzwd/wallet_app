@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Screen, Card, Button } from '@/components';
 import { QUERY_KEYS } from '@/constants/config';
 import * as transactionsApi from '@/api/transactions';
+import { useAuth } from '@/store/AuthContext';
 import type { Transaction } from '@/types/api';
 
 interface TransactionsScreenProps {
@@ -14,6 +15,7 @@ interface TransactionsScreenProps {
 
 export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: TransactionsScreenProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [limit] = useState(50);
 
   // Fetch transactions
@@ -95,6 +97,10 @@ export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: 
   const renderTransaction = ({ item }: { item: Transaction }) => {
     const amountDisplay = formatAmount(item.amount, item.currency);
     const dateDisplay = formatDate(item.occurred_at);
+    const isDifferentCurrency = user && item.currency !== user.base_currency;
+    const convertedDisplay = isDifferentCurrency && item.converted_amount
+      ? formatAmount(item.converted_amount, user!.base_currency)
+      : null;
 
     return (
       <Card variant="outlined" style={styles.transactionCard}>
@@ -128,6 +134,18 @@ export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: 
             <Text style={[styles.amountText, { color: amountDisplay.color }]}>
               {amountDisplay.text}
             </Text>
+            {convertedDisplay && (
+              <View style={styles.conversionInfo}>
+                <Text style={[styles.convertedAmount, { color: convertedDisplay.color }]}>
+                  {convertedDisplay.text}
+                </Text>
+                {item.conversion_rate && (
+                  <Text style={styles.conversionRate}>
+                    @ {parseFloat(item.conversion_rate).toFixed(4)} {user!.base_currency}/{item.currency}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         </View>
 
@@ -332,6 +350,19 @@ const styles = StyleSheet.create({
   amountText: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  conversionInfo: {
+    marginTop: 6,
+    alignItems: 'flex-end',
+  },
+  convertedAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  conversionRate: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 2,
   },
   transactionActions: {
     flexDirection: 'row',
