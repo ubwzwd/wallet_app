@@ -131,11 +131,15 @@ export function TransactionsScreen({ onCreatePress, onEditPress, onBackPress }: 
             )}
           </View>
           <View style={styles.transactionAmount}>
-            <Text style={[styles.amountText, { color: amountDisplay.color }]}>
-              {amountDisplay.text}
-            </Text>
+            <View style={styles.amountSection}>
+              <Text style={styles.amountLabel}>Original</Text>
+              <Text style={[styles.amountText, { color: amountDisplay.color }]}>
+                {amountDisplay.text}
+              </Text>
+            </View>
             {convertedDisplay && (
               <View style={styles.conversionInfo}>
+                <Text style={styles.amountLabel}>In {user!.base_currency}</Text>
                 <Text style={[styles.convertedAmount, { color: convertedDisplay.color }]}>
                   {convertedDisplay.text}
                 </Text>
@@ -346,6 +350,15 @@ const styles = StyleSheet.create({
   },
   transactionAmount: {
     alignItems: 'flex-end',
+  },
+  amountSection: {
+    alignItems: 'flex-end',
+  },
+  amountLabel: {
+    fontSize: 10,
+    color: '#9ca3af',
+    marginBottom: 2,
+    fontWeight: '500',
   },
   amountText: {
     fontSize: 18,
