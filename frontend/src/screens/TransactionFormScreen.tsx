@@ -963,9 +963,12 @@ const styles = StyleSheet.create({
   currencyList: {
     flexDirection: 'row',
     gap: 8,
+    flexWrap: 'nowrap',
+    paddingVertical: 4,
   },
   currencyButton: {
     minWidth: 60,
+    flexShrink: 0,
   },
   dateInput: {
     width: '100%',
