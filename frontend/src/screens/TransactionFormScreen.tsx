@@ -532,17 +532,34 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                 <Text style={styles.sectionLabel}>Currency *</Text>
                 {Platform.OS === 'web' ? (
                   <View style={styles.pickerContainer}>
-                    <select
+                    <input
+                      type="text"
+                      list="currencies-transfer"
                       value={currency}
-                      onChange={(e: any) => setCurrency(e.target.value)}
-                      style={styles.picker as any}
-                    >
+                      onChange={(e: any) => setCurrency(e.target.value.toUpperCase())}
+                      onBlur={(e: any) => {
+                        const val = e.target.value.toUpperCase();
+                        if (currencies.includes(val)) {
+                          setCurrency(val);
+                        }
+                      }}
+                      placeholder="Search or select currency..."
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '14px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontFamily: 'inherit',
+                      } as any}
+                    />
+                    <datalist id="currencies-transfer">
                       {currencies.map((c) => (
                         <option key={c} value={c}>
                           {c} - {currencyData?.currencies[c] || ''}
                         </option>
                       ))}
-                    </select>
+                    </datalist>
                   </View>
                 ) : (
                   <>
@@ -778,19 +795,36 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Currency *</Text>
                 {Platform.OS === 'web' ? (
-                  /* Web: dropdown select (consistent with finance source) */
+                  /* Web: searchable input with datalist */
                   <View style={styles.pickerContainer}>
-                    <select
+                    <input
+                      type="text"
+                      list="currencies"
                       value={currency}
-                      onChange={(e: any) => setCurrency(e.target.value)}
-                      style={styles.picker as any}
-                    >
+                      onChange={(e: any) => setCurrency(e.target.value.toUpperCase())}
+                      onBlur={(e: any) => {
+                        const val = e.target.value.toUpperCase();
+                        if (currencies.includes(val)) {
+                          setCurrency(val);
+                        }
+                      }}
+                      placeholder="Search or select currency..."
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '14px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontFamily: 'inherit',
+                      } as any}
+                    />
+                    <datalist id="currencies">
                       {currencies.map((c) => (
                         <option key={c} value={c}>
                           {c} - {currencyData?.currencies[c] || ''}
                         </option>
                       ))}
-                    </select>
+                    </datalist>
                   </View>
                 ) : (
                   /* Native: TouchableOpacity opens FlatList modal (per D-09) */

@@ -9,6 +9,7 @@ import {
   Alert,
   StyleSheet,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Screen, Card, Button } from '@/components';
@@ -26,6 +27,7 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const { user, refreshUser } = useAuth();
   const [selectedCurrency, setSelectedCurrency] = useState<string>(user?.base_currency ?? 'USD');
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
   // Fetch live currency list (T-03-07: staleTime: Infinity caches result)
   const { data: currencyData, isLoading: currenciesLoading } = useQuery({
@@ -34,9 +36,17 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
     staleTime: Infinity,
   });
 
-  const currencies = currencyData
+  const allCurrencies = currencyData
     ? Object.keys(currencyData.currencies).sort()
     : ['USD', 'EUR', 'GBP', 'CNY', 'SGD', 'HKD'];
+
+  const filteredCurrencies = searchText
+    ? allCurrencies.filter(
+        (c) =>
+          c.toLowerCase().includes(searchText.toLowerCase()) ||
+          (currencyData?.currencies[c]?.toLowerCase() || '').includes(searchText.toLowerCase())
+      )
+    : allCurrencies;
 
   const mutation = useMutation({
     mutationFn: (payload: { base_currency: string }) => updateMe(payload as UserUpdate),
@@ -142,20 +152,37 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
       <Modal
         visible={pickerVisible}
         animationType="slide"
-        onRequestClose={() => setPickerVisible(false)}
+        onRequestClose={() => {
+          setPickerVisible(false);
+          setSearchText('');
+        }}
       >
         <View style={styles.modalContainer}>
           {/* Modal header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Currency</Text>
-            <TouchableOpacity onPress={() => setPickerVisible(false)}>
+            <TouchableOpacity
+              onPress={() => {
+                setPickerVisible(false);
+                setSearchText('');
+              }}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Search input */}
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search currencies..."
+            placeholderTextColor="#9ca3af"
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+
           {/* Currency list */}
           <FlatList
-            data={currencies}
+            data={filteredCurrencies}
             keyExtractor={(item) => item}
             renderItem={({ item }) => {
               const isSelected = item === selectedCurrency;
@@ -166,6 +193,7 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
                   onPress={() => {
                     setSelectedCurrency(item);
                     setPickerVisible(false);
+                    setSearchText('');
                   }}
                 >
                   <Text style={[styles.currencyItemText, isSelected && styles.currencyItemTextSelected]}>
@@ -287,6 +315,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#0ea5e9',
+  },
+  searchInput: {
+    margin: 12,
+    padding: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
   },
   currencyItem: {
     height: 48,
