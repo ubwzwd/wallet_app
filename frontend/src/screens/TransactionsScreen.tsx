@@ -355,10 +355,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amountLabel: {
-    fontSize: 10,
-    color: '#9ca3af',
-    marginBottom: 2,
-    fontWeight: '500',
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+    fontWeight: '600',
   },
   amountText: {
     fontSize: 18,
