@@ -39,7 +39,9 @@ Users can record and view their financial activity across multiple sources in an
 - Single `docker-compose.yml` orchestrating frontend (Expo web export) + backend + Postgres on one VM
 - Caddy/Nginx reverse proxy with auto-HTTPS via Let's Encrypt
 - Custom domain registered + DNS pointed at VM
-- VM provisioned (Hetzner Singapore ARM primary; Oracle Cloud Always Free SG ARM fallback)
+- VM provisioned on **Oracle Cloud Always Free, VM.Standard.A1.Flex (Ampere ARM64), 2 OCPU / 12 GB RAM, Ubuntu 24.04** (user has the account; Singapore-region or whichever region had Ampere capacity)
+- Container images built **arm64-only** (no multi-arch — saves CI time; rebuild if platform ever changes)
+- Postgres tuned with `shared_buffers ≈ 3 GB` (~25% of 12 GB) so memory utilization stays comfortably above Oracle's 20% idle-reclaim threshold
 - PWA-flavored web build — manifest + service worker so the deployed URL is "Add to Home Screen"-installable
 - Mobile-responsive layout verified on real phone screens
 - Daily `pg_dump` cron pushing backups to offsite storage (B2/R2/S3)
