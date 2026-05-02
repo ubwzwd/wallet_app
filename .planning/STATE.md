@@ -1,42 +1,35 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: 1.0 milestone complete
-last_updated: "2026-04-20T16:23:41.263Z"
+milestone: v2.0
+milestone_name: Single-VPS Deployment + Mobile-Web Access
+status: planning
+last_updated: "2026-05-02T04:20:44.481Z"
+last_activity: 2026-05-02
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-05)
+See: .planning/PROJECT.md (updated 2026-05-02)
 
 **Core value:** Users can record and view financial activity across multiple sources in any currency, with automatic conversion to their preferred base currency.
-**Current focus:** Phase 02 — complete-transfer-transactions
+
+**Current focus:** v2.0 — defining requirements for single-VPS deployment + mobile-web access
 
 ## Milestone
 
-**M1 — Finish What's Started**
+**v2.0 — Single-VPS Deployment + Mobile-Web Access**
 
-## Phase Status
+## Current Position
 
-| Phase | Name | Status | Plans |
-|-------|------|--------|-------|
-| 1 | Wire, Fix, and Harden | Awaiting human verification | 2/2 |
-| 2 | Complete Transfer Transactions | Not started | 0/1 |
-| 3 | User Profile Management | Not started | 0/2 |
-
-## Last Action
-
-Phase 1 executed and verified (2026-04-05): All 13 must-haves pass static verification. 5 human verification items remain (native Alert.alert dialogs, live currency picker, live conversion fields, graceful API fallback). See .planning/phases/01-wire-fix-and-harden/01-VERIFICATION.md.
-
-## Next Action
-
-Complete human verification for Phase 1 (see VERIFICATION.md §Human Verification Required), then run `/gsd-transition` to close Phase 1 and plan Phase 2: Complete Transfer Transactions.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-02 — Milestone v2.0 started

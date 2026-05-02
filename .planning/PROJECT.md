@@ -28,7 +28,26 @@ Users can record and view their financial activity across multiple sources in an
 
 ### Active
 
-(None — v1.0 complete. Next milestone planning incoming.)
+(See Current Milestone below — v2.0 requirements TBD by /gsd-new-milestone.)
+
+## Current Milestone: v2.0 Single-VPS Deployment + Mobile-Web Access
+
+**Goal:** Get the wallet app running publicly on a single VPS so it's usable from PC and phone (via mobile browser / installable PWA), with custom domain and HTTPS.
+
+**Target features:**
+- Containerize FastAPI backend + Postgres for production (Docker images, env-based config)
+- Single `docker-compose.yml` orchestrating frontend (Expo web export) + backend + Postgres on one VM
+- Caddy/Nginx reverse proxy with auto-HTTPS via Let's Encrypt
+- Custom domain registered + DNS pointed at VM
+- VM provisioned (Hetzner Singapore ARM primary; Oracle Cloud Always Free SG ARM fallback)
+- PWA-flavored web build — manifest + service worker so the deployed URL is "Add to Home Screen"-installable
+- Mobile-responsive layout verified on real phone screens
+- Daily `pg_dump` cron pushing backups to offsite storage (B2/R2/S3)
+- Minimal CI/CD: GitHub Actions builds on push to `main`, pushes to GHCR, SSH-deploys
+- Health endpoint + free uptime monitor
+- Production secrets handling (env file on VM, not in git)
+
+**Out of milestone scope:** native EAS builds (deferred to M2 Android / M6 iOS), Sentry/Loki/Grafana, log aggregation, DB replication, multi-region.
 
 ### Out of Scope
 
@@ -38,7 +57,6 @@ Users can record and view their financial activity across multiple sources in an
 - Multi-user / shared wallets — deferred to future milestone
 - Push notifications — deferred to future milestone
 - OAuth / social login — email+password sufficient for M1
-- CI/CD pipeline — not in current scope
 
 ## Context
 
@@ -96,4 +114,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-21 after v1.0 milestone completion*
+*Last updated: 2026-05-02 — v2.0 milestone started (Single-VPS Deployment + Mobile-Web Access)*
