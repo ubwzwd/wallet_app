@@ -10,6 +10,7 @@ status: defined
 **Goal:** Get the wallet app running publicly on a single Oracle Cloud Always-Free Ampere VM so it's usable from PC and phone (mobile browser, installable as a PWA), with custom domain and HTTPS.
 
 **Platform (locked):**
+
 - VM: Oracle Cloud Always Free, `VM.Standard.A1.Flex`, **2 OCPU / 12 GB RAM, Ubuntu 24.04, ARM64**
 - Container images: **arm64-only** (no multi-arch)
 - Postgres tuned to keep memory >20% of RAM (Oracle idle-reclaim mitigation)
@@ -51,7 +52,7 @@ status: defined
 
 - [ ] **OPS-01**: `/health` endpoint in FastAPI returns 200 OK without touching the database (DB outage must not kill the API container)
 - [ ] **OPS-02**: UptimeRobot free-tier monitor pings `/health` every 5 min; email alert on failure
-- [ ] **OPS-03**: Daily `pg_dump | gzip` cron container pushes to off-site object storage via rclone (R2 vs B2 vs S3 chosen during Phase 4); 7-daily + 4-weekly retention
+- [ ] **OPS-03**: Daily `pg_dump | gzip` cron container pushes to off-site object storage via rclone (R2 vs B2 vs S3 chosen during Phase 7); 7-daily + 4-weekly retention
 - [ ] **OPS-04**: Postgres container tuned with `shared_buffers ≈ 3 GB` (~25% of 12 GB) so memory utilization stays above Oracle's 20% idle-reclaim threshold
 - [ ] **OPS-05**: Slack/Discord webhook posted from GH Actions on deploy success/failure (P2)
 
@@ -82,7 +83,7 @@ Anti-features for v2.0 — explicitly punted to a later "harden production" mile
 - Offline-first writes (IndexedDB queue, background sync) — deferred to a dedicated "offline mode" milestone
 - Custom Install banner with iOS instructions — deferred to "polish" follow-up
 - Maskable + monochrome icons (beyond the one maskable in PWA-01) — deferred polish
-- Weekly verified restore drill — deferred (manual restore drill once during Phase 4 is sufficient for v2.0)
+- Weekly verified restore drill — deferred (manual restore drill once during Phase 7 is sufficient for v2.0)
 - Image vulnerability scanning in CI — deferred to "harden production"
 - Multiple environments (staging/prod) — single env for POC
 - Preview environments per PR — single-developer workflow
@@ -99,10 +100,41 @@ Anti-features for v2.0 — explicitly punted to a later "harden production" mile
 
 ## Traceability
 
-Filled in by `/gsd-roadmapper` once phases are defined.
+Phase mappings produced by `/gsd-roadmapper` on 2026-05-02. Plan column populated as `/gsd-plan-phase` runs per phase.
 
 | REQ-ID | Phase | Plan |
 |--------|-------|------|
+| DEPLOY-01 | Phase 4 | TBD |
+| DEPLOY-02 | Phase 4 | TBD |
+| DEPLOY-03 | Phase 4 | TBD |
+| DEPLOY-04 | Phase 4 | TBD |
+| DEPLOY-05 | Phase 6 | TBD |
+| DEPLOY-06 | Phase 7 | TBD |
+| DOMAIN-01 | Phase 6 | TBD |
+| DOMAIN-02 | Phase 6 | TBD |
+| DOMAIN-03 | Phase 6 | TBD |
+| DOMAIN-04 | Phase 4 | TBD |
+| PWA-01 | Phase 5 | TBD |
+| PWA-02 | Phase 5 | TBD |
+| PWA-03 | Phase 5 | TBD |
+| PWA-04 | Phase 5 | TBD |
+| MOBUI-01 | Phase 5 | TBD |
+| MOBUI-02 | Phase 5 | TBD |
+| MOBUI-03 | Phase 5 | TBD |
+| MOBUI-04 | Phase 5 | TBD |
+| MOBUI-05 | Phase 5 | TBD |
+| OPS-01 | Phase 6 | TBD |
+| OPS-02 | Phase 6 | TBD |
+| OPS-03 | Phase 7 | TBD |
+| OPS-04 | Phase 4 | TBD |
+| OPS-05 | Phase 7 | TBD |
+| CI-01 | Phase 7 | TBD |
+| CI-02 | Phase 7 | TBD |
+| CI-03 | Phase 7 | TBD |
+| SEC-01 | Phase 4 | TBD |
+| SEC-02 | Phase 6 | TBD |
+
+**Coverage:** 29/29 requirements mapped to phases (no orphans).
 
 ---
-*v2.0 requirement count: 27 active (25 P1 + 2 P2: DEPLOY-06, OPS-05). Platform locked to Oracle Cloud Always Free Ampere ARM64.*
+*v2.0 requirement count: 29 active (27 P1 + 2 P2: DEPLOY-06, OPS-05). Platform locked to Oracle Cloud Always Free Ampere ARM64.*
