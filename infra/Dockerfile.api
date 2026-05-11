@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1.6
+#
+# Production backend image for Wallet App (Phase 4, plan 04-01).
+#
+# Strategy B (locked by 04-CONTEXT.md D-07/D-08, 04-RESEARCH.md):
+#   builder stage uses Poetry only to EXPORT a hash-free requirements file
+#   from poetry.lock, then uv installs the resolved deps into the system
+#   site-packages. Runtime stage carries only the resolved deps + app code,
+#   no Poetry, no uv, no pip cache, no .env.
+#
+# Platform is pinned to linux/arm64 on both stages (D-09, OPS-04): the
+# target VM is Oracle A1.Flex (Ampere ARM64). Cross-arch builds are out
+# of scope for v2.0.
+#
+# Build context is `backend/` (set by infra/docker-compose.prod.yml in the
+# next plan). All COPY paths are relative to that context.
+
+# ---------------------------------------------------------------------------
+# Builder stage: resolve deps with Poetry-export + uv, install into /usr/local
+# ---------------------------------------------------------------------------
+FROM --platform=linux/arm64 python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && rm -rf /var/lib/apt/lists/*
+
+# uv binary lifted from the official astral-sh image (no pip install needed).
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Poetry only used to export the lock; never installed into the runtime image.
+# NB: poetry-plugin-export>=1.8 (locked by plan) requires Poetry>=1.8 — the
+# plan's `poetry==1.7.1` pin was internally inconsistent (plugin-export 1.8+
+# depends on poetry>=1.8). Using poetry==1.8.5 (newest 1.x) is the minimum-
+# drift fix that preserves the plugin pin and the `poetry export` invocation.
+RUN pip install --no-cache-dir poetry==1.8.5 "poetry-plugin-export>=1.8"
+
+WORKDIR /app
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry export -f requirements.txt --without-hashes --only main -o /tmp/requirements.txt
+RUN uv pip install --system --no-cache -r /tmp/requirements.txt
+
+# Strip the Poetry binary + its site-packages from the builder image so they
+# do NOT travel to the runtime stage via COPY --from=builder /usr/local/bin
+# (T-04-01 / must_have: "Image contains NO Poetry / pip dev tooling"). The
+# resolved app deps already live in /usr/local/lib/python3.11/site-packages
+# from `uv pip install --system` above and are unaffected.
+RUN pip uninstall -y poetry poetry-plugin-export poetry-core || true \
+    && rm -f /usr/local/bin/poetry /usr/local/bin/poetry-* /bin/uv /bin/uvx
+
+# ---------------------------------------------------------------------------
+# Runtime stage: python:3.11-slim + libpq5 + non-root user + app code
+# ---------------------------------------------------------------------------
+FROM --platform=linux/arm64 python:3.11-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends libpq5 && rm -rf /var/lib/apt/lists/*
+
+# Non-root runtime user (Pitfall 7 ordering: useradd -> WORKDIR -> COPY --from=builder
+# -> COPY --chown=appuser:appuser -> USER appuser). Do NOT flip USER before the
+# final COPY: that produces a partial-ownership mix bug.
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+COPY --chown=appuser:appuser . .
+
+USER appuser
+
+EXPOSE 8000
+
+# Healthcheck uses stdlib urllib so we do NOT carry the `requests` package into
+# the runtime image purely for liveness probing (T-04-04 mitigation).
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

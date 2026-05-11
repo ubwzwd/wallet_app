@@ -1,0 +1,37 @@
+# Phase 4 plan 04-01 — T-04-01 mitigation: keep secrets and dev artifacts
+# out of the production image build context. The image must NOT contain
+# .env (provided at runtime via compose env_file:) or local SQLite dev DBs.
+
+# Secrets / runtime config — supplied via compose env_file:, never baked in.
+.env
+.env.*
+*.pem
+*.key
+
+# Local SQLite dev artefacts (wallet_dev.db etc.)
+*.db
+*.sqlite
+*.sqlite3
+
+# Python build / cache / test artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Editor / OS / VCS noise
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Docs / local-only files not needed at runtime
+README.md
+tests/
