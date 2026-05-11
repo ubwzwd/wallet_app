@@ -11,3 +11,8 @@ Thumbs.db
 .env
 .env.local
 
+# Phase 4 infra
+infra/.env
+
+# Frontend web build artifacts
+frontend/dist/

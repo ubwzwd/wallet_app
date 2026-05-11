@@ -93,10 +93,10 @@ The web application is **fully functional** with all core features implemented!
 
 2. **Start the backend**
    ```bash
+   docker compose -f infra/docker-compose.dev.yml up -d db  # Start PostgreSQL
    cd backend
-   docker-compose up -d  # Start PostgreSQL
-   poetry install        # Install dependencies
-   alembic upgrade head  # Run migrations
+   poetry install                                            # Install dependencies
+   alembic upgrade head                                      # Run migrations
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 

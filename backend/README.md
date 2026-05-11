@@ -48,7 +48,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 ### 4. Start PostgreSQL
 
 ```bash
-docker-compose up -d db
+docker compose -f ../infra/docker-compose.dev.yml up -d db
 ```
 
 This starts PostgreSQL on port 5432.
@@ -116,10 +116,9 @@ backend/
 │   └── main.py       # FastAPI app initialization
 ├── migrations/       # Alembic database migrations
 ├── tests/            # Test files
-├── docker-compose.yml
-├── Dockerfile
 ├── pyproject.toml    # Poetry dependencies and config
 └── README.md
+(see ../infra/ for Docker / compose files)
 ```
 
 ## Development Workflow
@@ -133,11 +132,17 @@ backend/
 
 ## Docker Development (Alternative)
 
-If you prefer to run everything in Docker:
+For the prod-shape full stack (api + migrate + caddy + tuned db), use the
+production compose file under `infra/` (added in phase 4 plan 04-05):
 
 ```bash
-# Uncomment the 'api' service in docker-compose.yml first
-docker-compose up --build
+docker compose -f ../infra/docker-compose.prod.yml up --build
+```
+
+For just a local Postgres for dev (the lightweight default), use the dev compose:
+
+```bash
+docker compose -f ../infra/docker-compose.dev.yml up -d db
 ```
 
 ## Testing
@@ -188,14 +193,14 @@ source ~/.bashrc  # or source ~/.zshrc
 ### Database connection errors
 ```bash
 # Check PostgreSQL is running
-docker-compose ps
+docker compose -f ../infra/docker-compose.dev.yml ps
 
 # Check logs
-docker-compose logs db
+docker compose -f ../infra/docker-compose.dev.yml logs db
 
 # Reset database
-docker-compose down -v
-docker-compose up -d db
+docker compose -f ../infra/docker-compose.dev.yml down -v
+docker compose -f ../infra/docker-compose.dev.yml up -d db
 ```
 
 ### Port 5432 already in use
