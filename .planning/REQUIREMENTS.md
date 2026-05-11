@@ -20,7 +20,7 @@ status: defined
 ### Deployment Lifecycle (DEPLOY)
 
 - [ ] **DEPLOY-01**: Production `docker-compose.yml` orchestrates backend + Postgres + Caddy reverse-proxy + frontend static export on a single VM (separate from local dev compose; named volumes for Postgres data and Caddy certs)
-- [ ] **DEPLOY-02**: Multi-stage `Dockerfile` for FastAPI backend (uv builder → `python:3.11-slim` runtime, non-root user, `arm64-only` build target)
+- [x] **DEPLOY-02**: Multi-stage `Dockerfile` for FastAPI backend (uv builder → `python:3.11-slim` runtime, non-root user, `arm64-only` build target) — completed in plan 04-01 (`infra/Dockerfile.api`)
 - [ ] **DEPLOY-03**: Frontend served as static `expo export -p web` output via Caddy `file_server` (no separate web container)
 - [ ] **DEPLOY-04**: Alembic migrations run before API container takes traffic (one-shot migrate service or entrypoint guard)
 - [ ] **DEPLOY-05**: First-time deploy `RUNBOOK.md` documents provision Oracle A1.Flex → install Docker → clone repo → set `.env` → bootstrap → verify
@@ -105,7 +105,7 @@ Phase mappings produced by `/gsd-roadmapper` on 2026-05-02. Plan column populate
 | REQ-ID | Phase | Plan |
 |--------|-------|------|
 | DEPLOY-01 | Phase 4 | TBD |
-| DEPLOY-02 | Phase 4 | TBD |
+| DEPLOY-02 | Phase 4 | 04-01 (done) |
 | DEPLOY-03 | Phase 4 | TBD |
 | DEPLOY-04 | Phase 4 | TBD |
 | DEPLOY-05 | Phase 6 | TBD |
@@ -131,7 +131,7 @@ Phase mappings produced by `/gsd-roadmapper` on 2026-05-02. Plan column populate
 | CI-01 | Phase 7 | TBD |
 | CI-02 | Phase 7 | TBD |
 | CI-03 | Phase 7 | TBD |
-| SEC-01 | Phase 4 | TBD |
+| SEC-01 | Phase 4 | 04-01 (partial: no secrets in image), 04-04 (.env example), 04-05 (env_file:) |
 | SEC-02 | Phase 6 | TBD |
 
 **Coverage:** 29/29 requirements mapped to phases (no orphans).

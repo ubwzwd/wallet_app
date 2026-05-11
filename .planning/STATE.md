@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-11T12:26:13.733Z"
+last_updated: "2026-05-11T15:25:58Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 17
 ---
 
 # Project State
@@ -21,7 +21,7 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 **Core value:** Users can record and view financial activity across multiple sources in any currency, with automatic conversion to their preferred base currency.
 
-**Current focus:** v2.0 — single-VPS deployment + mobile-web (PWA) access on Oracle Cloud Always Free Ampere ARM64
+**Current focus:** Phase 04 — containerize-and-compose-locally
 
 ## Milestone
 
@@ -40,17 +40,24 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 ## Current Position
 
-- **Phase:** 4 (queued — not yet planned)
-- **Plan:** —
-- **Status:** Ready to execute
+Phase: 04 (containerize-and-compose-locally) — EXECUTING
+Plan: 2 of 6 (next: 04-02-relocate-dev-compose)
+
+- **Phase:** 4 (in progress)
+- **Plan:** 04-01 complete; 04-02 next
+- **Status:** Executing Phase 04
 - **Last activity:** 2026-05-11
 
 ## Performance Metrics
 
 - Phases planned: 4
 - Phases completed: 0 / 4
-- Plans completed: 0 / 0
-- Overall progress: 0%
+- Plans completed: 1 / 6 (Phase 4)
+- Overall progress: 17%
+
+| Phase | Plan | Duration | Tasks | Files | Completed |
+|-------|------|----------|-------|-------|-----------|
+| 04 | 01-backend-dockerfile | ~15 min | 2 | 3 (1 new Dockerfile, 1 new .dockerignore, 1 deleted) | 2026-05-11 |
 
 ## Accumulated Context
 
@@ -63,10 +70,14 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 - **Same-origin routing**: Caddy `file_server` serves Expo web export at `/`, reverse-proxies `/api/*` to FastAPI. No separate web container.
 - **Postgres tuning** (`shared_buffers≈3GB`) for Oracle's 20%-idle-reclaim mitigation lives in Phase 4 (OPS-04), not a separate phase.
 - **Backup destination (R2 vs B2 vs S3)**: deferred to Phase 7 planning step.
+- **(04-01) Poetry 1.8.5 in builder image**: plan's `poetry==1.7.1` + `poetry-plugin-export>=1.8` was unresolvable (plugin 1.8 requires Poetry≥1.8); minimum-drift bump preserves the plugin pin and the `poetry export` invocation.
+- **(04-01) Strip Poetry/uv from builder /usr/local/bin before stage transition** so runtime image carries only resolved app deps + uvicorn (must_have: "no Poetry/dev tooling in runtime").
+- **(04-01) backend/.dockerignore is mandatory companion to Dockerfile.api**: T-04-01 ("no .env in image") fails without it because `COPY . .` would sweep `backend/.env`.
 
 ### Open Todos
 
-- Plan Phase 4 via `/gsd-plan-phase 4`
+- Execute plan 04-02 (relocate dev compose to infra/, update README docker paths)
+- Execute plans 04-03..04-06 (frontend config split, env-secrets, prod compose+caddy, smoke)
 
 ### Blockers
 
@@ -74,7 +85,9 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 ## Session Continuity
 
-**Next action:** Run `/gsd-plan-phase 4` to break Phase 4 (Containerize and Compose Locally) into executable plans.
+**Last session:** 2026-05-11 — Completed plan 04-01-backend-dockerfile. Image builds for linux/arm64, runs as uid 1000, no .env / no Poetry baked in, urllib healthcheck. Commits: 2a0755f (Task 1), bc97cde (Task 2).
+
+**Next action:** Execute plan 04-02-relocate-dev-compose (move backend/docker-compose.yml to infra/docker-compose.dev.yml, update README docker paths).
 
 **Files for reference:**
 

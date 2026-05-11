@@ -42,7 +42,7 @@ status: defined
   4. `.env` containing all secrets (SECRET_KEY, DB password, ALLOWED_ORIGINS) is loaded via `env_file:` directive, is `.gitignore`d, and is documented in `infra/.env.example` with placeholder values; FastAPI CORS allowlist is narrowed to the prod domain even though same-origin makes it moot.
   5. Backend Dockerfile is multi-stage (`uv` builder → `python:3.11-slim` runtime), produces a non-root container, and the final image is **arm64-only** (`--platform linux/arm64`).
 **Plans**: 6 plans
-  - [ ] 04-01-backend-dockerfile-PLAN.md — multi-stage arm64 uv Dockerfile + retire backend/Dockerfile (DEPLOY-02, SEC-01)
+  - [x] 04-01-backend-dockerfile-PLAN.md — multi-stage arm64 uv Dockerfile + retire backend/Dockerfile (DEPLOY-02, SEC-01)
   - [ ] 04-02-relocate-dev-compose-PLAN.md — move dev compose to infra/, update docs, gitignore infra/.env + frontend/dist (DEPLOY-01)
   - [ ] 04-03-frontend-config-split-PLAN.md — config.dev.ts / config.prod.ts + npm run build:web swap (DEPLOY-03, DOMAIN-04)
   - [ ] 04-04-env-secrets-PLAN.md — infra/.env.example + env-coverage.sh Wave-0 check (SEC-01, DEPLOY-04)
@@ -92,7 +92,7 @@ status: defined
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 4. Containerize and Compose Locally | 0/6 | Not started | - |
+| 4. Containerize and Compose Locally | 1/6 | In progress | - |
 | 5. PWA-ify Frontend + Mobile Polish | 0/0 | Not started | - |
 | 6. Provision Oracle VM + Domain + Caddy HTTPS | 0/0 | Not started | - |
 | 7. CI/CD + Backups + Polish | 0/0 | Not started | - |
