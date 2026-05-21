@@ -7,6 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "build:web": "rm -rf dist && cp src/constants/config.prod.ts src/constants/config.ts && expo export -p web && cp src/constants/config.dev.ts src/constants/config.ts",
     "test": "jest"
   },
   "dependencies": {
