@@ -1,0 +1,85 @@
+# infra/docker-compose.prod.yml — Phase 4 production-shape stack (DEPLOY-01, OPS-04, DOMAIN-04)
+# Bring up:   docker compose -f infra/docker-compose.prod.yml up -d --wait
+# Tear down:  docker compose -f infra/docker-compose.prod.yml down -v
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: wallet_db_prod
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=3GB"
+      - "-c"
+      - "effective_cache_size=8GB"
+      - "-c"
+      - "max_connections=50"
+    shm_size: 1g
+    volumes:
+      - wallet_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  migrate:
+    build:
+      context: ../backend
+      dockerfile: ../infra/Dockerfile.api
+      platforms:
+        - linux/arm64
+    image: wallet-app/api:local
+    container_name: wallet_migrate_prod
+    env_file: ./.env
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: wallet-app/api:local
+    container_name: wallet_api_prod
+    restart: unless-stopped
+    env_file: ./.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  caddy:
+    image: caddy:alpine
+    container_name: wallet_caddy_prod
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
+      CADDY_TLS_MODE: ${CADDY_TLS_MODE:-internal}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../frontend/dist:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  wallet_pgdata_prod:
+  caddy_data:
+  caddy_config:
