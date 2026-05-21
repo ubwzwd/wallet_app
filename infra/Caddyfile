@@ -1,0 +1,15 @@
+{$CADDY_DOMAIN:localhost} {
+    tls {$CADDY_TLS_MODE:internal}
+
+    encode zstd gzip
+
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}
