@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-11T15:25:58Z"
-last_activity: 2026-05-11
+last_updated: "2026-05-22T08:50:00.000Z"
+last_activity: 2026-05-22
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 1
-  percent: 17
+  completed_plans: 6
+  percent: 25
 ---
 
 # Project State
@@ -41,23 +41,28 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 ## Current Position
 
 Phase: 04 (containerize-and-compose-locally) — EXECUTING
-Plan: 2 of 6 (next: 04-02-relocate-dev-compose)
+Plan: 1 of 6
 
 - **Phase:** 4 (in progress)
-- **Plan:** 04-01 complete; 04-02 next
-- **Status:** Executing Phase 04
-- **Last activity:** 2026-05-11
+- **Plan:** All 6 plans complete
+- **Status:** Phase 04 complete — ready for verification
+- **Last activity:** 2026-05-22
 
 ## Performance Metrics
 
 - Phases planned: 4
 - Phases completed: 0 / 4
-- Plans completed: 1 / 6 (Phase 4)
-- Overall progress: 17%
+- Plans completed: 6 / 6 (Phase 4)
+- Overall progress: 100% of Phase 4
 
 | Phase | Plan | Duration | Tasks | Files | Completed |
 |-------|------|----------|-------|-------|-----------|
 | 04 | 01-backend-dockerfile | ~15 min | 2 | 3 (1 new Dockerfile, 1 new .dockerignore, 1 deleted) | 2026-05-11 |
+| 04 | 02-relocate-dev-compose | ~10 min | 2 | 4 (compose moved, README updated, .gitignore) | 2026-05-21 |
+| 04 | 03-frontend-config-split | ~15 min | 2 | 4 (config.dev.ts, config.prod.ts, config.ts, package.json) | 2026-05-22 |
+| 04 | 04-env-secrets | ~12 min | 2 | 2 (infra/.env.example, infra/scripts/env-coverage.sh) | 2026-05-22 |
+| 04 | 05-prod-compose-and-caddy | ~2 min | 2 | 2 (infra/docker-compose.prod.yml, infra/Caddyfile) | 2026-05-22 |
+| 04 | 06-smoke-and-verify | ~8 min | 1 | 1 (infra/scripts/smoke.sh) | 2026-05-22 |
 
 ## Accumulated Context
 
@@ -73,11 +78,14 @@ Plan: 2 of 6 (next: 04-02-relocate-dev-compose)
 - **(04-01) Poetry 1.8.5 in builder image**: plan's `poetry==1.7.1` + `poetry-plugin-export>=1.8` was unresolvable (plugin 1.8 requires Poetry≥1.8); minimum-drift bump preserves the plugin pin and the `poetry export` invocation.
 - **(04-01) Strip Poetry/uv from builder /usr/local/bin before stage transition** so runtime image carries only resolved app deps + uvicorn (must_have: "no Poetry/dev tooling in runtime").
 - **(04-01) backend/.dockerignore is mandatory companion to Dockerfile.api**: T-04-01 ("no .env in image") fails without it because `COPY . .` would sweep `backend/.env`.
+- **(04-03) config.ts header differs from config.dev.ts at rest**: intentional — after `npm run build:web` the cp restore makes them byte-identical (diff -q passes post-build only, not pre-build).
+- **(04-04) CADDY_DOMAIN/CADDY_TLS_MODE in .env.example are NOT FastAPI Settings fields**: env-coverage.sh correctly scopes to Settings fields only; these keys are consumed by compose variable interpolation for Caddy.
+- **(04-04) env-coverage.sh tamper test nuance**: removing CADDY_* keys doesn't trigger drift; must remove a Settings field (e.g. ENVIRONMENT) to trigger exit 1.
 
 ### Open Todos
 
-- Execute plan 04-02 (relocate dev compose to infra/, update README docker paths)
-- Execute plans 04-03..04-06 (frontend config split, env-secrets, prod compose+caddy, smoke)
+- Run `/gsd-verify-work` against Phase 4 (execute `bash infra/scripts/smoke.sh full` after populating `infra/.env`)
+- Begin Phase 05 (PWA-ify Frontend + Mobile Polish)
 
 ### Blockers
 
@@ -85,9 +93,9 @@ Plan: 2 of 6 (next: 04-02-relocate-dev-compose)
 
 ## Session Continuity
 
-**Last session:** 2026-05-11 — Completed plan 04-01-backend-dockerfile. Image builds for linux/arm64, runs as uid 1000, no .env / no Poetry baked in, urllib healthcheck. Commits: 2a0755f (Task 1), bc97cde (Task 2).
+**Last session:** 2026-05-22 — Phase 04 execution complete (all 6 plans). Delivered: arm64 Dockerfile, dev/prod compose, frontend config split, .env.example + env-coverage.sh, Caddyfile, docker-compose.prod.yml, smoke.sh.
 
-**Next action:** Execute plan 04-02-relocate-dev-compose (move backend/docker-compose.yml to infra/docker-compose.dev.yml, update README docker paths).
+**Next action:** Run `bash infra/scripts/smoke.sh full` (requires `infra/.env` with real values + Docker running) to verify all 5 Phase 4 ROADMAP success criteria.
 
 **Files for reference:**
 

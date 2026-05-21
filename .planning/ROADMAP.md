@@ -22,7 +22,7 @@ status: defined
 
 ## Phases
 
-- [ ] **Phase 4: Containerize and Compose Locally** — Production docker-compose stack runs end-to-end on a developer laptop, no cloud cost.
+- [x] **Phase 4: Containerize and Compose Locally** — Production docker-compose stack runs end-to-end on a developer laptop, no cloud cost.
 - [ ] **Phase 5: PWA-ify Frontend + Mobile Polish** — Web build is installable on iOS/Android home screen and feels native on phone-sized screens.
 - [ ] **Phase 6: Provision Oracle VM + Domain + Caddy HTTPS** — App reachable at `https://<domain>` with valid Let's Encrypt cert, deployed by hand from a runbook.
 - [ ] **Phase 7: CI/CD + Backups + Polish** — `git push` to `main` deploys; daily off-site backups verified by restore drill; zero-downtime rollovers.
@@ -92,7 +92,7 @@ status: defined
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 4. Containerize and Compose Locally | 1/6 | In progress | - |
+| 4. Containerize and Compose Locally | 6/6 | Complete | 2026-05-22 |
 | 5. PWA-ify Frontend + Mobile Polish | 0/0 | Not started | - |
 | 6. Provision Oracle VM + Domain + Caddy HTTPS | 0/0 | Not started | - |
 | 7. CI/CD + Backups + Polish | 0/0 | Not started | - |
