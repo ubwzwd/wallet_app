@@ -1,8 +1,8 @@
 /**
- * AUTO-MANAGED FILE — do not edit by hand.
- * Source files: config.dev.ts (committed default), config.prod.ts (web build).
- * `npm run build:web` swaps in config.prod.ts before `expo export -p web`,
- * then restores config.dev.ts after export.
+ * AUTO-MANAGED SOURCE: dev / native default.
+ * Active config.ts is restored to this file after `npm run build:web`.
+ * Native dev (iOS simulator / Android emulator) cannot resolve relative paths,
+ * so we keep the absolute URL here. (D-03)
  */
 export const API_BASE_URL = 'http://localhost:8000/api/v1';
 

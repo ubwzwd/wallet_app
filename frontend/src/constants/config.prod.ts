@@ -1,10 +1,8 @@
 /**
- * AUTO-MANAGED FILE — do not edit by hand.
- * Source files: config.dev.ts (committed default), config.prod.ts (web build).
- * `npm run build:web` swaps in config.prod.ts before `expo export -p web`,
- * then restores config.dev.ts after export.
+ * AUTO-MANAGED SOURCE: web production build (same-origin via Caddy reverse-proxy).
+ * MUST NOT contain the dev backend URL — D-06 grep test enforces zero hits for it in dist/.
  */
-export const API_BASE_URL = 'http://localhost:8000/api/v1';
+export const API_BASE_URL = '/api/v1';
 
 // Storage keys for AsyncStorage
 export const STORAGE_KEYS = {
