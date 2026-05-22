@@ -58,12 +58,17 @@ Exceptions:
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Body | 16px | 400 (regular) | 1.5 |
-| Label | 14px | 600 (semibold) | 1.4 |
-| Heading | 20px–24px | 700 (bold) | 1.2 |
+| Label | 14px | 700 (bold) | 1.4 |
+| Heading | 24px | 700 (bold) | 1.2 |
 | Display | 28px | 700 (bold) | 1.2 |
 
+Declared weights: 400 (regular) and 700 (bold). Two weights only.
+
+Final font size scale: 14px (Label) / 16px (Body) / 24px (Heading) / 28px (Display) — exactly 4 sizes.
+
 **Source:** Extracted from existing component styles:
-- `transactionDescription`: 16px / 600
+
+- `transactionDescription`: 16px / regular
 - `transactionMerchant`, `infoLabel`: 14px / regular
 - `title` (screen headers): 24px / bold
 - `greeting` (home screen): 28px / bold
@@ -100,6 +105,16 @@ Exceptions:
 
 ---
 
+## Visuals
+
+### Visual Hierarchy
+
+- **Primary screen focal point:** The most recent transaction (top row of TransactionList) is the primary focal point on the home screen — it confirms the user's last action.
+- **Hierarchy order on home:** header (account context) → TransactionList (primary content) → bottom nav (navigation).
+- **Emoji icon accessibility:** Every icon-only action button MUST carry an `accessibilityLabel` (React Native) prop describing the action (e.g., `accessibilityLabel="Delete transaction"`). Icon-with-text buttons do not require it.
+
+---
+
 ## Copywriting Contract
 
 | Element | Copy |
@@ -110,16 +125,16 @@ Exceptions:
 | Primary CTA — install prompt (Android) | Use browser-native install prompt; no custom banner (deferred per REQUIREMENTS.md) |
 | Offline state heading | `You're offline` |
 | Offline state body | `Check your connection. Your data will load once you're back online.` |
-| SW update available toast | `Update available` / button label: `Reload` |
+| SW update available toast | `Update available` / button label: `Reload App` |
 | Empty state — Transactions | "No transactions yet" / "Add your first transaction to start tracking your finances." / CTA: "Add Transaction" |
 | Empty state — Finance Sources | "No finance sources yet" / "Add a bank account, card, or wallet to get started." / CTA: "Add Finance Source" |
 | Error state — network failure | `Couldn't load data. Pull down to retry.` |
 | Error state — form validation | Field-level: `{field} is required` / `Enter a valid {field}` |
 | Destructive: Delete Transaction | Confirmation: "Delete this transaction? This cannot be undone." / Confirm button: "Delete" / Cancel button: "Keep" |
 | Destructive: Delete Transfer | Confirmation: "Delete both sides of this transfer? This cannot be undone." / Confirm button: "Delete Transfer" / Cancel button: "Keep" |
-| Destructive: Archive Finance Source | Confirmation: "Archive {name}? You can unarchive it later." / Confirm button: "Archive" / Cancel button: "Cancel" |
-| Destructive: Unarchive Finance Source | Confirmation: "Unarchive {name}?" / Confirm button: "Unarchive" / Cancel button: "Cancel" |
-| Destructive: Logout | Confirmation: "Sign out of Wallet?" / Confirm button: "Sign Out" / Cancel button: "Cancel" |
+| Destructive: Archive Finance Source | Confirmation: "Archive {name}? You can unarchive it later." / Confirm button: "Archive" / Cancel button: "Keep Unarchived" |
+| Destructive: Unarchive Finance Source | Confirmation: "Unarchive {name}?" / Confirm button: "Unarchive" / Cancel button: "Keep Archived" |
+| Destructive: Logout | Confirmation: "Sign out of Wallet?" / Confirm button: "Sign Out" / Cancel button: "Stay Signed In" |
 
 **Notes:**
 - Existing `TransactionsScreen.tsx` and `FinanceSourcesScreen.tsx` already have partial copy. Use the above as the canonical version; executor should align existing strings to this contract.
@@ -201,7 +216,7 @@ All interactive elements must satisfy 44px minimum in BOTH dimensions.
 | `/api/*` | Network-first | Workbox `NetworkFirst` — live data always preferred |
 | SW activation | Immediate | `skipWaiting()` + `clients.claim()` on `activate` event |
 
-**SW update UX:** When a new SW is waiting, display an unobtrusive toast at bottom of screen: "Update available" with a "Reload" button. On tap: `registration.waiting.postMessage({ type: 'SKIP_WAITING' })` then `window.location.reload()`. This is minimal — no full-screen takeover, no forced reload.
+**SW update UX:** When a new SW is waiting, display an unobtrusive toast at bottom of screen: "Update available" with a "Reload App" button. On tap: `registration.waiting.postMessage({ type: 'SKIP_WAITING' })` then `window.location.reload()`. This is minimal — no full-screen takeover, no forced reload.
 
 **Offline fallback:** If network-first fetch for `/index.html` fails (offline) and no cached version exists, SW serves a minimal offline.html with the copy from the Copywriting Contract above. If cached `/index.html` exists, serve it. For `/api/*` failures, the app renders the network error state defined in the Copywriting Contract.
 
