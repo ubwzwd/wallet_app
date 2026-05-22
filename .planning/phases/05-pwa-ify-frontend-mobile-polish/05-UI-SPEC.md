@@ -1,10 +1,11 @@
 ---
 phase: 5
 slug: pwa-ify-frontend-mobile-polish
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-23
+reviewed_at: 2026-05-23
 ---
 
 # Phase 5 — UI Design Contract
