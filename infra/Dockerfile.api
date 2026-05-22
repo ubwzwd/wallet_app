@@ -8,9 +8,10 @@
 #   site-packages. Runtime stage carries only the resolved deps + app code,
 #   no Poetry, no uv, no pip cache, no .env.
 #
-# Platform is pinned to linux/arm64 on both stages (D-09, OPS-04): the
-# target VM is Oracle A1.Flex (Ampere ARM64). Cross-arch builds are out
-# of scope for v2.0.
+# Target platform is Oracle A1.Flex (Ampere ARM64) — D-09, OPS-04.
+# Platform is NOT pinned in this Dockerfile; pass --platform at build time:
+#   docker build --platform linux/arm64 ...   (CI / Oracle VM deploy)
+#   docker build ...                          (local dev, uses host arch)
 #
 # Build context is `backend/` (set by infra/docker-compose.prod.yml in the
 # next plan). All COPY paths are relative to that context.
@@ -18,7 +19,7 @@
 # ---------------------------------------------------------------------------
 # Builder stage: resolve deps with Poetry-export + uv, install into /usr/local
 # ---------------------------------------------------------------------------
-FROM --platform=linux/arm64 python:3.11-slim AS builder
+FROM python:3.11-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
@@ -50,7 +51,7 @@ RUN pip uninstall -y poetry poetry-plugin-export poetry-core || true \
 # ---------------------------------------------------------------------------
 # Runtime stage: python:3.11-slim + libpq5 + non-root user + app code
 # ---------------------------------------------------------------------------
-FROM --platform=linux/arm64 python:3.11-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends libpq5 && rm -rf /var/lib/apt/lists/*
 

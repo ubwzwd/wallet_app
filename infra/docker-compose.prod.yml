@@ -34,8 +34,6 @@ services:
     build:
       context: ../backend
       dockerfile: ../infra/Dockerfile.api
-      platforms:
-        - linux/arm64
     image: wallet-app/api:local
     container_name: wallet_migrate_prod
     env_file: ./.env
