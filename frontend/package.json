@@ -8,6 +8,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "rm -rf dist && cp src/constants/config.prod.ts src/constants/config.ts && expo export -p web && npx workbox generateSW workbox-config.cjs && cp src/constants/config.dev.ts src/constants/config.ts",
+    "verify:phase5": "npm run build:web && node scripts/verify-pwa.mjs --all && node scripts/verify-touch-targets.mjs && npm test",
     "test": "jest"
   },
   "dependencies": {
