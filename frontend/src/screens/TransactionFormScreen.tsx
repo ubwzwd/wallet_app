@@ -536,6 +536,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                   setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 error={errors.amount}
               />
 
@@ -629,6 +630,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                   setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 error={errors.amount}
               />
 
@@ -728,6 +730,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                   setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 error={errors.amount}
               />
 
