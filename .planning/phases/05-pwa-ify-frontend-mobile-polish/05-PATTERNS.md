@@ -524,6 +524,7 @@ autoComplete="email"
 **Also add to `devDependencies` (per CONTEXT D-06 + RESEARCH.md Standard Stack):**
 - `"workbox-cli": "^7.4.1"`
 - `"ajv": "^8"`
+- `"sharp": "^0.33"` (per revised D-10 — icon generation script in 05-02)
 
 **Atomicity contract (CONTEXT D-05):** the entire `build:web` value MUST stay on one logical line. Phase 4 lived through a partial config-swap failure once already; do not introduce intermediate state.
 
