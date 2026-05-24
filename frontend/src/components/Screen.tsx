@@ -1,12 +1,12 @@
 import React, { ReactNode } from 'react';
 import {
   View,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ScreenProps {
   children: ReactNode;
