@@ -17,3 +17,6 @@ infra/.env
 
 # Frontend web build artifacts
 frontend/dist/
+
+# Design package zips — extracted contents live in .planning/research/
+wallet-ui-design.zip
