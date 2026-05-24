@@ -276,7 +276,7 @@ export function UpdateToast() {
 
 **Analog 2 (step-by-step CLI verify pattern):** `infra/scripts/smoke.sh` (lines 30-72 — `echo "==> step"; assert; exit !=0 on fail`).
 
-**Why these analogs:** Project already has two verification idioms — Jest static-analysis tests (in `__tests__/`) and shell-style step-by-step verifiers (in `infra/scripts/`). The new `verify-pwa.mjs` follows the smoke.sh "echo step name, run check, exit on fail" cadence but in Node so it can use `JSON.parse`, regex, and (optionally) `@pwabuilder/manifest-validation`.
+**Why these analogs:** Project already has two verification idioms — Jest static-analysis tests (in `__tests__/`) and shell-style step-by-step verifiers (in `infra/scripts/`). The new `verify-pwa.mjs` follows the smoke.sh "echo step name, run check, exit on fail" cadence but in Node so it can use `JSON.parse`, regex, and JSON-Schema validation (or via `ajv` + vendored W3C schema, per 05-01 Task 2).
 
 **Step-by-step pattern from `infra/scripts/smoke.sh` lines 49-58:**
 ```bash
@@ -316,7 +316,7 @@ for (const c of checks) {
 **CLI flags (locked by RESEARCH.md "Phase Requirements → Test Map"):** `--check=manifest`, `--check=apple-meta`, `--check=viewport`, `--check=sw`, `--all`.
 
 **Per-check assertions (each row from the Test Map):**
-- `--check=manifest`: parse + required-field presence + icon-size + maskable presence. RESEARCH.md A2: `@pwabuilder/manifest-validation` is the preferred validator behind a `checkpoint:human-verify`; ajv schema is the fallback. For Wave 0, hand-rolled field-presence is acceptable (RESEARCH.md "Don't Hand-Roll" lists the dep as "dev-only").
+- `--check=manifest`: parse + required-field presence + icon-size + maskable presence. Wave 0 uses `ajv` + vendored W3C manifest schema (`frontend/scripts/w3c-manifest-schema.json`) for real JSON-Schema validation. No human-verify checkpoint required — ajv is a top-30 npm package.
 - `--check=apple-meta`: grep `dist/index.html` for the literal strings `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`, `apple-touch-icon`. Plus file exists at `dist/apple-touch-icon.png`.
 - `--check=viewport`: grep `dist/index.html` for the literal string `viewport-fit=cover` (RESEARCH.md Pitfall 3).
 - `--check=sw`: file exists at `dist/sw.js`; parses as JS via dynamic `new Function(src)` (catches syntax errors); contains the strings `NetworkFirst`, `CacheFirst`, `skipWaiting`, `clientsClaim`, `/api/`, `/index.html`.
@@ -591,7 +591,7 @@ autoComplete="email"
 
 **Also add to `devDependencies` (per CONTEXT D-06 + RESEARCH.md Standard Stack):**
 - `"workbox-cli": "^7.4.1"`
-- (Optional, behind `checkpoint:human-verify`) `"@pwabuilder/manifest-validation": "latest"`
+- `"ajv": "^8"`
 
 **Atomicity contract (CONTEXT D-05):** the entire `build:web` value MUST stay on one logical line. Phase 4 lived through a partial config-swap failure once already; do not introduce intermediate state.
 

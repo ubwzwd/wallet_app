@@ -60,7 +60,7 @@ created: 2026-05-23
 - [ ] `frontend/scripts/verify-touch-targets.mjs` — new — source-regex audit for `minHeight: 44`, `inputMode="decimal"`, safe-area-context imports.
 - [ ] `frontend/scripts/verify-sw-update.mjs` — new, OPTIONAL — Puppeteer smoke for SW v1→v2 controllerchange.
 - [ ] `frontend/__tests__/Button.test.ts` — new — assert `Button` `small` style has `minHeight === 44 && minWidth === 44` (testEnvironment node, no RN runtime).
-- [ ] devDependency `@pwabuilder/manifest-validation` (or `ajv` + W3C schema) — install behind `checkpoint:human-verify` per Package Legitimacy Audit.
+- [ ] devDependency `ajv@^8` + vendored W3C manifest schema (`frontend/scripts/w3c-manifest-schema.json`). No `checkpoint:human-verify` needed — ajv is a top-30 npm package with no legitimacy concern.
 
 ---
 
