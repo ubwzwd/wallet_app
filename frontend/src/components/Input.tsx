@@ -97,6 +97,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     paddingHorizontal: 4,
+    minHeight: 44,
+    minWidth: 44,
   },
   passwordToggleText: {
     fontSize: 20,
