@@ -38,12 +38,23 @@ Transform the existing Expo-web build into a real PWA that installs to the home 
 ### SW Registration + Update UX
 
 - **D-07:** New `frontend/src/pwa/registerSW.ts` registers `/sw.js` on `window.addEventListener('load', ...)`. The module exposes a `useServiceWorkerUpdate()` hook returning `{ updateAvailable: boolean, applyUpdate: () => void }`. `applyUpdate()` posts `{ type: 'SKIP_WAITING' }` to `registration.waiting` then calls `window.location.reload()`. The module is a no-op on native (guarded by `Platform.OS === 'web'` and the `'serviceWorker' in navigator` check), so importing it from `App.tsx` is safe across platforms.
+
+  > **Superseded by:** User spot-check 2026-05-24 — UpdateToast UI removed. `registerSW.ts` simplified to register-only (logs `[pwa] service worker registered` / `[pwa] service worker registration failed` to console; relies on ROADMAP SC-3's `skipWaiting + clientsClaim` to silently take over; NetworkFirst on `/index.html` lets the next navigation/refresh surface the new version). No `useServiceWorkerUpdate()` hook, no `subscribeUpdate`/`applyUpdate` API, no `controllerchange` listener, no `SKIP_WAITING` postMessage. `App.tsx` integration is just the side-effect import. See 05-03-PLAN.md and 05-05-PLAN.md.
+
 - **D-08:** New `frontend/src/components/UpdateToast.tsx` (React-Native-Web component) consumes `useServiceWorkerUpdate()` and renders the bottom-of-screen toast using the UI-SPEC copywriting contract: heading "Update available", button label "Reload App". Styling uses the existing color tokens (accent `#0ea5e9` for the Reload button). Mounted once at the App.tsx root, alongside the existing navigation tree.
+
+  > **Superseded by:** User spot-check 2026-05-24 — UpdateToast.tsx is no longer authored. The component is not produced in Phase 5; silent SW update via `skipWaiting + clientsClaim` (preserved per ROADMAP SC-3) replaces the explicit user-opt-in toast. See 05-03-PLAN.md (component dropped from files_modified and tasks).
+
 - **D-09:** Registration code path: import side-effect `import '@/pwa/registerSW'` in `App.tsx` near the top; the import triggers registration on web only. The toast is rendered as a sibling of `<Navigation />` in App.tsx so it overlays all screens.
+
+  > **Superseded by:** User spot-check 2026-05-24 — only the side-effect import `import '@/pwa/registerSW'` survives; no `<UpdateToast />` element is mounted. App.tsx integration is the SafeAreaProvider wrap + the side-effect import, nothing else PWA-related. See 05-05-PLAN.md.
 
 ### Icon Generation
 
 - **D-10:** Hand-author the 4 required PNGs once and commit them under `frontend/public/`: `192.png`, `512.png`, `512-maskable.png` (foreground content within the center 80% safe zone), `apple-touch-icon.png` (180×180). No icon-generation script, no `pwa-asset-generator` dep, no `sharp` script. Acceptable because UI-SPEC locks the icon design and v2.0 ships once.
+
+  > **Superseded by:** User spot-check 2026-05-24 — sharp generation script replaces hand-authored PNGs. `frontend/scripts/generate-icons.mjs` (added in 05-02 Task 2) reads `frontend/assets/adaptive-icon.png`, composites on the `#0ea5e9` background (per D-11), and emits the 4 required PNGs to `frontend/public/`. `sharp@^0.33` added as a devDependency in 05-01 Task 1. Future logo/color changes regenerate by re-running the script. D-11 (icon design) is preserved verbatim — only the production method changed.
+
 - **D-11:** Icon design reuses the existing `frontend/assets/adaptive-icon.png` foreground composited on a solid `#0ea5e9` background, per UI-SPEC "Icon design direction" section.
 
 ### Lighthouse + Device Verification
@@ -58,6 +69,8 @@ Transform the existing Expo-web build into a real PWA that installs to the home 
 ### Touch-Target Scope
 
 - **D-15:** Touch-target enforcement is the **Button.tsx single-point fix** from UI-SPEC PLUS a targeted spot-fix of the named non-Button offenders. Specifically: add `minHeight: 44, minWidth: 44` to the `small` size style in `Button.tsx`; then audit and fix the `TouchableOpacity` instances called out in UI-SPEC Touch Target Enforcement Contract (currency picker rows, modal close buttons when introduced, navigation back buttons). Not a full grep audit of every TouchableOpacity in the codebase — UI-SPEC names the touch-critical sites; trust that list.
+
+  > **Superseded by:** User spot-check 2026-05-24 — touch-target audit scope expanded from "named spot-fix list (Button.tsx + 3 screens)" to **full grep audit of every `TouchableOpacity`, `Pressable`, and `TouchableHighlight` in `frontend/src/`**, with a new `all-touchables` check in verify-touch-targets.mjs gating the result. The named spot-fix list is preserved as a subset (Tasks 1–4 of 05-04 still land those edits); the audit pass (05-04 Task 6) catches anything the named list missed. Genuinely non-tap-critical elements may opt out via `// touch-target-exempt: <reason>` inline/preceding-line comments that the verifier recognizes.
 
 ### Claude's Discretion
 

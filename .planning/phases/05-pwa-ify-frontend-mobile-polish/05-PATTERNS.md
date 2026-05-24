@@ -12,11 +12,10 @@
 | `frontend/public/manifest.json` | NEW | config (JSON) | request-response (static) | `frontend/app.json` (single root-object JSON, no in-tree manifest analog) | role-match |
 | `frontend/public/pwa.css` | NEW | config (CSS) | request-response (static) | none in-tree (first stylesheet in this repo) | no analog |
 | `frontend/public/offline.html` | NEW | config (static HTML) | request-response (static) | `frontend/dist/index.html` (single self-contained HTML) | role-match |
-| `frontend/public/192.png`, `512.png`, `512-maskable.png`, `apple-touch-icon.png` | NEW | asset (binary) | static | `frontend/assets/adaptive-icon.png` (source design) | role-match |
+| `frontend/public/192.png`, `512.png`, `512-maskable.png`, `apple-touch-icon.png` | NEW | asset (binary, script-generated) | static | `frontend/assets/adaptive-icon.png` (source design) — composited via `frontend/scripts/generate-icons.mjs` (sharp-based, per revised D-10) | role-match |
+| `frontend/scripts/generate-icons.mjs` | NEW | script (icon generator) | batch | sharp v0.33 upstream docs (https://sharp.pixelplumbing.com/) — no in-tree analog; first image-processing script in repo | no analog (RESEARCH/sharp primary) |
 | `frontend/workbox-config.cjs` | NEW | config (CommonJS) | build-tool | none in-tree (first `.cjs` file in repo other than `jest.config.js`) | partial (`jest.config.js` shapes the CJS module style) |
 | `frontend/src/pwa/registerSW.ts` | NEW | utility (side-effect + pub-sub) | event-driven | `frontend/src/store/AuthContext.tsx` (singleton state + subscribers) — confirmed exists; alternative analog is `frontend/src/utils/queryClient.ts` (module-level singleton) | role-match |
-| `frontend/src/pwa/useServiceWorkerUpdate.ts` | NEW | hook | event-driven | `frontend/src/store/AuthContext.tsx` (custom `useAuth` hook pattern) | role-match |
-| `frontend/src/components/UpdateToast.tsx` | NEW | component (presentational) | event-driven (consumes hook) | `frontend/src/components/Button.tsx` (StyleSheet-based RN component) | role-match |
 | `frontend/scripts/verify-pwa.mjs` | NEW | script (verification) | batch | `frontend/__tests__/CurrencyPicker.test.ts` (file-read + assertion pattern) and `infra/scripts/smoke.sh` (step-by-step verify with explicit exit codes) | role-match |
 | `frontend/scripts/verify-touch-targets.mjs` | NEW | script (verification) | batch | `frontend/__tests__/CurrencyPicker.test.ts` (regex-over-source pattern) | role-match |
 | `frontend/__tests__/Button.test.ts` | NEW | test (unit, static) | batch | `frontend/__tests__/CurrencyPicker.test.ts` and `frontend/__tests__/TransactionsScreen.test.ts` | exact |
@@ -161,112 +160,47 @@ module.exports = {
 
 ---
 
-### `frontend/src/pwa/registerSW.ts` (NEW — utility, event-driven side-effect)
+### `frontend/src/pwa/registerSW.ts` (NEW — utility, side-effect register + log only)
 
-**Analog:** `frontend/src/utils/queryClient.ts` (module-level singleton init, side-effect on import) — and `frontend/src/store/AuthContext.tsx` (pub-sub listener pattern via React Context).
+**Analog:** `frontend/src/utils/queryClient.ts` (module-level singleton init, side-effect on import).
 
-**Why this analog:** `queryClient.ts` is the established pattern for a module that exports an initialized singleton; `AuthContext.tsx` is the established subscribe/notify pattern. `registerSW.ts` combines both — a module-level singleton (`waitingWorker`) plus a `Set<Listener>` pub-sub.
+**Why this analog:** `queryClient.ts` is the established pattern for a module whose import triggers a one-time side-effect (singleton init) and exposes nothing — or only a singleton — to callers. Per the revised D-07 (user spot-check 2026-05-24), `registerSW.ts` is now equally minimal: it registers `/sw.js` on web, logs success/failure, and exits. No pub-sub, no hook, no postMessage handshake. (The pub-sub / `AuthContext`-style listener pattern referenced in earlier revisions has been removed alongside the UpdateToast surface.)
 
-**Imports pattern (from RESEARCH.md Pattern 2 + project conventions):**
+**Imports pattern (from project conventions):**
 ```ts
 import { Platform } from 'react-native';
 ```
 
-**Core pattern (locked by CONTEXT D-07 + RESEARCH.md Pattern 2 — must follow verbatim shape):**
+**Core pattern (locked by revised D-07 + RESEARCH.md Pattern 2 simplified):**
 ```ts
-let waitingWorker: ServiceWorker | null = null;
-const listeners = new Set<(w: ServiceWorker | null) => void>();
-
-export function subscribeUpdate(cb: (w: ServiceWorker | null) => void) {
-  listeners.add(cb);
-  cb(waitingWorker);
-  return () => listeners.delete(cb);
-}
-
-export function applyUpdate() {
-  if (!waitingWorker) return;
-  waitingWorker.postMessage({ type: 'SKIP_WAITING' });
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload();
-  }, { once: true });
-}
+import { Platform } from 'react-native';
 
 if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then((registration) => { /* ... */ })
-      .catch((err) => console.warn('[PWA] SW registration failed:', err));
+    navigator.serviceWorker.register('/sw.js')
+      .then(() => console.log('[pwa] service worker registered'))
+      .catch((err) => console.warn('[pwa] service worker registration failed', err));
   });
 }
 ```
 
 **Why the `Platform.OS === 'web'` guard:** Established convention in this codebase — see `TransactionFormScreen.tsx:548` (`{Platform.OS === 'web' && ...}`) and `FinanceSourcesScreen.test.ts` (BUG-03 tests assert `Platform.OS === 'web'` branches). New PWA module must follow the same gate so importing it from `App.tsx` is safe on native.
 
-**Gotcha:** Never throw on SW registration failure — `.catch((err) => console.warn(...))`. App boot must never break because of PWA registration. RESEARCH.md Pattern 2 covers this exact line.
+**Why no hook / no UI surface:** Per the revised D-07 / D-08 / D-09 (2026-05-24), the update lifecycle is handled entirely SW-side via Workbox's `skipWaiting: true + clientsClaim: true` (configured in `workbox-config.cjs`, ROADMAP SC-3 preserved). NetworkFirst on `/index.html` ensures the next navigation/refresh after a deploy fetches the fresh shell. No `useServiceWorkerUpdate()` hook, no `subscribeUpdate`/`applyUpdate` API, no `controllerchange` listener, no `SKIP_WAITING` postMessage, no `UpdateToast.tsx` component.
+
+**Gotcha:** Never throw on SW registration failure — `.catch((err) => console.warn(...))`. App boot must never break because of PWA registration.
 
 ---
 
-### `frontend/src/pwa/useServiceWorkerUpdate.ts` (NEW — hook)
+### `frontend/src/pwa/useServiceWorkerUpdate.ts` — SUPERSEDED (not produced)
 
-**Analog:** `frontend/src/store/AuthContext.tsx` `useAuth()` — the established custom-hook pattern.
-
-**Why this analog:** Project convention is to export hooks as small wrappers over a subscribe API. `useAuth()` reads `useContext(AuthContext)`; `useServiceWorkerUpdate()` reads `subscribeUpdate()` from `./registerSW`. Same naming convention (`useXxx`).
-
-**Pattern (locked by RESEARCH.md Pattern 2):**
-```ts
-import { useEffect, useState } from 'react';
-import { subscribeUpdate, applyUpdate } from './registerSW';
-
-export function useServiceWorkerUpdate() {
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  useEffect(() => subscribeUpdate((w) => setUpdateAvailable(!!w)), []);
-  return { updateAvailable, applyUpdate };
-}
-```
-
-**Gotcha:** Return shape `{ updateAvailable, applyUpdate }` — UI-SPEC §Service Worker Caching Contract names exactly these two surfaces (boolean + callback). Don't add extra fields without a UI-SPEC update.
+**Status (2026-05-24):** This module is NO LONGER planned. The revised D-07 / D-08 / D-09 (user spot-check) eliminated the SW-update UI surface entirely. There is no hook, no pub-sub, no consumer. The silent SW takeover via Workbox `skipWaiting + clientsClaim` (preserved per ROADMAP SC-3) handles updates with zero client participation. See `05-CONTEXT.md` D-07 supersession annotation.
 
 ---
 
-### `frontend/src/components/UpdateToast.tsx` (NEW — component, presentational)
+### `frontend/src/components/UpdateToast.tsx` — SUPERSEDED (not produced)
 
-**Analog:** `frontend/src/components/Button.tsx`
-
-**Why this analog:** Both are simple React-Native components built with `TouchableOpacity` + `Text` + `StyleSheet.create`. UpdateToast renders a fixed-position container (the "bottom-of-screen banner" from UI-SPEC §Service Worker Caching Contract "SW update UX") with an inline button styled identically to a primary `Button`.
-
-**Imports pattern (mirror `Button.tsx` lines 1-9):**
-```tsx
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useServiceWorkerUpdate } from '@/pwa/useServiceWorkerUpdate';
-```
-
-**Core component pattern (mirror `Button.tsx` lines 22-67 structure, but with conditional render):**
-```tsx
-export function UpdateToast() {
-  const { updateAvailable, applyUpdate } = useServiceWorkerUpdate();
-  if (!updateAvailable) return null;
-  return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Update available</Text>
-      <TouchableOpacity style={styles.button} onPress={applyUpdate} activeOpacity={0.7}>
-        <Text style={styles.buttonText}>Reload App</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-```
-
-**Styling pattern (mirror `Button.tsx` lines 69-137 — flat `StyleSheet.create({...})` with color tokens):**
-- Container: `position: 'absolute'`, `bottom: 16`, `left: 16`, `right: 16` (or use safe-area-inset-bottom via the same `useSafeAreaInsets()` Screen.tsx will use after MOD).
-- Container `backgroundColor: '#ffffff'`, `borderRadius: 12`, `padding: 16`, `boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)'` (mirror `Card.tsx` `elevated` variant, lines 31-35).
-- Button background: `#0ea5e9` (accent, UI-SPEC §Color — same as `Button.tsx:79` primary).
-- Heading: `fontSize: 16, fontWeight: '600', color: '#1f2937'`.
-- Button text: `color: '#ffffff', fontWeight: '600', fontSize: 14` (smallText size — UI-SPEC §Typography Label).
-- Button MUST have `minHeight: 44, minWidth: 44` per UI-SPEC §Touch Target Enforcement Contract (do NOT use `Button` size="small" because Button's MOD task happens in parallel — be explicit here for safety).
-
-**Copy (locked by UI-SPEC §Copywriting Contract):** heading `"Update available"`, button label `"Reload App"`. Verbatim.
-
-**Gotcha:** Toast must render `null` when there's no update — do not render an empty container with opacity 0; SW events fire seldom and an empty hidden node blocks taps below it.
+**Status (2026-05-24):** This component is NO LONGER planned. The revised D-08 (user spot-check) eliminated the explicit user-opt-in toast in favor of silent SW takeover. No `UpdateToast.tsx` is authored in 05-03; no `<UpdateToast />` is mounted in 05-05. The next navigation/refresh after deploy surfaces the new version automatically because `workbox-config.cjs` uses NetworkFirst on `/index.html` (configured in 05-03). See `05-CONTEXT.md` D-08 supersession annotation.
 
 ---
 
@@ -412,7 +346,7 @@ describe('MOBUI-01: Button small size satisfies 44x44 touch-target minimum', () 
 
 **Analog:** itself (existing structure stays; additive only)
 
-**Why:** UI-SPEC §Safe Area Inset Contract + RESEARCH.md Pattern 3 + CONTEXT D-07/D-09 lock the surface — wrap in `SafeAreaProvider`, side-effect import `@/pwa/registerSW`, render `<UpdateToast />` as sibling of `<Navigation />`.
+**Why:** UI-SPEC §Safe Area Inset Contract + RESEARCH.md Pattern 3 + CONTEXT D-07/D-09 (revised) lock the surface — wrap in `SafeAreaProvider` and side-effect-import `@/pwa/registerSW`. Per the revised D-08 / D-09 (2026-05-24), the previously planned `<UpdateToast />` sibling-render is REMOVED — App.tsx integration is now JUST the provider wrap + the side-effect import. No `UpdateToast` import, no `<UpdateToast />` element.
 
 **Current shape (`App.tsx` lines 1-42) — to be EXTENDED, not rewritten:**
 ```tsx
@@ -424,14 +358,13 @@ import { queryClient } from '@/utils/queryClient';
 import { Navigation } from '@/components/Navigation';
 ```
 
-**Modified imports (add 3 lines):**
+**Modified imports (add 2 lines — NO UpdateToast import per revised D-08):**
 ```tsx
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import '@/pwa/registerSW';  // side-effect; no-op on native
-import { UpdateToast } from '@/components/UpdateToast';
 ```
 
-**Modified root JSX (mirror RESEARCH.md Pattern 3 §SafeAreaProvider wrapping):**
+**Modified root JSX (mirror RESEARCH.md Pattern 3 §SafeAreaProvider wrapping; NO UpdateToast sibling per revised D-09):**
 ```tsx
 export default function App() {
   return (
@@ -439,7 +372,6 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <AppContent />
-          <UpdateToast />
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
@@ -531,7 +463,7 @@ Apply at lines 535, 628, 727 (one per amount-field call).
 - Line 191 (modal close `<TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>`) — wrap or add inline `style={{ minHeight: 44, minWidth: 44, padding: 12, justifyContent: 'center' }}`. UI-SPEC §Touch Target Enforcement Contract lists "Modal close buttons" explicitly.
 - Line 204 (currency row `<TouchableOpacity style={[styles.currencyItem, ...]}>`) — add `minHeight: 44` to `styles.currencyItem`.
 
-**Why this targeted-fix instead of grep-all-TouchableOpacities:** CONTEXT D-15 explicitly says "not a full grep audit — UI-SPEC names the touch-critical sites; trust that list."
+**Why these named edits (revised 2026-05-24):** These three sites are the HIGH-CONFIDENCE SUBSET — the original D-15 named list that UI-SPEC explicitly called out as touch-critical (currency picker rows + modal close). Per the revised D-15 (user spot-check 2026-05-24), the full grep audit landed in 05-04 Task 6 covers everything else under `frontend/src/` (via `verify-touch-targets.mjs --check=all-touchables`, with `// touch-target-exempt: <reason>` opt-out for genuinely non-tap-critical elements). The named edits here remain because they are reliably correct without inspection — landing them up-front frees the audit pass to focus on the long tail.
 
 ---
 
@@ -619,7 +551,6 @@ autoComplete="email"
 - `manifest.json` (`theme_color: #0ea5e9`, `background_color: #ffffff`)
 - `pwa.css` — no hardcoded colors needed (font-size rule only)
 - `offline.html` — inline styles must use `#f9fafb` background, `#1f2937` heading, `#6b7280` body text
-- `UpdateToast.tsx` — `#0ea5e9` button bg, `#ffffff` container bg, `#1f2937` heading text
 
 **Anti-pattern:** Do NOT introduce any new color value. Every color in every new file MUST appear in this table.
 
@@ -640,7 +571,7 @@ if (Platform.OS === 'web') { /* web-only */ }
 
 **Apply to:**
 - `registerSW.ts` — gate the SW registration block (`Platform.OS === 'web' && 'serviceWorker' in navigator`) so the file is safe to import unconditionally from `App.tsx`.
-- Anywhere else PWA-only logic intrudes — there shouldn't be much; `useServiceWorkerUpdate` returns `{updateAvailable: false}` on native naturally because `subscribeUpdate` never fires the truthy path on native.
+- Anywhere else PWA-only logic intrudes — there shouldn't be much; the only PWA-side module in Phase 5 is `registerSW.ts` itself (already guarded), and per the revised D-07/D-08/D-09 there is no hook or component consuming SW events on the client side.
 
 ---
 
@@ -656,9 +587,7 @@ import { useAuth } from '@/store/AuthContext';
 
 **Apply to:**
 - `registerSW.ts` is at `@/pwa/registerSW`
-- `useServiceWorkerUpdate.ts` is at `@/pwa/useServiceWorkerUpdate`
-- `UpdateToast.tsx` is at `@/components/UpdateToast`
-- `App.tsx` imports them as `import '@/pwa/registerSW'` (side-effect form, no destructure) and `import { UpdateToast } from '@/components/UpdateToast'`.
+- `App.tsx` imports `registerSW` as `import '@/pwa/registerSW'` (side-effect form, no destructure). Per the revised D-08/D-09, no `UpdateToast` component is produced or imported.
 
 **Gotcha:** Verification scripts under `frontend/scripts/*.mjs` run with `cwd=frontend/` — they use literal relative paths (`path.join(FRONTEND, 'src/...')`), not `@/` aliases. The alias only resolves inside the TS/JS bundler graph.
 
@@ -670,13 +599,15 @@ import { useAuth } from '@/store/AuthContext';
 
 **Pattern:** All component styling via `StyleSheet.create({...})` at the bottom of the file (after the component export), declared as `const styles = StyleSheet.create({...})`. No NativeWind className strings in any current component despite the dep being installed — convention is StyleSheet only.
 
-**Apply to:** `UpdateToast.tsx` MUST follow the same `const styles = StyleSheet.create({...})` shape; do NOT introduce NativeWind `className=...` syntax. (NativeWind exists in deps but no component uses it yet — keep that convention until a separate phase intentionally adopts it.)
+**Apply to:** every new component in this phase MUST follow the same `const styles = StyleSheet.create({...})` shape; do NOT introduce NativeWind `className=...` syntax. (NativeWind exists in deps but no component uses it yet — keep that convention until a separate phase intentionally adopts it. Phase 5 produces no new components — UpdateToast was dropped per the revised D-08 — so this rule applies prospectively to future phases that touch this area.)
 
 ---
 
-### Touch-Target Spot-Fix (per CONTEXT D-15)
+### Touch-Target Spot-Fix (per CONTEXT D-15 — revised 2026-05-24)
 
-**Sources to touch (locked list — NOT a grep-all-TouchableOpacities audit):**
+**Scope (revised 2026-05-24):** Button.tsx single-point fix propagates to 14 call-sites. Named non-Button spot-fixes cover 3 known screens (ProfileScreen, FinanceSourceFormScreen, TransactionFormScreen). **Plus** a full grep audit (05-04 Task 6) over every `<TouchableOpacity>` / `<Pressable>` / `<TouchableHighlight>` in `frontend/src/` catches anything the named list missed, gated by the `all-touchables` check in `verify-touch-targets.mjs`. Opt-out: `// touch-target-exempt: <reason>` comment above a JSX element exempts it (for genuinely non-tap-critical UI like 24×24 informational icons or web-only hover affordances). See revised D-15 supersession annotation in `05-CONTEXT.md`.
+
+**Named sources to touch (preserved as a high-confidence SUBSET of the broader audit):**
 
 | File | Line | Element | Fix |
 |------|------|---------|-----|
@@ -692,7 +623,7 @@ import { useAuth } from '@/store/AuthContext';
 | `ProfileScreen.tsx` | 164 | modal close | `minHeight: 44, minWidth: 44, padding: 12` |
 | (every screen) | n/a | `<Button size="small">` | inherits from Button.tsx fix — no per-site edit |
 
-**Anti-pattern:** Don't audit every TouchableOpacity in the repo. CONTEXT D-15 + RESEARCH.md Pitfall 7 (tag chips aren't interactive — no fix needed).
+**Audit (revised 2026-05-24):** Per the revised D-15, the named-list-only approach was expanded — 05-04 Task 6 now runs a full grep audit of every `<TouchableOpacity>` / `<Pressable>` / `<TouchableHighlight>` under `frontend/src/` and applies `minHeight: 44` (or a `// touch-target-exempt: <reason>` opt-out comment for genuinely non-tap-critical UI). The `all-touchables` check in `verify-touch-targets.mjs` is the gate. RESEARCH.md Pitfall 7 (tag chips aren't interactive) is preserved as guidance — apply the exemption comment to those sites rather than forcing a 44px hit area.
 
 ---
 
@@ -740,7 +671,8 @@ These four files have no in-tree analog; planner falls back to RESEARCH.md prima
 | File | Role | Why no analog | Fallback source |
 |------|------|---------------|-----------------|
 | `frontend/public/pwa.css` | CSS | First CSS file in repo (everything else is RN StyleSheet) | RESEARCH.md Code Examples §pwa.css |
-| `frontend/public/192.png` / `512.png` / `512-maskable.png` / `apple-touch-icon.png` | binary assets | Existing `adaptive-icon.png` is design-source only, not a PWA icon | UI-SPEC §PWA Manifest Contract §Icon design direction; CONTEXT D-10/D-11 |
+| `frontend/public/192.png` / `512.png` / `512-maskable.png` / `apple-touch-icon.png` | binary assets (script-generated) | Per the revised D-10 (2026-05-24), these are produced by `frontend/scripts/generate-icons.mjs` (sharp-based; reads `frontend/assets/adaptive-icon.png`, composites on `#0ea5e9` per D-11 preserved). Source: sharp docs at https://sharp.pixelplumbing.com/ — UI-SPEC §PWA Manifest Contract §Icon design direction + CONTEXT D-10 (revised) / D-11 (verbatim). |
+| `frontend/scripts/generate-icons.mjs` | image-processing script | First sharp-using script in repo; no in-tree analog | sharp docs at https://sharp.pixelplumbing.com/; CONTEXT revised D-10 |
 | `frontend/public/manifest.json` | JSON manifest | No web-app-manifest precedent in repo | RESEARCH.md Code Examples §manifest.json + UI-SPEC §PWA Manifest Contract |
 | `frontend/workbox-config.cjs` | Workbox config | First `.cjs` config in repo (only `jest.config.js` is a `.js` config; partial-match only on module-style) | RESEARCH.md Pattern 1 + Anti-Patterns section |
 
