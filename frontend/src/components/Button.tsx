@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     flexDirection: 'row',
+    minHeight: 44,
   },
 
   // Variants
