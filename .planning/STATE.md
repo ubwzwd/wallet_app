@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-05-25T14:07:08.531Z"
+status: executing
+last_updated: "2026-05-25T15:48:15.421Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 13
+  total_plans: 20
   completed_plans: 13
   percent: 50
 ---
@@ -21,7 +21,7 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 **Core value:** Users can record and view financial activity across multiple sources in any currency, with automatic conversion to their preferred base currency.
 
-**Current focus:** Phase 05 — pwa-ify-frontend-mobile-polish
+**Current focus:** Phase 06 — provision-oracle-vm-domain-caddy-https
 
 ## Milestone
 
@@ -40,12 +40,12 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 ## Current Position
 
-Phase: 05 — COMPLETE
+Phase: 06 (provision-oracle-vm-domain-caddy-https) — EXECUTING
 Plan: 1 of 7
 
 - **Phase:** 4 (in progress)
 - **Plan:** All 6 plans complete
-- **Status:** Phase 05 complete
+- **Status:** Executing Phase 06
 - **Last activity:** 2026-05-25
 
 ## Performance Metrics

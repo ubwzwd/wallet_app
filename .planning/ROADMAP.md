@@ -80,9 +80,9 @@ status: defined
   4. `GET /health` returns 200 OK in <100ms **without** touching the database (verified by stopping Postgres and observing /health still 200) — DB outage cannot kill the API container.
   5. UptimeRobot free-tier monitor is pinging `https://<domain>/health` every 5 min and successfully delivered an email alert during a deliberate downtime test; HSTS header (`max-age=31536000; includeSubDomains`, no preload) is observed in `curl -I` output.
 **Plans**: 7 plans
-  - [ ] 06-01-PLAN.md — Caddyfile additions (acme_ca global + HSTS header) + .env.example new CADDY_ACME_CA + narrowed ALLOWED_ORIGINS + caddy service env passthrough in docker-compose.prod.yml (DOMAIN-02, DOMAIN-03, DOMAIN-04)
-  - [ ] 06-02-PLAN.md — Wave 0 verification scaffold: infra/scripts/verify-phase6.sh (quick + full modes, assertion-only no down -v) + infra/runbook-evidence/.gitkeep + .gitignore *.png rule (cross-cutting verification)
-  - [ ] 06-03-PLAN.md — ROADMAP.md SC3 trivial text amendment: 22/80/443 -> 23333/80/443 per D-12 (SEC-02)
+  - [x] 06-01-PLAN.md — Caddyfile additions (acme_ca global + HSTS header) + .env.example new CADDY_ACME_CA + narrowed ALLOWED_ORIGINS + caddy service env passthrough in docker-compose.prod.yml (DOMAIN-02, DOMAIN-03, DOMAIN-04)
+  - [x] 06-02-PLAN.md — Wave 0 verification scaffold: infra/scripts/verify-phase6.sh (quick + full modes, assertion-only no down -v) + infra/runbook-evidence/.gitkeep + .gitignore *.png rule (cross-cutting verification)
+  - [x] 06-03-PLAN.md — ROADMAP.md SC3 trivial text amendment: 22/80/443 -> 23333/80/443 per D-12 (SEC-02)
   - [ ] 06-04-PLAN.md — infra/RUNBOOK.md authoring (§0-§16 + Appendices A-D): operator playbook with D-04 + D-05 procedural gates and 9 pitfall callouts (DEPLOY-05)
   - [ ] 06-05-PLAN.md — Operator-driven RUNBOOK §0-§13 execution: provision Oracle VM, register domain, harden SSH/ufw/unattended-upgrades, install Docker, DNS A record + propagation gate, author .env with LE staging URL, first compose up, verify staging cert in incognito, SC4 DB-independence test, SC3 nmap scan (DOMAIN-01, DEPLOY-05, SEC-02, OPS-01)
   - [ ] 06-06-PLAN.md — Operator-driven D-05 Commit B: flip CADDY_ACME_CA= empty + docker compose restart caddy + verify real LE prod cert (not STAGING) + verify HSTS header on responses (DOMAIN-02, DOMAIN-03)
@@ -108,7 +108,7 @@ status: defined
 |-------|----------------|--------|-----------|
 | 4. Containerize and Compose Locally | 6/6 | Complete | 2026-05-22 |
 | 5. PWA-ify Frontend + Mobile Polish | 7/7 | Complete   | 2026-05-25 |
-| 6. Provision Oracle VM + Domain + Caddy HTTPS | 0/0 | Not started | - |
+| 6. Provision Oracle VM + Domain + Caddy HTTPS | 3/7 | In Progress|  |
 | 7. CI/CD + Backups + Polish | 0/0 | Not started | - |
 
 ---
