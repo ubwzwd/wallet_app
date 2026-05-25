@@ -23,7 +23,7 @@ status: defined
 ## Phases
 
 - [x] **Phase 4: Containerize and Compose Locally** — Production docker-compose stack runs end-to-end on a developer laptop, no cloud cost.
-- [ ] **Phase 5: PWA-ify Frontend + Mobile Polish** — Web build is installable on iOS/Android home screen and feels native on phone-sized screens.
+- [x] **Phase 5: PWA-ify Frontend + Mobile Polish** — Web build is installable on iOS/Android home screen and feels native on phone-sized screens. (completed 2026-05-25)
 - [ ] **Phase 6: Provision Oracle VM + Domain + Caddy HTTPS** — App reachable at `https://<domain>` with valid Let's Encrypt cert, deployed by hand from a runbook.
 - [ ] **Phase 7: CI/CD + Backups + Polish** — `git push` to `main` deploys; daily off-site backups verified by restore drill; zero-downtime rollovers.
 
@@ -66,7 +66,7 @@ status: defined
   - [x] 05-04-PLAN.md — Touch-target single-point fix in Button.tsx (44×44 propagates to 14 call-sites) + spot-fixes in FinanceSourceFormScreen, TransactionFormScreen, ProfileScreen (MOBUI-01)
   - [x] 05-05-PLAN.md — Safe-area-inset wiring: Screen.tsx SafeAreaView import swap to react-native-safe-area-context + App.tsx SafeAreaProvider wrap + PWA glue mount (registerSW + UpdateToast) (MOBUI-02)
   - [x] 05-06-PLAN.md — inputMode="decimal" on TransactionFormScreen amount fields + verify Login/Register email props already compliant (MOBUI-03, MOBUI-04)
-  - [ ] 05-07-PLAN.md — Phase verification gate: npm run verify:phase5 aggregator + manual Incognito-Chrome install smoke + record MOBUI-05 deferral to Phase 6 (per CONTEXT D-13) (all 9)
+  - [x] 05-07-PLAN.md — Phase verification gate: npm run verify:phase5 aggregator + manual Incognito-Chrome install smoke + record MOBUI-05 deferral to Phase 6 (per CONTEXT D-13) (all 9)
 **UI hint**: yes
 
 ### Phase 6: Provision Oracle VM + Domain + Caddy HTTPS
@@ -100,7 +100,7 @@ status: defined
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 4. Containerize and Compose Locally | 6/6 | Complete | 2026-05-22 |
-| 5. PWA-ify Frontend + Mobile Polish | 6/7 | In Progress|  |
+| 5. PWA-ify Frontend + Mobile Polish | 7/7 | Complete   | 2026-05-25 |
 | 6. Provision Oracle VM + Domain + Caddy HTTPS | 0/0 | Not started | - |
 | 7. CI/CD + Backups + Polish | 0/0 | Not started | - |
 
