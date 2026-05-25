@@ -54,7 +54,7 @@ echo "==> caddy: HSTS preload absent (D-19 / Pitfall 7 — irreversible)"
   || { echo "FAIL: HSTS preload token must NOT be in Caddyfile — preload submission is irreversible"; exit 1; }
 
 echo "==> caddy: acme_ca global block present (D-05 / env-var driven ACME endpoint)"
-grep -q 'acme_ca {$CADDY_ACME_CA}' "$REPO_ROOT/infra/Caddyfile" \
+grep -qE 'acme_ca \{\$CADDY_ACME_CA(:[^}]*)?\}' "$REPO_ROOT/infra/Caddyfile" \
   || { echo "FAIL: acme_ca env-var directive missing from global block in Caddyfile"; exit 1; }
 
 echo "==> env: .env.example has CADDY_ACME_CA key"
