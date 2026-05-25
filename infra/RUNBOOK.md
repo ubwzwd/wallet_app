@@ -622,3 +622,392 @@ echo "Commit B (LE production flip) verified at $(date -u +%FT%TZ)" >> ~/wallet_
 
 ---
 
+## 12. Verify /health DB-independence
+
+**Background:** ROADMAP Phase 6 SC4 requires that `GET /health` returns 200 OK without touching the database — a DB outage must not kill the API container. The existing endpoint at `backend/app/main.py:33-40` is already DB-independent by construction. This section formally verifies that property end-to-end on the live VM.
+
+All commands on the VM as `deploy`, from `~/wallet_app/infra`.
+
+**12a. Confirm baseline** (DB up, /health works):
+
+```bash
+curl -sf https://<your-domain>/health | python3 -m json.tool
+# Expected JSON: {"status":"healthy","environment":"production","version":"0.1.0"}
+```
+
+**12b. Stop the DB container:**
+
+```bash
+docker compose -f docker-compose.prod.yml stop db
+docker compose -f docker-compose.prod.yml ps db
+# Expected: db state = exited
+```
+
+**12c. Verify /health still returns 200 with the DB stopped:**
+
+```bash
+time curl -sf https://<your-domain>/health | python3 -m json.tool
+# Expected JSON: same {"status":"healthy",...} as the baseline — no error, no 503
+# Expected time: well under 1 second wall clock (the /health endpoint never touches the DB)
+```
+
+**12d. Restore the DB:**
+
+```bash
+docker compose -f docker-compose.prod.yml start db
+docker compose -f docker-compose.prod.yml ps db
+# Wait for db to become healthy (~10–30 seconds)
+PGUSER=$(grep ^POSTGRES_USER .env | cut -d= -f2)
+docker compose -f docker-compose.prod.yml exec db pg_isready -U "$PGUSER"
+# Expected: /var/run/postgresql:5432 - accepting connections
+```
+
+**12e. Record the result:**
+
+```bash
+mkdir -p ~/wallet_app/infra/runbook-evidence
+echo "OPS-01 / SC4 DB-independence verified at $(date -u +%FT%TZ)" >> ~/wallet_app/infra/runbook-evidence/health-db-independence.log
+```
+
+> **Expected outcome:** `/health` returns 200 JSON with the DB container stopped, confirming DB outage does not kill the API container (OPS-01 / SC4 satisfied).
+
+---
+
+## 13. External port scan from laptop
+
+Run this from your **laptop** — the scan must originate from outside the VM to verify that ufw and the Oracle security list together expose exactly the three allowed ports.
+
+**Broad scan** (confirms no unexpected ports are open — takes 30–90 seconds):
+
+```bash
+nmap -Pn -p 1-65535 <vm-ip>
+# Expected: only TCP 23333, 80, 443 shown as "open"; all other ports as "closed" or "filtered"
+```
+
+**Targeted spot-check** (faster — asserts exactly what `verify-phase6.sh` asserts):
+
+```bash
+nmap -Pn -p 22,23333,80,443 <vm-ip>
+```
+
+Expected output:
+
+```
+22/tcp     closed   ssh        (or filtered)
+23333/tcp  open     unknown
+80/tcp     open     http
+443/tcp    open     https
+```
+
+**Save the scan result as evidence:**
+
+```bash
+nmap -Pn -p 22,23333,80,443 <vm-ip> -oN infra/runbook-evidence/nmap-scan.txt
+# Commit this file — it is plain text (not a PNG), so it is NOT gitignored.
+```
+
+> **Expected outcome:** nmap shows exactly three allowed ports reachable (23333/80/443). Port 22 is closed or filtered. This satisfies D-15 / SC3 per the ROADMAP literal "ufw allows only 23333/80/443".
+
+---
+
+## 14. UptimeRobot signup + monitor
+
+_Dashboard click-through. No shell commands._
+
+**14a. Sign up** at `https://uptimerobot.com` (free tier — no credit card required). Verify the confirmation email.
+
+**14b. Add a monitor:**
+
+1. Click **+ Add New Monitor** from the dashboard.
+2. **Monitor Type:** `HTTPS`
+3. **Friendly Name:** `wallet-app prod /health`
+4. **URL (or IP):** `https://<your-domain>/health`
+5. **Monitoring Interval:** `5 minutes` (this is the free-tier minimum)
+6. **Alert Contacts:** Select your verified email address. (UptimeRobot sends a "Please verify this contact" email at this step — click the link in that email to activate the alert destination before continuing.)
+7. Click **Create Monitor**.
+
+**14c. Wait for the first probe cycle:**
+
+Wait 5–10 minutes for UptimeRobot's probe servers to complete their first check cycle.
+
+**14d. CRITICAL CALLOUT (Pitfall 6):**
+
+> If the monitor shows "Down" immediately after creation, **wait one full check cycle (5 minutes)** before troubleshooting. UptimeRobot's probe servers may not yet have resolved the DNS A record you created in §7. Only investigate further if "Down" persists past 10 minutes. Confirm locally first: `curl -sf https://<your-domain>/health` from your laptop must work before suspecting UptimeRobot.
+
+> **Expected outcome:** UptimeRobot dashboard shows the monitor as "Up" with a green status indicator. Per D-23, this is the only monitor — no separate TLS-cert-expiry or root-URL monitor is needed.
+
+---
+
+## 15. Deliberate downtime drill
+
+**This section produces the SC5 evidence artifact.** `verify-phase6.sh full` checks that `infra/runbook-evidence/uptime-alert.png` is non-empty. Do not skip this section.
+
+**15a. Confirm baseline:** UptimeRobot dashboard shows the monitor as "Up".
+
+**15b. Stop Caddy** (Caddy is the only container listening on port 443 — stopping it makes `/health` unreachable from the internet):
+
+```bash
+ssh wallet-app   # or: ssh -p 23333 deploy@<vm-ip>
+cd ~/wallet_app/infra
+docker compose -f docker-compose.prod.yml stop caddy
+docker compose -f docker-compose.prod.yml ps caddy
+# Expected: caddy state = exited
+```
+
+**15c. Wait for the UptimeRobot alert:**
+
+Wait up to 10 minutes. The UptimeRobot free tier requires 2 consecutive failed probes (at 5-minute intervals) before sending an alert. The alert email arrives in your verified inbox.
+
+**15d. Screenshot the alert email:**
+
+Open the alert email in your email client. Take a screenshot and save it as:
+
+```
+infra/runbook-evidence/uptime-alert.png
+```
+
+(PNG files in `infra/runbook-evidence/` are gitignored per Plan 02 — the file lives on the operator's laptop and on the VM, but is committed to the repo as the final SC5 evidence step below.)
+
+**15e. Commit the screenshot to the repo:**
+
+```bash
+# On the VM or laptop (wherever the repo checkout is):
+cd ~/wallet_app
+git add infra/runbook-evidence/uptime-alert.png
+git commit -m "evidence(06): SC5 UptimeRobot downtime alert screenshot"
+git push
+```
+
+Note: the `.gitignore` rule for `infra/runbook-evidence/*.png` is negated by `!infra/runbook-evidence/uptime-alert.png` (or the rule was written to allow specific filenames). Verify the file stages with `git add` before committing.
+
+**15f. Restore Caddy:**
+
+```bash
+docker compose -f docker-compose.prod.yml start caddy
+docker compose -f docker-compose.prod.yml ps caddy
+# Wait ~30 seconds for Caddy to become healthy
+sleep 30
+curl -sf https://<your-domain>/health | python3 -m json.tool
+# Expected: {"status":"healthy",...}
+```
+
+**15g. Confirm UptimeRobot returns to "Up"** within one probe cycle (5 minutes).
+
+> **Expected outcome:** `infra/runbook-evidence/uptime-alert.png` committed to the repo (non-empty); UptimeRobot returns to "Up"; SC5 evidence captured and verifiable by `verify-phase6.sh full`.
+
+---
+
+## 16. Final verification
+
+Run both modes of the verifier from your **laptop** (or from the VM — both have a checkout of the repo):
+
+**Quick mode** (local static file checks — no VM needed):
+
+```bash
+cd <path-to>/wallet_app
+bash infra/scripts/verify-phase6.sh quick
+# Expected last line: OK: Phase 6 quick verify green
+```
+
+**Full mode** (against the live VM):
+
+```bash
+bash infra/scripts/verify-phase6.sh full <your-domain> <vm-ip>
+# Expected last line: OK: Phase 6 full verify green
+```
+
+If full mode fails, the failing assertion is printed to stdout (e.g., `FAIL: HSTS header missing`). Cross-reference the named check with the section that establishes that property:
+
+| Failing check | Section to revisit |
+|---------------|--------------------|
+| DNS does not resolve | §7, §8 |
+| HTTPS 200 fails | §10, §11 |
+| TLS cert is still staging | §11 |
+| HSTS header missing | §11 (Caddy restart) |
+| Port 22 unexpectedly open | §4, §5b |
+| /health JSON missing | §12 |
+| Evidence screenshot missing | §15 |
+
+> **Expected outcome:** Both modes exit 0. Phase 6 is complete.
+
+---
+
+## Appendix A: SSH config snippet
+
+Add this block to `~/.ssh/config` on your laptop:
+
+```
+Host wallet-app
+    HostName <vm-ip>
+    User deploy
+    Port 23333
+    IdentityFile ~/.ssh/wallet_app_oracle
+```
+
+Usage: `ssh wallet-app` is now equivalent to `ssh -p 23333 -i ~/.ssh/wallet_app_oracle deploy@<vm-ip>`. For `scp`, use `-P 23333` and `deploy@wallet-app:<path>` syntax (note: `scp` uses uppercase `-P` for port). Restart any existing shell session to pick up the new config.
+
+---
+
+## Appendix B: Oracle A1.Flex Out-of-Capacity retry tactic
+
+A1.Flex Always Free capacity is the single hardest part of Phase 6. Real-world reports vary week-to-week, but "Out of capacity" errors are common — especially in Asia-Pacific regions at peak hours.
+
+**Manual retry (try this first):**
+
+1. Close the "Out of capacity" error dialog in the Oracle console.
+2. Wait 5–15 minutes.
+3. Re-open the Create Instance form and try again. Repeat 3–5 times.
+4. A1.Flex capacity often opens up briefly during off-peak hours (try during UTC night for your chosen region).
+
+**Region availability** (anecdotal — varies week to week):
+
+| Region | Anecdotal A1.Flex availability |
+|--------|-------------------------------|
+| US East (Ashburn) | Most consistent |
+| US West (Phoenix) | Most consistent |
+| EU (Frankfurt) | Mixed; often available on retry |
+| Tokyo / Singapore / Sydney | Can have availability issues at peak demand |
+| Mumbai | Anecdotal — varies |
+
+**Home Region constraint (important):**
+
+The Home Region is chosen **once at OCI tenancy creation** and is irreversible for that tenancy. If your tenancy was created in Singapore and capacity is unavailable, you must create a new OCI tenancy (a separate account) to use a different home region. Capacity reservations require a paid OCI account — not available on Always Free.
+
+**Scripted retry (optional — for persistent OOC situations):**
+
+1. Install the OCI CLI: `https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm` (~10 minutes setup).
+2. Configure API key: OCI Console → User Settings → API Keys → Add public key. Save the OCID and tenancy details to `~/.oci/config`.
+3. Use the launch API in a retry loop — poll every 60 seconds until capacity becomes available:
+
+```bash
+while ! oci compute instance launch \
+    --availability-domain <AD-NAME> \
+    --compartment-id <COMPARTMENT-OCID> \
+    --shape VM.Standard.A1.Flex \
+    --shape-config '{"ocpus":2,"memoryInGBs":12}' \
+    --image-id <UBUNTU-24-04-ARM64-IMAGE-OCID> \
+    --subnet-id <SUBNET-OCID> \
+    --assign-public-ip true \
+    --ssh-authorized-keys-file ~/.ssh/wallet_app_oracle.pub \
+    --display-name wallet-app-prod; do
+  echo "Out of capacity — retrying in 60s..."
+  sleep 60
+done
+echo "Instance launched."
+```
+
+Replace each `<...>` placeholder with the values from your tenancy. The `--image-id` for Ubuntu 24.04 Minimal ARM64 is visible in the Oracle console under Compute → Images.
+
+---
+
+## Appendix C: Common operational commands
+
+These are the commands the operator runs day-to-day after Phase 6 is complete. All run on the VM as `deploy` from `~/wallet_app/infra`.
+
+**View logs:**
+
+```bash
+cd ~/wallet_app/infra
+docker compose -f docker-compose.prod.yml logs --tail 100 -f caddy
+docker compose -f docker-compose.prod.yml logs --tail 100 -f api
+docker compose -f docker-compose.prod.yml logs --tail 100 -f db
+```
+
+**Restart a single service:**
+
+```bash
+docker compose -f docker-compose.prod.yml restart caddy
+docker compose -f docker-compose.prod.yml restart api
+```
+
+**Stop the entire stack gracefully (PRESERVES VOLUMES):**
+
+```bash
+docker compose -f docker-compose.prod.yml stop
+```
+
+**Bring the stack back up after a stop:**
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**Pull the latest image after a code update** (Phase 7 introduces GHCR; for now, rebuild on VM):
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+**Edit `.env` on the VM:**
+
+```bash
+cd ~/wallet_app/infra
+chmod 600 .env   # re-enforce in case of accidental relaxation
+vim .env
+# After editing, restart the affected service:
+docker compose -f docker-compose.prod.yml restart caddy   # if Caddy vars changed
+docker compose -f docker-compose.prod.yml restart api     # if API vars changed
+```
+
+**Check service health status:**
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+# All services should show Status = "running (healthy)"
+```
+
+**FORBIDDEN commands on this VM (Pitfall 8 — permanent data loss risk):**
+
+- `docker compose down -v` — destroys named volumes (`caddy_data` burns LE rate-limit budget; `wallet_pgdata_prod` destroys all user data). **NEVER use on the production VM.**
+- `docker volume rm caddy_data` — same consequence as above.
+- `docker volume rm wallet_pgdata_prod` — destroys all user financial data.
+
+**Safe alternatives:**
+
+- Graceful shutdown (preserves volumes): `docker compose -f docker-compose.prod.yml stop`
+- Full removal without volume loss: `docker compose -f docker-compose.prod.yml down` (no `-v`)
+
+---
+
+## Appendix D: Recovery — Oracle serial console (lockout fallback)
+
+Use this path if you lose SSH access to the VM — for example, if §4's SECOND-TERMINAL verify step was skipped and the first session was closed before port-23333 SSH was confirmed working, or if a ufw misconfiguration blocks all inbound traffic.
+
+**The serial console gives you direct local TTY access to the VM without any network dependency.** Oracle support also uses this path — there is no "let Oracle SSH in and fix it" option.
+
+1. Go to **Oracle Cloud console** → **Compute** → **Instances** → `wallet-app-prod`.
+2. In the instance detail page, find the **Resources** section in the left panel → **Console connection**.
+3. Click **Create local connection** (or **Launch Cloud Shell connection** if you prefer the browser-based terminal).
+4. Follow the on-screen instructions to connect via the serial console. You will get a local TTY prompt.
+5. From the serial console, fix the broken configuration:
+
+   **To restore SSH access on port 22 temporarily:**
+
+   ```bash
+   # Revert or remove the SSH hardening drop-in:
+   sudo rm /etc/ssh/sshd_config.d/99-wallet-hardening.conf
+   sudo rm -rf /etc/systemd/system/ssh.socket.d
+   sudo systemctl daemon-reload
+   sudo systemctl restart ssh.socket
+   # SSH on port 22 should now accept connections again.
+   ```
+
+   **To disable ufw temporarily:**
+
+   ```bash
+   sudo ufw disable
+   # All traffic now passes through — reconnect via SSH on port 22.
+   ```
+
+6. Reconnect via SSH on port 22: `ssh -i ~/.ssh/wallet_app_oracle ubuntu@<vm-ip>`
+7. Re-apply hardening with the SECOND-TERMINAL verify discipline (§4).
+
+> The serial console is the only recovery path for a fully locked-out VM. It works even if all network-level SSH access is blocked. Treat it as a last resort — the §4 SECOND-TERMINAL verify step exists specifically to avoid needing it.
+
+---
+
+*Phase: 06-provision-oracle-vm-domain-caddy-https*
+*RUNBOOK version: Phase 6 / 2026-05-25*
+*Operator: follow top-to-bottom for a first-time provision. For a re-provision (domain already owned, key already generated), skip §1 and skip the SSH keygen step in §0.*
+
+
