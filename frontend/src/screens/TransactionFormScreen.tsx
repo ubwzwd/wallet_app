@@ -453,7 +453,10 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                       <View style={styles.modalContainer}>
                         <View style={styles.modalHeader}>
                           <Text style={styles.modalTitle}>Select Destination</Text>
-                          <TouchableOpacity onPress={() => setDestPickerVisible(false)}>
+                          <TouchableOpacity
+                            onPress={() => setDestPickerVisible(false)}
+                            style={styles.modalCloseButton}
+                          >
                             <Text style={styles.modalClose}>Close</Text>
                           </TouchableOpacity>
                         </View>
@@ -533,6 +536,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                   setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 error={errors.amount}
               />
 
@@ -626,6 +630,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                   setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 error={errors.amount}
               />
 
@@ -725,6 +730,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                   setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 error={errors.amount}
               />
 
@@ -822,6 +828,7 @@ export function TransactionFormScreen({ transaction, onSuccess, onCancel }: Tran
                 setCurrencyPickerVisible(false);
                 setCurrencySearch('');
               }}
+              style={styles.modalCloseButton}
             >
               <Text style={styles.modalClose}>Close</Text>
             </TouchableOpacity>
@@ -954,6 +961,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     backgroundColor: '#ffffff',
+    minHeight: 44,
+  },
+  modalCloseButton: {
+    minHeight: 44,
+    minWidth: 44,
+    padding: 12,
+    justifyContent: 'center',
   },
   currencyTriggerText: {
     fontSize: 16,
@@ -998,6 +1012,7 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     paddingHorizontal: 16,
+    minHeight: 44,
   },
   currencyItemSelected: {
     backgroundColor: '#eff6ff',

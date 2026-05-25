@@ -65,6 +65,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   activeTab: {
     borderBottomColor: '#0ea5e9',

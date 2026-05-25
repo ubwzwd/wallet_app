@@ -1,184 +1,222 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-04-05
+**Analysis Date:** 2026-05-24
 
 ## Naming Patterns
 
 **Files:**
-- React components and screens: PascalCase `.tsx` — e.g., `Button.tsx`, `LoginScreen.tsx`, `TransactionFormScreen.tsx`
-- Utility modules, API clients, constants: camelCase `.ts` — e.g., `queryClient.ts`, `client.ts`, `config.ts`
-- Barrel exports: `index.ts` in every major directory
-- Python modules: snake_case `.py` — e.g., `finance_sources.py`, `transaction_tag.py`
+- Backend Python modules: snake_case (`auth.py`, `transactions.py`, `finance_source.py`)
+- Frontend TypeScript/TSX components: PascalCase (`LoginScreen.tsx`, `Button.tsx`, `TransactionFormScreen.tsx`)
+- Frontend utilities: camelCase (`queryClient.ts`, `config.ts`)
+- Frontend API modules: camelCase (`client.ts`, `auth.ts`, `financeSources.ts`)
 
-**Functions (TypeScript/React):**
-- React components: PascalCase named exports — `export function LoginScreen()`, `export function Button()`
-- Event handlers: `handle` prefix — `handleLogin`, `handleDelete`, `handleSubmit`
-- Async API functions: verb + noun camelCase — `getTransactions`, `createTransaction`, `deleteTransaction`, `updateTransaction`
-- Custom hooks: `use` prefix — `useAuth`
-- Helper/utility functions: camelCase — `formatAmount`, `formatDate`
-
-**Functions (Python/FastAPI):**
-- Route handlers: snake_case — `create_transaction`, `delete_transaction`, `list_transactions`
-- Utility functions: snake_case — `verify_password`, `get_password_hash`, `create_access_token`, `authenticate_user`
-- Dependency functions: `get_` prefix — `get_db`, `get_current_user`
+**Functions:**
+- Backend: snake_case, with docstrings describing purpose and exceptions
+  - Example: `def get_current_user()`, `def create_access_token()`
+- Frontend: camelCase (utilities/helpers), PascalCase (React components as exported functions)
+  - Example: `const register = async ()`, `export function Button()`
 
 **Variables:**
-- TypeScript: camelCase — `isLoading`, `currentView`, `selectedSource`, `queryClient`
-- Python: snake_case — `new_transaction`, `hashed_password`, `access_token`, `current_user`
-- Constants (TypeScript): UPPER_SNAKE_CASE — `QUERY_KEYS`, `STORAGE_KEYS`, `API_BASE_URL`
-- Settings (Python): UPPER_SNAKE_CASE — `DATABASE_URL`, `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES`
+- Backend: snake_case throughout
+  - Example: `user_id`, `hashed_password`, `base_currency`
+- Frontend: camelCase for state and local variables
+  - Example: `isLoading`, `setEmail`, `destinationSourceId`, `errorMessage`
 
-**Types/Interfaces:**
-- TypeScript interfaces: PascalCase with descriptive name — `AuthContextType`, `ButtonProps`, `InputProps`, `TransactionFormScreenProps`
-- Type aliases: PascalCase — `HomeView`, `TransactionType`
-- Python Pydantic models: PascalCase suffixed with role — `TransactionCreate`, `TransactionUpdate`, `TransactionResponse`, `UserCreate`, `UserLogin`, `Token`
-- Python SQLAlchemy models: PascalCase, singular noun — `Transaction`, `User`, `FinanceSource`, `TransactionTag`
+**Types:**
+- Backend Pydantic schemas (pydantic.BaseModel): PascalCase
+  - Example: `TransactionCreate`, `UserUpdate`, `FinanceSourceResponse`
+- Frontend TypeScript interfaces: PascalCase
+  - Example: `User`, `Transaction`, `LoginRequest`, `ButtonProps`
+- Enums/constants: UPPER_SNAKE_CASE
+  - Example: `STORAGE_KEYS`, `ALLOWED_ORIGINS`, `SECRET_KEY`
 
 ## Code Style
 
-**Formatting (Frontend):**
-- No explicit Prettier config detected; follows Expo/TypeScript defaults
-- TypeScript strict mode enabled in `frontend/tsconfig.json`
-- `baseUrl: "."` with `@/*` path alias mapping to `src/*`
-
-**Formatting (Backend):**
-- Black with `line-length = 100` configured in `backend/pyproject.toml`
-- Ruff linter: rules `E` (pycodestyle), `F` (pyflakes), `I` (isort), `line-length = 100`
-- Target: Python 3.11
+**Formatting:**
+- Backend (Python):
+  - Tool: Black (configured in `backend/pyproject.toml`)
+  - Line length: 100 characters
+  - Target: Python 3.11
+  - Settings: `[tool.black]` in pyproject.toml
+  
+- Frontend (TypeScript/JavaScript):
+  - No Prettier config detected (default formatting)
+  - Uses Jest/Babel for testing and transpilation
+  - TypeScript strict mode enabled (`"strict": true` in `frontend/tsconfig.json`)
 
 **Linting:**
-- Frontend: No eslint config detected; TypeScript compiler enforces type safety via `strict: true`
-- Backend: Ruff (`ruff`) + Black (`black`) + mypy for type checking, all in `backend/pyproject.toml`
+- Backend:
+  - Tool: Ruff (configured in `backend/pyproject.toml`)
+  - Rules: `select = ["E", "F", "I"]` (errors, pyflakes, isort imports)
+  - Line length: 100 characters
+  
+- Frontend:
+  - No ESLint config file detected
+  - Uses TypeScript compiler for type checking
 
 ## Import Organization
 
-**TypeScript order (consistent throughout codebase):**
-1. React and React Native core — `import React from 'react'`, `import { View, Text } from 'react-native'`
-2. Third-party packages — `import { useQuery } from '@tanstack/react-query'`, `import axios from 'axios'`
-3. Internal path-aliased imports — `import { Screen, Card } from '@/components'`, `import { useAuth } from '@/store/AuthContext'`
-4. Type-only imports last — `import type { Transaction } from '@/types/api'`
+**Order (Backend - Python):**
+1. Standard library imports (e.g., `import os`, `from datetime import`)
+2. Third-party imports (e.g., `from fastapi import`, `from sqlalchemy import`)
+3. Local application imports (e.g., `from app.core.config import`, `from app.models`)
 
-**Python order (ruff isort enforced):**
-1. Standard library — `from typing import List`, `from datetime import datetime`
-2. Third-party — `from fastapi import APIRouter, Depends`, `from sqlalchemy.orm import Session`
-3. Internal app — `from app.core.database import get_db`, `from app.models.transaction import Transaction`
+**Order (Frontend - TypeScript):**
+1. Third-party imports (e.g., `import React from 'react'`, `import axios`)
+2. React Native/Expo imports (e.g., `import { View, Text } from 'react-native'`)
+3. Local imports using @ alias (e.g., `import { Button } from '@/components'`, `import { apiClient } from '@/api/client'`)
 
 **Path Aliases:**
-- Frontend: `@/` maps to `frontend/src/` — configured in both `tsconfig.json` and `babel.config.js`
+- Frontend: `@/*` maps to `src/*` (configured in `frontend/tsconfig.json` and `frontend/babel.config.js`)
+- Backend: No path aliases used (direct relative imports)
 
 ## Error Handling
 
-**Frontend pattern — API calls in context/hooks:**
-```typescript
-try {
-  setIsLoading(true);
-  const result = await someApiCall();
-  // handle success
-} catch (error) {
-  console.error('Descriptive message:', error);
-  throw error; // re-throw so callers can handle UI
-} finally {
-  setIsLoading(false);
-}
-```
-- Used consistently in `frontend/src/store/AuthContext.tsx` for all auth operations
-- `console.error` for all caught errors in context/infrastructure code
-- Errors re-thrown from context so screen components can show UI feedback
+**Patterns:**
+- Backend:
+  - HTTP errors raised as `HTTPException(status_code=..., detail="...")` from FastAPI
+  - Database errors logged with structured DIAG_ prefixes for diagnostics
+  - Example from `app/core/security.py`: `logger.error(f"DIAG_CREDENTIALS_EXCEPTION reason=jwt_decode_failed")`
+  - Specific exception types caught first, then generic `Exception` as fallback
+  - Use `try/except` blocks to log and re-raise HTTPException for auth endpoints
 
-**Frontend pattern — screen-level error display:**
-```typescript
-catch (error: any) {
-  const errorMessage = error.message || 'Login failed. Please try again.';
-  Alert.alert('Login Failed', errorMessage);
-  setErrors({ password: errorMessage });
-}
-```
-- Used in `frontend/src/screens/LoginScreen.tsx` and similar screens
-- `Alert.alert` on mobile, `window.alert` on web (Platform.OS check) — see `frontend/src/screens/TransactionFormScreen.tsx`
-
-**Frontend pattern — TanStack Query mutations:**
-```typescript
-const createMutation = useMutation({
-  mutationFn: (data: TransactionCreate) => transactionsApi.createTransaction(data),
-  onSuccess: () => { queryClient.invalidateQueries(...); onSuccess(); },
-  onError: (error: any) => {
-    const errorMessage = error.message || 'Failed to create transaction';
-    if (Platform.OS === 'web') { window.alert(`Error\n\n${errorMessage}`); }
-  },
-});
-```
-- `onError` always extracts `error.message` with fallback string
-- `onSuccess` always invalidates relevant query keys
-
-**Backend pattern — route error handling:**
-```python
-if not resource:
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Resource {resource_id} not found"
-    )
-```
-- All route handlers use `HTTPException` with explicit `status_code` constants from `fastapi.status`
-- `detail` field uses f-strings with resource ID for debuggability
-- Database integrity errors caught at registration endpoint with `IntegrityError` rollback pattern — `backend/app/api/auth.py`
-
-**API client error normalization:**
-- Axios interceptor in `frontend/src/api/client.ts` normalizes all errors to `new Error(message)` before rejection
-- Extracts `errorData?.detail` (FastAPI format) or `errorData?.message` as fallback
+- Frontend:
+  - Errors captured in `try/catch` blocks with `.message` extraction
+  - User-facing errors shown via `Alert.alert(title, errorMessage)`
+  - API client errors extracted from response `.data?.detail` or `.message`
+  - Special handling for 401 errors to avoid clearing tokens on transient failures (see `frontend/src/api/client.ts:48-64`)
+  - State-based error storage for form validation (e.g., `errors` object in `LoginScreen.tsx:11`)
 
 ## Logging
 
-**Frontend:**
-- `console.error` exclusively — used for all caught exceptions in infrastructure code
-- No structured logging or log levels beyond error
+**Framework:** 
+- Backend: Python `logging` module with `logger = logging.getLogger(__name__)` per module
+- Frontend: Browser `console.error()`, `console.log()` (no structured logging library)
 
-**Backend:**
-- No logging framework detected; errors surfaced via HTTP exception responses
-- No `logging` module usage found in app code
+**Patterns:**
+- Backend uses diagnostic (DIAG_) prefixes to categorize log messages:
+  - `DIAG_CREDENTIALS_EXCEPTION` for auth failures
+  - `DIAG_DB_ERROR` for database-related issues
+  - `DIAG_TOKEN_DECODE` for JWT processing
+  - `DIAG_USER_LOOKUP` for user queries
+  - Example: `logger.error(f"DIAG_USER_LOOKUP found={user is not None} user_id={user_id}")`
+  
+- Frontend logs API errors with context:
+  - Example from `client.ts:26`: `console.error('Error reading auth token:', error)`
+  - Errors include full message from backend detail field
 
 ## Comments
 
-**TypeScript style:**
-- JSDoc `/** */` blocks for module-level groupings — `/** Authentication API endpoints */`, `/** Authentication Context Type */`
-- Inline `//` comments explaining non-obvious logic — e.g., `// Backend doesn't have a logout endpoint (stateless JWT)`, `// Security: owner check`
-- Section dividers with `/* Header */`, `/* Amount Input */` style comments in JSX-heavy screen files
+**When to Comment:**
+- Backend: Module-level docstrings with triple quotes (`"""..."""`)
+- Every function has a docstring describing purpose, args, returns, and raises
+- Inline comments explain non-obvious logic (e.g., case-insensitive currency comparison)
+- Example from `security.py`: docstring with Args, Returns, Raises sections
 
-**Python style:**
-- Module-level docstring `"""..."""` on every file — `"""API routes for transaction management."""`
-- Function docstrings with `- **param**:` formatting for route endpoint parameters (FastAPI docs integration)
-- Inline `# Comment` for security annotations — `# Security: owner check`, `# Normalize tags`
+- Frontend: File-level JSDoc comments for complex logic
+- Component comments explain wizard steps or conditional rendering
+- Example from `TransactionFormScreen.test.ts:3-8`: multi-line comment explaining test scope
+
+## JSDoc/TSDoc
+
+**Usage Pattern:**
+- Backend (Python): Full docstrings with description, Args, Returns, Raises sections
+  ```python
+  def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+      """
+      Create a JWT access token.
+      
+      Args:
+          data: Dictionary containing the claims to encode in the token
+          expires_delta: Optional expiration time delta
+      
+      Returns:
+          Encoded JWT token string
+      """
+  ```
+
+- Frontend: Block comments for complex test cases and file headers
+  ```typescript
+  /**
+   * XFER-01/02/03: Transfer creation wizard static analysis tests.
+   *
+   * Verifies that TransactionFormScreen.tsx implements the full two-step transfer
+   * wizard...
+   */
+  ```
 
 ## Function Design
 
-**Size:** Screen functions are large (100–400 lines) due to co-located state, effects, mutations, validation, and JSX. Component functions are concise (30–70 lines).
+**Size:** 
+- Backend: Functions generally 20-50 lines; complex logic (e.g., `_build_conversion_fields`) extracted to module-level helpers
+- Frontend: Components 60-100 lines; hooks for shared logic
 
 **Parameters:**
-- React components: single typed props interface — `interface ButtonProps { title: string; onPress: () => void; ... }`
-- Optional props use `?` with documented defaults — `variant?: 'primary' | 'secondary' | 'danger'`
-- API functions accept typed request objects from `@/types/api`
-- FastAPI routes use `Depends()` injection for `db` and `current_user`
+- Backend: Use Pydantic models for complex data (`UserCreate`, `TransactionCreate`)
+- Frontend: Props interfaces (e.g., `ButtonProps`) passed to components as single parameter
 
 **Return Values:**
-- API functions always return typed promises: `Promise<Transaction>`, `Promise<void>`
-- FastAPI routes use `response_model=` for automatic serialization
-- React components return `JSX.Element`
+- Backend: Explicit type hints on all functions
+- Frontend: Explicit return types on async functions (`Promise<T>`)
 
 ## Module Design
 
-**Exports (TypeScript):**
-- Named exports only — no default exports except `App.tsx` root component
-- Barrel `index.ts` files for `components/` and `screens/` directories
-- API modules use namespace import at call sites: `import * as transactionsApi from '@/api/transactions'`
+**Exports:**
+- Backend: Routers created with `APIRouter(prefix="/...", tags=[...])` and included in main app
+- Frontend: Named exports for components and utilities
+  - Example: `export function Button({...}: ButtonProps)`
+  - Example: `export const apiClient = axios.create({...})`
 
 **Barrel Files:**
-- `frontend/src/components/index.ts` — exports all UI components
-- `frontend/src/screens/index.ts` — exports all screen components
-- `frontend/index.ts` — root entry point
+- Frontend uses index files for clean imports:
+  - `frontend/src/components/index.ts` (if exists) would export `{ Button, Card, Input, ... }`
+  - `frontend/src/screens/index.ts` exports all screen components
+  - Actual import: `import { Screen, Card, Button } from '@/components'`
 
-**Python packages:**
-- `__init__.py` present in all app directories: `app/`, `app/api/`, `app/models/`, `app/schemas/`, `app/services/`, `app/core/`
-- `app/api/__init__.py` content not inspected but present for package recognition
+- Backend does not use barrel files; imports are direct from modules
+
+## Shell Script Conventions
+
+**Location:** `infra/scripts/`
+
+**Naming:** lowercase with hyphens (`smoke.sh`, `env-coverage.sh`)
+
+**Header Format:**
+- Shebang: `#!/usr/bin/env bash`
+- Description: Comment with file path and purpose
+- Example from `smoke.sh:2`: `# infra/scripts/smoke.sh — Phase 4 end-to-end verification`
+
+**Mode/Usage Documentation:**
+- Scripts document modes as comments near top
+- Example: `# Modes: bash infra/scripts/smoke.sh up # compose up --wait only`
+
+**Error Handling:**
+- Use `set -euo pipefail` for strict error handling
+- All tests documented with row numbers (e.g., `# row 04-06-01`)
+- Exit codes: 0 for success, non-zero for failure
+- Teardown via `trap` cleanup functions
+
+**Logging:**
+- Use `echo "==> [step description]"` for progress
+- Use `echo "FAIL: [message]"` for errors
+- Pipe logs to `/tmp/` for long operations (e.g., `/tmp/smoke-build.log`)
+
+## Key Conventions Summary
+
+| Aspect | Backend (Python) | Frontend (TypeScript/TSX) |
+|--------|------------------|--------------------------|
+| File naming | snake_case | PascalCase (components), camelCase (utils) |
+| Function naming | snake_case | camelCase (utils), PascalCase (components) |
+| Variable naming | snake_case | camelCase |
+| Type naming | PascalCase | PascalCase |
+| Constant naming | UPPER_SNAKE_CASE | UPPER_SNAKE_CASE |
+| Line length | 100 | No enforced limit |
+| Formatter | Black | Default (no Prettier) |
+| Linter | Ruff | None detected |
+| Docstrings | Required (full) | Used for complex logic |
+| Error handling | HTTPException + logging | try/catch + Alert |
+| Logging prefix | DIAG_* for diagnostics | console.* (unstructured) |
 
 ---
 
-*Convention analysis: 2026-04-05*
+*Convention analysis: 2026-05-24*

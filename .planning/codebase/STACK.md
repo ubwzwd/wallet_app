@@ -1,127 +1,138 @@
 # Technology Stack
 
-**Analysis Date:** 2026-04-05
+**Analysis Date:** 2026-05-24
 
 ## Languages
 
-**Primary (Backend):**
-- Python 3.11 - All backend API code in `backend/app/`
-
-**Primary (Frontend):**
-- TypeScript ~5.9.2 - All frontend code in `frontend/src/`
+**Primary:**
+- Python 3.11+ - FastAPI backend, Alembic migrations, service layer
+- TypeScript 5.9+ - Expo/React Native frontend, web platform
+- Bash - Infrastructure scripts (`infra/scripts/env-coverage.sh`, `infra/scripts/smoke.sh`)
 
 **Secondary:**
-- JavaScript - Config files (`frontend/babel.config.js`, `frontend/tailwind.config.js`)
+- Docker - Container orchestration
+- Dockerfile - Multi-stage builder pattern for backend (`infra/Dockerfile.api`)
 
 ## Runtime
 
-**Backend Environment:**
-- Python 3.11 (minimum ^3.11)
-- Uvicorn 0.27+ as ASGI server
+**Environment:**
+- Python 3.11-slim - Backend runtime in Docker (builder + runtime stages)
+- Node.js (via npm) - Frontend development and build
+- Docker Engine - Local and production deployment
 
-**Frontend Environment:**
-- Node.js (via Expo/React Native toolchain)
-- Expo SDK ~54.0.20
-
-**Package Managers:**
-- Backend: Poetry 1.7.1 - Lockfile: `backend/poetry.lock` (present)
-- Frontend: npm - Lockfile: `frontend/package-lock.json` (present)
+**Package Manager:**
+- Poetry - Python dependency management (`backend/pyproject.toml`, `backend/poetry.lock`)
+  - Lockfile: Present (`backend/poetry.lock`)
+- npm - Node.js frontend dependencies (`frontend/package.json`)
+  - Lockfile: Present via npm-lock
 
 ## Frameworks
 
-**Backend Core:**
-- FastAPI ^0.109.0 - REST API framework; entry point at `backend/app/main.py`
-- SQLAlchemy ^2.0.25 - ORM; engine configured in `backend/app/core/database.py`
-- Alembic ^1.13.0 - Database migrations; config at `backend/alembic.ini`, migrations in `backend/migrations/versions/`
-- Pydantic ^2.5.0 - Data validation and serialization; schemas in `backend/app/schemas/`
-- pydantic-settings ^2.1.0 - Settings management; used in `backend/app/core/config.py`
+**Core:**
+- FastAPI ^0.109.0 - REST API framework, ASGI server
+- Uvicorn 0.27.0+ with standard extras - ASGI server for FastAPI (production deployments)
+- Expo ~54.0.20 - React Native + web platform framework
+- React 19.1.0 - UI component framework
+- React Native 0.81.5 - Cross-platform mobile runtime
 
-**Frontend Core:**
-- React 19.1.0 - UI rendering
-- React Native 0.81.5 - Mobile app framework
-- Expo ~54.0.20 - React Native toolchain and build system; configured via `frontend/app.json`
+**Database & ORM:**
+- SQLAlchemy ^2.0.25 - SQL toolkit and ORM (`backend/app/core/database.py`)
+- Alembic ^1.13.0 - Database schema migrations (`backend/alembic.ini`, `backend/migrations/`)
+- PostgreSQL 15-alpine - Production database container (`infra/docker-compose.prod.yml`)
+  - SQLite - Development fallback (supports check_same_thread, pool disabled)
 
-**Navigation:**
-- @react-navigation/native ^7.1.19 - Navigation container
-- @react-navigation/native-stack ^7.6.1 - Stack navigator
+**Authentication & Security:**
+- python-jose ^3.3.0 with cryptography extras - JWT token creation/validation (`backend/app/core/security.py`)
+- passlib ^1.7.4 with bcrypt extras - Password hashing and verification
+- bcrypt ^5.0.0 - Cryptographic password hashing
+- HTTPBearer - FastAPI HTTP Bearer token scheme (`backend/app/core/security.py`)
 
-**State & Data Fetching:**
-- @tanstack/react-query ^5.90.5 - Server state management; client configured in `frontend/src/utils/queryClient.ts`
+**HTTP Client:**
+- httpx ^0.26.0 - Async HTTP client for external API calls (Frankfurter rates API, `backend/app/services/rates.py`)
+- axios ^1.13.0 - Frontend HTTP client with request/response interceptors (`frontend/src/api/client.ts`)
 
-**Forms:**
-- react-hook-form ^7.65.0 - Form state management
-- @hookform/resolvers ^5.2.2 - Validation resolver bridge
-- zod ^3.25.76 - Schema validation integrated with react-hook-form
+**State Management & Caching:**
+- TanStack React Query ^5.90.5 - Server state management, caching, background sync (`frontend/package.json`)
+  - Query keys defined in `frontend/src/constants/config.dev.ts` and `config.prod.ts`
+- AsyncStorage (@react-native-async-storage) ^2.2.0 - Local client-side token and user data persistence
 
-**Styling:**
-- NativeWind ^4.2.1 - Tailwind CSS for React Native
-- Tailwind CSS ^3.4.18 - Utility-first CSS; configured in `frontend/tailwind.config.js`
+**UI & Styling:**
+- NativeWind ^4.2.1 - Tailwind CSS for React Native (`frontend/package.json`)
+- Tailwind CSS ^3.4.18 - Utility-first CSS framework
+- React Navigation - Navigation library for React Native
+  - @react-navigation/native ^7.1.19
+  - @react-navigation/native-stack ^7.6.1
 
-**Testing (Backend):**
-- pytest ^7.4.0 - Test runner; configured in `backend/pyproject.toml` under `[tool.pytest.ini_options]`
-- pytest-asyncio ^0.23.0 - Async test support
+**Forms & Validation:**
+- react-hook-form ^7.65.0 - Form state and validation
+- @hookform/resolvers ^5.2.2 - Schema integration for hook-form
+- Zod ^3.25.76 - TypeScript-first schema validation
 
-**Build/Dev (Backend):**
-- black ^24.0.0 - Code formatter (line length 100)
-- ruff ^0.1.0 - Linter (E, F, I rules; line length 100)
-- mypy ^1.8.0 - Static type checker
+**Build & Dev:**
+- Babel - JavaScript transpilation (babel-plugin-module-resolver)
+- TypeScript ~5.9.2 - Type checking and compilation
 
-**Build/Dev (Frontend):**
-- babel-preset-expo ^54.0.6 - Babel preset for Expo
-- babel-plugin-module-resolver ^5.0.2 - Path alias resolution; `@/` maps to `src/`
+**Testing:**
+- pytest ^7.4.0 - Python testing framework (`backend/pyproject.toml`)
+- pytest-asyncio ^0.23.0 - Async test support for FastAPI
+- Jest ^30.3.0 - JavaScript testing framework (`frontend/package.json`)
+- @testing-library/react-native ^13.3.3 - React Native component testing utilities
+
+**Code Quality:**
+- black ^24.0.0 - Python code formatter (100 char line length target)
+- ruff ^0.1.0 - Python linter (rules: E, F, I; 100 char lines)
+- mypy ^1.8.0 - Python static type checker
 
 ## Key Dependencies
 
 **Critical:**
-- `psycopg2-binary` ^2.9.9 - PostgreSQL adapter; connects backend to database
-- `python-jose[cryptography]` ^3.3.0 - JWT encoding/decoding in `backend/app/core/security.py`
-- `passlib[bcrypt]` ^1.7.4 + `bcrypt` ^5.0.0 - Password hashing in `backend/app/core/security.py`
-- `httpx` ^0.26.0 - HTTP client for external API calls in `backend/app/services/rates.py`
-- `tenacity` ^9.1.2 - Retry logic with exponential backoff for external API calls
-- `axios` ^1.13.0 - HTTP client for frontend API calls in `frontend/src/api/client.ts`
-- `@react-native-async-storage/async-storage` ^2.2.0 - Persistent token storage; used in `frontend/src/api/client.ts` and `frontend/src/store/AuthContext.tsx`
+- PostgreSQL 15-alpine - Production relational database
+  - Connection pooling: pool_size=5, max_overflow=10 (non-SQLite backends)
+  - Pool recycling: pool_recycle=3600s for stale connection recovery
+  - Pre-ping enabled for connection health checks
+- FastAPI - RESTful API framework with automatic OpenAPI documentation
+- Alembic - Declarative schema migrations, versioned (`backend/migrations/versions/`)
+- JWT (python-jose) - Stateless authentication tokens with HS256 algorithm
 
-**Animation/Gestures:**
-- react-native-reanimated ^4.1.3 - Animations
-- react-native-gesture-handler ~2.28.0 - Gesture system
-- react-native-screens ~4.16.0 - Native screen containers
-- react-native-safe-area-context ^5.6.1 - Safe area insets
-
-**Web Support:**
-- react-native-web ^0.21.0 - React Native rendering for web
-- react-dom 19.1.0 - React DOM renderer
+**Infrastructure:**
+- tenacity ^9.1.2 - Retry logic with exponential backoff (Frankfurter API calls, `backend/app/services/rates.py`)
+  - 3 retries maximum, 1-10s exponential wait
+- python-multipart ^0.0.6 - Multipart form data handling for FastAPI
+- email-validator ^2.3.0 - Email validation for auth
+- psycopg2-binary ^2.9.9 - PostgreSQL Python adapter
+- pydantic ^2.5.0 - Data validation using Python type annotations
+- pydantic-settings ^2.1.0 - Environment-based settings management (`backend/app/core/config.py`)
 
 ## Configuration
 
-**Backend Environment:**
-- Loaded via pydantic-settings from `.env` file and environment variables
-- Settings class defined in `backend/app/core/config.py`
-- Example config at `backend/env.example`
-- Key settings: `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `EXCHANGE_RATE_API_URL`, `ALLOWED_ORIGINS`
-
-**Frontend Configuration:**
-- TypeScript paths configured in `frontend/tsconfig.json` (extends `expo/tsconfig.base`, strict mode enabled)
-- Babel alias in `frontend/babel.config.js` (`@/` → `./src`)
-- App metadata in `frontend/app.json` (Expo config; new architecture enabled)
-- Runtime constants in `frontend/src/constants/config.ts`
+**Environment:**
+- Environment-based via `pydantic-settings` (`backend/app/core/config.py`)
+- Development: `.env` file in project root (git-ignored)
+- Production: `infra/.env` template at `infra/.env.example` (committed sentinel, CHANGE_ME_* placeholders)
+- Env vars required: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, DATABASE_URL, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, ALLOWED_ORIGINS, EXCHANGE_RATE_API_URL, ENVIRONMENT, DEBUG, CADDY_DOMAIN, CADDY_TLS_MODE
 
 **Build:**
-- Backend: `backend/Dockerfile` (multi-stage; Python 3.11-slim; Poetry install)
-- Backend: `backend/docker-compose.yml` (Postgres 15-alpine; API container commented out)
+- Frontend build config: `frontend/config.dev.ts` (dev default, restored after build)
+- Frontend build config: `frontend/config.prod.ts` (production with relative API URL)
+- Backend build: Multi-stage Dockerfile (`infra/Dockerfile.api`)
+  - Builder stage: Poetry export to requirements.txt, uv pip install to /usr/local
+  - Runtime stage: python:3.11-slim + libpq5 + non-root appuser (uid 1000)
+- Docker Compose: `infra/docker-compose.dev.yml` (db only), `infra/docker-compose.prod.yml` (api + migrate + caddy)
 
 ## Platform Requirements
 
 **Development:**
-- Python ^3.11 with Poetry for backend
-- Node.js with npm for frontend
-- PostgreSQL 15 (via Docker Compose at `backend/docker-compose.yml`)
-- Expo CLI for mobile development
+- Python 3.11+ with Poetry
+- Node.js + npm (frontend)
+- Docker & Docker Compose (for containerized local dev)
+- Optional: PostgreSQL server (or use compose db container)
 
 **Production:**
-- Backend: Docker container; Uvicorn listening on port 8000
-- Frontend: Expo build targets iOS, Android, and Web
-- Database: PostgreSQL (connection via `DATABASE_URL` env var)
+- Docker & Docker Compose
+- Oracle A1.Flex (Ampere ARM64) target platform (image built with `--platform linux/arm64`)
+- Caddy reverse proxy for TLS termination (Let's Encrypt ACME or internal self-signed)
+- PostgreSQL 15+ (shared_buffers=3GB, effective_cache_size=8GB, max_connections=50)
 
 ---
 
-*Stack analysis: 2026-04-05*
+*Stack analysis: 2026-05-24*

@@ -188,7 +188,10 @@ export function FinanceSourceFormScreen({ source, onSuccess, onCancel }: Finance
                       {/* Modal header */}
                       <View style={styles.modalHeader}>
                         <Text style={styles.modalTitle}>Select Currency</Text>
-                        <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
+                        <TouchableOpacity
+                          onPress={() => setCurrencyPickerVisible(false)}
+                          style={styles.modalCloseButton}
+                        >
                           <Text style={styles.modalClose}>Close</Text>
                         </TouchableOpacity>
                       </View>
@@ -327,6 +330,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     backgroundColor: '#ffffff',
+    minHeight: 44,
+  },
+  modalCloseButton: {
+    minHeight: 44,
+    minWidth: 44,
+    padding: 12,
+    justifyContent: 'center',
   },
   currencyTriggerText: {
     fontSize: 16,
@@ -361,6 +371,7 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     paddingHorizontal: 16,
+    minHeight: 44,
   },
   currencyItemSelected: {
     backgroundColor: '#eff6ff',

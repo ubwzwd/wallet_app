@@ -23,7 +23,7 @@ status: defined
 ## Phases
 
 - [x] **Phase 4: Containerize and Compose Locally** — Production docker-compose stack runs end-to-end on a developer laptop, no cloud cost.
-- [ ] **Phase 5: PWA-ify Frontend + Mobile Polish** — Web build is installable on iOS/Android home screen and feels native on phone-sized screens.
+- [x] **Phase 5: PWA-ify Frontend + Mobile Polish** — Web build is installable on iOS/Android home screen and feels native on phone-sized screens. (completed 2026-05-25)
 - [ ] **Phase 6: Provision Oracle VM + Domain + Caddy HTTPS** — App reachable at `https://<domain>` with valid Let's Encrypt cert, deployed by hand from a runbook.
 - [ ] **Phase 7: CI/CD + Backups + Polish** — `git push` to `main` deploys; daily off-site backups verified by restore drill; zero-downtime rollovers.
 
@@ -59,7 +59,14 @@ status: defined
   3. Workbox-generated service worker caches JS/CSS/fonts/images cache-first, but uses **network-first for `/index.html` and `/api/*`** (verified in DevTools: SW v1 → deploy SW v2 → reload once → v2 controls; no stale-shell trap), with `skipWaiting()` + `clients.claim()` on activation.
   4. Touch targets across TransactionList row actions, FinanceSourceList row actions, modal close buttons, currency picker rows, and tag chips measure ≥44×44 CSS px (audited via DevTools); `safe-area-inset-top/bottom` padding applied to header and bottom navigation.
   5. Form inputs use `font-size: 16px` globally (no iOS zoom-on-focus); transaction amount field has `inputmode="decimal"`; auth forms use `type="email"` + `autocomplete="email"`.
-**Plans**: TBD
+**Plans**: 7 plans
+  - [x] 05-01-PLAN.md — Wave 0 verification harness: verify-pwa.mjs + verify-touch-targets.mjs + Button.test.ts + workbox-cli/@pwabuilder/manifest-validation install (gated by checkpoint:human-verify) — establishes deterministic verifiers used by every downstream plan (PWA-01..04, MOBUI-01..04)
+  - [x] 05-02-PLAN.md — Static PWA assets under frontend/public/: index.html (preserves Expo bootstrap shape), manifest.json, pwa.css, offline.html, 4 hand-authored PNG icons + favicon.ico; bootstrap-injection smoke per RESEARCH A1 (PWA-01, PWA-02, PWA-03, MOBUI-03)
+  - [x] 05-03-PLAN.md — Workbox SW pipeline + update flow: workbox-config.cjs, registerSW.ts (Platform.OS web guard), useServiceWorkerUpdate hook, UpdateToast component, atomic build:web extension (PWA-04)
+  - [x] 05-04-PLAN.md — Touch-target single-point fix in Button.tsx (44×44 propagates to 14 call-sites) + spot-fixes in FinanceSourceFormScreen, TransactionFormScreen, ProfileScreen (MOBUI-01)
+  - [x] 05-05-PLAN.md — Safe-area-inset wiring: Screen.tsx SafeAreaView import swap to react-native-safe-area-context + App.tsx SafeAreaProvider wrap + PWA glue mount (registerSW + UpdateToast) (MOBUI-02)
+  - [x] 05-06-PLAN.md — inputMode="decimal" on TransactionFormScreen amount fields + verify Login/Register email props already compliant (MOBUI-03, MOBUI-04)
+  - [x] 05-07-PLAN.md — Phase verification gate: npm run verify:phase5 aggregator + manual Incognito-Chrome install smoke + record MOBUI-05 deferral to Phase 6 (per CONTEXT D-13) (all 9)
 **UI hint**: yes
 
 ### Phase 6: Provision Oracle VM + Domain + Caddy HTTPS
@@ -93,7 +100,7 @@ status: defined
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 4. Containerize and Compose Locally | 6/6 | Complete | 2026-05-22 |
-| 5. PWA-ify Frontend + Mobile Polish | 0/0 | Not started | - |
+| 5. PWA-ify Frontend + Mobile Polish | 7/7 | Complete   | 2026-05-25 |
 | 6. Provision Oracle VM + Domain + Caddy HTTPS | 0/0 | Not started | - |
 | 7. CI/CD + Backups + Polish | 0/0 | Not started | - |
 

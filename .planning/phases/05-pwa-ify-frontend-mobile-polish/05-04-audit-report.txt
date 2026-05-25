@@ -1,0 +1,69 @@
+# 05-04 Touch-Target Audit Report
+# Generated: 2026-05-25 (plan 05-04, MOBUI-01)
+# Command: grep -rnE "(<TouchableOpacity|<Pressable|<TouchableHighlight)" src/
+
+## Totals
+- Before fixes: 18 touchables, 18 verifier failures (all-touchables FAIL)
+- After fixes:  18 touchables (none deleted), 0 verifier failures (all-touchables PASS)
+- Exemptions added: 0
+
+## Verifier confirmation (post-fix)
+$ node scripts/verify-touch-targets.mjs --check=all-touchables
+==> verify-touch-targets[all-touchables]: scanning all TouchableOpacity / Pressable / TouchableHighlight under frontend/src/
+PASS: all-touchables
+exit=0
+
+## Per-check confirmation (post-fix)
+PASS: button-small-44
+PASS: finance-form-spot-fix-44
+PASS: tx-form-spot-fix-44
+PASS: profile-spot-fix-44
+PASS: all-touchables
+
+## Inventory snapshot (BEFORE fixes — baseline)
+src/screens/ProfileScreen.tsx:98:          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+src/screens/ProfileScreen.tsx:122:            <TouchableOpacity
+src/screens/ProfileScreen.tsx:164:            <TouchableOpacity
+src/screens/ProfileScreen.tsx:191:                <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:439:                    <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:456:                          <TouchableOpacity onPress={() => setDestPickerVisible(false)}>
+src/screens/TransactionFormScreen.tsx:466:                              <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:542:                <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:734:                <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:820:            <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:847:                <TouchableOpacity
+src/components/Button.tsx:35:    <TouchableOpacity
+src/components/Navigation.tsx:25:        <TouchableOpacity
+src/components/Navigation.tsx:33:        <TouchableOpacity
+src/screens/FinanceSourceFormScreen.tsx:175:                  <TouchableOpacity
+src/screens/FinanceSourceFormScreen.tsx:191:                        <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
+src/screens/FinanceSourceFormScreen.tsx:204:                            <TouchableOpacity
+src/components/Input.tsx:47:          <TouchableOpacity
+
+## Inventory snapshot (AFTER fixes — same elements; only line numbers shifted by inserted style props)
+src/screens/ProfileScreen.tsx:98:          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+src/screens/ProfileScreen.tsx:122:            <TouchableOpacity
+src/screens/ProfileScreen.tsx:164:            <TouchableOpacity
+src/screens/ProfileScreen.tsx:192:                <TouchableOpacity
+src/screens/FinanceSourceFormScreen.tsx:175:                  <TouchableOpacity
+src/screens/FinanceSourceFormScreen.tsx:191:                        <TouchableOpacity
+src/screens/FinanceSourceFormScreen.tsx:207:                            <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:439:                    <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:456:                          <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:469:                              <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:545:                <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:737:                <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:823:            <TouchableOpacity
+src/screens/TransactionFormScreen.tsx:851:                <TouchableOpacity
+src/components/Button.tsx:35:    <TouchableOpacity
+src/components/Navigation.tsx:25:        <TouchableOpacity
+src/components/Navigation.tsx:33:        <TouchableOpacity
+src/components/Input.tsx:47:          <TouchableOpacity
+
+## Remediation strategy used
+- Tasks 1-4 covered named spot-fixes (Button.tsx small, three screens' currency-pickers/back-buttons/modal-closes).
+- Task 6 audit found 4 additional sites NOT in the named list:
+    * Button.tsx:35 (root TouchableOpacity, dynamic styles[size] indexing) -> fixed by adding minHeight: 44 to styles.button base style
+    * Input.tsx:47 (password-visibility toggle) -> fixed by adding minHeight: 44, minWidth: 44 to styles.passwordToggle
+    * Navigation.tsx:25,33 (login/register tab buttons) -> fixed by adding minHeight: 44, justifyContent: 'center' to styles.tab
+- Zero `// touch-target-exempt:` comments added — all 18 sites are touch-critical and received minHeight: 44.
