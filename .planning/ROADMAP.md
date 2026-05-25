@@ -79,7 +79,14 @@ status: defined
   3. VM is hardened per SEC-02 baseline: `ufw` allows only 22/80/443; SSH is key-only (`PasswordAuthentication no`, `PermitRootLogin no`); `unattended-upgrades` enabled for security patches; non-root deploy user with sudo; `nmap` from outside shows only the three allowed ports.
   4. `GET /health` returns 200 OK in <100ms **without** touching the database (verified by stopping Postgres and observing /health still 200) — DB outage cannot kill the API container.
   5. UptimeRobot free-tier monitor is pinging `https://<domain>/health` every 5 min and successfully delivered an email alert during a deliberate downtime test; HSTS header (`max-age=31536000; includeSubDomains`, no preload) is observed in `curl -I` output.
-**Plans**: TBD
+**Plans**: 7 plans
+  - [ ] 06-01-PLAN.md — Caddyfile additions (acme_ca global + HSTS header) + .env.example new CADDY_ACME_CA + narrowed ALLOWED_ORIGINS + caddy service env passthrough in docker-compose.prod.yml (DOMAIN-02, DOMAIN-03, DOMAIN-04)
+  - [ ] 06-02-PLAN.md — Wave 0 verification scaffold: infra/scripts/verify-phase6.sh (quick + full modes, assertion-only no down -v) + infra/runbook-evidence/.gitkeep + .gitignore *.png rule (cross-cutting verification)
+  - [ ] 06-03-PLAN.md — ROADMAP.md SC3 trivial text amendment: 22/80/443 -> 23333/80/443 per D-12 (SEC-02)
+  - [ ] 06-04-PLAN.md — infra/RUNBOOK.md authoring (§0-§16 + Appendices A-D): operator playbook with D-04 + D-05 procedural gates and 9 pitfall callouts (DEPLOY-05)
+  - [ ] 06-05-PLAN.md — Operator-driven RUNBOOK §0-§13 execution: provision Oracle VM, register domain, harden SSH/ufw/unattended-upgrades, install Docker, DNS A record + propagation gate, author .env with LE staging URL, first compose up, verify staging cert in incognito, SC4 DB-independence test, SC3 nmap scan (DOMAIN-01, DEPLOY-05, SEC-02, OPS-01)
+  - [ ] 06-06-PLAN.md — Operator-driven D-05 Commit B: flip CADDY_ACME_CA= empty + docker compose restart caddy + verify real LE prod cert (not STAGING) + verify HSTS header on responses (DOMAIN-02, DOMAIN-03)
+  - [ ] 06-07-PLAN.md — Operator-driven RUNBOOK §14-§16: UptimeRobot signup + /health monitor (D-21) + deliberate downtime drill capturing uptime-alert.png evidence (D-22 / SC5) + final verify-phase6.sh full as SC1-SC5 holistic gate (OPS-02, DEPLOY-05)
 
 ### Phase 7: CI/CD + Backups + Polish
 **Goal**: A push to `main` ships to production automatically; daily off-site backups exist and have been proven restorable; deploys cause no user-visible downtime.
