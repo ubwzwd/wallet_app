@@ -160,6 +160,41 @@ EXIT: 0
 
 ## Task 3 Incognito-Chrome install smoke — checkpoint status
 
+**Status: PASSED (2026-05-25) with documented Phase 6 dependency on SW runtime verification.**
+
+### Verified by human (Chrome → `https://localhost`)
+- ✅ Manifest accepted by Chrome — no installability errors; `Name: Wallet`, `Start URL: /`, `Display: standalone`, `Theme color: #0ea5e9`, 192×192 icon renders.
+- ✅ Address-bar install affordance appeared; "Install Wallet?" prompt confirmed; app installed and launched in **standalone window** (no Chrome chrome).
+- ✅ Two `Richer PWA Install UI` warnings about `screenshots[]` field are **non-blocking** — they only affect the optional richer-install-UI affordance, not installability. Adding screenshots is Phase 7+ UI-redesign work.
+
+### Known Limitation — SW registration blocked by self-signed cert (deferred to Phase 6)
+Console showed: `[pwa] service worker registration failed SecurityError: An SSL certificate error occurred when fetching the script.` The `Application → Service workers` panel was empty.
+
+**Root cause:** Chrome enforces strict cert validation for the Service Worker script source (higher trust requirement than ordinary page loads). The Phase 4 Caddy `tls internal` cert is self-signed and not in any OS/browser trust store on the test machine — so Chrome refuses to load `https://localhost/sw.js` even after the user clicks "Proceed to localhost (unsafe)" for the page navigation.
+
+**This is NOT a Phase 5 code defect:**
+- `verify-pwa.mjs --check=sw` confirms `dist/sw.js` content is correct (NetworkFirst, CacheFirst, skipWaiting, clientsClaim, /api/, /index.html all present).
+- `npm run build:web` produces a valid SW (2260 bytes, precaches 11 URLs / 743 KB).
+- `frontend/src/pwa/registerSW.ts` correctly emits the failure log via its `.catch()` — proving the error-handling path works.
+
+**Phase 6 (DEPLOY-05 + DOMAIN-01..03)** will deploy to a real domain with a Let's Encrypt certificate — at which point SW registration will succeed without any code changes. Runtime SW verification (v1→v2→reload-once→v2-controls, NetworkFirst on `/api/*`, offline behavior) inherits to Phase 6.
+
+This is fully consistent with CONTEXT D-12's existing "document delta, re-verify in Phase 6 against real domain" decision and the D-13 MOBUI-05 deferral — the same class of "local self-signed cert limits real-world verification" gap.
+
+### Original checkpoint instructions (preserved for audit trail)
+The checkpoint instructions emitted during Task 3 execution ask the human to:
+
+1. Populate `infra/.env` per Phase 4 and run `docker compose -f infra/docker-compose.prod.yml up -d`.
+2. Open `https://localhost` in Incognito Chrome (accept the self-signed cert warning per Phase 4 D-10 `tls internal`).
+3. DevTools → Application → Manifest → confirm "Installability" shows no errors; check the 3 icons + theme_color `#0ea5e9`.
+4. DevTools → Application → Service Workers → confirm a SW is registered at scope `/`, status "activated and is running", source `sw.js`. **(Known to fail on self-signed cert — see Known Limitation above; verification inherits to Phase 6.)**
+5. Address-bar install icon → click → confirm "Install Wallet?" prompt → confirm the app opens in a standalone window with no Chrome chrome.
+6. Tear down: `docker compose -f infra/docker-compose.prod.yml down`.
+
+Note: this Incognito smoke is the spec-correct proxy for SC-2 since CONTEXT D-12 was superseded — see D-12 supersession section above.
+
+## Task 3 status — superseded by section above (kept below for diff history only)
+
 **Status: PENDING — orchestrator-surfaced human verification.**
 
 The checkpoint instructions emitted during Task 3 execution (see the `## CHECKPOINT REACHED` block below in this executor's narration) ask the human to:
