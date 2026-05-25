@@ -28,7 +28,7 @@ status: defined
 
 ### Domain & TLS (DOMAIN)
 
-- [ ] **DOMAIN-01**: Custom domain registered (Porkbun or similar) and A record points at Oracle VM public IP, `dig`-confirmed before first Caddy start
+- [ ] **DOMAIN-01**: Custom domain registered via **Cloudflare Registrar** (at-cost pricing) and managed in Cloudflare DNS in **DNS-only mode (gray cloud, no proxy)** so Caddy can do LE HTTP-01 challenges directly; A record points at Oracle VM public IP, `dig`-confirmed before first Caddy start. CF proxy/CDN/WAF are deferred to a future "harden production" milestone.
 - [ ] **DOMAIN-02**: Caddy auto-HTTPS via Let's Encrypt (using staging endpoint during initial setup to avoid prod rate limits)
 - [ ] **DOMAIN-03**: HSTS header (`max-age=31536000; includeSubDomains`, no preload) configured in Caddy
 - [ ] **DOMAIN-04**: API served same-origin (Caddy reverse-proxies `/api/*` to FastAPI) so CORS becomes a non-issue; FastAPI CORS allowlist still narrowed to prod domain as defense-in-depth
@@ -46,13 +46,13 @@ status: defined
 - [ ] **MOBUI-02**: `safe-area-inset-top/bottom` padding applied to header and bottom navigation/tabs
 - [ ] **MOBUI-03**: Global `font-size: 16px` on `input, select, textarea` to prevent iOS zoom-on-focus
 - [ ] **MOBUI-04**: `inputmode="decimal"` on transaction amount field; `type="email"` + `autocomplete="email"` on auth forms
-- [ ] **MOBUI-05**: PWA installability verified on real iPhone (Safari → Share → Add to Home Screen) and real Android (Chrome install prompt)
+- [ ] **MOBUI-05**: PWA installability verified on real iPhone (Safari → Share → Add to Home Screen) and real Android (Chrome install prompt). **Verification phase = Phase 6** (deferred from Phase 5 per Phase 5 CONTEXT D-13: install prompt + service-worker registration require the production LE cert that only exists after Phase 6 06-06 cert flip).
 
 ### Operations (OPS)
 
 - [ ] **OPS-01**: `/health` endpoint in FastAPI returns 200 OK without touching the database (DB outage must not kill the API container)
 - [ ] **OPS-02**: UptimeRobot free-tier monitor pings `/health` every 5 min; email alert on failure
-- [ ] **OPS-03**: Daily `pg_dump | gzip` cron container pushes to off-site object storage via rclone (R2 vs B2 vs S3 chosen during Phase 7); 7-daily + 4-weekly retention
+- [ ] **OPS-03**: Daily `pg_dump | gzip` cron container pushes to off-site object storage via rclone to **Cloudflare R2 free tier** (consistent with the Cloudflare-centric stack in DOMAIN-01); **7-day retention only**, no weekly rollups; pg_dump runs from the matching Postgres image (no version-mismatch silent failures). **No restore drill / `docs/RESTORE.md`** — the daily dump existing off-site is enough cover for v2.0; a verified restore is deferred to "harden production".
 - [ ] **OPS-04**: Postgres container tuned with `shared_buffers ≈ 3 GB` (~25% of 12 GB) so memory utilization stays above Oracle's 20% idle-reclaim threshold
 - [ ] **OPS-05**: Slack/Discord webhook posted from GH Actions on deploy success/failure (P2)
 
@@ -83,7 +83,7 @@ Anti-features for v2.0 — explicitly punted to a later "harden production" mile
 - Offline-first writes (IndexedDB queue, background sync) — deferred to a dedicated "offline mode" milestone
 - Custom Install banner with iOS instructions — deferred to "polish" follow-up
 - Maskable + monochrome icons (beyond the one maskable in PWA-01) — deferred polish
-- Weekly verified restore drill — deferred (manual restore drill once during Phase 7 is sufficient for v2.0)
+- Restore drill of any kind (manual or weekly) — deferred to "harden production" milestone; for v2.0 the existence of an off-site daily dump is the bar (see OPS-03)
 - Image vulnerability scanning in CI — deferred to "harden production"
 - Multiple environments (staging/prod) — single env for POC
 - Preview environments per PR — single-developer workflow
@@ -122,7 +122,7 @@ Phase mappings produced by `/gsd-roadmapper` on 2026-05-02. Plan column populate
 | MOBUI-02 | Phase 5 | TBD |
 | MOBUI-03 | Phase 5 | TBD |
 | MOBUI-04 | Phase 5 | TBD |
-| MOBUI-05 | Phase 5 | TBD |
+| MOBUI-05 | Phase 6 | TBD (deferred from Phase 5; verified post 06-06 cert flip) |
 | OPS-01 | Phase 6 | TBD |
 | OPS-02 | Phase 6 | TBD |
 | OPS-03 | Phase 7 | TBD |
@@ -137,4 +137,4 @@ Phase mappings produced by `/gsd-roadmapper` on 2026-05-02. Plan column populate
 **Coverage:** 29/29 requirements mapped to phases (no orphans).
 
 ---
-*v2.0 requirement count: 29 active (27 P1 + 2 P2: DEPLOY-06, OPS-05). Platform locked to Oracle Cloud Always Free Ampere ARM64.*
+*v2.0 requirement count: 29 active (27 P1 + 2 P2: DEPLOY-06, OPS-05). Platform locked to Oracle Cloud Always Free Ampere ARM64. Domain layer: Cloudflare Registrar + Cloudflare DNS (gray cloud / DNS-only). Last updated: 2026-05-26 — MOBUI-05 remapped Phase 5 → Phase 6, OPS-03 downgraded (R2 free tier, 7d retention, no restore drill).*
