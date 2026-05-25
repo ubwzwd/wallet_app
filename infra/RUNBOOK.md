@@ -327,3 +327,298 @@ sudo systemctl status apt-daily-upgrade.timer
 > **Expected outcome:** `deploy` user exists with NOPASSWD sudo; ufw active with only 23333/80/443 reachable; unattended-upgrades scheduled for the Ubuntu security pocket with `Automatic-Reboot "false"`.
 
 ---
+
+## 6. Install Docker + Compose v2
+
+All commands run on the VM as `deploy` with sudo.
+
+**6a. Install prerequisites and Docker GPG key:**
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+```
+
+**6b. Add Docker apt sources (deb822 format, arm64):**
+
+```bash
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: noble
+Components: stable
+Architectures: arm64
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+sudo apt-get update
+```
+
+**6c. Install Docker Engine, CLI, containerd, and Compose plugin:**
+
+```bash
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+**6d. Add `deploy` to the docker group** (so `deploy` can run docker without sudo):
+
+```bash
+sudo usermod -aG docker deploy
+# IMPORTANT: deploy must log out and back in for group membership to take effect.
+exit
+# Reconnect: ssh -p 23333 deploy@<vm-ip>
+```
+
+After reconnecting, verify:
+
+```bash
+docker compose version
+# Expected: Docker Compose version v2.x.x
+# Note: "docker compose" (two words) is the v2 plugin. NOT "docker-compose" (deprecated v1).
+docker run --rm hello-world
+# Expected: "Hello from Docker!" message — confirms Docker daemon is working.
+```
+
+> **Expected outcome:** `docker compose version` returns v2.x.x; `docker run hello-world` succeeds without sudo.
+
+---
+
+## 7. Add Cloudflare DNS A record (grey cloud)
+
+_Pure Cloudflare dashboard click-through. No shell commands._
+
+1. Go to `https://dash.cloudflare.com` → select `<your-domain>` → **DNS** → **Records** → **Add record**.
+2. **Type:** `A`
+3. **Name:** `@` (apex — the `@` symbol represents the root of the domain)
+4. **IPv4 address:** `<vm-ip>` (the reserved public IP from §2 step 4)
+5. **Proxy status:** **DNS only** (grey cloud). If the icon shows an orange cloud, click it once to toggle it to grey. **This step is mandatory** — orange-cloud would proxy traffic through Cloudflare, breaking the Let's Encrypt HTTP-01 challenge in §10.
+6. **TTL:** `Auto`
+7. Click **Save**.
+
+> **Expected outcome:** DNS record visible in the Cloudflare dashboard showing Type A, Name @, Content `<vm-ip>`, Proxy status = DNS only (grey cloud icon).
+
+> **Note:** Do NOT add a `www` CNAME in this phase — apex-only deployment. `www` redirect is deferred to a later milestone.
+
+---
+
+## 8. Wait for DNS propagation
+
+> **CRITICAL (Pitfall 2): DO NOT proceed to §9 until `dig` confirms the A record from a public resolver. Skipping this gate means Caddy's first start will attempt the HTTP-01 challenge before the domain resolves to your VM. The challenge fails, and the failure counts against your Let's Encrypt rate-limit budget — even for the staging endpoint.**
+
+Run this loop from your **laptop** (NOT from the VM — you must use an external public resolver to avoid local DNS cache):
+
+```bash
+DOMAIN="<your-domain>"
+EXPECTED_IP="<vm-ip>"
+
+while true; do
+  ACTUAL=$(dig @1.1.1.1 "$DOMAIN" +short | head -1)
+  if [ "$ACTUAL" = "$EXPECTED_IP" ]; then
+    echo "DNS propagated: $DOMAIN -> $EXPECTED_IP"
+    break
+  fi
+  echo "Waiting for DNS... got [$ACTUAL] expected [$EXPECTED_IP]"
+  sleep 10
+done
+```
+
+Cross-check from a second public resolver to confirm:
+
+```bash
+dig @8.8.8.8 "$DOMAIN" +short
+# Expected: same $EXPECTED_IP
+```
+
+> **Expected outcome:** Both `1.1.1.1` and `8.8.8.8` return the VM IP. DNS typically propagates within 1–5 minutes of the Cloudflare save. Only proceed to §9 after both resolvers return the correct IP.
+
+---
+
+## 9. Clone repo + author .env (staging LE endpoint)
+
+**9a. Set up SSH config alias on your LAPTOP for convenience** — add to `~/.ssh/config`:
+
+```
+Host wallet-app
+    HostName <vm-ip>
+    User deploy
+    Port 23333
+    IdentityFile ~/.ssh/wallet_app_oracle
+```
+
+From here on, `ssh wallet-app` is equivalent to `ssh -p 23333 -i ~/.ssh/wallet_app_oracle deploy@<vm-ip>`. See Appendix A for the full snippet.
+
+**9b. Clone the repo on the VM:**
+
+```bash
+ssh wallet-app   # or: ssh -p 23333 -i ~/.ssh/wallet_app_oracle deploy@<vm-ip>
+cd ~
+git clone https://github.com/<your-org>/wallet_app.git
+cd wallet_app/infra
+```
+
+**9c. Author `.env` from the example:**
+
+```bash
+cp .env.example .env
+```
+
+**9d. Immediately apply `chmod 600` (Pitfall 9 — SEC-01 enforcement on the VM):**
+
+```bash
+chmod 600 .env
+chown deploy:deploy .env
+ls -la .env
+# Expected: -rw------- 1 deploy deploy ... .env
+```
+
+> **IMPORTANT:** This is the Phase 6 enforcement of Phase 4's deferred `chmod 600` requirement. Do NOT skip this step — a world-readable `.env` exposes `SECRET_KEY` and `POSTGRES_PASSWORD` to any user on the box.
+
+**9e. Edit `.env`** using `vim` or `nano`. Replace every `CHANGE_ME_*` placeholder with a real value:
+
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: choose strong values.  
+  Generate a secure password: `openssl rand -base64 24`
+- `SECRET_KEY`: **regenerate for production** — `openssl rand -hex 32`. Do NOT reuse a laptop dev value.
+- `ALLOWED_ORIGINS`: set to `https://<your-domain>` — single origin, HTTPS scheme, no trailing slash.
+- `CADDY_DOMAIN`: set to `<your-domain>` — bare hostname, no scheme, no trailing slash.
+- `CADDY_TLS_MODE`: **comment out or delete this line entirely** (removing it causes Caddy to fall back to ACME instead of the internal self-signed cert).
+- `CADDY_ACME_CA`: set to `https://acme-staging-v02.api.letsencrypt.org/directory` — **Commit A staging URL. DO NOT REMOVE until staging cert is verified in §10.**
+
+**9f. Pre-flight validation block (Pitfall 1 guard):**
+
+Run these checks immediately before `docker compose up`. All four must return the expected values:
+
+```bash
+grep '^CADDY_DOMAIN=' .env
+# Expected: CADDY_DOMAIN=<your-domain>
+
+grep '^CADDY_ACME_CA=' .env
+# Expected: CADDY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory
+
+grep '^ALLOWED_ORIGINS=' .env
+# Expected: ALLOWED_ORIGINS=https://<your-domain>
+
+grep '^CADDY_TLS_MODE' .env || echo "OK: CADDY_TLS_MODE removed/commented as expected"
+# Expected: empty grep result + the OK message
+```
+
+> **Expected outcome:** `.env` exists, is `chmod 600`, has the staging `CADDY_ACME_CA` URL, and `CADDY_TLS_MODE` is absent.
+
+---
+
+## 10. First `docker compose up` → verify staging cert
+
+All commands on the VM as `deploy`, from `~/wallet_app/infra`.
+
+**10a. Build the frontend bundle and copy it to the VM:**
+
+Build on the laptop (recommended — keeps Node off the production VM):
+
+```bash
+# From laptop, in the repo root:
+cd frontend
+npm install
+npm run build:web
+scp -P 23333 -r dist deploy@<vm-ip>:~/wallet_app/frontend/
+```
+
+Alternative: build directly on the VM (requires Node.js):
+
+```bash
+# On VM — only if you prefer not to scp:
+sudo apt-get install -y nodejs npm
+cd ~/wallet_app/frontend
+npm install
+npm run build:web
+```
+
+**10b. Bring up the stack:**
+
+```bash
+cd ~/wallet_app/infra
+docker compose -f docker-compose.prod.yml up -d --build --wait
+```
+
+First start takes 3–5 minutes: `db` starts → `migrate` runs (alembic upgrade head) → `api` becomes healthy → `caddy` starts and immediately attempts the HTTP-01 challenge against the LE staging endpoint.
+
+**10c. Verify the staging cert was issued:**
+
+```bash
+docker compose -f docker-compose.prod.yml logs caddy | grep -iE "obtained certificate|certificate obtained"
+# Expected: a log line referencing issuance. Issuer will reference "STAGING" or "Pretend Pear".
+docker compose -f docker-compose.prod.yml logs caddy | grep -iE "staging|pretend|fake"
+# Expected: matches present — confirming it is the staging cert, not a production cert.
+```
+
+**10d. CRITICAL CALLOUT (Pitfall 7 — HSTS + staging cert = browser brick):**
+
+> Open `https://<your-domain>/` **ONLY in a private/incognito browser window**. The staging cert is signed by "(STAGING) Pretend Pear X1" or similar — your browser will warn that the cert is untrusted. If you open it in a regular (non-incognito) browser window, the HSTS header (`max-age=31536000`) will be pinned in your browser's HSTS store, bricking HTTPS access to that domain for up to one year even after the real cert is issued. Incognito mode discards HSTS pins when the window is closed.
+
+In the incognito window:
+
+- You will see a browser security warning. Click **Advanced** → **Proceed anyway** (wording varies by browser).
+- Confirm the wallet app loads.
+- Open DevTools → Security tab → confirm the cert subject matches `<your-domain>` and the issuer references "STAGING", "Pretend Pear", or "Fake LE Root".
+
+**10e. Record staging verification (conceptual Commit A gate):**
+
+```bash
+mkdir -p ~/wallet_app/infra/runbook-evidence
+echo "Commit A (staging) verified at $(date -u +%FT%TZ)" >> ~/wallet_app/infra/runbook-evidence/staging-verified.log
+```
+
+> **Expected outcome:** Staging cert issued; site reachable via incognito (with browser warning); cert subject matches `<your-domain>` and issuer references STAGING. Only proceed to §11 after this is confirmed.
+
+---
+
+## 11. Flip to LE production
+
+> **PROCEDURAL GATE (D-05 TWO-COMMIT pattern): Only proceed past §10 once §10's incognito verification succeeds. Do NOT jump from §9 directly to §11 — that defeats the staging-first requirement and risks burning a LE production rate-limit attempt on a misconfigured setup.**
+
+All commands on the VM as `deploy`, from `~/wallet_app/infra`.
+
+**11a. Set `CADDY_ACME_CA` to empty in `.env`** (single-line change):
+
+```bash
+cd ~/wallet_app/infra
+sed -i 's|^CADDY_ACME_CA=.*|CADDY_ACME_CA=|' .env
+grep '^CADDY_ACME_CA=' .env
+# Expected: CADDY_ACME_CA=  (empty value — Caddy Caddyfile default = LE prod)
+```
+
+**11b. Restart Caddy only** (preserves the `caddy_data` named volume — Pitfall 8):
+
+```bash
+docker compose -f docker-compose.prod.yml restart caddy
+```
+
+> **CRITICAL CALLOUT (Pitfall 8): NEVER use `docker compose down -v` on this VM.** The `-v` flag removes named volumes. `caddy_data` loss burns your Let's Encrypt Duplicate Certificate budget (5 issuances/week per identical SAN set); `wallet_pgdata_prod` loss destroys all user data. Use `restart`, `stop`, `start`, or `up -d` only. See Appendix C for the safe alternatives.
+
+**11c. Verify the LE production cert is issued** (allow ~30 seconds for Caddy to reissue):
+
+```bash
+sleep 30
+docker compose -f docker-compose.prod.yml logs --tail 50 caddy | grep -iE "obtained certificate|certificate obtained"
+# Expected: a new log line. It must NOT reference "STAGING" or "Pretend Pear" or "Fake LE Root".
+```
+
+**11d. Confirm from your laptop** (regular browser — the LE prod cert IS browser-trusted):
+
+```bash
+curl -vI "https://<your-domain>/" 2>&1 | grep -iE 'issuer|subject'
+# Expected: issuer line contains "Let's Encrypt" (R3, R10, or E1 — NOT "STAGING").
+```
+
+Open `https://<your-domain>/` in your **regular** (non-incognito) browser. Expected: no certificate warning. Padlock icon present. App loads.
+
+**11e. Record production verification (conceptual Commit B gate):**
+
+```bash
+echo "Commit B (LE production flip) verified at $(date -u +%FT%TZ)" >> ~/wallet_app/infra/runbook-evidence/prod-verified.log
+```
+
+> **Expected outcome:** Real LE production cert in browser (padlock, no warning); `curl -vI` confirms LE prod issuer; HSTS header active on responses (verified in §16 final script).
+
+---
+
