@@ -76,7 +76,7 @@ status: defined
 **Success Criteria** (what must be TRUE):
   1. `https://<domain>/` loads the wallet app from the Oracle VM with a real (production, not staging) Let's Encrypt certificate; `dig +short <domain>` returns the VM's public IP and was verified before the first Caddy start (DOMAIN-01 → DOMAIN-02 ordering preserved); Caddyfile uses Let's Encrypt **staging endpoint** during initial bring-up and is flipped to production in a separate, deliberate commit to avoid burning the 5-issuance/week prod rate limit.
   2. Operator can re-provision the VM end-to-end in <60 minutes by following `RUNBOOK.md` (provision Oracle A1.Flex → install Docker → clone repo → write `.env` → `docker compose up -d` → verify `/health`).
-  3. VM is hardened per SEC-02 baseline: `ufw` allows only 22/80/443; SSH is key-only (`PasswordAuthentication no`, `PermitRootLogin no`); `unattended-upgrades` enabled for security patches; non-root deploy user with sudo; `nmap` from outside shows only the three allowed ports.
+  3. VM is hardened per SEC-02 baseline: `ufw` allows only 23333/80/443; SSH is key-only (`PasswordAuthentication no`, `PermitRootLogin no`); `unattended-upgrades` enabled for security patches; non-root deploy user with sudo; `nmap` from outside shows only the three allowed ports.
   4. `GET /health` returns 200 OK in <100ms **without** touching the database (verified by stopping Postgres and observing /health still 200) — DB outage cannot kill the API container.
   5. UptimeRobot free-tier monitor is pinging `https://<domain>/health` every 5 min and successfully delivered an email alert during a deliberate downtime test; HSTS header (`max-age=31536000; includeSubDomains`, no preload) is observed in `curl -I` output.
 **Plans**: 7 plans
