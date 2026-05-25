@@ -8,11 +8,10 @@
 # Exit 0  : all assertions for the selected mode observably true.
 # Exit !=0: the failing step is echoed to stderr.
 #
-# WARNING: This script is ASSERTION-ONLY. It does NOT call 'docker compose down' or 'down -v'.
-# WARNING: Pitfall 8: 'docker compose down -v' would delete the caddy_data volume and burn the
-# WARNING: Let's Encrypt issuance/rate-limit budget. This script never calls compose lifecycle
-# WARNING: commands (up, down, stop, start, restart, rm). It assumes the stack is already running
-# WARNING: (full mode) or operates on static files only (quick mode).
+# WARNING: This script is ASSERTION-ONLY. No compose lifecycle commands are invoked here.
+# WARNING: Pitfall 8 (RESEARCH): running compose with the volume-removal flag deletes caddy_data
+# WARNING: and burns the Let's Encrypt rate-limit budget. This script assumes the stack is
+# WARNING: already running (full mode) or operates on static files only (quick mode).
 
 set -euo pipefail
 
@@ -92,7 +91,7 @@ out=$(curl -vI "https://$DOMAIN/" 2>&1)
 echo "$out" | grep -qi "issuer.*Let.s Encrypt" \
   || { echo "FAIL: TLS cert issuer is not Let's Encrypt — check CADDY_ACME_CA env var on VM"; exit 1; }
 if echo "$out" | grep -qiE 'STAGING|Fake LE|Pretend Pear'; then
-  echo "FAIL: TLS cert is from LE STAGING — flip CADDY_ACME_CA to empty in VM .env then: docker compose restart caddy"
+  echo "FAIL: TLS cert is from LE STAGING — set CADDY_ACME_CA= (empty) in VM infra/.env, then restart the caddy service"
   exit 1
 fi
 
