@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-05-25T13:27:12.555Z"
+status: executing
+last_updated: "2026-05-25T15:48:15.421Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 13
+  total_plans: 20
   completed_plans: 13
   percent: 50
 ---
@@ -21,7 +21,7 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 **Core value:** Users can record and view financial activity across multiple sources in any currency, with automatic conversion to their preferred base currency.
 
-**Current focus:** Phase 05 — pwa-ify-frontend-mobile-polish
+**Current focus:** Phase 06 — provision-oracle-vm-domain-caddy-https
 
 ## Milestone
 
@@ -31,38 +31,48 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 
 | # | Phase | Status | Requirements |
 |---|-------|--------|--------------|
-| 4 | Containerize and Compose Locally | Not started | DEPLOY-01..04, DOMAIN-04, OPS-04, SEC-01 (7) |
-| 5 | PWA-ify Frontend + Mobile Polish | Not started | PWA-01..04, MOBUI-01..05 (9) |
-| 6 | Provision Oracle VM + Domain + Caddy HTTPS | Not started | DEPLOY-05, DOMAIN-01..03, SEC-02, OPS-01, OPS-02 (7) |
+| 4 | Containerize and Compose Locally | Complete (2026-05-22) | DEPLOY-01..04, DOMAIN-04, OPS-04, SEC-01 (7) |
+| 5 | PWA-ify Frontend + Mobile Polish | Complete (2026-05-25) | PWA-01..04, MOBUI-01..04 (8); MOBUI-05 remapped → Phase 6 |
+| 6 | Provision Oracle VM + Domain + Caddy HTTPS | In Progress (4/7 plans) | DEPLOY-05, DOMAIN-01..03, SEC-02, OPS-01, OPS-02, MOBUI-05 (8) |
 | 7 | CI/CD + Backups + Polish | Not started | CI-01..03, OPS-03, OPS-05, DEPLOY-06 (6) |
 
 **Coverage:** 29/29 requirements mapped.
 
 ## Current Position
 
-Phase: 05 — COMPLETE
-Plan: 1 of 7
+Phase: 06 (provision-oracle-vm-domain-caddy-https) — EXECUTING (4 of 7 plans complete)
 
-- **Phase:** 4 (in progress)
-- **Plan:** All 6 plans complete
-- **Status:** Phase 05 complete
-- **Last activity:** 2026-05-25
+- **Phase:** 6 (in progress)
+- **Plan:** 06-04 complete; 06-05 next (operator-driven RUNBOOK §0-§13 — Oracle VM provision, Cloudflare domain register + A record, SSH/ufw/unattended-upgrades, Docker install, DNS propagation gate, first compose up with LE staging cert, SC4 DB-independence test, SC3 nmap scan)
+- **Status:** Executing Phase 06
+- **Last activity:** 2026-05-26 — M2 docs reconciled (REQUIREMENTS/ROADMAP/PROJECT/MILESTONES refreshed; scope refinements: Cloudflare Registrar + DNS-only, OPS-03 → R2 + 7d, MOBUI-05 → Phase 6 / 06-07)
 
 ## Performance Metrics
 
 - Phases planned: 4
-- Phases completed: 0 / 4
-- Plans completed: 6 / 6 (Phase 4)
-- Overall progress: 100% of Phase 4
+- Phases completed: 2 / 4
+- Plans completed: 13 / 20 (Phase 4: 6/6 ✓ · Phase 5: 7/7 ✓ · Phase 6: 4/7 in progress · Phase 7: 0/0)
+- Overall progress: 50% (phase-weighted) — Phase 4 + 5 shipped; Phase 6 mid-execution
 
-| Phase | Plan | Duration | Tasks | Files | Completed |
-|-------|------|----------|-------|-------|-----------|
-| 04 | 01-backend-dockerfile | ~15 min | 2 | 3 (1 new Dockerfile, 1 new .dockerignore, 1 deleted) | 2026-05-11 |
-| 04 | 02-relocate-dev-compose | ~10 min | 2 | 4 (compose moved, README updated, .gitignore) | 2026-05-21 |
-| 04 | 03-frontend-config-split | ~15 min | 2 | 4 (config.dev.ts, config.prod.ts, config.ts, package.json) | 2026-05-22 |
-| 04 | 04-env-secrets | ~12 min | 2 | 2 (infra/.env.example, infra/scripts/env-coverage.sh) | 2026-05-22 |
-| 04 | 05-prod-compose-and-caddy | ~2 min | 2 | 2 (infra/docker-compose.prod.yml, infra/Caddyfile) | 2026-05-22 |
-| 04 | 06-smoke-and-verify | ~8 min | 1 | 1 (infra/scripts/smoke.sh) | 2026-05-22 |
+| Phase | Plan | Completed |
+|-------|------|-----------|
+| 04 | 01-backend-dockerfile | 2026-05-11 |
+| 04 | 02-relocate-dev-compose | 2026-05-21 |
+| 04 | 03-frontend-config-split | 2026-05-22 |
+| 04 | 04-env-secrets | 2026-05-22 |
+| 04 | 05-prod-compose-and-caddy | 2026-05-22 |
+| 04 | 06-smoke-and-verify | 2026-05-22 |
+| 05 | 01-verification-harness | 2026-05-23 |
+| 05 | 02-static-pwa-assets | 2026-05-24 |
+| 05 | 03-workbox-sw-pipeline | 2026-05-24 |
+| 05 | 04-touch-target-fixes | 2026-05-24 |
+| 05 | 05-safe-area-wiring | 2026-05-25 |
+| 05 | 06-input-modes | 2026-05-25 |
+| 05 | 07-phase-verify-aggregator | 2026-05-25 |
+| 06 | 01-caddyfile-acme-hsts | 2026-05-25 |
+| 06 | 02-verify-phase6-scaffold | 2026-05-25 |
+| 06 | 03-ssh-port-amend | 2026-05-25 |
+| 06 | 04-runbook-authoring | 2026-05-26 |
 
 ## Accumulated Context
 
@@ -74,7 +84,9 @@ Plan: 1 of 7
 - **Container builds: arm64-only** (no multi-arch — saves CI time).
 - **Same-origin routing**: Caddy `file_server` serves Expo web export at `/`, reverse-proxies `/api/*` to FastAPI. No separate web container.
 - **Postgres tuning** (`shared_buffers≈3GB`) for Oracle's 20%-idle-reclaim mitigation lives in Phase 4 (OPS-04), not a separate phase.
-- **Backup destination (R2 vs B2 vs S3)**: deferred to Phase 7 planning step.
+- **Domain layer (2026-05-26)**: Cloudflare Registrar + Cloudflare DNS in DNS-only mode (gray cloud). CF proxy/CDN/WAF deferred to "harden production" — keeps Caddy LE HTTP-01 working without extra plugins.
+- **Backup destination (2026-05-26)**: Cloudflare R2 free tier (stays inside the CF stack). 7-day retention, no weekly rollups, no restore drill — defers restore drill to "harden production".
+- **MOBUI-05 remapped Phase 5 → Phase 6 (2026-05-26)**: install-prompt + SW registration require the production LE cert; verified inside 06-07 alongside the UptimeRobot drill (per Phase 5 CONTEXT D-13).
 - **(04-01) Poetry 1.8.5 in builder image**: plan's `poetry==1.7.1` + `poetry-plugin-export>=1.8` was unresolvable (plugin 1.8 requires Poetry≥1.8); minimum-drift bump preserves the plugin pin and the `poetry export` invocation.
 - **(04-01) Strip Poetry/uv from builder /usr/local/bin before stage transition** so runtime image carries only resolved app deps + uvicorn (must_have: "no Poetry/dev tooling in runtime").
 - **(04-01) backend/.dockerignore is mandatory companion to Dockerfile.api**: T-04-01 ("no .env in image") fails without it because `COPY . .` would sweep `backend/.env`.
@@ -84,8 +96,9 @@ Plan: 1 of 7
 
 ### Open Todos
 
-- Run `/gsd-verify-work` against Phase 4 (execute `bash infra/scripts/smoke.sh full` after populating `infra/.env`)
-- Begin Phase 05 (PWA-ify Frontend + Mobile Polish)
+- Execute Phase 6 plan **06-05** (operator-driven RUNBOOK §0-§13): Oracle VM provision, Cloudflare domain register + A record, SSH/ufw/unattended-upgrades, Docker install, DNS propagation gate, first compose up with LE staging cert, SC4 DB-independence test, SC3 nmap scan
+- Then 06-06 (LE staging → prod cert flip) and 06-07 (UptimeRobot + downtime drill + MOBUI-05 real-device install verification)
+- Plan Phase 7 (CI/CD + Backups + Polish) once Phase 6 verifies
 
 ### Blockers
 
@@ -93,9 +106,9 @@ Plan: 1 of 7
 
 ## Session Continuity
 
-**Last session:** 2026-05-22T18:41:20.372Z
+**Last session:** 2026-05-25T14:07:08.517Z
 
-**Next action:** Run `bash infra/scripts/smoke.sh full` (requires `infra/.env` with real values + Docker running) to verify all 5 Phase 4 ROADMAP success criteria.
+**Next action:** Execute Phase 6 plan 06-05 (operator-driven Oracle VM provision + Cloudflare domain register + first compose up with LE staging cert).
 
 **Files for reference:**
 

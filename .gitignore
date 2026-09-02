@@ -20,3 +20,7 @@ frontend/dist/
 
 # Design package zips — extracted contents live in .planning/research/
 wallet-ui-design.zip
+
+# Phase 6 runbook evidence (UptimeRobot screenshot, ~100-300KB PNG — keep dir tracked, ignore the PNG)
+infra/runbook-evidence/*.png
+!infra/runbook-evidence/.gitkeep

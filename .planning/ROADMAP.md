@@ -70,27 +70,35 @@ status: defined
 **UI hint**: yes
 
 ### Phase 6: Provision Oracle VM + Domain + Caddy HTTPS
-**Goal**: The app is publicly reachable at `https://<domain>` with a valid Let's Encrypt certificate, deployed manually from a documented runbook on a hardened Oracle A1.Flex VM.
+**Goal**: The app is publicly reachable at `https://<domain>` with a valid Let's Encrypt certificate, deployed manually from a documented runbook on a hardened Oracle A1.Flex VM. Real-device PWA installability is verified once the production cert is live.
 **Depends on**: Phase 4 (need working compose stack to deploy), Phase 5 (PWA assets shipped in the deployed bundle)
-**Requirements**: DEPLOY-05, DOMAIN-01, DOMAIN-02, DOMAIN-03, SEC-02, OPS-01, OPS-02
+**Requirements**: DEPLOY-05, DOMAIN-01, DOMAIN-02, DOMAIN-03, SEC-02, OPS-01, OPS-02, MOBUI-05
+**Domain layer**: Cloudflare Registrar + Cloudflare DNS in **DNS-only (gray-cloud) mode**. No CF proxy / CDN / WAF for v2.0 — this keeps Caddy's LE HTTP-01 challenge working with zero extra plugins. CF proxy + DNS-01 challenge is deferred to "harden production".
 **Success Criteria** (what must be TRUE):
   1. `https://<domain>/` loads the wallet app from the Oracle VM with a real (production, not staging) Let's Encrypt certificate; `dig +short <domain>` returns the VM's public IP and was verified before the first Caddy start (DOMAIN-01 → DOMAIN-02 ordering preserved); Caddyfile uses Let's Encrypt **staging endpoint** during initial bring-up and is flipped to production in a separate, deliberate commit to avoid burning the 5-issuance/week prod rate limit.
   2. Operator can re-provision the VM end-to-end in <60 minutes by following `RUNBOOK.md` (provision Oracle A1.Flex → install Docker → clone repo → write `.env` → `docker compose up -d` → verify `/health`).
-  3. VM is hardened per SEC-02 baseline: `ufw` allows only 22/80/443; SSH is key-only (`PasswordAuthentication no`, `PermitRootLogin no`); `unattended-upgrades` enabled for security patches; non-root deploy user with sudo; `nmap` from outside shows only the three allowed ports.
+  3. VM is hardened per SEC-02 baseline: `ufw` allows only 23333/80/443; SSH is key-only (`PasswordAuthentication no`, `PermitRootLogin no`); `unattended-upgrades` enabled for security patches; non-root deploy user with sudo; `nmap` from outside shows only the three allowed ports.
   4. `GET /health` returns 200 OK in <100ms **without** touching the database (verified by stopping Postgres and observing /health still 200) — DB outage cannot kill the API container.
   5. UptimeRobot free-tier monitor is pinging `https://<domain>/health` every 5 min and successfully delivered an email alert during a deliberate downtime test; HSTS header (`max-age=31536000; includeSubDomains`, no preload) is observed in `curl -I` output.
-**Plans**: TBD
+  6. **MOBUI-05** (deferred from Phase 5): PWA installs to home screen on a real iPhone (Safari → Share → Add to Home Screen, launches in standalone mode) AND on a real Android Chrome (install prompt fires); service-worker registration confirmed in DevTools against the production LE cert. Verified after 06-06 (LE staging → prod flip).
+**Plans**: 7 plans
+  - [x] 06-01-PLAN.md — Caddyfile additions (acme_ca global + HSTS header) + .env.example new CADDY_ACME_CA + narrowed ALLOWED_ORIGINS + caddy service env passthrough in docker-compose.prod.yml (DOMAIN-02, DOMAIN-03, DOMAIN-04)
+  - [x] 06-02-PLAN.md — Wave 0 verification scaffold: infra/scripts/verify-phase6.sh (quick + full modes, assertion-only no down -v) + infra/runbook-evidence/.gitkeep + .gitignore *.png rule (cross-cutting verification)
+  - [x] 06-03-PLAN.md — ROADMAP.md SC3 trivial text amendment: 22/80/443 -> 23333/80/443 per D-12 (SEC-02)
+  - [x] 06-04-PLAN.md — infra/RUNBOOK.md authoring (§0-§16 + Appendices A-D): operator playbook with D-04 + D-05 procedural gates and 9 pitfall callouts (DEPLOY-05)
+  - [ ] 06-05-PLAN.md — Operator-driven RUNBOOK §0-§13 execution: provision Oracle VM, register domain, harden SSH/ufw/unattended-upgrades, install Docker, DNS A record + propagation gate, author .env with LE staging URL, first compose up, verify staging cert in incognito, SC4 DB-independence test, SC3 nmap scan (DOMAIN-01, DEPLOY-05, SEC-02, OPS-01)
+  - [ ] 06-06-PLAN.md — Operator-driven D-05 Commit B: flip CADDY_ACME_CA= empty + docker compose restart caddy + verify real LE prod cert (not STAGING) + verify HSTS header on responses (DOMAIN-02, DOMAIN-03)
+  - [ ] 06-07-PLAN.md — Operator-driven RUNBOOK §14-§16: UptimeRobot signup + /health monitor (D-21) + deliberate downtime drill capturing uptime-alert.png evidence (D-22 / SC5) + **MOBUI-05 real-device install verification on iPhone Safari + Android Chrome against the LE prod cert (SC6)** + final verify-phase6.sh full as SC1-SC6 holistic gate (OPS-02, DEPLOY-05, MOBUI-05)
 
 ### Phase 7: CI/CD + Backups + Polish
-**Goal**: A push to `main` ships to production automatically; daily off-site backups exist and have been proven restorable; deploys cause no user-visible downtime.
+**Goal**: A push to `main` ships to production automatically; a daily off-site database dump exists; deploys cause no user-visible downtime.
 **Depends on**: Phase 6 (need a live VM to deploy to and back up from)
 **Requirements**: CI-01, CI-02, CI-03, OPS-03, OPS-05, DEPLOY-06
 **Success Criteria** (what must be TRUE):
   1. A commit pushed to `main` triggers GitHub Actions to build arm64 backend + frontend images on `runs-on: ubuntu-24.04-arm`, push to GHCR tagged with both `latest` and the git SHA, SSH into the VM, run `docker rollout` for zero-downtime cutover, and complete the full `git push` → live in <5 minutes (measured wall-clock).
   2. Post-deploy healthcheck (`curl --retry 5 --retry-delay 3 https://<domain>/health` from the runner) gates the workflow: a deliberately broken deploy fails the workflow with a non-200 status and prevents the bad image from being marked stable.
-  3. Daily `pg_dump | gzip` cron container pushes encrypted/compressed dumps to off-site object storage via `rclone` (R2 vs B2 vs S3 chosen during this phase's planning step — flagged as a TBD decision); 7-daily + 4-weekly retention policy applied; pg_dump runs from the matching Postgres image (no version-mismatch silent failures).
-  4. **Restore drill executed once**: latest off-site dump pulled to a throwaway Postgres container, restored, and a sanity query (`SELECT count(*) FROM users`) confirms tables and data are intact — drill is documented in `docs/RESTORE.md`.
-  5. Slack/Discord webhook posts deploy success/failure to a channel from the GH Actions workflow (P2 — DEPLOY-06 + OPS-05); `docker rollout` performs zero-downtime swaps verified by hammering `/health` during a deploy and observing zero non-200s (DEPLOY-06).
+  3. Daily `pg_dump | gzip` cron container pushes the dump to **Cloudflare R2 free tier** via `rclone`; **7-day retention only** (no weekly rollups); pg_dump runs from the matching Postgres image (no version-mismatch silent failures). The first scheduled dump's existence in R2 is verified via `rclone ls` from the VM. **No restore drill / `docs/RESTORE.md`** for v2.0 — deferred to "harden production".
+  4. Slack/Discord webhook posts deploy success/failure to a channel from the GH Actions workflow (P2 — OPS-05); `docker rollout` performs zero-downtime swaps verified by hammering `/health` during a deploy and observing zero non-200s (DEPLOY-06).
 **Plans**: TBD
 
 ---
@@ -101,7 +109,7 @@ status: defined
 |-------|----------------|--------|-----------|
 | 4. Containerize and Compose Locally | 6/6 | Complete | 2026-05-22 |
 | 5. PWA-ify Frontend + Mobile Polish | 7/7 | Complete   | 2026-05-25 |
-| 6. Provision Oracle VM + Domain + Caddy HTTPS | 0/0 | Not started | - |
+| 6. Provision Oracle VM + Domain + Caddy HTTPS | 4/7 | In Progress|  |
 | 7. CI/CD + Backups + Polish | 0/0 | Not started | - |
 
 ---
@@ -113,8 +121,8 @@ status: defined
 | Phase | Requirements | Count |
 |-------|--------------|-------|
 | 4 | DEPLOY-01, DEPLOY-02, DEPLOY-03, DEPLOY-04, DOMAIN-04, OPS-04, SEC-01 | 7 |
-| 5 | PWA-01, PWA-02, PWA-03, PWA-04, MOBUI-01, MOBUI-02, MOBUI-03, MOBUI-04, MOBUI-05 | 9 |
-| 6 | DEPLOY-05, DOMAIN-01, DOMAIN-02, DOMAIN-03, SEC-02, OPS-01, OPS-02 | 7 |
+| 5 | PWA-01, PWA-02, PWA-03, PWA-04, MOBUI-01, MOBUI-02, MOBUI-03, MOBUI-04 | 8 |
+| 6 | DEPLOY-05, DOMAIN-01, DOMAIN-02, DOMAIN-03, SEC-02, OPS-01, OPS-02, MOBUI-05 | 8 |
 | 7 | CI-01, CI-02, CI-03, OPS-03, OPS-05, DEPLOY-06 | 6 |
 
 ---
@@ -126,9 +134,10 @@ status: defined
 - **Service worker stale-shell trap** — Phase 5 success criterion 3 explicitly verifies network-first on `/index.html` and `/api/*`, plus a SW v1→v2 swap test.
 - **Migrations before API takes traffic** — Phase 4 success criterion 1 mandates one-shot `migrate` service via `depends_on: condition: service_completed_successfully`; not an entrypoint script in the API container (avoids worker-race per Pitfall 8).
 - **Hardcoded `localhost:8000` baked into prod bundle** — Phase 4 success criterion 3 grep-checks the built JS for the literal string; Phase 7 CI step can promote this to a build-failing assertion.
-- **Backup destination (R2 vs B2 vs S3)** — intentionally deferred to Phase 7's planning step; not a pre-decision blocker.
+- **Backup destination** — Cloudflare R2 free tier chosen to stay inside the Cloudflare-centric stack (DOMAIN-01 already adds CF as a vendor). 7-day retention; no restore drill for v2.0.
+- **MOBUI-05 deferred Phase 5 → Phase 6** — install-prompt + SW registration require the production LE cert that only exists after Phase 6 06-06 cert flip; verified inside 06-07 alongside the UptimeRobot drill.
 - **Postgres tuning for Oracle 20% idle-reclaim** — folded into Phase 4 (OPS-04) as part of the production compose, not a separate phase.
 
 ---
 
-*Last updated: 2026-05-02 — v2.0 roadmap defined (4 phases continuing from v1.0).*
+*Last updated: 2026-05-26 — Phase 4 + 5 shipped; Phase 6 in execution (4 of 7 plans done). MOBUI-05 remapped Phase 5 → Phase 6 (06-07). Phase 7 OPS-03 downgraded to R2 free tier + 7-day retention + no restore drill. Cloudflare Registrar + DNS-only (gray cloud) added to DOMAIN-01 in Phase 6.*
