@@ -6,7 +6,7 @@
 >
 > **本版按第一轮审核意见与决策 §14 修订**。相对初稿的实质变化：`exchange_rates` 改成决策 §14.1 定义的缓存表（主键 `(date, base, symbol)`，目标币种列名 `symbol`）并进入迁移第 1 步；账户余额口径按决策 §14.2 改为"以账户 `default_currency` 计价、交易按发生日汇率折算成账户币种后累加"；`import_rows` 的行号列按决策 §14.5 固定为 `row_no`；`users` 按决策 §14.6 删 `default_source_id`、加 `language`，`user_llm_settings` 与 `ledger_invites` 各加 `created_at`；迁移第 3 步补上被漏掉的 `DROP INDEX IF EXISTS`（含 `ix_transactions_user_id`）与 `finance_sources` 孤儿行兜底，第 6 步补上 `fk_users_default_source` 命名分叉的兜底写法。
 >
-> 关于篇幅：本文约 1300 行，超出最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十张表的完整 DDL、六步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
+> 关于篇幅：本文长于最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十张表的完整 DDL、六步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
 
 技术栈不变：SQLAlchemy 2.0 同步引擎 + Alembic + Postgres 15，测试用 SQLite 内存库（backend/pyproject.toml:13-14,21）。
 
@@ -26,7 +26,7 @@
 | 6 | `finance_sources` | 已有 | 归属从用户改为账本，加 `opening_balance` 等（决策 §3） |
 | 7 | `transactions` | 已有 | 加 kind / 分类 / 转账 / 退款 / 导入等列（决策 §1、§10） |
 | 8 | `import_batches` | **新增** | 一次账单上传（决策 §5） |
-| 9 | `import_rows` | **新增** | 导入草稿行（决策 §5） |
+| 9 | `import_rows` | **新增** | 导入草稿行（决策 §5）；含 `counterparty`（决策 §14.10）与 `page_no`（决策 §14.12）两列 |
 | 10 | `exchange_rates` | **新建（重建）** | Frankfurter 日汇率缓存。现状这张表已被迁移 `5ca7fe6e37db` 删除，目标态按决策 §14.1 用**新形状**重建，不是沿用现状（§1.10） |
 
 删除的表：`transaction_tags`（决策 §1.3"现有 `transaction_tags` 表、`?tag=` 筛选、标签输入框全部移除"）。现状模型见 backend/app/models/transaction_tag.py:11-20。
@@ -36,6 +36,8 @@
 **新增表**：`user_llm_settings`、`ledgers`、`ledger_members`、`ledger_invites`、`import_batches`、`import_rows`、`exchange_rates`。最后一张是**重建**：现状里它在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被 drop 掉了；目标态按决策 §14.1 重新定义列与主键（复合主键 `(date, base, symbol)`、没有自增 `id`、没有 `source` 列、新增 `fetched_at`），**不**把初始迁移里的旧形状原样搬回来。
 
 **删除表**：`transaction_tags`。
+
+`import_rows` 里有两列是第二轮评审后追加的，初稿没有：`counterparty VARCHAR(100) NULL`（决策 §14.10，提交单腿转账时写入 `transactions.counterparty`）与 `page_no INTEGER NULL`（决策 §14.12，视觉路径下这一行来自原件的第几页，非视觉路径为 NULL）。
 
 **改名列**：
 
@@ -430,9 +432,11 @@ CREATE TABLE import_rows (
     category_l2            VARCHAR(32),
     transfer_role          VARCHAR(8),
     transfer_subtype       VARCHAR(16),
+    counterparty           VARCHAR(100),
     hint                   VARCHAR(200),
     confidence             NUMERIC(3,2),
     source_ref             VARCHAR(200),
+    page_no                INTEGER,
     flags                  JSON,
     matched_transaction_id UUID,
     counterpart_source_id  UUID,
@@ -465,7 +469,7 @@ CREATE INDEX ix_import_rows_transaction_id
     ON import_rows (transaction_id) WHERE transaction_id IS NOT NULL;
 ```
 
-列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`transfer_role`（`out` / `in`）和 `transfer_subtype`（`plain` / `repayment`）在 review 阶段就要能改：提交时它们直接落到 `transactions` 的同名列（[`05-import-and-llm.md`](./05-import-and-llm.md) §9.2），不靠金额符号现推，否则用户在 review 里改不了转账方向。`hint` 是服务端写给 review 界面的一句提示（"请确认这笔还款是从哪个账户转出的"），**只读、不进** `transactions.note`——`note` 会原样进正式交易，把这类话带进去是污染（[`05-import-and-llm.md`](./05-import-and-llm.md) §0.2）。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6），外加一个 `merged_duplicates`（同批原文里的完全重复行被合并到这一行，[`05-import-and-llm.md`](./05-import-and-llm.md) §7.7；它在决策 §5 的三种标记之外，见 README 的待决汇总）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
+列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`transfer_role`（`out` / `in`）和 `transfer_subtype`（`plain` / `repayment`）在 review 阶段就要能改：提交时它们直接落到 `transactions` 的同名列（[`05-import-and-llm.md`](./05-import-and-llm.md) §9.2），不靠金额符号现推，否则用户在 review 里改不了转账方向。`hint` 是服务端写给 review 界面的一句提示（"请确认这笔还款是从哪个账户转出的"），**只读、不进** `transactions.note`——`note` 会原样进正式交易，把这类话带进去是污染（[`05-import-and-llm.md`](./05-import-and-llm.md) §0.2）。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6），外加一个 `merged_duplicates`（同批原文里的完全重复行被合并到这一行，[`05-import-and-llm.md`](./05-import-and-llm.md) §7.7；它在决策 §5 的三种标记之外，见 README 的待决汇总）。`counterparty` 是单腿转账的对手文本（"老婆""工资卡"，决策 §14.10）：LLM 解析出来后可由 `PATCH .../rows/{rid}` 修改（≤100 字），提交时原样写进 `transactions.counterparty`（[`03-backend-api.md`](./03-backend-api.md) §5.43、§5.44）。`page_no` 是这一行来自原件的第几页（1 起，决策 §14.12）：只有视觉路径（`import_batches.used_vision = TRUE`）才填，文本路径为 NULL；review 界面用它把行和 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png` 那张页面缩略图对上（图片经 [`03-backend-api.md`](./03-backend-api.md) §5.46 的鉴权接口取，不入库）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
 
 ### 1.10 `exchange_rates`
 
@@ -584,8 +588,8 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  |    kind      VC(16)  NN            |  |    kind/merchant/note             |
  |    note VC(500) / merchant VC(200) |  |    category_l1/category_l2        |
  |    category_l1/category_l2 VC(32)  |  |    transfer_role/transfer_subtype |
- |    transfer_role    VC(8)  out|in  |  |    hint / confidence              |
- |    transfer_subtype VC(16) plain|  |  |    source_ref / flags JSON|JSONB  |
+ |    transfer_role    VC(8)  out|in  |  |    counterparty/hint/confidence   |
+ |    transfer_subtype VC(16) plain|  |  |    source_ref/flags/page_no INT   |
  |                     repayment      |  | FK matched_transaction_id ------->| (SET NULL)
  |    transfer_pair_id UUID (无 FK)   |  | FK counterpart_source_id -------->| (SET NULL)
  |    counterparty     VC(100)        |  | FK transaction_id --------------->| (SET NULL)
@@ -778,6 +782,8 @@ sa.CheckConstraint("kind IN ('expense','income','transfer','refund')", name="kin
 `upgrade()`：按依赖顺序 `op.create_table(...)` 建 `ledgers`、`ledger_members`、`ledger_invites`、`user_llm_settings`、`import_batches`、`import_rows`、`exchange_rates`，DDL 与 §1.2–§1.5、§1.8、§1.9、§1.10 一致，随后 `op.create_index(...)` 建 §4 里属于这些表的索引（含两个部分唯一索引，用 `postgresql_where=sa.text("status = 'parsing'")`）。
 
 `exchange_rates` 也在本步建（决策 §14.1）：这张表在现状里已被 `5ca7fe6e37db` 删除，目标态是**新建**，形状按 §1.10。它没有任何外键，放在本步的哪个位置都可以。
+
+`import_rows` 的建表语句要包含 `counterparty`（`sa.String(100)`，决策 §14.10）与 `page_no`（`sa.Integer()`，决策 §14.12）两列，都可空——它们和其余列一样在本步一次建出，后面没有补列的迁移。
 
 注意：`import_batches.source_id` 引用 `finance_sources`，`import_rows.matched_transaction_id` 引用 `transactions`——这两张表此时已存在（现状就有），所以外键可以在 `create_table` 里内联。
 
@@ -1261,7 +1267,8 @@ COMMIT;
 
 顺序选择：**应用层在事务内先删交易再删批次**，列上的 `ON DELETE SET NULL` 只是兜底（万一有人绕过 API 直接删批次，交易不会丢，只是失去归属）。理由：如果反过来依赖 CASCADE 删交易，一次误删批次就会连带删掉用户已经手工编辑过的交易，不可逆；SET NULL 则至少保住数据。撤销时若某条交易是转账的一腿（还款行，决策 §5），两腿都带同一个 `import_batch_id`，会被同一条 `DELETE` 一起删掉。
 
-- **服务重启**：启动时执行 `UPDATE import_batches SET status='failed', error_code='interrupted' WHERE status='parsing'`（决策 §5），这样 `uq_import_batches_one_parsing` 不会被僵尸批次长期占用。
+- **服务重启**：启动时执行 `UPDATE import_batches SET status='failed', error_code='import_interrupted', error_message='server restarted while parsing' WHERE status='parsing'`（决策 §5、§14.14），这样 `uq_import_batches_one_parsing` 不会被僵尸批次长期占用。`import_interrupted` 是 [`03-backend-api.md`](./03-backend-api.md) §4.2 错误注册表里登记的 code（决策 §14.4"不允许各章自造同义名"），写进 `error_code` 列的就是这个名字；接口只把 `error_code` / `error_message` 拼成 `error: {code, message}` 暴露，`error_chunk` 只进服务端日志（决策 §14.15）。
+- **磁盘侧**：批次无论走丢弃还是撤销，删库行之外还要删掉它在磁盘上的整个目录 `UPLOAD_DIR/{ledger_id}/{batch_id}/`——里面既有原始上传文件，也有视觉路径渲染出来的 `pages/{page_no}.png`（决策 §14.12"图片……批次删除时连同删除"）。数据库里没有任何列记这些文件，删库行不会自动带走它们，所以这一步必须由应用层显式做：先提交数据库事务，再 `shutil.rmtree(dir, ignore_errors=True)`；顺序反过来会在事务回滚时留下"库里有批次、磁盘上文件已丢"的坏状态。
 
 ### 6.7 账本删除
 
@@ -1356,7 +1363,7 @@ UPDATE transactions
 
 沿用现状：`backend/tests/conftest.py:10` 在导入任何 `app` 模块前把 `DATABASE_URL` 设成 `sqlite:///:memory:`，`conftest.py:47-50` 建专用引擎，`conftest.py:58-69` 的 session 级 fixture 调 `Base.metadata.create_all` / `drop_all`。目标态对这条路径的要求：
 
-1. **`create_all` 必须能建出全部十张表和全部 CHECK**（十张表含 `exchange_rates`，模型里必须有它，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 `ck_user_llm_settings_base_url` 先 `lower()` 再匹配（§1.2）；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.5）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要 §7.1 里那种 `BigInteger().with_variant(Integer, "sqlite")` 的写法（决策 §14.1）。
+1. **`create_all` 必须能建出全部十张表和全部 CHECK**（十张表含 `exchange_rates`，模型里必须有它，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 `ck_user_llm_settings_base_url` 先 `lower()` 再匹配（§1.2）；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.5）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
 2. **CHECK 在 SQLite 上是真的生效的**，所以约束测试可以全部跑在内存库上：插入 `kind='expense', amount=100` 必须抛 `IntegrityError`。这是把不变量写进数据库而不是只写在 pydantic 里的最大回报——现状的 `finance_sources.type` 只有注释没有 CHECK（backend/app/models/finance_source.py:19），SQLite 上根本测不到。
 3. **外键在 SQLite 上默认不生效**，现状没有任何 `PRAGMA foreign_keys=ON`（`../current-design/02-database.md` §1.2）。目标态在测试引擎上挂一个连接事件把它打开，否则 `ON DELETE CASCADE` / `SET NULL` 的行为在测试里完全测不到：
 
@@ -1394,10 +1401,11 @@ def test_check_constraint_names():
 markers = ["postgres: 需要一个真实 Postgres 实例（环境变量 TEST_POSTGRES_URL）"]
 ```
 
-fixture 思路（`backend/tests/conftest.py`，两个 fixture）：
+fixture 思路（`backend/tests/conftest.py`，三个 fixture；前两个是 Postgres 专用，第三个在默认回路里跑）：
 
 - `postgres_url`（session 级）：读环境变量 `TEST_POSTGRES_URL`，没有就 `pytest.skip`，这样默认的纯 SQLite 回路不受影响。
 - `migrated_db`（函数级）：用 `isolation_level="AUTOCOMMIT"` 的管理连接 `CREATE DATABASE wallet_test_<随机 hex>`，把库名替换进 URL；构造一个 `alembic.Config`（`script_location` 指向 `backend/migrations`、`sqlalchemy.url` 指向新库），调 `alembic.command.upgrade(cfg, "head")`，`yield` 新库 URL，`finally` 里 `DROP DATABASE ... WITH (FORCE)`。每个用例一个全新空库，用例之间零耦合；要测"有数据的升级"就先 `command.upgrade(cfg, "8a4f4d66d893")` 灌数据、再 `upgrade("head")`。
+- `sqlite_migrated_db`（函数级，**不带** `postgres` marker）：`url = f"sqlite:///{tmp_path}/mig.db"`，同样构造一个 `alembic.Config`（`script_location` 指向 `backend/migrations`、`sqlalchemy.url` 设成这个 URL），调 `command.upgrade(cfg, "head")`，`yield` URL。它存在的唯一理由是：§5 那条迁移链里所有加列 / 加约束的步骤都写成了 `batch_alter_table`，而 batch 重建表的路径只有真的在 SQLite 上跑一遍才会暴露问题（漏掉 `DROP INDEX IF EXISTS ix_transactions_user_id` 时 batch 会报 `no such column: user_id`）。它不需要任何外部服务，所以进默认回路，`pytest -m "not postgres"` 也会跑到。
 
 必须覆盖的用例（全部 `@pytest.mark.postgres`）：
 
@@ -1408,8 +1416,35 @@ fixture 思路（`backend/tests/conftest.py`，两个 fixture）：
 | 有数据的库升级 | 先在 head `8a4f4d66d893` 上灌入：2 个用户、每人 2 个账户、若干交易（含一对正确的转账、一对同号的错误转账、一条 `amount = 0`、一条 `source_id` 指向已删账户的孤儿行）、若干 `transaction_tags`；升级后断言：每人恰好一本账本且是 owner、`finance_sources.ledger_id` / `transactions.ledger_id` 全部非空且一致、`kind` 回填正确、同号 pair 被打散成单腿、零金额行被删、`transaction_tags` 不存在 |
 | schema 与模型一致 | 升级后用 `alembic revision --autogenerate` 的比较 API（`compare_metadata`）断言 diff 为空——防止迁移与模型漂移，这是现状最大的隐患（现状模型改过而没有对应迁移，`../current-design/02-database.md` §6）。迁移第 1 步和模型都必须有 `exchange_rates`（决策 §14.1），少一边这条断言就会失败 |
 | 约束真的生效 | 逐条插入违反 §1.7.1 八个约束的行，断言 `IntegrityError`；插入合法行断言成功 |
-| 索引被正确 drop | 在 head `8a4f4d66d893` 上灌数据后升级，断言 `ix_transactions_user_id`、`ix_accounts_user_id`、`ix_transactions_account_id`、`idx_transactions_transfer_pair` 都已不在 `pg_indexes` 里（对应 §5.3 / §5.4 那几段 `DROP INDEX IF EXISTS`）。同一组断言在 SQLite 上跑一遍更关键——batch 重建路径正是在这里会报 `no such column: user_id` |
+| 索引被正确 drop（Postgres） | 在 head `8a4f4d66d893` 上灌数据后升级，断言 `ix_transactions_user_id`、`ix_accounts_user_id`、`ix_transactions_account_id`、`idx_transactions_transfer_pair` 都已不在 `SELECT indexname FROM pg_indexes WHERE tablename IN ('transactions','finance_sources')` 的结果里（对应 §5.3 / §5.4 那几段 `DROP INDEX IF EXISTS`） |
 | `exchange_rates` 可用 | 升级后 upsert 同一 `(date, base, symbol)` 两次，断言只有一行且 `rate` / `fetched_at` 被刷新；插入 `rate = 0` 或 `base = symbol` 断言 `IntegrityError`（决策 §14.1、§1.10）|
+
+另有一条**不带** `@pytest.mark.postgres` 的用例，跑在上面的 `sqlite_migrated_db` 上——`pg_indexes` 在 SQLite 上不存在，所以断言换一套写法，但要盯的是同一件事（§5.3 那几段 `DROP INDEX IF EXISTS` 少一条，batch 重建就会失败）：
+
+```python
+@pytest.fixture()
+def sqlite_migrated_db(tmp_path):
+    url = f"sqlite:///{tmp_path}/mig.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(MIGRATIONS_DIR))   # backend/migrations
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "head")        # 光是这一句不抛异常就已经有价值
+    yield url
+
+
+def test_upgrade_head_on_sqlite_drops_legacy_indexes(sqlite_migrated_db):
+    engine = create_engine(sqlite_migrated_db)
+    with engine.connect() as conn:
+        tx_indexes = {row[1] for row in conn.exec_driver_sql(
+            "PRAGMA index_list('transactions')")}
+        all_indexes = {row[0] for row in conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='index'")}
+    assert "ix_transactions_user_id" not in tx_indexes
+    assert "ix_transactions_user_id" not in all_indexes
+    assert "ix_finance_sources_user_id" not in all_indexes
+```
+
+（`PRAGMA index_list` 只看单表，`sqlite_master` 兜住"索引跟着 batch 重建换了张表"的情况，两个都查一遍。空库跑 `upgrade head` 覆盖不到回填分支，但覆盖得到本文最想拦的那类回归：batch 重建时撞上一个没被 drop 掉的旧索引。）
 
 CI 里用一个 `postgres:15-alpine` service 提供 `TEST_POSTGRES_URL`；本地开发用 `infra/docker-compose.dev.yml` 已有的 db 容器（它把 5432 发布到宿主机）。没有该环境变量时这些测试自动 skip，`pytest -m "not postgres"` 保持纯 SQLite 的快速回路。
 
@@ -1417,7 +1452,7 @@ CI 里用一个 `postgres:15-alpine` service 提供 `TEST_POSTGRES_URL`；本地
 
 ## 待决
 
-以下问题在 [`00-decisions.md`](./00-decisions.md) 里没有覆盖，本文按"建议默认值"书写但**未拍板**，需要在决策记录里补一条后再定稿。
+以下问题原本在 [`00-decisions.md`](./00-decisions.md) 里没有覆盖；带删除线的条目已被决策 §14 裁定，保留一行只作记录，其余各条本文按"建议默认值"书写但**未拍板**，需要在决策记录里补一条后再定稿。
 
 | # | 问题 | 建议默认值 |
 |---|---|---|
@@ -1428,7 +1463,7 @@ CI 里用一个 `postgres:15-alpine` service 提供 `TEST_POSTGRES_URL`；本地
 | D-5 | 同一账本内账户是否允许重名 | 允许（不加唯一约束），创建时若同名则在响应里带一个 warning 由前端提示。加 `UNIQUE (ledger_id, lower(name))` 会让"招商银行"这类同名不同卡号的场景很别扭 |
 | D-6 | 已用 / 已过期邀请码何时删 | §6.3 的双保险：生成新码前惰性清理本账本的，外加每日一次全表清理 |
 | D-7 | "每人 ≤10 本账、每本 ≤10 人"是否需要数据库约束 | 只做应用层 `COUNT(*)` 校验。数据库侧要做需要触发器，代价与收益不匹配 |
-| D-8 | 视觉解析路径的页面缩略图存哪里 | 不入库：解析时把页面 PNG 落在批次的临时目录，批次删除时一并清理，`import_rows.source_ref` 记页码即可。具体由 [`05-import-and-llm.md`](./05-import-and-llm.md) 定 |
+| D-8 | ~~视觉解析路径的页面缩略图存哪里~~ | **已由决策 §14.12 裁定**：不入库，页面 PNG 落在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`，批次删除时连同目录删掉（§6.6）；页码记在新增列 `import_rows.page_no` 而不是 `source_ref`（§1.9），图片经 [`03-backend-api.md`](./03-backend-api.md) §5.46 的鉴权接口取。本行只作记录 |
 | D-9 | 迁移第 3/4 步对回填不出 `ledger_id` 的行、以及 `amount = 0` 的历史行采取删除 | 保持删除（现状只有测试数据，决策 §13 允许粗回填）；本文已把 `delete_and_warn`（§5.0）写进两步，删前先计数打 warning。若上线前认为不能容忍任何静默删除，可把 warning 改成 `raise RuntimeError` 让迁移中止 |
 
 ---

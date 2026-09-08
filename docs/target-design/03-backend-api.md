@@ -14,7 +14,7 @@
 
 ## 0. 与现状的差异总览
 
-现状一共 20 条注册路由（`backend/app/main.py:27-30` 挂了四个路由器）。目标是 48 条业务路由，其中 7 条原样保留、4 条改语义保留、9 条改前缀、28 条新增，另删除标签相关的全部行为。
+现状一共 20 条注册路由（`backend/app/main.py:27-30` 挂了四个路由器）。目标是 49 条业务路由，其中 7 条原样保留、4 条改语义保留、9 条改前缀、29 条新增，另删除标签相关的全部行为。
 
 | # | 现状端点 | 目标端点 | 变化 | 说明 |
 |---|---|---|---|---|
@@ -63,9 +63,10 @@
 | 43 | — | `PATCH /api/v1/ledgers/{id}/imports/{bid}/rows/{rid}` | 新增 | 改草稿行 |
 | 44 | — | `POST /api/v1/ledgers/{id}/imports/{bid}/commit` | 新增 | 单事务建全部交易 |
 | 45 | — | `DELETE /api/v1/ledgers/{id}/imports/{bid}` | 新增 | ready/failed = 丢弃；committed = 撤销 |
-| 46 | `GET /api/v1/rates/currencies` | `GET /api/v1/rates/currencies` | 保留 | |
-| 47 | `GET /api/v1/rates/latest` | `GET /api/v1/rates/latest` | 保留 + 修正 | `date` 改为上游汇率日期而不是服务器日期 |
-| 48 | `POST /api/v1/rates/convert` | `POST /api/v1/rates/convert` | 保留 + 修正 | 只发一次上游请求；`date` 同上 |
+| 46 | — | `GET /api/v1/ledgers/{id}/imports/{bid}/pages/{page_no}` | 新增 | 视觉路径的页面缩略图，返回 `image/png`（决策 §14.12） |
+| 47 | `GET /api/v1/rates/currencies` | `GET /api/v1/rates/currencies` | 保留 | |
+| 48 | `GET /api/v1/rates/latest` | `GET /api/v1/rates/latest` | 保留 + 修正 | `date` 改为上游汇率日期而不是服务器日期 |
+| 49 | `POST /api/v1/rates/convert` | `POST /api/v1/rates/convert` | 保留 + 修正 | 只发一次上游请求；`date` 同上 |
 | — | `?tag=` 筛选、请求/响应里的 `tags` 字段 | **删除** | 删除 | `transaction_tags` 表与标签输入框全部移除（决策 §1.3） |
 
 除路由外的行为差异（都在后面章节展开）：
@@ -108,7 +109,7 @@ backend/
       finance_sources.py [重写] /ledgers/{id}/sources（改为账本前缀，带余额）
       transactions.py  [重写]  /ledgers/{id}/transactions + /transactions/transfer
       stats.py         [新]    /ledgers/{id}/stats/summary、/trend
-      imports.py       [新]    /ledgers/{id}/imports 全组
+      imports.py       [新]    /ledgers/{id}/imports 全组（含 .../pages/{page_no} 页面图，唯一返回 image/png 的路由）
       rates.py                 /rates/currencies、/rates/latest、/rates/convert（保留）
     schemas/
       common.py        [新]    Page[T]、ErrorBody、OptimisticBase
@@ -564,6 +565,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 | `batch_not_failed` | 409 | 对非 `failed` 批次调 retry |
 | `rows_uncategorized` | 409 | commit 时仍有行缺一级分类 |
 | `rows_all_skipped` | 409 | commit 时所有行都被标 `skipped`，一条交易也建不出来（[`./05-import-and-llm.md`](./05-import-and-llm.md) §9.1） |
+| `import_interrupted` | 500 | 服务重启时把仍为 `parsing` 的批次标 `failed`（§7.4、决策 §14.14）；不是某个请求的响应 code，只写进 `import_batches.error_code`，前端在批次详情里按它查文案 |
 | `llm_not_configured` | 409 | 当前用户没有可用的 LLM 设置 |
 | `llm_error` | 502 | LLM 端点返回错误、超时、或输出不是合法 JSON |
 | `fx_unavailable` | 503 | 汇率上游不可用且缓存里也没有可用值 |
@@ -675,6 +677,7 @@ POST /api/v1/auth/register
 |---|---|---|
 | 403 | `registration_closed` | `REGISTRATION_OPEN=false` |
 | 409 | `email_exists` | 邮箱已注册（先查一次，并捕获唯一索引 `IntegrityError` 兜底并发） |
+| 429 | `register_rate_limited` | 同 IP 每小时注册超过 5 次（§8.2） |
 
 副作用（一个事务）：`INSERT users` → `INSERT ledgers`（名字 `我的账本`、`base_currency` = 用户填的币种、`created_by` = 该用户）→ `INSERT ledger_members`（role=`owner`）。返回令牌，前端随后调 `GET /me`。不建任何默认账户（用户自己去建）。
 
@@ -897,6 +900,7 @@ POST /api/v1/me/llm-settings/test
 | 状态码 | code | 条件 |
 |---|---|---|
 | 409 | `llm_not_configured` | 请求体没给 `api_key`，库里也没有 |
+| 429 | `llm_test_rate_limited` | 每用户每分钟超过 6 次（§8.2） |
 
 副作用：不写库；对用户配置的 base_url 发起 1–2 次出站 HTTPS 请求。此端点单独限流：每用户每分钟 6 次（§8）。
 
@@ -983,7 +987,7 @@ GET /api/v1/ledgers
 
 | 字段 | 类型 | 必填 | 校验 |
 |---|---|---|---|
-| `name` | str | 是 | 1..60 字符，`strip()` 后非空 |
+| `name` | str | 是 | 1..100 字符，`strip()` 后非空（决策 §14.13，与账户名一致；`ledgers.name` 是 `VARCHAR(100)`） |
 | `base_currency` | str | 否 | `^[A-Za-z]{3}$`；省略则用 `users.base_currency`；必须在支持列表内 |
 
 ```json
@@ -1026,7 +1030,7 @@ GET /api/v1/ledgers/8f0f7b2e-2a20-4c39-9c0f-2a9d5a1b6c31
 | 字段 | 类型 | 必填 | 校验 |
 |---|---|---|---|
 | `updated_at` | datetime | 是 | 版本戳 |
-| `name` | str | 否 | 1..60 |
+| `name` | str | 否 | 1..100（决策 §14.13） |
 | `base_currency` | str | 否 | `^[A-Za-z]{3}$`，必须在支持列表内 |
 
 ```json
@@ -1538,6 +1542,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions?kind=expense&kind=refund&from=2026
 | 404 | `not_found` | 账本不可见；或 `source_id` 里有不属于本账本的 id |
 | 400 | `category_invalid` | `category_l1` / `category_l2` 不合法或不匹配 |
 | 422 | `validation_error` | 日期格式错、`limit` 越界、`min_amount > max_amount` 等（现状把日期格式错报成 400，目标统一为 422） |
+
+**退款原单选择器复用这个端点**（决策 §14.11）：记账表单和导入 review 表格里的"关联原单"选择器都直接调 `GET /ledgers/{id}/transactions`，带 `?kind=expense&source_id=…&from=<90 天前>&q=<用户输入>`，用响应里 expense 行自带的 `refunded_total` / `refundable` 显示"已退 / 可退"。**不另设 `refund-candidates` 接口**——候选就是一次普通的交易查询，多一个端点只会多一份要维护的筛选逻辑。
 
 副作用：只读。查询次数固定：1 条 count、1 条分页查询、1 条退款汇总、1 次批量汇率（`fx.convert_many`，§6.3），与页大小无关。
 
@@ -2118,6 +2124,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
   "error": null,
   "model": "google/gemini-2.5-flash",
   "used_vision": false,
+  "pages": [],
   "flags_summary": {"duplicate": 0, "refund_candidate": 0, "repayment": 0,
                     "needs_review": 0, "merged_duplicates": 0},
   "row_status_summary": {"pending": 84, "edited": 0, "skipped": 0},
@@ -2131,15 +2138,30 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
 
 `progress` 的定义（决策 §5"文本按约 150 行分块调用 LLM"）：`total` = 分块总数（图片路径下是页数），`done` = 已经成功解析并落库的块数。`total` 在抽取完成前是 `null`，前端显示不确定进度条。
 
+`pages` 只在 `used_vision = true`（走了视觉路径）时非空，其余情况一律是空数组 `[]`（决策 §14.12）：
+
+```json
+{
+  "used_vision": true,
+  "pages": [
+    {"page_no": 1, "image_url": "/api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/1"},
+    {"page_no": 2, "image_url": "/api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/2"}
+  ]
+}
+```
+
+`image_url` 是本站的相对路径，指向 §5.46 那个带鉴权的端点（图片不放在任何可匿名访问的静态目录下）；`page_no` 与草稿行的 `page_no`（§5.42）是同一个编号，review 界面据此把行和页面缩略图对上。
+
 失败态：
 
 ```json
 -> 200
 {"id": "d1e2f3a4-...", "status": "failed", "progress": {"done": 1, "total": 3},
- "row_count": 0, "error": "llm_error: upstream returned 429 after 1 chunk", …}
+ "row_count": 0,
+ "error": {"code": "llm_error", "message": "upstream returned 429 after 1 chunk"}, …}
 ```
 
-`error` 是给人看的一句话，前缀是 §4.2 里的 code，方便前端决定是否显示"重试"按钮。
+`error` 是一个对象而不是字符串（决策 §14.15）：`code` 取自 `import_batches.error_code`，一定是 §4.2 注册表里登记过的名字（`llm_error` / `unsupported_file` / `rows_exceed_limit` / `import_interrupted` / `internal_error` …），前端按它查 [`./04-frontend.md`](./04-frontend.md) §3.7 的文案表并决定要不要显示"重试"按钮；`message` 取自 `error_message`，是脱敏截断后（§9.2）给人看的一句原文。数据库里的第三列 `error_chunk`（失败块序号，[`./02-database.md`](./02-database.md) §1.8）**不出现在响应里**，它只用于服务端日志和重试定位（决策 §14.15）。批次没失败时 `error` 是 `null`，不是 `{"code": null, …}`。
 
 状态机（决策 §5）：
 
@@ -2190,7 +2212,7 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../retry
 | 429 | `import_rate_limited` | retry 与上传共用同一个限流桶 |
 | 415 | `unsupported_file` | 原文件已从磁盘丢失或损坏 |
 
-副作用（一个事务）：`DELETE import_rows WHERE batch_id = :bid`（上次跑了一半留下的草稿行全清），批次置 `parsing`、`error=NULL`、`progress` 归零，然后注册后台任务。用的是**当前操作者**的 LLM 设置和当时保存的原始文件，不需要重新上传。
+副作用（一个事务）：`DELETE import_rows WHERE batch_id = :bid`（上次跑了一半留下的草稿行全清），批次置 `parsing`、把 `error_code` / `error_message` / `error_chunk` 三列**一并置 NULL**（上次失败的痕迹要清干净，否则重试成功后响应里还带着旧错误）、`progress` 归零（`chunk_done = 0`、`chunk_total = NULL`），然后注册后台任务。响应里的 `error` 字段是由 `error_code` / `error_message` 两列拼出来的（§5.40），所以三列清空后它就是 `null`。用的是**当前操作者**的 LLM 设置和当时保存的原始文件，不需要重新上传。
 
 ### 5.42 `GET /api/v1/ledgers/{id}/imports/{bid}/rows`
 
@@ -2225,9 +2247,11 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
       "category_l2": "snacks_drinks",
       "confidence": 0.86,
       "source_ref": "p1:l14",
+      "page_no": null,
       "flags": [],
       "matched_transaction_id": null,
       "counterpart_source_id": null,
+      "counterparty": null,
       "transfer_role": null,
       "transfer_subtype": null,
       "hint": null,
@@ -2248,9 +2272,11 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
       "category_l2": null,
       "confidence": 0.91,
       "source_ref": "p1:l22",
+      "page_no": null,
       "flags": ["repayment"],
       "matched_transaction_id": null,
       "counterpart_source_id": "34fa63d8-5776-4775-982b-4d58deb0ace9",
+      "counterparty": null,
       "transfer_role": "in",
       "transfer_subtype": "repayment",
       "hint": "请确认这笔还款是从哪个账户转出的",
@@ -2260,6 +2286,15 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
   "total": 128
 }
 ```
+
+（这一批是文本路径解析的，所以两行的 `page_no` 都是 `null`；视觉路径下它们会是 `1` / `2` 这样的页码。）
+
+两个字段值得单独说明：
+
+| 字段 | 何时有值 | 说明 |
+|---|---|---|
+| `counterparty` | 单腿转账行上可能有值，其余行一般为 `null` | 对手方的自由文本（例如 `"老婆"`、`"工资卡"`），决策 §14.10 新增。上面两行的示例里都是 `null`：第二行的对手账户已经被猜成本账本里的一个账户（`counterpart_source_id`），不需要文本。LLM 从摘要里抽到就填，用户可在 review 里改（§5.43，≤100 字）；提交时原样写进 `transactions.counterparty`（§5.44）。它与 `counterpart_source_id` 是两件事：后者是"对手账户也在本应用里"，两者同时有值时以 `counterpart_source_id` 为准建两腿转账，`counterparty` 不写入 |
+| `page_no` | 仅 `used_vision = true` 的批次；文本路径一律 `null` | 这一行来自原件的第几页（1 起，决策 §14.12），与 §5.40 的 `pages[].page_no` 同一个编号。review 表格用它把当前行和 §5.46 取回来的页面缩略图对上；它是**只读**的，不在 §5.43 的可改字段里 |
 
 `flags` 的含义（决策 §5，服务端在批次进入 `ready` 时自动打）：
 
@@ -2294,8 +2329,11 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 | `category_l2` | str \| null | 属于 `category_l1` |
 | `matched_transaction_id` | UUID \| null | 只在 `kind='refund'` 时允许非 null；校验同 §5.29 的 `refund_of` |
 | `counterpart_source_id` | UUID \| null | 只在 `kind='transfer'` 时允许非 null；必须属于本账本、未归档、不等于批次的 `source_id` |
+| `counterparty` | str \| null | ≤ 100 字，`strip()` 后空串按 `null` 存（决策 §14.10）。只在 `kind='transfer'` 时有意义；给了 `counterpart_source_id` 时它会被忽略（提交时建的是两腿转账，§5.44） |
 | `transfer_role` | str \| null | `out` \| `in`；`kind='transfer'` 时必须非 null（决定这一腿的方向与金额符号） |
 | `transfer_subtype` | str \| null | `plain` \| `repayment`；`kind='transfer'` 时必须非 null |
+
+`page_no`、`source_ref`、`confidence`、`flags`、`transaction_id` 都是**只读**的，不在上表里：前三个是解析过程的产物，改了没有意义；`page_no` 改了还会让行和页面缩略图（§5.46）对不上。
 
 `hint` 是服务端写给 review 界面的一句提示（例如「请确认这笔还款是从哪个账户转出的」），**只读**，不在可改字段里，也不会进 `transactions.note`（[`./05-import-and-llm.md`](./05-import-and-llm.md) §0.2、[`./02-database.md`](./02-database.md) §1.9）。
 
@@ -2309,9 +2347,9 @@ PATCH /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows/e5f6a7b8-...
 {"id": "e5f6a7b8-...", "batch_id": "d1e2f3a4-...", "row_no": 1, "status": "edited",
  "date": "2026-08-03", "amount": "-128.5000", "currency": "CNY", "kind": "expense",
  "merchant": "全家", "note": "FAMILYMART 3521", "category_l1": "food", "category_l2": "lunch",
- "confidence": 0.86, "source_ref": "p1:l14", "flags": [], "matched_transaction_id": null,
- "counterpart_source_id": null, "transfer_role": null, "transfer_subtype": null,
- "hint": null, "transaction_id": null}
+ "confidence": 0.86, "source_ref": "p1:l14", "page_no": null, "flags": [],
+ "matched_transaction_id": null, "counterpart_source_id": null, "counterparty": null,
+ "transfer_role": null, "transfer_subtype": null, "hint": null, "transaction_id": null}
 ```
 
 标记跳过：
@@ -2377,13 +2415,16 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../commit
    b. kind != 'transfer' 时 category_l1 非空                  -> 409 rows_uncategorized
       （决策 §1.3："提交前必须补一级分类"；detail 里给出还差几行）
    c. 符号 / 分类 / refund 目标 / 对手账户，规则同 §5.29        -> 400 对应 code
-4. 全部通过后开事务
+4. 至少有一条非 skipped 的行                                  -> 409 rows_all_skipped
+   （整批都被标 skipped 时一条交易也建不出来，与其建一个空批次
+     不如直接拒绝并提示用户改回来或丢弃这批，见 05 §9.1）
+5. 全部通过后开事务
 ```
 
 事务里的写入：
 
 - `kind` 为 `expense` / `income` / `refund` 的行 → 一条 `transactions`，`source_id` = 批次的目标账户，`import_batch_id` = 批次 id，`created_by` / `updated_by` = 当前用户，`refund_of` = 行的 `matched_transaction_id`。
-- `kind='transfer'` 且 `counterpart_source_id` 为空 → 一条单腿转账（`transfer_pair_id` 为 NULL）。
+- `kind='transfer'` 且 `counterpart_source_id` 为空 → 一条单腿转账（`transfer_pair_id` 为 NULL），行的 `counterparty` 文本原样写进 `transactions.counterparty`（决策 §14.10）。
 - `kind='transfer'` 且 `counterpart_source_id` 非空 → **两腿**：生成一个 `pair_id`，目标账户那一腿按行的金额符号定 role，对手账户那一腿金额取反、币种相同，两腿都带 `transfer_subtype`（通常是 `repayment`）和同一个 `import_batch_id`（决策 §5"两腿还款一起建"）。
 - 每写一条就把 `import_rows.transaction_id` 回填（两腿的行回填目标账户那一腿的 id）。
 - 最后 `UPDATE import_batches SET status='committed', committed_at=now()`。
@@ -2398,6 +2439,7 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../commit
 | 409 | `batch_not_ready` | 批次不是 `ready`；或有行缺 date / amount / currency / kind |
 | 409 | `batch_already_committed` | 重复提交 |
 | 409 | `rows_uncategorized` | 有非 transfer 行缺 `category_l1` |
+| 409 | `rows_all_skipped` | 所有行都被标 `skipped`，一条交易也建不出来 |
 | 409 | `source_archived` | 目标账户或对手账户在解析后被归档了 |
 | 400 | `category_invalid` / `category_kind_mismatch` / `refund_target_invalid` / `validation_error` | 行内容非法（正常情况下 §5.43 已经拦住了，这里是最后一道） |
 
@@ -2409,8 +2451,8 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../commit
 
 | 批次状态 | 语义 | 做什么 |
 |---|---|---|
-| `ready` / `failed` / `uploaded` | **丢弃** | 删 `import_rows` → 删 `import_batches` → 删磁盘上的原文件。没有任何交易被建过，所以没有别的影响 |
-| `committed` | **撤销** | 先 `DELETE FROM transactions WHERE import_batch_id = :bid`（决策 §5"删除这批建的所有交易，不限时限"），再删草稿行、批次、文件 |
+| `ready` / `failed` / `uploaded` | **丢弃** | 删 `import_rows` → 删 `import_batches` → 删磁盘上这批的整个目录 `UPLOAD_DIR/{ledger_id}/{batch_id}/`（原文件 + 视觉路径渲染出的 `pages/*.png`，决策 §14.12）。没有任何交易被建过，所以没有别的影响 |
+| `committed` | **撤销** | 先 `DELETE FROM transactions WHERE import_batch_id = :bid`（决策 §5"删除这批建的所有交易，不限时限"），再删草稿行、批次，最后同样删掉整个 `UPLOAD_DIR/{ledger_id}/{batch_id}/` 目录 |
 | `parsing` | 拒绝 | 409 `import_in_progress`，请等它跑完或失败 |
 
 调用方必须先带 `?dry_run=true` 问一次要删多少条，界面上确认后再真删（决策 §5"撤销前确认并显示条数"）：
@@ -2444,7 +2486,40 @@ DELETE /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-...
 
 副作用：见上表。撤销时如果这批建的某条 expense 被后来手工记的 refund 引用着，`refund_of` 会被数据库置 NULL（决策 §1.1），退款行保留——**这一点要在确认弹窗里告诉用户**（`dry_run` 响应里可以另外给 `orphaned_refunds` 计数，属于前端体验细节，见文末的 `## 待决`）。
 
-### 5.46 `GET /api/v1/rates/currencies`
+### 5.46 `GET /api/v1/ledgers/{id}/imports/{bid}/pages/{page_no}`
+
+鉴权：成员（`get_ledger_member`）。决策 §14.12。
+
+视觉路径解析时渲染出来的页面图存在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`，**不入库、也不挂在任何可匿名访问的静态目录下**，只能通过这个端点取。它是 review 界面"左边一行草稿、右边一张原件页面"的图源：§5.40 的 `pages[].image_url` 指向的就是它，草稿行上的 `page_no`（§5.42）与这里的路径参数是同一个编号。
+
+路径参数：`page_no` 是 ≥ 1 的整数（`page_no: int = Path(ge=1)`）。没有 query 参数、没有请求体。
+
+```text
+GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/2
+Authorization: Bearer eyJ...
+
+-> 200
+Content-Type: image/png
+Cache-Control: private, max-age=3600
+Content-Length: 240118
+
+<PNG 字节流>
+```
+
+实现就是一行 `FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})`。`private` 是因为响应体是用户的账单内容，任何共享缓存都不该留下它；一小时足够看完一次 review，批次被删（§5.45）之后旧 URL 直接 404。这是全部 49 条路由里**唯一**成功响应不是 JSON 的一条；出错时仍然返回 §4.1 的标准错误体（`{"detail": …, "code": …}`，`Content-Type: application/json`）。
+
+错误：
+
+| 状态码 | code | 条件 |
+|---|---|---|
+| 404 | `not_found` | 账本或批次不可见；批次 `used_vision = false`（这批根本没有页面图）；`page_no` 超出这批的页数（越界判断用 `import_batches.chunk_total`，视觉路径下它就是页数，§5.40）；或文件在磁盘上已丢失 |
+| 422 | `validation_error` | `page_no` 不是 ≥ 1 的整数 |
+
+四种 404 的响应完全一样，不区分"没有这个批次"和"没有这一页"（§3.3 的不泄露原则）。
+
+副作用：只读。一次查库（成员校验 + 批次行，拿 `used_vision` / `chunk_total`）+ 一次磁盘读取，不调 LLM、不调汇率。文件路径由 `UPLOAD_DIR` 与三段已校验过的值（两个 UUID + 一个整数）拼出，用户提供的字符串不参与拼接（§9.3）。
+
+### 5.47 `GET /api/v1/rates/currencies`
 
 鉴权：无（保留现状）。
 
@@ -2462,7 +2537,7 @@ GET /api/v1/rates/currencies
 
 副作用：进程生命周期内最多一次上游 `GET {EXCHANGE_RATE_API_URL}/currencies`。
 
-### 5.47 `GET /api/v1/rates/latest`
+### 5.48 `GET /api/v1/rates/latest`
 
 鉴权：无（保留现状）。
 
@@ -2488,7 +2563,7 @@ GET /api/v1/rates/latest?base=usd&symbols=eur,%20cny
 
 副作用：0 或 1 次上游调用（缓存命中则 0 次）；命中未命中都可能 `INSERT exchange_rates`。
 
-### 5.48 `POST /api/v1/rates/convert`
+### 5.49 `POST /api/v1/rates/convert`
 
 鉴权：无（保留现状）。
 
@@ -2549,7 +2624,7 @@ exchange_rates(
 )
 ```
 
-列名用 `symbol` 是为了和现有 `/rates/latest?symbols=` 参数（§5.47）同源；本文与 [`./01-domain-and-flows.md`](./01-domain-and-flows.md) §1.13 用同一套列名（决策 §14.1）。换算时缺哪一天就向 Frankfurter 取哪一天并落库；"最新汇率" = 最近一个已公布日的行，同一 `(base, symbol)` 一小时内不重复请求。
+列名用 `symbol` 是为了和现有 `/rates/latest?symbols=` 参数（§5.48）同源；本文与 [`./01-domain-and-flows.md`](./01-domain-and-flows.md) §1.13 用同一套列名（决策 §14.1）。换算时缺哪一天就向 Frankfurter 取哪一天并落库；"最新汇率" = 最近一个已公布日的行，同一 `(base, symbol)` 一小时内不重复请求。
 
 顺带修掉的两个现状问题：`tenacity` 的重试装饰器（`backend/app/services/rates.py:18-23` 和 `:56-61`）因为异常在函数内部就被换成了 `HTTPException` 而从未生效（`../current-design/06-known-issues.md` M-04）——新实现里 HTTP 客户端只负责抛 `httpx` 异常，转换成 `ApiError` 的动作放在调用层，重试才会真的发生；`EXCHANGE_RATE_API_URL` 的默认值也改成 `https://api.frankfurter.dev/v1`（H-03）。
 
@@ -2716,7 +2791,8 @@ async def lifespan(app: FastAPI):
             update(ImportBatch)
             .where(ImportBatch.status == "parsing")
             .values(status="failed",
-                    error="interrupted: server restarted while parsing",
+                    error_code="import_interrupted",
+                    error_message="server restarted while parsing",
                     updated_at=func.now())
         ).rowcount
         db.commit()
@@ -2729,7 +2805,7 @@ app = FastAPI(..., lifespan=lifespan)
 
 必须在 `alembic upgrade head` 之后运行（生产里 `migrate` 服务先跑完 `api` 才起，`infra/docker-compose.prod.yml` 的 `depends_on`），否则表可能还不存在——所以这段代码要能容忍"表不存在"并只记一条警告。
 
-用户看到的是批次变成 `failed` 且 `error` 说明了原因，点"重试"（§5.41）即可，原文件还在磁盘上。
+`import_interrupted` 是 §4.2 注册表里登记的 code（决策 §14.14），不是临时拼的字符串——它写进 `import_batches.error_code`，`error_message` 写那句给人看的原文，`error_chunk` 保持原样（重启时不知道跑到第几块就不改它）。用户在 §5.40 的响应里看到 `error: {"code": "import_interrupted", "message": "server restarted while parsing"}`，前端按 code 查 [`./04-frontend.md`](./04-frontend.md) §3.7 的文案表显示中文/英文说明，点"重试"（§5.41）即可，原文件还在磁盘上。
 
 ### 7.5 时序图
 
@@ -2814,9 +2890,9 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 
 - **大小**：`MAX_UPLOAD_MB`（10）。不要等读完再判断——边写盘边累加字节数，超过就中断、删临时文件、返回 413 `file_too_large`。Caddy 侧也应该配 `request_body max_size 12MB`（现状没配任何限制，`../current-design/06-known-issues.md` M-10），让超大请求在反代就被挡掉。
 - **类型**：读前 4 KB 做魔数嗅探，不信任客户端的 `Content-Type` 和扩展名。白名单：`%PDF-` → pdf；`PK\x03\x04` 且解开后含 `xl/workbook.xml` → xlsx；`\xff\xd8\xff` → jpeg；`\x89PNG\r\n\x1a\n` → png；其余尝试按 UTF-8 / GBK 解码并检测分隔符 → csv。都不匹配 → 415 `unsupported_file`。
-- **路径**：落盘文件名**完全由服务端生成**（`UPLOAD_DIR/<ledger_id>/<batch_id>.<白名单里的扩展名>`），用户提供的 `filename` 只存进数据库列用于展示，绝不参与路径拼接（防目录穿越）。存前对它做长度截断（200 字符）和控制字符过滤。
+- **路径**：落盘文件名**完全由服务端生成**（`UPLOAD_DIR/<ledger_id>/<batch_id>.<白名单里的扩展名>`），用户提供的 `filename` 只存进数据库列用于展示，绝不参与路径拼接（防目录穿越）。存前对它做长度截断（200 字符）和控制字符过滤。视觉路径的页面图同理：`UPLOAD_DIR/<ledger_id>/<batch_id>/pages/<page_no>.png` 三段全部是服务端已经校验过的值（两个 UUID + 一个 `int`，§5.46 的 `page_no: int = Path(ge=1)`），路径里没有任何一段来自用户提交的字符串，所以 §5.46 不需要额外做路径归一化或 `realpath` 比对。
 - **权限**：`UPLOAD_DIR` 目录 0700，文件 0600，属主是容器里的 `appuser`。
-- **清理**：批次被删（§5.45）时同步删文件；另有一个每次启动时跑的清理，删掉 `UPLOAD_DIR` 下没有对应批次行的孤儿文件。
+- **清理**：批次被删（§5.45）时同步删掉这批的整个目录（原文件与 `pages/` 下的页面图，决策 §14.12）；另有一个每次启动时跑的清理，删掉 `UPLOAD_DIR` 下没有对应批次行的孤儿文件与孤儿目录。
 - **不做**：不解压嵌套压缩包、不跟随 PDF 里的外部引用、渲染 PDF 页面时不执行 JavaScript。
 
 ### 9.4 提示注入防御
