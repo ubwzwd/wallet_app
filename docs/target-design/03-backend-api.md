@@ -2088,7 +2088,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports?status=ready&status=failed
 -> 200
 {
   "items": [
-    {"id": "d1e2f3a4-...", "source_id": "5b6c7d8e-...", "filename": "2026-08-cmb-credit.pdf",
+    {"id": "d1e2f3a4-...", "ledger_id": "8f0f7b2e-...", "source_id": "5b6c7d8e-...",
+     "filename": "2026-08-cmb-credit.pdf",
      "mime_type": "application/pdf", "size_bytes": 184320, "status": "ready",
      "progress": {"done": 3, "total": 3}, "row_count": 128, "error": null,
      "model": "google/gemini-2.5-flash", "created_by": "4ee1c8fa-...",
@@ -2136,7 +2137,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
 }
 ```
 
-`progress` 的定义（决策 §5"文本按约 150 行分块调用 LLM"）：`total` = 分块总数（图片路径下是页数），`done` = 已经成功解析并落库的块数。`total` 在抽取完成前是 `null`，前端显示不确定进度条。
+`progress` 的定义（决策 §5"文本按约 150 行分块调用 LLM"）：`total` = 分块总数（图片路径下是页数或半页数——密表格页会被切成上下半页各算一块，见 [`./05-import-and-llm.md`](./05-import-and-llm.md) §2.5、§10.3，所以它 ≥ 真实页数），`done` = 已经成功解析并落库的块数。`total` 在抽取完成前是 `null`，前端显示不确定进度条。
 
 `pages` 只在 `used_vision = true`（走了视觉路径）时非空，其余情况一律是空数组 `[]`（决策 §14.12）：
 
@@ -2512,10 +2513,10 @@ Content-Length: 240118
 
 | 状态码 | code | 条件 |
 |---|---|---|
-| 404 | `not_found` | 账本或批次不可见；批次 `used_vision = false`（这批根本没有页面图）；`page_no` 在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/` 下没有对应的 `{page_no}.png`（越界判断就是这张图在不在，与 §5.40 的 `pages` 同源；**不要拿 `import_batches.chunk_total` 当上界**——决策 §14.9 的图片对半切与 [`./05-import-and-llm.md`](./05-import-and-llm.md) §2.5 的密表格半页切分都会让 `chunk_total` 大于真实页数，见 §14.17）；或文件在磁盘上已丢失 |
+| 404 | `not_found` | 账本或批次不可见；批次 `used_vision = false`（这批根本没有页面图）；`page_no` 在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/` 下没有对应的 `{page_no}.png`（越界判断就是这张图在不在，与 §5.40 的 `pages` 同源；**不要拿 `import_batches.chunk_total` 当上界**——决策 §14.9 的图片对半切与 [`./05-import-and-llm.md`](./05-import-and-llm.md) §2.5 的密表格半页切分都会让 `chunk_total` 大于真实页数，见决策 §14.17） |
 | 422 | `validation_error` | `page_no` 不是 ≥ 1 的整数 |
 
-四种 404 的响应完全一样，不区分"没有这个批次"和"没有这一页"（§3.3 的不泄露原则）。
+三种 404 的响应完全一样，不区分"没有这个批次"和"没有这一页"（§3.3 的不泄露原则）。
 
 副作用：只读。一次查库（成员校验 + 批次行，拿 `used_vision`）+ 一次磁盘读取，不调 LLM、不调汇率。文件路径由 `UPLOAD_DIR` 与三段已校验过的值（两个 UUID + 一个整数）拼出，用户提供的字符串不参与拼接（§9.3）。
 
