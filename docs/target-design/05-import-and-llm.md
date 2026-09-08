@@ -5,6 +5,10 @@
 > **本文是目标设计，不是现状。** 仓库里**目前没有任何导入或 LLM 相关代码**：`backend/app` 下只有 `api/`（auth、rates、finance_sources、transactions）、`core/`、`models/`、`schemas/`、`services/rates.py`（`find backend/app -name '*.py'`；路由挂载见 `backend/app/main.py:26-30`）。因此本章描述的每一个模块、函数、表、依赖都需要新建。凡是引用现有代码的地方都写明 `path:line`，行号已在本工作树核实；凡是目标物都显式写"新增"。
 >
 > 所有决定都可追溯到 [`00-decisions.md`](./00-decisions.md)，标注形如（决策 §5）。本文不改写决策；决策没覆盖的问题集中在文末 [`## 待决`](#待决)。
+>
+> **本版按第一轮审核意见与决策 §14 修订。** 修订点：§5.1 补上日期逃生规则并与 §7.1 的全批 DD/MM 判定打通；§3.4 的图片块截断改成无条件对半切一次、切过的子块再截断即整批 `failed`（决策 §14.9）；§9.2 写 `refund_of` 的条件收敛为两个（决策 §14.7）；两腿转账统一走 `build_transfer_pair`，`transfer_subtype` 取行值而不是写死 `repayment`；§6 补 strict `json_schema` 的端点兼容降级路径；§8.2 的候选 SQL 修正排序与 `LIMIT`；§0.2 补 `DraftRow` 全字段表；全章错误 code 统一到 [`03-backend-api.md`](./03-backend-api.md) §4.2 的注册表（决策 §14.4），行号列一律 `row_no`（决策 §14.5）。
+>
+> **关于篇幅：** 本章明显长于其它章，原因是决策 §5 / §6 要求 system prompt 全文、输出 JSON Schema 全文、归一化规则、三种标记算法、测试用例表都"完整可用、不写略"，仅提示词与 schema 两段就占了数百行。决策 §14.8 明确行数只是参考、不作验收项，且**不要**为压行数把提示词、schema 拆到附录文件，所以这里保持单文件全文。
 
 ---
 
@@ -135,13 +139,39 @@ def finalize(db: Session, ctx, rows, raw_response: dict) -> None:
     """写 import_rows、import_batches.row_count/model/raw_response，status='ready'。"""
 ```
 
-三个贯穿全程的 dataclass：
+四个贯穿全程的 dataclass（`DraftRow` 字段多，单列一张表）：
 
 | 类型 | 字段 |
 |---|---|
-| `ImportContext`（frozen） | `batch_id` / `ledger_id` / `source_id` / `source_name` / `source_type`（checking\|savings\|credit\|cash\|other）/ `source_currency` / `ledger_base_currency` / `operator_id`（上传人，LLM 用他的 key）/ `file_path` / `mime` |
+| `ImportContext`（frozen） | `batch_id` / `ledger_id` / `source_id` / `source_name` / `source_type`（checking\|savings\|credit\|cash\|other）/ `source_currency` / `ledger_base_currency` / `operator_id`（上传人，LLM 用他的 key）/ `file_path` / `mime` / `llm_runtime`（可变，见下） |
 | `Extraction` | `mode`（`text`\|`vision`）/ `pages: list[Page]`（文本页有 `lines: list[tuple[int, str]]`——**行标号随行携带**，见 §3.1；视觉页有 `png: bytes`、`sub_index`）/ `header_lines`（分块时重复注入）/ `degrade_reason` |
 | `Chunk` | `index`（0 起）/ `kind`（`text`\|`image`）/ `text` / `png` / `page_no`（1 起，CSV/XLSX 恒为 1）/ `sub_index`（0=整页，1=上半，2=下半）/ `line_offset`（本块首行的行标号，仅用于日志与 `split_chunk` 继承，不参与 `source_ref` 还原） |
+| `DraftRow`（可变；§7 产出、§8 加工、§7.8 落库） | 见下表 |
+
+`ImportContext` 里的 `llm_runtime` 是一个**可变**的小对象（`ImportContext` 本身 frozen，只是不能重新绑定字段，字段指向的对象照样能改），只装两个"每批一次"的降级开关：`schema_downgraded`（§6「端点兼容性与降级」）和 `detail_field_ok`（§4.3 的 `detail` 字段降级）。它只存布尔量，不装 `api_key`，因此不违反 §11.4"`ImportContext` 会被日志打印"的约定。
+
+`DraftRow` 的全部字段与归宿（"落列"= 写进 `import_rows` 的同名列，见 [`02-database.md`](./02-database.md) §1.9）：
+
+| 字段 | 类型 | 归宿 |
+|---|---|---|
+| `date` | `date \| None` | 落 `import_rows.date` |
+| `amount` | `Decimal` | 落 `import_rows.amount` |
+| `currency` | `str` | 落 `import_rows.currency` |
+| `kind` | `str` | 落 `import_rows.kind` |
+| `transfer_role` | `str \| None` | 落 `import_rows.transfer_role`（该列 02 章当前的 DDL 里还没有，见 待决 15） |
+| `transfer_subtype` | `str \| None` | 落 `import_rows.transfer_subtype` |
+| `merchant` | `str \| None` | 落 `import_rows.merchant`（已过 §11.2 脱敏） |
+| `note` | `str \| None` | 落 `import_rows.note`（已过 §11.2 脱敏，§7.7 的合并说明也拼在这里） |
+| `category_l1` | `str \| None` | 落 `import_rows.category_l1` |
+| `category_l2` | `str \| None` | 落 `import_rows.category_l2` |
+| `confidence` | `float` | 落 `import_rows.confidence` |
+| `source_ref` | `str \| None` | 落 `import_rows.source_ref` |
+| `flags` | `set[str]` | 落 `import_rows.flags`（排序后的 JSON 数组，§7.8） |
+| `matched_transaction_id` | `UUID \| None` | 落 `import_rows.matched_transaction_id`（§8.1 / §8.2 写；§9.2 据它写 `refund_of`） |
+| `counterpart_source_id` | `UUID \| None` | 落 `import_rows.counterpart_source_id`（§8.3 预填，用户可改） |
+| `note_hint` | `str \| None` | 落 `import_rows.hint`（**新增列**，见 待决 15）。由 §8.1 / §8.3 写，只给 review 界面当提示用；**不**拼进 `note`——`note` 会原样进 `transactions.note`（§9.2），把"另一个账户里已有这笔还款的对应腿"这种话带进正式交易备注是污染 |
+| `candidate_ids` | `list[UUID]` | **仅内存**：退款候选列表不落列，由 `GET .../rows/{rid}/refund-candidates` 现算（§8.2） |
+| `merged_count` | `int` | **仅内存**：§7.7 的合并计数，结果已拼进 `note`，不单独落列 |
 
 `run_import` 的骨架（错误处理是本函数的主要内容）：
 
@@ -182,18 +212,18 @@ def run_import(batch_id: UUID) -> None:
 
 ### 1.1 校验顺序
 
-请求处理函数按下面的顺序校验，任何一步失败都**不落盘**、不建批次行，返回统一的 `{"detail": ..., "code": ...}`（决策 §9）：
+请求处理函数按下面的顺序校验，任何一步失败都**不落盘**、不建批次行，返回统一的 `{"detail": ..., "code": ...}`（决策 §9）。code 一律取 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的名字（决策 §14.4），与该章 §5.38 的校验顺序逐条对应：
 
 | # | 检查 | 失败码 | HTTP |
 |---|---|---|---|
 | 1 | 当前用户是该账本成员 | `not_found` | 404 |
-| 2 | 该用户 1 小时内已提交 < 10 批（决策 §9） | `rate_limited` | 429 |
-| 3 | 该用户已配置 LLM（`user_llm_settings` 有 `api_key`，决策 §6） | `llm_not_configured` | 400 |
+| 2 | 该用户 1 小时内已提交 < 10 批（决策 §9） | `import_rate_limited` | 429 |
+| 3 | 该用户已配置 LLM（`user_llm_settings` 有 `api_key`，决策 §6） | `llm_not_configured` | 409 |
 | 4 | 本账本没有 `status='parsing'` 的批次（决策 §5） | `import_in_progress` | 409 |
 | 5 | 实际读入字节 ≤ 10 MB（决策 §5、§9） | `file_too_large` | 413 |
-| 6 | 扩展名 ∈ 白名单 | `unsupported_file_type` | 400 |
-| 7 | 文件头嗅探出的 MIME 与扩展名一致 | `unsupported_file_type` | 400 |
-| 8 | `source_id` 属于本账本且 `archived = false`（决策 §3、§5） | `source_not_found` / `source_archived` | 404 / 400 |
+| 6 | 扩展名 ∈ 白名单 | `unsupported_file` | 415 |
+| 7 | 文件头嗅探出的 MIME 与扩展名一致 | `unsupported_file` | 415 |
+| 8 | `source_id` 属于本账本（不可见按不存在处理，03 §3.3）/ 且 `archived = false`（决策 §3、§5） | `not_found` / `source_archived` | 404 / 409 |
 
 第 5 条要**边读边计数**，不能只信 `Content-Length`：
 
@@ -239,7 +269,7 @@ _MAGIC = (
 )
 
 def sniff_mime(raw: bytes) -> str:
-    """返回**归一化后**的 MIME，取值只可能是白名单里的 5 个之一，或抛 unsupported_file_type。
+    """返回**归一化后**的 MIME，取值只可能是白名单里的 5 个之一，或抛 415 unsupported_file。
 
     raw 是 §1.1 已完整读入内存的字节（≤10 MB），不是只有文件头——
     xlsx 的确认需要能打开整个 ZIP 目录。
@@ -273,23 +303,23 @@ def _normalize_mime(mime: str, raw: bytes) -> str:
     if mime.startswith("text/") or mime in ("application/csv", "application/octet-stream"):
         if _is_probably_text(raw[:8192]):
             return "text/plain"
-    raise ApiError(400, "unsupported_file_type", "只支持 PDF / CSV / XLSX / PNG / JPG")
+    raise ApiError(415, "unsupported_file", "只支持 PDF / CSV / XLSX / PNG / JPG")
 
 def _refine_zip(raw: bytes) -> str:
     """ZIP 头的文件必须确认是 OOXML 工作簿，否则拒绝（防止把随便一个 zip 当 xlsx）。"""
     try:
         names = zipfile.ZipFile(io.BytesIO(raw)).namelist()
     except zipfile.BadZipFile:
-        raise ApiError(400, "unsupported_file_type", "文件损坏或不是有效的 XLSX")
+        raise ApiError(415, "unsupported_file", "文件损坏或不是有效的 XLSX")
     if "xl/workbook.xml" in names:
         return XLSX_MIME
-    raise ApiError(400, "unsupported_file_type", "只支持 PDF / CSV / XLSX / PNG / JPG")
+    raise ApiError(415, "unsupported_file", "只支持 PDF / CSV / XLSX / PNG / JPG")
 
 def _is_probably_text(head: bytes) -> bool:
     """前 8KB 不含 NUL 字节，且能用 §2.2 的候选编码之一解码。"""
 ```
 
-CSV 没有魔数，判据就是上面的 `_is_probably_text`；不满足则按 `unsupported_file_type` 拒绝。
+CSV 没有魔数，判据就是上面的 `_is_probably_text`；不满足则按 415 `unsupported_file` 拒绝。
 
 **归一化是硬约定**：`sniff_mime()` 只会返回下面 5 个值之一，`ImportContext.mime`（§0.2）存的就是这个归一化结果，因此 §1.3 的 `ALLOWED_EXT` 只需要这 5 个键，`ALLOWED_EXT[mime]` 不会 KeyError；§2 的 `extract()` 分派也因此不会把 xlsx 落到 `extract_csv()`（`.endswith("spreadsheetml.sheet")` 分支一定先命中）。
 
@@ -696,6 +726,10 @@ def chunk(ex: Extraction) -> list[Chunk]:
 ### 3.4 单块失败与重试
 
 ```python
+import io, random, time
+from dataclasses import replace          # 生成子块：只改 text / png / sub_index
+from PIL import Image
+
 MAX_ATTEMPTS = 3          # 首次 + 重试 2 次（决策 §5 口径："重试 2 次"）
 BACKOFF = [2.0, 6.0]      # 秒
 
@@ -722,16 +756,46 @@ def call_llm(ctx, ck, llm):
                         chunk_index=ck.index)
 
 def split_chunk(ck: Chunk) -> list[Chunk] | None:
-    """把一个块对半切。切不动返回 None。
+    """把一个块对半切。切不动返回 None（调用方据此把整批判 failed）。
 
-    - 文本块：按行数对半（行前的标号已经在 text 里，切开不会丢）；只有 1 行时返回 None。
-    - 图片块：用 §2.5 的 `_split_if_dense` 强切上下两半（重叠 6%）；
-      `ck.sub_index != 0` 说明这页已经被切过一次，不再切，返回 None。
+    - 文本块：按行数对半（行前的标号已经在 text 里，切开不会丢），表头前缀两半都重新注入；
+      只有 1 行时返回 None。
+    - 图片块：无条件对半切（重叠 6%，裁法与 §2.5 一致），子块 sub_index 分别置 1 / 2；
+      若 `ck.sub_index != 0` 或切不出两块，返回 None。
 
-    两个子块**沿用父块的 `page_no` / `sub_index` / `line_offset`**（图片块的 sub_index
-    由 `_split_if_dense` 重新编号），`index` 沿用父块的 `ck.index`——它只用于错误信息里
-    的"第 N 块"和 §3.3 的排序，子块之间的先后由 `_merge` 按拼接顺序保证。
+    图片子块的 `sub_index` 由本函数重新置为 1 / 2，**不沿用父块**（决策 §14.9）。它同时是
+    终止条件的依据（`sub_index != 0` = 这一页已经被切过一次），也是 §5.3 视觉 user message
+    里"上半页 / 下半页"和 `source_ref` 的 `p{page}-{sub}` 的来源。`page_no` / `line_offset`
+    沿用父块；`index` 也沿用父块的 `ck.index`——它只用于错误信息里的"第 N 块"和 §3.3 的排序，
+    子块之间的先后由 `_merge` 按拼接顺序保证。
+
+    **不复用 §2.5 的 `_split_if_dense`**：那个函数在图片不密（估计行数 ≤ DENSE_ROWS 且
+    高宽比 ≤ 2）时原样返回 `[img]`，于是 split_chunk 会吐出一个与父块内容相同、sub_index
+    仍为 0 的子块 → 重发 → 同样 `finish_reason=length` → 再进 split_chunk，无限递归，每
+    一轮都真花用户一次调用的钱。这里改成无条件切，且用 sub_index 记住"切过了"。
     """
+    if ck.kind == "text":
+        head, sep, body = (ck.text.partition("\n\n")
+                           if ck.text.startswith("表头：") else ("", "", ck.text))
+        lines = body.splitlines()
+        if len(lines) < 2:                       # 只剩 1 行，切不动
+            return None
+        mid = len(lines) // 2
+        pre = head + sep if sep else ""          # 表头两半都要有，否则下半块不知道列义
+        return [replace(ck, text=pre + "\n".join(lines[:mid])),
+                replace(ck, text=pre + "\n".join(lines[mid:]))]
+
+    # 图片块（决策 §14.9）
+    if ck.sub_index != 0:                        # 本页已被切过一次，不再切
+        return None
+    img = Image.open(io.BytesIO(ck.png))
+    h, ov = img.height, int(img.height * 0.06)   # 重叠 6%，与 §2.5 一致
+    halves = [img.crop((0, 0, img.width, h // 2 + ov)),
+              img.crop((0, h // 2 - ov, img.width, h))]
+    if len(halves) < 2:                          # 理论上不会发生，兜底
+        return None
+    return [replace(ck, png=_fit(part, LONG_SIDE_MAX), sub_index=i)   # sub_index = 1 / 2
+            for i, part in enumerate(halves, start=1)]
 
 def _merge(results: Iterable[LLMResult]) -> LLMResult:
     """按顺序拼 rows，envelope 里的 usage 相加、content 拼成数组。"""
@@ -743,10 +807,24 @@ def _merge(results: Iterable[LLMResult]) -> LLMResult:
 | 返回体不是合法 JSON 或不满足 schema | 是（2 次；重试时 `strict_reminder=True`，在 user message 末尾追加"上次输出不是合法 JSON，请严格按 schema 只输出 JSON 对象"） | 同上 |
 | HTTP 401 / 403 | 否 | 立刻 `failed`，`error` = "LLM 密钥无效，请到设置里更新" |
 | HTTP 404 model not found | 否 | 立刻 `failed`，`error` = "模型不存在，请到设置里更换模型" |
-| `finish_reason == "length"` | 不走退避重试，直接 `split_chunk` 切成两半分别重发（纯重试没用）；切不动则整批 `failed` | 任一半失败 → `failed` |
+| `finish_reason == "length"` | 不走退避重试，直接 `split_chunk` 切成两半分别重发（纯重试没用）。**每页/每块最多切一次**：文本块切到只剩 1 行、图片块的 `sub_index != 0` 时 `split_chunk` 返回 `None`，立刻整批 `failed`（决策 §14.9），所以一次导入里因截断产生的额外调用次数是有界的（每个被截断的块至多再加 2 次） | 任一半失败 → `failed` |
 | 某块返回 `rows: []` | 否，视为合法 | 该块 0 行；若**全部块**都 0 行 → `failed`，`error` = "没有识别到任何交易" |
 
-**整批 failed 时记录失败块号**：`import_batches.error` 存人话，`import_batches.error_chunk` 存 0 起的块序号（新增列，见 §待决 5）。重试（`POST .../retry`）从头跑，不做断点续传——单批最多几十次调用，重跑的成本远低于维护断点状态的复杂度。
+**整批 failed 时怎么落库**：[`02-database.md`](./02-database.md) §1.8 的 `import_batches` 有 `error_code VARCHAR(64)` 和 `error_message VARCHAR(2000)` 两列（本章正文里说的"`error`"就是 `error_message`），另外需要 `error_chunk INTEGER NULL` 存 0 起的失败块序号（新增列，见 待决 5）。`error_code` 取 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的名字（决策 §14.4），不自造：
+
+| 失败原因 | `error_code` | `error_message`（人话，给用户看） |
+|---|---|---|
+| 重试 2 次后仍 5xx / 429 / 超时 | `llm_error` | 第 N 块解析失败：模型服务暂时不可用 |
+| 输出不是合法 JSON 或不满足 schema（重试后仍然） | `llm_error` | 第 N 块解析失败：模型输出不是合法 JSON |
+| 401 / 403 | `llm_error` | LLM 密钥无效，请到设置里更新 |
+| 404 model not found | `llm_error` | 模型不存在，请到设置里更换模型 |
+| 全部块都返回 `rows: []` | `llm_error` | 没有识别到任何交易 |
+| 截断且切不动（§3.4 图片分支、单行文本块） | `llm_error` | 第 N 块输出被截断且无法再拆分，请拆分账单后重试 |
+| 归一化后行数 > 2000（§7.7） | `rows_exceed_limit` | 识别出 N 行，超过单批 2000 行上限，请拆分账单 |
+| 文件加密 / 损坏 / 页数超限 / 没有数据行（§2） | `unsupported_file` | PDF 有密码保护，请先去掉密码（等，逐条见 §2） |
+| 未捕获异常（`run_import` 的兜底分支） | `internal_error` | 解析失败，请重试或换一份文件 |
+
+重试（`POST .../retry`）从头跑，不做断点续传——单批最多几十次调用，重跑的成本远低于维护断点状态的复杂度。
 
 ---
 
@@ -811,7 +889,7 @@ def _merge(results: Iterable[LLMResult]) -> LLMResult:
 }
 ```
 
-`detail: "high"` 对不支持该字段的端点是多余字段，OpenAI 兼容实现一般忽略；若某端点因此报 400，客户端捕获后去掉该字段重试一次（这一次不计入 §3.4 的 2 次配额）。
+`detail: "high"` 对不支持该字段的端点是多余字段，OpenAI 兼容实现一般忽略；若某端点因此报 400，客户端捕获后去掉该字段重试一次（这一次不计入 §3.4 的 2 次配额），并把 `ctx.llm_runtime.detail_field_ok` 置假，同批后续图片块直接不带这个字段，不用每块都先撞一次 400。
 
 ### 4.4 请求头
 
@@ -838,6 +916,12 @@ def _call_once(ctx, ck, llm, strict_reminder: bool = False) -> LLMResult:
         raise FatalLLMError("LLM 密钥无效，请到设置里更新")
     if r.status_code == 404:
         raise FatalLLMError("模型不存在，请到设置里更换模型")
+    if (r.status_code == 400 and _schema_rejected(r)
+            and not ctx.llm_runtime.schema_downgraded):
+        # §6「端点兼容性与降级」：端点不吃 ROWS_SCHEMA 里的校验关键字。
+        # 剥成 ROWS_SCHEMA_MIN 重发一次，这一次**不计入** §3.4 的 2 次配额。
+        ctx.llm_runtime.schema_downgraded = True
+        return _call_once(ctx, ck, llm, strict_reminder)
     if r.status_code >= 400:
         raise RetryableLLMError("模型服务暂时不可用")
     env = r.json()
@@ -854,6 +938,15 @@ def _call_once(ctx, ck, llm, strict_reminder: bool = False) -> LLMResult:
                                "model": env.get("model"),
                                "content": choice["message"]["content"]})
 ```
+
+```python
+def _schema_rejected(r: httpx.Response) -> bool:
+    """400 且响应体提到 schema / json_schema → 认为端点不接受 ROWS_SCHEMA 里的校验关键字。
+    只看小写后的响应体，不记日志（§11.4：不记第三方异常与响应体原文）。"""
+    return "schema" in (r.text or "").lower()
+```
+
+`build_body` 在 `ctx.llm_runtime.schema_downgraded` 为真时把 `response_format` 里的 schema 换成 `ROWS_SCHEMA_MIN`（§6），其余部分不变；`jsonschema.validate` 那一行**永远**用完整的 `ROWS_SCHEMA`。
 
 `read=180s`：一块 150 行、输出约 3k token，慢模型也够；再长就说明块太大了。
 
@@ -936,8 +1029,12 @@ def render_prompt_categories() -> str:
 - 账本基准币种：{ledger_base_currency}
 
 # 输出的每一行代表一笔交易，字段含义
-- date：交易发生日期，必须是 "YYYY-MM-DD"。原文只有月日没有年份时，用账单所属年份补全；
-  跨年账单（12 月和 1 月同时出现）按时间连续性推断年份。
+- date：交易发生日期，优先输出 "YYYY-MM-DD"。原文里年、月、日都能确定时（例如 "2025-08-03"、
+  "2025年8月3日"、"3 Aug 2025"），直接归一成 "YYYY-MM-DD"；原文只有月日没有年份、但哪个是月
+  哪个是日不会混淆时（例如 "8月3日"、"Aug 3"），用账单所属年份补全，跨年账单（12 月和 1 月
+  同时出现）按时间连续性推断年份。
+  但当原文日期是 A/B 或 A/B/YYYY 这种只有两个数字、无法确定谁是月谁是日的形式时，**不要猜**，
+  把原文日期串原样填进 date（例如 "03/08/2025"），服务端会按整份账单统一判定 DD/MM 还是 MM/DD。
 - amount：带符号的数字（不是字符串）。符号规则见下面「符号规则」。
 - currency：3 位大写 ISO 货币代码。原文没写币种时填 "{source_currency}"。
 - kind：只能是 "expense"、"income"、"refund"、"transfer" 四个值之一。
@@ -1052,25 +1149,27 @@ def render_prompt_categories() -> str:
 
 ```json
 {"rows": [
-  {"date":"2025-08-03","amount":-32.00,"currency":"CNY","kind":"expense",
+  {"date":"08/03","amount":-32.00,"currency":"CNY","kind":"expense",
    "transfer_role":null,"transfer_subtype":null,"merchant":"星巴克","note":null,
    "category_l1":"food","category_l2":"snacks_drinks","confidence":0.93,"source_ref":"12"},
-  {"date":"2025-08-05","amount":-48.50,"currency":"CNY","kind":"expense",
+  {"date":"08/05","amount":-48.50,"currency":"CNY","kind":"expense",
    "transfer_role":null,"transfer_subtype":null,"merchant":"饿了么","note":null,
    "category_l1":"food","category_l2":null,"confidence":0.88,"source_ref":"13"},
-  {"date":"2025-08-07","amount":32.00,"currency":"CNY","kind":"refund",
+  {"date":"08/07","amount":32.00,"currency":"CNY","kind":"refund",
    "transfer_role":null,"transfer_subtype":null,"merchant":"星巴克","note":"退货",
    "category_l1":"food","category_l2":"snacks_drinks","confidence":0.90,"source_ref":"14"},
-  {"date":"2025-08-10","amount":3000.00,"currency":"CNY","kind":"transfer",
+  {"date":"08/10","amount":3000.00,"currency":"CNY","kind":"transfer",
    "transfer_role":"in","transfer_subtype":"repayment","merchant":null,"note":"还款-储蓄卡",
    "category_l1":null,"category_l2":null,"confidence":0.95,"source_ref":"15"},
-  {"date":"2025-08-12","amount":-71.20,"currency":"CNY","kind":"expense",
+  {"date":"08/12","amount":-71.20,"currency":"CNY","kind":"expense",
    "transfer_role":null,"transfer_subtype":null,"merchant":"Apple","note":"原值 USD 9.99",
    "category_l1":"culture","category_l2":"subscriptions","confidence":0.82,"source_ref":"16"}
 ]}
 ```
 
 注意第 15 行：原文金额是 `-3000.00`（信用卡账单里还款印成负数），输出是 `+3000.00` + `transfer_role="in"`——这正是"不要照抄原文符号"那条规则的效果。
+
+也注意 `date` 字段：原文的 `08/03` 只有两个数字，谁是月谁是日在提示词这一层无法确定，所以模型按 §5.1 的**日期逃生规则**原样回填 `"08/03"`，既不自作主张判月日、也不自己补年份。整份账单是 DD/MM 还是 MM/DD 由服务端 §7.1 的 `detect_dmy` 统一判定：本例这 5 行的两个数字都 ≤12，判不出来，按 `MDY` 解析成 8 月 3 日等，并给这几行打 `needs_review`；真实账单通常会出现日 >12 的行（例如 `08/25`），那时能唯一判定，不打这个标记。年份由 §7.1 的补年份规则（同批已解析年份的众数 → 上传时的年份）补上。反过来说，如果提示词让模型自己把 `03/08/2025` 解析成 "2025-08-03"，`detect_dmy` 拿到的就永远是 ISO 串，英式账单会被静默解析错而且不打任何标记——这正是本版要修的问题。
 
 ### 5.3 SYSTEM_VISION（视觉路径 system prompt）
 
@@ -1190,6 +1289,35 @@ ROWS_SCHEMA = {
 | 两层都写 `additionalProperties: false` | 防止模型多塞字段。多出来的字段服务端也不会读，但严格模式能让模型少发挥 |
 | `maxItems: 300` | 一块 150 行，300 是两倍余量；超了说明模型在幻觉，直接判 `RetryableLLMError` |
 
+**端点兼容性与降级**（决策 §6："任何 OpenAI 兼容端点都可用"，见 §4.1）：`minLength` / `maxLength` / `pattern` / `minimum` / `maximum` / `maxItems` 这几个关键字，OpenAI 之外的 OpenAI 兼容端点支持得很不一致，常见表现是**直接 400 拒绝整个请求**，响应体里带 `schema` / `json_schema` 字样。若不处理，§3.4 的重试表会把 4xx 当 `RetryableLLMError` 重试 2 次然后整批 `failed`，用户看到的是"模型服务暂时不可用"，完全指不到真正原因。所以客户端要有一条降级路径：
+
+| 项 | 规则 |
+|---|---|
+| 触发 | HTTP 400 **且** 响应体（小写后）含 `schema` |
+| 动作 | 换成"最小可移植版" `ROWS_SCHEMA_MIN` 重发**一次** |
+| `ROWS_SCHEMA_MIN` | 递归剥掉 `minLength` / `maxLength` / `pattern` / `minimum` / `maximum` / `maxItems`；**保留** `type` / `enum` / `required` / `additionalProperties` / `description` |
+| 配额 | 与 §4.3 的 `detail` 字段降级一样，**不计入** §3.4 的 2 次重试配额；降级后再失败才按原路径处理 |
+| 每批一次 | 降级成功后 `ctx.llm_runtime.schema_downgraded` 置真，同批后续块直接用 `ROWS_SCHEMA_MIN`，不用每块都先撞一次 400 |
+| 服务端侧不放松 | `_call_once` 里的 `jsonschema.validate` **永远**用完整的 `ROWS_SCHEMA`（§4.5），长度、范围、`maxItems` 约束照旧生效——降级降的是"我们对端点的要求"，不是"我们对输出的要求" |
+
+```python
+_PORTABILITY_STRIP_KEYS = ("minLength", "maxLength", "pattern",
+                           "minimum", "maximum", "maxItems")
+
+def strip_unsupported(node):
+    """递归去掉端点可能不认的校验关键字，只留结构性关键字。"""
+    if isinstance(node, dict):
+        return {k: strip_unsupported(v) for k, v in node.items()
+                if k not in _PORTABILITY_STRIP_KEYS}
+    if isinstance(node, list):
+        return [strip_unsupported(v) for v in node]
+    return node
+
+ROWS_SCHEMA_MIN = strip_unsupported(ROWS_SCHEMA)
+```
+
+降级后仍然保留 `kind` / `transfer_role` / `transfer_subtype` 的 `enum` 和两层 `additionalProperties: false`——这几项是所有端点都支持的基本约束，也是最能约束模型的部分。
+
 服务端**不依赖** `strict` 生效：`_call_once` 里用 `jsonschema.validate` 再校验一遍（§4.5）。
 
 ---
@@ -1202,10 +1330,13 @@ ROWS_SCHEMA = {
 
 ### 7.1 日期
 
+本节的 `detect_dmy` **依赖 §5.1 的那条日期逃生规则供给原始日期串**：提示词明确要求模型遇到 `A/B`、`A/B/YYYY` 这种月日分不清的形式时原样回填原文串，服务端这里才有东西可判。两边必须同时成立——如果提示词让模型自行猜月日并输出 ISO 串，下面优先级第 3 条就成了永远走不到的死代码，英式账单（`03/08/2025` = 8 月 3 日）会被静默解析成 3 月 8 日且不打 `needs_review`。
+
 **先在全批范围内判定 DD/MM 还是 MM/DD**，再逐行解析。判定只做一次、对整批统一（同一份账单不可能混用两种格式）：
 
 ```python
-_SLASH = re.compile(r"^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?$")
+_SEP = r"[/\-.]"          # 日期分隔符；单独抽出来，避免 "]" 紧挨 "(" 被文档链接检查器误判
+_SLASH = re.compile(r"^(\d{1,2})" + _SEP + r"(\d{1,2})(?:" + _SEP + r"(\d{2,4}))?$")
 
 def detect_dmy(raw_dates: list[str]) -> str | None:
     """返回 'DMY' / 'MDY' / None（无法判定）。"""
@@ -1404,7 +1535,13 @@ def dedup_in_batch(rows: list[DraftRow]) -> list[DraftRow]:
 
 ### 7.8 写入 `import_rows`
 
-`row_no` 从 1 递增（拼接后的顺序），`status = 'pending'`，`flags` 存排序后的 JSON 数组（方便测试断言）。列定义见 [`02-database.md`](./02-database.md)。
+`row_no` 从 1 递增（拼接后的顺序，决策 §14.5 统一了这个列名），`status = 'pending'`，`flags` 存排序后的 JSON 数组（方便测试断言）。`DraftRow` 每个字段落到哪一列见 §0.2 的字段表；列定义见 [`02-database.md`](./02-database.md) §1.9。
+
+三个字段要特别说明归宿（§0.2 的表也标了）：
+
+- `note_hint`（§8.1 / §8.3 写的那句人话提示，例如"请选择还款是从哪个账户出的；不在应用里就留空"）落**新增列** `import_rows.hint VARCHAR(200) NULL`（见 待决 15），由 `GET .../rows` 带给前端，在 review 表格里显示成该行的提示条。它**不**拼进 `note`：`note` 会原样进 `transactions.note`（§9.2），把"另一个账户里已有这笔还款的对应腿"这种话带进正式交易备注是污染。
+- `candidate_ids` 只在内存里，退款候选列表由 `GET .../rows/{rid}/refund-candidates` 现算（§8.2）。
+- `merged_count` 只在内存里，合并结果已经在 §7.7 拼进 `note` 了。
 
 ### 7.9 规则速查表
 
@@ -1489,7 +1626,7 @@ def flag_duplicates(db, ctx, rows):
 
 `matched_transaction_id` 在这里只在**唯一命中**时预填，作用是让 review 界面能一键跳去看那笔已有交易。它和 §8.2 的用途不同（那边是退款原单），两者同时命中时以 `refund_candidate` 的填充为准，`duplicate` 只保留标记（见 §待决 3）。
 
-**这就要求 §8.2 无条件先清空这个列再查候选**：一行既命中 duplicate、退款候选又为空（原单可退额度已用完）时，若不清空，§9.2 会把这个 duplicate 目标当成退款原单写进 `refund_of`，指向一笔可能不是 `expense` 的交易，违反决策 §1.1。§8.2 的伪代码里 `r.matched_transaction_id = None` 放在 `cands = ...` 之前就是为了这个；对应用例见 §12.5。
+**这就要求 §8.2 无条件先清空这个列再查候选**：§9.2 按决策 §14.7 只看"`kind='refund'` 且 `matched_transaction_id` 非空"两个条件，不再看 `flags`；一行既命中 duplicate、`kind` 又是 `refund`、退款候选却为空（原单可退额度已用完）时，若不清空，那个 duplicate 目标就会被当成退款原单写进 `refund_of`，指向一笔可能不是 `expense` 的交易，违反决策 §1.1。所以这个清空是**唯一**的闸，必须无条件执行：§8.2 的伪代码里 `r.matched_transaction_id = None` 放在 `cands = ...` 之前就是为了这个；对应用例见 §12.5。
 
 ### 8.2 refund_candidate
 
@@ -1535,9 +1672,11 @@ WHERE t.ledger_id   = :ledger_id
   AND ABS(t.amount) >= :ramt
 GROUP BY t.id, t.occurred_at, t.amount, t.merchant, t.category_l1, t.category_l2
 HAVING ABS(MIN(t.amount)) - COALESCE(SUM(rf.amount), 0) > 0
-ORDER BY t.occurred_at DESC
-LIMIT 20;
+ORDER BY (CASE WHEN ABS(t.amount) = :ramt THEN 0 ELSE 1 END), t.occurred_at DESC, t.id
+LIMIT 200;
 ```
+
+**排序与 LIMIT 的口径**：`LIMIT` 只是防极端情况下把整个账户拉进内存（信用卡高频用户 90 天内几千笔），不是"取最近 20 笔"的业务规则；排序则保证**金额完全相等的候选一定落在截断窗口内**——它在 Python 打分里权重最高（+100），如果按纯时间倒序截断，同账户 90 天内同币种、金额 ≥ 退款额且仍有可退额度的支出超过窗口大小时，那笔金额相等的可能排在窗口之外被丢掉，"唯一候选才预填"的判定会静默失准。所以截断依据（`ABS(t.amount) = :ramt` 优先）必须和打分的首要依据是同一维度，`t.id` 只是让排序稳定。
 
 ```python
 UNIQUE_MARGIN = 20
@@ -1644,7 +1783,7 @@ def flag_repayments(db, ctx, rows):
 
 | 用户选择 | commit 时 |
 |---|---|
-| 选了某个对手账户 | 建两条交易共享新的 `transfer_pair_id`（决策 §1.2） |
+| 选了某个对手账户 | 建两条交易共享新的 `transfer_pair_id`（决策 §1.2），走 §9.3 的 `build_transfer_pair`；`plain` 转账（转到自己另一张卡）走的是同一个函数，只是 `transfer_subtype` 不同 |
 | 选"不在应用里" | 只建本账户这一条，`transfer_pair_id = NULL`，`counterparty` 填用户输入的文本 |
 | 标 `skipped`（因为对手腿已在库里，本行是重复） | 不建任何交易 |
 
@@ -1664,19 +1803,22 @@ def flag_repayments(db, ctx, rows):
 
 ### 9.1 前置校验
 
-`POST /api/v1/ledgers/{lid}/imports/{bid}/commit` 在开事务前逐条检查，任一不过则 400/409 且不写任何数据：
+`POST /api/v1/ledgers/{lid}/imports/{bid}/commit` 在开事务前逐条检查，任一不过则整体拒绝、不写任何数据。code 一律取 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的名字（决策 §14.4），与该章 §5.44 的校验清单逐条对应：
 
-| 检查 | code |
-|---|---|
-| 批次 `status = 'ready'` | `import_not_ready` |
-| 至少有一行 `status != 'skipped'` | `import_empty` |
-| 所有非 skipped 行 `date IS NOT NULL` | `import_row_invalid` |
-| 所有非 skipped、非 transfer 行 `category_l1 IS NOT NULL`（决策 §1.3、§5） | `import_missing_category` |
-| 所有非 skipped、非 transfer 行的 `category_l1`/`category_l2` 与 `kind` 的**收支组匹配**（决策 §1.3：`expense`/`refund` 只能用支出分类，`income` 只能用收入分类，`category_l2` 必须属于该 `category_l1`） | `import_category_mismatch` |
-| 所有非 skipped 的 transfer 行 `category_l1 IS NULL AND category_l2 IS NULL` | `import_category_mismatch` |
-| 所有非 skipped 的 transfer 行有明确的对手处理（选了账户 / 选了"不在应用里"） | `import_transfer_unresolved` |
-| 目标账户仍未归档 | `source_archived` |
-| 请求体 `updated_at` 与批次一致（乐观锁，决策 §2） | `stale_update` |
+| 检查 | HTTP | code |
+|---|---|---|
+| 批次 `status = 'ready'` | 409 | `batch_not_ready` |
+| 批次已经是 `committed`（幂等保护，含并发双提交） | 409 | `batch_already_committed` |
+| 所有非 skipped 行 `date` / `amount` / `currency` / `kind` 非空且 `amount != 0` | 409 | `batch_not_ready` |
+| 所有非 skipped、非 transfer 行 `category_l1 IS NOT NULL`（决策 §1.3、§5） | 409 | `rows_uncategorized` |
+| 所有非 skipped、非 transfer 行的 `category_l1` 与 `kind` **收支组匹配**（决策 §1.3：`expense`/`refund` 只能用支出分类，`income` 只能用收入分类） | 400 | `category_kind_mismatch` |
+| `category_l2` 属于该 `category_l1`；transfer 行 `category_l1 IS NULL AND category_l2 IS NULL` | 400 | `category_invalid` |
+| 要写进 `refund_of` 的 `matched_transaction_id` 仍指向同账本的 `kind='expense'` 交易（§9.2 的两个条件成立时才查） | 400 | `refund_target_invalid` |
+| 目标账户、以及任何被选中的 `counterpart_source_id` 仍未归档 | 409 | `source_archived` |
+| 这批不是"所有行都被跳过"（提交出 0 条交易没有意义） | 409 | `rows_all_skipped`（**需 03 §4.2 注册表新增**，见 待决 16；在注册表补上之前退化用 `batch_not_ready` + detail 说明） |
+| 请求体带了 `updated_at` 时与批次一致（乐观锁，决策 §2、03 §4.4） | 409 | `stale_update` |
+
+**transfer 行不作对手校验**：`counterpart_source_id` 为空就是"对手不在应用里"，按决策 §1.2 建单腿（`transfer_pair_id = NULL` + `counterparty` 文本），服务端不拦——这与 [`03-backend-api.md`](./03-backend-api.md) §5.44 的写入规则一致。§8.3 给这类行打的 `needs_review` 只是让 review 界面提醒用户"确认一下这笔是从哪个账户出的"，不是提交的硬条件。
 
 错误响应里带 `rows: [row_no, ...]`，前端直接把有问题的行滚到视野里。
 
@@ -1700,7 +1842,7 @@ def flag_repayments(db, ctx, rows):
 | `merchant` | `merchant` | ≤200 |
 | `note` | `note` | ≤500，卡号已脱敏（§11.2） |
 | `category_l1` / `category_l2` | 同名 | transfer 为 NULL |
-| `matched_transaction_id`（三个条件同时成立才写：`'refund_candidate' in flags`、`kind='refund'`、用户在 review 里确认过） | `refund_of` | 决策 §1.1。加 `refund_candidate` 这一条是因为 `matched_transaction_id` 也被 §8.1 的 duplicate 用来存"同日同额的已有交易"，那笔不一定是 `expense`，写进 `refund_of` 会违反决策 §1.1 的外键语义。§8.2 已经在查候选前把它清空了，这里是第二道闸 |
+| `matched_transaction_id`（**两个**条件同时成立才写：`kind = 'refund'` 且 `matched_transaction_id` 非空） | `refund_of` | 决策 §14.7 的原话：行 `kind='refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选）就写 `refund_of`，**不引入"用户已确认"这类额外状态**——那种状态在 `import_rows` 里没有列，也会让"服务端预填、用户看一眼没问题直接提交"（§8.4 的默认动作）永远写不进 `refund_of`。不需要再看 `flags`：§8.2 在查候选前已经无条件清空过 `matched_transaction_id`（见 §8.1 末尾的说明与 §12.5 的对应用例），所以留在退款行上的值只可能来自退款候选或用户改选；非 `refund` 行（例如只命中 `duplicate` 的行）本来就走不到这一格。写之前 §9.1 还会再确认目标仍是同账本的 `kind='expense'` 交易（`refund_target_invalid`） |
 | batch.`id` | `import_batch_id` | 撤销靠它 |
 | batch.`created_by` | `created_by`、`updated_by` | 上传人（决策 §2） |
 | — | `created_at` / `updated_at` | `now()` |
@@ -1708,18 +1850,22 @@ def flag_repayments(db, ctx, rows):
 
 `confidence`、`source_ref`、`flags`、`row_no` **不进** `transactions`——它们是草稿的元数据，留在 `import_rows` 里可追溯（决策 §5）。
 
-### 9.3 两腿还款的建法
+### 9.3 两腿转账的建法（还款是其中最常见的一种）
 
-对每条 `transfer_subtype='repayment'` 且用户选了对手账户的行：
+对每条 `kind='transfer'` **且**用户在 review 里选了对手账户（`counterpart_source_id` 非空）的行，建两条交易。还款（`transfer_subtype='repayment'`）和普通划转（`plain`，例如"转到自己另一张卡"）走**同一个函数**：
 
 ```python
-def build_repayment_pair(row, batch, ctx) -> list[Transaction]:
+def build_transfer_pair(row, batch, ctx) -> list[Transaction]:
+    """两腿转账。两腿的 transfer_subtype 一律取 `row.transfer_subtype`，**不写死
+    'repayment'**——写死会让 plain 转账被存成 repayment，下一次导入时被 §8.3 的还款
+    配对误当成"对手腿已存在"，凭空多一个 duplicate 标记。"""
     pair_id = uuid4()
     near = Transaction(                       # 本账户这一腿（账单里那一行）
         ledger_id=batch.ledger_id, source_id=batch.source_id,
         amount=row.amount, currency=row.currency, occurred_at=row.date,
         kind="transfer", transfer_role=row.transfer_role,
-        transfer_subtype="repayment", transfer_pair_id=pair_id, counterparty=None,
+        transfer_subtype=row.transfer_subtype,       # 'repayment' 或 'plain'，取行值
+        transfer_pair_id=pair_id, counterparty=None,
         note=row.note, merchant=row.merchant, category_l1=None, category_l2=None,
         import_batch_id=batch.id, created_by=batch.created_by, updated_by=batch.created_by)
     far = Transaction(                        # 对手账户那一腿
@@ -1727,12 +1873,14 @@ def build_repayment_pair(row, batch, ctx) -> list[Transaction]:
         amount=-row.amount, currency=row.currency, occurred_at=row.date,
         kind="transfer",
         transfer_role="out" if row.transfer_role == "in" else "in",
-        transfer_subtype="repayment", transfer_pair_id=pair_id, counterparty=None,
+        transfer_subtype=row.transfer_subtype,       # 两腿的 subtype 必须一致
+        transfer_pair_id=pair_id, counterparty=None,
         note=row.note, merchant=None, category_l1=None, category_l2=None,
         import_batch_id=batch.id, created_by=batch.created_by, updated_by=batch.created_by)
     return [near, far]
 ```
 
+- 两腿的 `transfer_subtype` 都取 `row.transfer_subtype`（决策 §1.2 的 `plain` / `repayment` 二选一，§7.4 已保证非空）。小节标题写"还款"只是因为导入场景里它最常见，`plain` 完全走同一条路径。
 - 对手腿的金额取本腿的相反数、日期取本腿日期、币种取本腿币种。决策 §1.2 允许两腿跨币种、金额不等，但**导入时没有第二份账单可依据**，只能等额生成；用户如果需要跨币种，commit 后用 `PATCH .../transactions/transfer/{pair_id}` 改。
 - `UNIQUE (transfer_pair_id, transfer_role)`（决策 §10）保证一个 pair 最多一出一入；同一批里两行选了同一个对手账户也各有各的 `pair_id`，不会撞。
 - 用户选"不在应用里" → 只建 `near`，`transfer_pair_id = NULL`、`counterparty` = 用户填的文本（决策 §1.2、§10 的 `transfer_pair_id IS NULL OR counterparty IS NULL`）。
@@ -1743,14 +1891,15 @@ def build_repayment_pair(row, batch, ctx) -> list[Transaction]:
 def commit_batch(db: Session, batch_id: UUID, actor_id: UUID) -> CommitResult:
     with db.begin():                          # 单个事务，异常自动回滚
         batch = db.get(ImportBatch, batch_id, with_for_update=True)   # 行锁，防并发双提交
-        _assert_ready(batch)
+        _assert_ready(batch)                       # §9.1 的全部前置校验
+        ctx = load_context(db, batch_id)           # §0.2 的同一个函数：目标账户、币种、类型
         rows = db.scalars(select(ImportRow)
                           .where(ImportRow.batch_id == batch_id,
                                  ImportRow.status != "skipped")
                           .order_by(ImportRow.row_no)).all()
         created = []
         for i, r in enumerate(rows, start=1):
-            txs = (build_repayment_pair(r, batch, ctx)
+            txs = (build_transfer_pair(r, batch, ctx)
                    if _is_two_leg(r) else [build_single(r, batch, ctx)])
             db.add_all(txs)
             if i % 200 == 0:
@@ -1764,8 +1913,23 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID) -> CommitResult:
     return CommitResult(transaction_count=len(created))
 ```
 
+两个辅助函数：
+
+```python
+def _is_two_leg(r: ImportRow) -> bool:
+    """这一行要不要建两条交易。只有转账、且用户选了对手账户时才两腿（决策 §1.2）；
+    对手账户为空 = "对手不在应用里"，按单腿建。"""
+    return r.kind == "transfer" and r.counterpart_source_id is not None
+
+def build_single(row, batch, ctx) -> Transaction:
+    """按 §9.2 的字段映射把一条草稿行装成一条 Transaction。非转账行、以及"对手不在应用里"
+    的单腿转账都走这里：`transfer_pair_id = None`，`counterparty` 取用户在 review 里填的
+    文本（非转账行为 None），`refund_of` 按 §9.2 的两个条件写（`kind='refund'` 且
+    `matched_transaction_id` 非空），其余字段一一对应。"""
+```
+
 - **一个事务**（决策 §5）：任何一行违反 CHECK 约束都整批回滚，批次保持 `ready`，用户改完再提交。
-- `with_for_update()` 的行锁挡住"同一批次被点两次提交"的竞态；第二个请求拿到锁时看到 `status='committed'`，返回 409 `import_not_ready`。
+- `with_for_update()` 的行锁挡住"同一批次被点两次提交"的竞态；第二个请求拿到锁时看到 `status='committed'`，返回 409 `batch_already_committed`（§9.1）。
 - 分批 flush（每 200 行）比逐条 flush 快一个数量级；约束报错时定位不到具体行，此时在出错路径上再对该批逐行 flush 一次定位（只有出错时才慢）。
 - **提交不改 `import_rows.status`**：决策 §5 给这个列的取值只有 `pending` / `edited` / `skipped`，本章不擅自扩枚举。"这一行提交过没有"由 `transaction_id IS NULL` 回答，语义更直接，也不会把用户改过行的 `edited` 标记冲掉。若 `02-database.md` 最终选择加第四个值 `committed`，则撤销时必须能还原成 `edited`/`pending`，见 §待决 14。
 
@@ -1778,7 +1942,7 @@ def revert_batch(db: Session, batch_id: UUID, actor_id: UUID) -> RevertResult:
     with db.begin():
         batch = db.get(ImportBatch, batch_id, with_for_update=True)
         if batch.status != "committed":
-            raise ApiError(409, "import_not_committed", "该批次不是已提交状态")
+            raise ApiError(409, "batch_not_committed", "该批次不是已提交状态")
         n = db.execute(delete(Transaction)
                        .where(Transaction.import_batch_id == batch_id)).rowcount
         db.execute(update(ImportRow)
@@ -1796,7 +1960,7 @@ def revert_batch(db: Session, batch_id: UUID, actor_id: UUID) -> RevertResult:
 | 被删的支出有退款行指向它（`refund_of`） | 退款行的 `refund_of` 置 NULL，退款行保留 | 决策 §1.1 `ON DELETE SET NULL` |
 | 被删的是两腿转账的一腿 | 两腿都属于本批、都被删；只删一腿的情况不存在 | 两腿同 `import_batch_id` |
 | 被删的交易被后来手工编辑过 | 照删不误 | 撤销就是"当初这批不该导" |
-| `reverted` 批次再次撤销 | 409 `import_not_committed` | |
+| `reverted` 批次再次撤销 | 409 `batch_not_committed`（**需 03 §4.2 注册表新增**，见 待决 16） | |
 | `reverted` 批次重新提交 | **不允许**，重新导入 = 新建批次 | 见 §待决 2 |
 
 `reverted` 是 `import_batches.status` 的第六个取值（`uploaded` / `parsing` / `ready` / `failed` / `committed` / `reverted`）。决策 §5 只列了前五个 + "撤销"这个行为；本章把撤销后的状态命名为 `reverted`，需要 [`02-database.md`](./02-database.md) 的 CHECK 约束覆盖（见 §待决 1）。
@@ -2001,11 +2165,25 @@ def fake_llm(monkeypatch, request):
 | `fake_llm_always_500` | 整批 `failed`，`error` 含块号，`error_chunk` 正确 |
 | `fake_llm_bad_json` | 重试 2 次后 `failed`；第 2、3 次请求的 user message 含"严格按 schema" |
 | `fake_llm_401` | 不重试（`calls` 长度 = 1），`error` = "LLM 密钥无效，请到设置里更新" |
-| `fake_llm_truncated`（`finish_reason="length"`） | 该块被切成两半重发，`calls` 长度增加 |
+| `fake_llm_truncated`（文本块，首次 `finish_reason="length"`，两半都成功） | 该块被切成两半重发，`len(calls) == 3`（父块 1 + 子块 2）；两个子块的正文都带表头前缀 |
+| `fake_llm_truncated_image`（**非密表格**的整页图片，每次都回 `finish_reason="length"`） | 不递归：`len(calls) == 3`——父块 1 次、两个子块各 1 次，父块之后的调用增量 **≤ 2**；两个子块的请求正文对应 `sub_index = 1` / `2`（user message 分别是"（上半页）"和"（下半页）"）；子块再截断时 `split_chunk` 返回 `None`，整批 `failed`，`error_message` 含"无法再拆分"（决策 §14.9）。这条用例专门盯着"图片块无限递归、无限计费"这个回归 |
+| `fake_llm_schema_400`（第一次 400 且响应体含 `"json_schema"`，之后正常） | 只重发**一次**（`len(calls) == 2`）；第 2 次请求的 `response_format.json_schema.schema` 里不含 `minLength` / `maxLength` / `pattern` / `minimum` / `maximum` / `maxItems`，仍含 `enum` 与 `additionalProperties: false`；这一次不占 §3.4 的重试配额，最终批次 `ready`；同批第二块直接用 `ROWS_SCHEMA_MIN`（不再出现 400） |
 | `fake_llm_empty`（所有块 `rows: []`） | `failed`，`error` = "没有识别到任何交易" |
 | `fake_llm_extra_field`（多返回一个字段） | `jsonschema` 校验失败 → 走重试路径 |
 
 **至少一个测试断言提示词本身**：`test_system_prompt_contains_all_categories` 检查渲染出的 system prompt 含全部 22 个一级 code（16 支出 + 6 收入，逐个断言，含 `social_income`、`other_income`）、含填充后的实际账户币种、含"不要发明新的 code"这句话。分类表改了而提示词没跟上时这个测试会红。
+
+另一个 `test_system_prompt_has_date_escape_rule` 断言**日期逃生规则**逐字在提示词正文里（§5.1）：
+
+```python
+def test_system_prompt_has_date_escape_rule():
+    p = render_system_text(CTX)
+    assert "把原文日期串原样填进 date" in p
+    assert "服务端会按整份账单统一判定 DD/MM 还是 MM/DD" in p
+    assert "**不要猜**" in p
+```
+
+这条不是形式主义：§7.1 的全批 DD/MM 判定完全依赖模型把 `A/B`、`A/B/YYYY` 原样回填；提示词一旦被改回"必须输出 YYYY-MM-DD"，`detect_dmy` 就再也拿不到可判的输入，英式账单会被静默解析错——那种回归在别的测试里看不出来。
 
 ### 12.4 归一化单元测试用例表
 
@@ -2096,7 +2274,7 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
                       headers=auth).json()["items"]
     assert rows[1]["category_l1"] is None
     bad = client.post(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/commit", headers=auth)
-    assert bad.status_code == 400 and bad.json()["code"] == "import_missing_category"
+    assert bad.status_code == 409 and bad.json()["code"] == "rows_uncategorized"
 
     # 4. 改一行
     client.patch(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/rows/{rows[1]['id']}",
@@ -2130,20 +2308,21 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 
 | 用例 | 断言 |
 |---|---|
-| 未配 LLM 就上传 | 400 `llm_not_configured` |
+| 未配 LLM 就上传 | 409 `llm_not_configured` |
 | 11 MB 文件 | 413 `file_too_large` |
-| `.exe` 改名成 `.pdf` | 400 `unsupported_file_type` |
+| `.exe` 改名成 `.pdf` | 415 `unsupported_file` |
 | 真 xlsx 上传，测试环境**没装 libmagic**（`monkeypatch` 让 `import magic` 抛 `ImportError`） | `sniff_mime` 返回 `XLSX_MIME`（不是 `application/zip`），`ALLOWED_EXT[mime] == "xlsx"` 不抛 KeyError，`extract()` 走 `extract_xlsx` 而不是 `extract_csv` |
-| 普通 `.zip`（里面没有 `xl/workbook.xml`）改名成 `.xlsx` | 400 `unsupported_file_type`，两条嗅探分支都拒绝 |
+| 普通 `.zip`（里面没有 `xl/workbook.xml`）改名成 `.xlsx` | 415 `unsupported_file`，两条嗅探分支都拒绝 |
 | 本账本已有 parsing 批次 | 409 `import_in_progress` |
-| 1 小时内第 11 批 | 429 `rate_limited` |
-| 归档账户作为目标 | 400 `source_archived` |
+| 1 小时内第 11 批 | 429 `import_rate_limited` |
+| 归档账户作为目标 | 409 `source_archived` |
 | 别的账本的成员访问本批次 | 404 |
 | `failed` 批次 `POST retry` | 重跑成 `ready` |
-| `committed` 批次 `PATCH rows` | 409 |
-| 同一批次并发两次 commit | 一次 200、一次 409，交易只建一遍 |
+| `committed` 批次 `PATCH rows` | 409 `batch_not_ready` |
+| 同一批次并发两次 commit | 一次 200、一次 409 `batch_already_committed`，交易只建一遍 |
 | 扫描件 fixture 走完全程 | 所有行都带 `needs_review`，`batch.parse_mode == "vision"` |
 | 3 页文本 PDF fixture | 各页 `source_ref` 互不重复（第 2 页首行标号 = 第 1 页非空行数 + 1），无行被 §7.7 误合并 |
+| review 里把一条 `kind=transfer` / `subtype=plain` 的行选上对手账户后 commit | 走 `build_transfer_pair`（§9.3），两腿共享一个 `transfer_pair_id`、**两腿的 `transfer_subtype` 都是 `plain`**（不是 `repayment`）；再导一次同一份账单时 §8.3 不会把它当还款腿配对 |
 | 提交后再撤销、再重新上传同一文件 | 新批次独立，`duplicate` 标记命中所有行 |
 | 提交后**不撤销**、直接重新上传同一文件 | 所有行 `duplicate`；其中那条退款行因为原单可退额度已为 0 而没有退款候选，`matched_transaction_id` 为 `None`；若强行 commit，新建的退款交易 `refund_of IS NULL`，不会指向一笔非 `expense` 的交易 |
 
@@ -2157,13 +2336,13 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 
 ## 待决
 
-以下问题在 [`00-decisions.md`](./00-decisions.md) 里没有明确答案。**正文按下面的"建议默认值"写，但需要用户拍板后回填到决策记录。**
+以下问题在 [`00-decisions.md`](./00-decisions.md) 里没有明确答案。**正文按下面的"建议默认值"写，但需要用户拍板后回填到决策记录。** 第一轮评审后已被决策 §14 裁定的条目在表里标注出来，正文按裁定改过了。
 
 | # | 问题 | 建议默认值 |
 |---|---|---|
 | 1 | 撤销后的批次状态叫什么？决策 §5 只给了 `uploaded/parsing/ready/committed/failed` 五个值和"撤销"这个行为 | 加第六个值 `reverted`，需要 `02-database.md` 的 CHECK 覆盖 |
 | 2 | `reverted` 的批次能否重新提交（草稿还在） | 不能；重新导入 = 新建批次。理由：撤销之后用户往往要换账户或换文件 |
-| 3 | 一行同时命中 `duplicate` 和 `refund_candidate` 时，`matched_transaction_id` 归谁 | 归 `refund_candidate`（它要写 `refund_of`；`duplicate` 只是提示） |
+| 3 | 一行同时命中 `duplicate` 和 `refund_candidate` 时，`matched_transaction_id` 归谁 | **已由决策 §14.7 裁定**：`refund_of` 只看"`kind='refund'` 且 `matched_transaction_id` 非空"，所以退款行上的这一列必须归退款候选——§8.2 在查候选前无条件清空它，§9.2 不再看 `flags`、也不引入"用户已确认"状态 |
 | 4 | 欧陆数字格式 `1.234,56` 是否支持 | 本版本不支持；命中启发式时整批 `needs_review` 并提示用户 |
 | 5 | 是否需要 `import_batches.error_chunk` 列存失败块号 | 需要，`INTEGER NULL`；若 `02-database.md` 不加，退化为写进 `error` 文本 |
 | 6 | 是否需要 `import_batches.parse_mode`（text/vision）、`progress`、`chunk_total` 三列 | 需要：前端要显示"正在识别 3/12"和缩略图入口 |
@@ -2176,6 +2355,9 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | 12 | 提示词是否要注入账本里已有的商户名列表以提高分类准确率 | 不注入。会显著涨 token，且容易让模型"对齐"到错误的历史数据 |
 | 13 | `merged_duplicates` 是否要在 review 表格里单独筛选 | 要，和 `duplicate` / `needs_review` 一样是筛选器的一个选项 |
 | 14 | `import_rows.status` 要不要第四个值 `committed`（决策 §5 只给了 `pending` / `edited` / `skipped`） | **不要**。本章 §9.4 提交时不动 `status`，"提交过没有"看 `transaction_id IS NOT NULL`；§9.5 撤销时也只清 `transaction_id`，`edited` / `skipped` 原样保留。若最终决定要加这个值，`02-database.md` 的 CHECK 要覆盖，并且撤销**不能**一律置回 `pending`（会丢掉 `edited`），得还原成"改过 → `edited`，没改过 → `pending`"，那就还要一个"是否被 PATCH 过"的记号——所以建议就别加 |
+| 15 | `import_rows` 还差两列：`hint VARCHAR(200) NULL`（装 §0.2 的 `note_hint`，给 review 界面显示"请选择还款是从哪个账户出的"这类提示；不拼进 `note`，否则会污染提交后的 `transactions.note`）和 `transfer_role VARCHAR(8) NULL`（§6 的输出 schema、§7.4 的补齐、§9.2 的字段映射都要它，[`02-database.md`](./02-database.md) §1.9 当前的 DDL 里没有） | 两列都加，`02-database.md` 的 `import_rows` DDL 要收录：`hint` 无约束；`transfer_role` 加 `CHECK (transfer_role IS NULL OR transfer_role IN ('out','in'))`。若最终不加 `transfer_role`，退化方案是提交时按 `amount` 符号现推（`< 0` → `out`，否则 `in`），但那样用户在 review 里改不了方向 |
+| 16 | 本章用到、而 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里还没有的两个 code（决策 §14.4 不允许各章自造，只能提请注册表新增） | 新增 `rows_all_skipped`（409，commit 时所有行都被标 skipped，建不出任何交易）和 `batch_not_committed`（409，对非 `committed` 批次调撤销）。在注册表补上之前，前者退化用 `batch_not_ready` + detail 说明，后者只会出现在 `reverted` 批次上（见 待决 17） |
+| 17 | 撤销后批次是**保留**为 `reverted`（本章 §9.5：批次行、草稿行、原文件都留着，供追溯与再次导入）还是**整批删除**（[`03-backend-api.md`](./03-backend-api.md) §5.45 现在的写法：删交易 → 删草稿行 → 删批次 → 删文件）。两章现在不一致 | 建议按本章保留为 `reverted`：决策 §5 只说"删除这批建的所有交易"，没说删批次；保留才能回答"这批当初导了什么、为什么撤销"，也才有 §1.3 保留原文件的意义。若采纳，`02-database.md` 要把 `reverted` 加进 `ck_import_batches_status`（同 待决 1）、并放宽 `ck_import_batches_committed_at`；`03-backend-api.md` §5.45 要改成"撤销 = 删交易 + 批次转 `reverted`" |
 
 ---
 
