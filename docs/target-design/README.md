@@ -273,13 +273,13 @@ frontend/src/
 
 | 文件 | 行数 |
 |---|---|
-| [`00-decisions.md`](./00-decisions.md) | 227 |
+| [`00-decisions.md`](./00-decisions.md) | 231 |
 | [`01-domain-and-flows.md`](./01-domain-and-flows.md) | 1270 |
-| [`02-database.md`](./02-database.md) | 1486 |
-| [`03-backend-api.md`](./03-backend-api.md) | 3054 |
-| [`04-frontend.md`](./04-frontend.md) | 1795 |
-| [`05-import-and-llm.md`](./05-import-and-llm.md) | 2408 |
-| 本文 `README.md` | 381 |
+| [`02-database.md`](./02-database.md) | 1489 |
+| [`03-backend-api.md`](./03-backend-api.md) | 3055 |
+| [`04-frontend.md`](./04-frontend.md) | 1803 |
+| [`05-import-and-llm.md`](./05-import-and-llm.md) | 2419 |
+| 本文 `README.md` | 408 |
 
 各章都超出了最初给写作者的行数参考区间。这是**有意的**：决策 §14.8 明确"各章的行数目标只是参考，**不作为验收项**"，并且不得为压行数删掉被点名要求的内容，也不要把提示词、schema 拆到附录文件。十张表的完整 DDL、49 个端点的请求响应、完整的 system prompt 与输出 schema 必须一次给全，读者才能照着实现。行数只在这里作为一个规模参考，不代表质量。
 
