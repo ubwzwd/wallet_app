@@ -7,6 +7,8 @@
 描述**现状**时（`path:line` 形式的引用）指的是 [`../current-design/04-frontend.md`](../current-design/04-frontend.md) 所描述的、当前仓库里真实存在的代码；描述**目标**时不假设任何代码已经存在。所有相对路径以仓库根目录为基准。
 
 > **修订说明**：本版按终审意见与决策 §14「评审后的补充裁定」修订。主要变化：§3.3 的 TypeScript 类型与 §3.4 的函数签名**逐字段对齐** [`./03-backend-api.md`](./03-backend-api.md) §5 的真实请求 / 响应形状（列表信封 `{items,total}`、折算字段 `amount_base` / `rate_used` / `rate_date`、退款字段 `refunded_total` / `refundable`、账本角色 `role`、扁平的 `TransferCreate`、统计的 `expense[]` / `income[]` 双数组等）；§3.7 的 `errors.*` 语言包改成与 [`./03-backend-api.md`](./03-backend-api.md) §4.2 **唯一错误 code 注册表**一一对应的完整表（决策 §14.4，之前有 10 个 key 与后端实际发出的 code 对不上，运行时会 100% 落到 `errors.unknown`）；待决 D-3 / D-9 / D-10 已被 03 章回答，D-12 已由决策 §14.6 裁定。
+>
+> **第二轮修订**：`Transaction.pair` 改用新增的 `TransactionPairRef`（03 §5.30 的精简引用形状），不再复用 `TransferPair`；`llmApi.get()` 不再返回 `null`（03 §5.7 恒为 200，用 `configured` 区分）；`IsoDateTime` 的示例补上 `Z`；`UserUpdate.language` 允许显式 `null`、§5.1 的「跟随系统」改为置 `null` 而不是存 `'system'`（决策 §14.6）。
 
 ---
 
@@ -371,7 +373,7 @@ export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 120_0
 // ---------- 通用 ----------
 export type Uuid = string;
 export type IsoDate = string;      // 'YYYY-MM-DD'
-export type IsoDateTime = string;  // '2026-09-01T12:00:00.000000'
+export type IsoDateTime = string;  // '2026-09-01T12:00:00.000000Z'（UTC，带 Z，微秒精度，03 §4.5）
 export type Money = string;        // Decimal 的 JSON 形态，如 '-42.5000'
 export interface Paged<T> { items: T[]; total: number; }
 export interface ApiError { detail: string; code: string; }   // 决策 §9
@@ -387,7 +389,8 @@ export interface User {
   has_llm_settings: boolean;
 }
 // PATCH /me（03 §5.6）：两个字段都可选，显式 null 会被服务端拒成 422
-export interface UserUpdate { base_currency?: string; language?: 'zh' | 'en'; }
+export interface UserUpdate { base_currency?: string; language?: 'zh' | 'en' | null; }
+// language 传显式 null = 恢复「跟随系统」（决策 §14.6、03 §5.6）；其余字段不接受 null。
 export interface LoginRequest { email: string; password: string; }
 // POST /auth/register（03 §5.1）
 export interface RegisterRequest {
@@ -479,8 +482,19 @@ export interface Transaction {
   // 只在 kind === 'expense' 的行上出现（03 §5.28）：
   refunded_total?: Money;        // 指向该行的所有 refund 的 amount 之和（正数）
   refundable?: Money;            // |amount| - refunded_total，可以为负（允许超额退款，决策 §1.1）
-  // 只在 GET /transactions/{tid} 且该行是两腿转账的一腿时出现（03 §5.30）：
-  pair?: TransferPair | null;
+  // 只在 GET /transactions/{tid} 且该行是两腿转账的一腿时出现（03 §5.30）。
+  // 形状见 03 §5.30，与 POST/PATCH `.../transfer` 响应的 `TransferPair` **不是同一个类型**。
+  pair?: TransactionPairRef | null;
+}
+
+// GET /transactions/{tid} 里那个精简的对腿引用（03 §5.30）：out/in 各只有四个字段，
+// 键名是 `transaction_id` 而不是 `id`，`pair` 里也没有 occurred_at / subtype / note。
+// 千万不要和下面 §5.33/§5.34 响应的 `TransferPair` 混用（那个才带完整的两条 Transaction）。
+// 非转账行、单腿转账时后端返回 `pair: null`。
+export interface TransactionPairRef {
+  pair_id: Uuid;
+  out: { transaction_id: Uuid; source_id: Uuid; amount: Money; currency: string };
+  in:  { transaction_id: Uuid; source_id: Uuid; amount: Money; currency: string };
 }
 
 export interface TransactionCreate {
@@ -655,7 +669,7 @@ export interface CurrencyList { currencies: Record<string, string>; }
 | `POST /auth/login` | `authApi.login(b: LoginRequest): Promise<AuthResponse>` |
 | `GET /me` | `meApi.get(): Promise<User>` |
 | `PATCH /me` | `meApi.update(b: UserUpdate): Promise<User>` |
-| `GET /me/llm-settings` | `llmApi.get(): Promise<LlmSettings \| null>` |
+| `GET /me/llm-settings` | `llmApi.get(): Promise<LlmSettings>`（没配过也是 200，用 `configured` 区分，03 §5.7，不会返回 `null`） |
 | `PUT /me/llm-settings` | `llmApi.put(b: LlmSettingsPut): Promise<LlmSettings>` |
 | `DELETE /me/llm-settings` | `llmApi.remove(): Promise<void>` |
 | `POST /me/llm-settings/test` | `llmApi.test(b?: LlmSettingsTestRequest): Promise<LlmTestResult>` |
@@ -796,7 +810,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | code | HTTP | zh | en |
 |---|---|---|---|
 | `network_error` | — | 网络连接失败，请检查网络后重试 | Can't reach the server. Check your connection. |
-| `validation_error` | 422 | 有几项填得不对，请检查标红的字段 | Some fields need fixing |
+| `validation_error` | 422 / 400 | 有几项填得不对，请检查标红的字段 | Some fields need fixing |
 | `unauthorized` | 401 | 登录已过期，请重新登录 | Your session expired. Please sign in again. |
 | `invalid_credentials` | 401 | 邮箱或密码不正确 | Incorrect email or password |
 | `not_found` | 404 | 找不到这条记录，它可能已经被删除，或者你不在这个账本里 | Not found — it may have been deleted, or you're not a member of this ledger |
@@ -1365,7 +1379,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | `react-intl` (FormatJS) | ICU 消息格式更强、日期数字格式化一体化；但 API 更重，运行时体积更大，且 key 回退要自己写 |
 | 自己写一个 `t()` | 只有两种语言时看着够用，但复数、插值、缺失 key 回退、语言切换重渲染都得重新实现一遍，不划算 |
 
-`expo-localization` 负责读设备语言（`getLocales()[0].languageCode`）。语言决策顺序：`user.language`（服务端持久化，决策 §11 的 `PATCH /me`）→ `localStorage['wallet:lang']` → 设备语言 → `zh`。选了「跟随系统」时存 `'system'` 并在设备语言变化时跟着变。
+`expo-localization` 负责读设备语言（`getLocales()[0].languageCode`）。语言决策顺序：`user.language`（服务端持久化，决策 §11 的 `PATCH /me`）→ `localStorage['wallet:lang']` → 设备语言 → `zh`。选了「跟随系统」时把 `user.language` 置为 `null`（`PATCH /me {"language": null}`，决策 §14.6），本地 `localStorage['wallet:lang']` 也一并清掉，并在设备语言变化时跟着变——语言字段没有 `'system'` 这个取值。
 
 Web 上同时把 `<html lang>` 设成当前语言（现状固定 `lang="en"`，`frontend/public/index.html:2`）。
 

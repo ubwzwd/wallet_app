@@ -7,6 +7,8 @@
 阅读前提：读者没看过这个仓库。全部路径相对于仓库根目录。技术栈沿用现状：FastAPI 0.109.2 + SQLAlchemy 2.0.44 + Alembic + PostgreSQL 15（测试用 SQLite），汇率来自 Frankfurter。
 
 > **修订说明**：本版按终审意见与 [`00-decisions.md`](./00-decisions.md) §14「评审后的补充裁定」修订。§4.2 的 code 清单是全仓库**唯一的错误 code 注册表**（决策 §14.4），01 / 04 / 05 章引用的每个 code 都必须能在这里找到；本版补齐了 `kind_change_not_allowed`、`llm_test_rate_limited`、`register_rate_limited`，把描述与触发条件不符的 `source_currency_mismatch` 改名为 `same_source` 并在 §5.33 / §5.34 真正使用。另外：`import_rows` 的行号列统一为 `row_no`（决策 §14.5）；账户余额口径改为决策 §14.2；`exchange_rates` 的目标币种列统一为 `symbol`（决策 §14.1）；`kind` 跨 transfer 边界互改被明确禁止（决策 §14.3，见 §5.31）。
+>
+> **第二轮修订**：§4.2 的 `validation_error` 明确为 **422（schema 层）/ 400（业务层）** 双状态码，正文里的 400 与 422 用法都在这一条之下；§5.6 的 `language` 允许显式 `null`（恢复「跟随系统」，决策 §14.6）；§5.30 补一句说明——那里的 `pair` 是精简引用，与 §5.33 / §5.34 的转账对象不是同一个形状。
 
 ---
 
@@ -512,7 +514,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 
 | code | HTTP | 触发条件 |
 |---|---|---|
-| `validation_error` | 422 | 请求体 / 查询参数 / 路径参数不满足 schema |
+| `validation_error` | 422 / 400 | **422**：请求体 / 查询参数 / 路径参数不满足 pydantic schema（由 §4.1 的 `RequestValidationError` 处理器统一产出）。**400**：schema 过了、但业务层校验没过且没有更专属的 code（币种不在支持列表、金额为 0、符号与 `kind` 冲突、非转账行却带了 `transfer_role` 等）。两种情形共用这一个 code，用状态码区分：422 = 形状不对，400 = 形状对但值不合法 |
 | `unauthorized` | 401 | 缺令牌、令牌无效或过期 |
 | `invalid_credentials` | 401 | 登录邮箱或口令错 |
 | `not_found` | 404 | 资源不存在，或对当前用户不可见（§3.3） |
@@ -743,12 +745,14 @@ GET /api/v1/me
 
 鉴权：bearer。决策 §11（默认币种、语言）。
 
-请求体（两个字段都可选，`exclude_unset` 语义；显式 `null` 一律拒绝为 422，不再像现状那样把 `null` 写进 NOT NULL 列导致 500）：
+请求体（两个字段都可选，`exclude_unset` 语义；显式 `null` 默认拒绝为 422，不再像现状那样把 `null` 写进 NOT NULL 列导致 500。**`language` 是唯一的例外**，见下表）：
 
 | 字段 | 类型 | 校验 |
 |---|---|---|
-| `base_currency` | str | `^[A-Za-z]{3}$`，`.upper()` 后必须在 Frankfurter 支持列表里，否则 400 |
-| `language` | str | `zh` \| `en` |
+| `base_currency` | str | `^[A-Za-z]{3}$`，`.upper()` 后必须在 Frankfurter 支持列表里，否则 400；不接受 `null` |
+| `language` | `'zh' \| 'en' \| null` | 只接受这三个值。显式传 `null` 是合法的，表示**恢复「跟随系统」**（写 `users.language = NULL`，决策 §14.6）；这是本端点唯一接受显式 `null` 的字段 |
+
+所以「跟随系统 → 中文 → 跟随系统」这条路是通的：前端在语言设置里选「跟随系统」就发 `{"language": null}`。
 
 ```json
 PATCH /api/v1/me
@@ -1661,6 +1665,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e0615
 ```
 
 非转账、或单腿转账时 `pair` 为 `null`。
+
+注意这个 `pair` 是个**精简引用**：`out` / `in` 各只有 `transaction_id`（不是 `id`）、`source_id`、`amount`、`currency` 四个字段，`pair` 上也没有 `occurred_at` / `subtype` / `note`。它和 §5.33 / §5.34 响应里那个带完整两条交易的转账对象**不是同一个形状**，前端要用两个不同的类型（[`./04-frontend.md`](./04-frontend.md) §3.3 的 `TransactionPairRef` 与 `TransferPair`）。
 
 错误：404 `not_found`（不存在、属于别的账本、账本不可见）。副作用：只读。
 

@@ -9,6 +9,8 @@
 > **与其他章的分工**：本章写"是什么"和"什么规则"；建表 DDL、索引、迁移在 [`./02-database.md`](./02-database.md)；每个接口的参数、状态码、响应体在 [`./03-backend-api.md`](./03-backend-api.md)；界面在 [`./04-frontend.md`](./04-frontend.md)；账单解析的实现细节、提示词、schema 在 [`./05-import-and-llm.md`](./05-import-and-llm.md)。本章只写导入的**状态与业务规则**。
 >
 > **修订说明**：本版按终审意见与决策 §14「评审后的补充裁定」修订。主要变化：全文的错误 `code` 一律改用 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的**唯一注册表**里的名字与状态码（决策 §14.4），本章不再自造同义名；`exchange_rates` 的目标币种列由 `quote` 改为 `symbol`（决策 §14.1）；`kind` 在 `transfer` 与非 `transfer` 之间禁止互改（决策 §14.3）；账户余额口径改为"以账户币种计价、异币种交易按发生日汇率折算"（决策 §14.2，§5.4）；`import_rows` 行号列为 `row_no`（决策 §14.5）。本章篇幅超过最初的行数目标，按决策 §14.8 行数不作为验收项，内容不因压行而删减。
+>
+> **第二轮修订**：`category_kind_mismatch` 的状态码改为注册表登记的 400；退出账本改为 204（与 03 §5.19 一致）；`validation_error` 的双状态码口径见 03 §4.2；§4.1 / §4.3 / §4.4 三处 ASCII 图的框线因 code 改名重新对齐。
 
 ---
 
@@ -444,7 +446,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 - **触发者**：member。
 - **前置**：调用者角色是 `member`；不是自己唯一的账本也没关系（允许退到 0 本账，界面引导新建）。
-- **步骤**：`POST /api/v1/ledgers/{id}/leave`（空体）→ 删除自己的 `ledger_members` 行 → 200。
+- **步骤**：`POST /api/v1/ledgers/{id}/leave`（空体）→ 删除自己的 `ledger_members` 行 → 204（无响应体，见 [`./03-backend-api.md`](./03-backend-api.md) §5.19）。
 - **服务端校验**：调用者是 owner → 409 `owner_must_transfer`（决策 §2："owner 必须先转让再退出"）。
 - **状态变化**：该账本从他的 `GET /ledgers` 里消失；他此前创建的账户和交易**留在账本里**（`created_by` 仍指向他，用于显示"谁记的"）。
 - **失败分支**：owner 直接退出被拒；界面提示先转让。
@@ -575,7 +577,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
   3. `kind` 合法；
   4. 符号与 kind 匹配（expense 必须 < 0，income 必须 > 0；`amount = 0` 一律 400 `validation_error`）；
   5. `category_l1` 非空且在常量表里 → 否则 400 `category_invalid`；
-  6. `category_l1` 的收支侧与 kind 匹配（expense 用支出分类，income 用收入分类）→ 否则 422 `category_kind_mismatch`；
+  6. `category_l1` 的收支侧与 kind 匹配（expense 用支出分类，income 用收入分类）→ 否则 400 `category_kind_mismatch`；
   7. `category_l2` 若非空必须属于该一级 → 否则 400 `category_invalid`；
   8. `transfer_role` / `transfer_subtype` / `counterparty` / `refund_of` 必须为空 → 否则 400 `validation_error`；
   9. `currency` 匹配 `^[A-Z]{3}$`；`amount` ≤ 4 位小数。
@@ -819,19 +821,19 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
          +----------------------------------+           |                 |
                                                         |                 |
    PATCH /transactions/{tid}                            |    PATCH/DELETE /transactions/{tid}
-   （改金额/日期/账户/分类/备注/kind）                   |    -> 409 use_transfer_endpoint
+   （改金额/日期/账户/分类/备注/kind）                  |    -> 409 use_transfer_endpoint
                                                         |                 |
-   ==========  非 transfer <-/-> transfer  ==========    |    只能走
-   任何方向都 400 kind_change_not_allowed                |    PATCH/DELETE .../transfer/{pair_id}
-   （要改只能删了重记）                                   |    （两腿一起，事务内）
+   ==========  非 transfer <-/-> transfer  ==========   |    只能走
+   任何方向都 400 kind_change_not_allowed               |    PATCH/DELETE .../transfer/{pair_id}
+   （要改只能删了重记）                                 |    （两腿一起，事务内）
                                                         |                 |
         |                                               |                 |
         | DELETE /transactions/{tid}                    | DELETE          | DELETE .../transfer/{pair_id}
         v                                               v /transactions/  v
    +---------------------------------------------------------------------------+
-   |                                 DELETED                                    |
-   |  指向它的 refund 行 refund_of -> NULL（ON DELETE SET NULL）                |
-   |  之后 GET / PATCH / DELETE 一律 404 not_found                  |
+   |                                 DELETED                                   |
+   |  指向它的 refund 行 refund_of -> NULL（ON DELETE SET NULL）               |
+   |  之后 GET / PATCH / DELETE 一律 404 not_found                             |
    +---------------------------------------------------------------------------+
 ```
 
@@ -895,16 +897,16 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
               v                                        v
       +----------------+   POST .../transfer-ownership  +----------------+
       |     OWNER      |------------------------------->|     MEMBER     |
-      | 唯一，1 本 1 个 |<-------------------------------| 记账/改账/导入 |
-      | 全部权限       |   （原 owner 降为 member，       | 可自行退出     |
-      +----------------+     同一事务内原子完成）        +----------------+
+      | 唯一，1 本 1 个|<-------------------------------| 记账/改账/导入 |
+      | 全部权限       |   （原 owner 降为 member，     | 可自行退出     |
+      +----------------+     同一事务内原子完成）       +----------------+
               |                                                |
-              | POST .../leave -> 409 owner_must_transfer|
+              | POST .../leave -> 409 owner_must_transfer      |
               |                                                |
-              | DELETE /ledgers/{id}（owner 删账本）            |
+              | DELETE /ledgers/{id}（owner 删账本）           |
               v                                                v
       +-----------------------------------------------------------------+
-      |  账本 GONE：成员关系、邀请码、账户、交易、导入批次全部级联删除    |
+      |  账本 GONE：成员关系、邀请码、账户、交易、导入批次全部级联删除  |
       +-----------------------------------------------------------------+
 ```
 
@@ -914,11 +916,11 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    POST /ledgers/{id}/invites   （owner；成员数 < 10）
               |
               v
-      +------------------------+
-      |        ACTIVE          |  used_by = NULL 且 now < expires_at
+      +-------------------------+
+      |        ACTIVE           |  used_by = NULL 且 now < expires_at
       |  code = 6 位数字        |  同一账本可以同时有多个 ACTIVE
       |  expires_at = now+10min |
-      +------------------------+
+      +-------------------------+
          |                  |
          | POST /ledgers/join  正确 & 未过期 & 调用者非成员
          |                  |
@@ -934,7 +936,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
          | 再次提交         | 提交
          v                  v
    400 invite_used         400 invite_expired
-        （计入 15 分钟 5 次限流窗口）
+       （计入 15 分钟 5 次限流窗口）
 
    不存在的 code           -> 400 invite_invalid（计入限流）
    已是该账本成员           -> 409 already_member（不计限流、不消耗码）
