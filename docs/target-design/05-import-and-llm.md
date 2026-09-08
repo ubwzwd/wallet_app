@@ -88,7 +88,7 @@
                  │ POST .../imports/{bid}/commit
                  ▼
  ┌────────────────────────────────────────────────┐
- │ ⑩ 一个事务内建交易 → status = 'committed'        │
+ │ ⑩ 一个事务内建交易 → 批次 status = 'committed'   │
  └───────────────┬────────────────────────────────┘
                  │ DELETE .../imports/{bid}（committed 时 = 撤销）
                  ▼
@@ -140,8 +140,8 @@ def finalize(db: Session, ctx, rows, raw_response: dict) -> None:
 | 类型 | 字段 |
 |---|---|
 | `ImportContext`（frozen） | `batch_id` / `ledger_id` / `source_id` / `source_name` / `source_type`（checking\|savings\|credit\|cash\|other）/ `source_currency` / `ledger_base_currency` / `operator_id`（上传人，LLM 用他的 key）/ `file_path` / `mime` |
-| `Extraction` | `mode`（`text`\|`vision`）/ `pages: list[Page]`（文本页有 `lines: list[str]`、`line_offset`，视觉页有 `png: bytes`、`sub_index`）/ `header_lines`（分块时重复注入）/ `degrade_reason` |
-| `Chunk` | `index`（0 起）/ `kind`（`text`\|`image`）/ `text` / `png` / `page_no`（1 起，CSV/XLSX 恒为 1）/ `sub_index`（0=整页，1=上半，2=下半）/ `line_offset`（本块首行在**整份原文**中的行号，1 起，用于还原 `source_ref`） |
+| `Extraction` | `mode`（`text`\|`vision`）/ `pages: list[Page]`（文本页有 `lines: list[tuple[int, str]]`——**行标号随行携带**，见 §3.1；视觉页有 `png: bytes`、`sub_index`）/ `header_lines`（分块时重复注入）/ `degrade_reason` |
+| `Chunk` | `index`（0 起）/ `kind`（`text`\|`image`）/ `text` / `png` / `page_no`（1 起，CSV/XLSX 恒为 1）/ `sub_index`（0=整页，1=上半，2=下半）/ `line_offset`（本块首行的行标号，仅用于日志与 `split_chunk` 继承，不参与 `source_ref` 还原） |
 
 `run_import` 的骨架（错误处理是本函数的主要内容）：
 
@@ -227,28 +227,83 @@ async def _read_limited(upload: UploadFile) -> bytes:
 嗅探优先用 `python-magic`（依赖系统 `libmagic1`，`infra/Dockerfile.api` 需要装）。为了让本地开发和 CI 不强依赖 libmagic，实现成"能 import 就用 python-magic，否则用内置文件头表"：
 
 ```python
-_MAGIC = {
-    b"%PDF-": "application/pdf",
-    b"\x89PNG\r\n\x1a\n": "image/png",
-    b"\xff\xd8\xff": "image/jpeg",
-    b"PK\x03\x04": "application/zip",      # 再确认里面是不是 xlsx
-}
+import io, zipfile
 
-def sniff_mime(head: bytes, ext: str) -> str:
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+_MAGIC = (
+    (b"%PDF-", "application/pdf"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"PK\x03\x04", "application/zip"),      # 待 _refine_zip 细分
+)
+
+def sniff_mime(raw: bytes) -> str:
+    """返回**归一化后**的 MIME，取值只可能是白名单里的 5 个之一，或抛 unsupported_file_type。
+
+    raw 是 §1.1 已完整读入内存的字节（≤10 MB），不是只有文件头——
+    xlsx 的确认需要能打开整个 ZIP 目录。
+    """
+    head = raw[:8192]
+    mime = None
     try:
         import magic
-        return magic.from_buffer(head, mime=True)
-    except Exception:
-        for sig, mime in _MAGIC.items():
+        mime = magic.from_buffer(head, mime=True)
+    except Exception:                       # 没装 python-magic 或没有 libmagic
+        for sig, m in _MAGIC:
             if head.startswith(sig):
-                return mime
-        return "text/plain" if _is_probably_text(head) else "application/octet-stream"
+                mime = m
+                break
+        if mime is None:
+            mime = "text/plain" if _is_probably_text(head) else "application/octet-stream"
+    return _normalize_mime(mime, raw)
+
+def _normalize_mime(mime: str, raw: bytes) -> str:
+    """把两条分支的输出收敛到同一组取值。
+
+    libmagic 的版本差异很大：新版对 xlsx 直接给
+    application/vnd.openxmlformats-officedocument.spreadsheetml.sheet，
+    老版（以及 Debian bookworm 的 file 5.44 在某些 xlsx 上）只给
+    application/zip 或 application/x-ooxml。所以两条分支都要过这里。
+    """
+    if mime in ("application/zip", "application/x-zip-compressed", "application/x-ooxml", XLSX_MIME):
+        return _refine_zip(raw)
+    if mime in ("application/pdf", "image/png", "image/jpeg"):
+        return mime
+    if mime.startswith("text/") or mime in ("application/csv", "application/octet-stream"):
+        if _is_probably_text(raw[:8192]):
+            return "text/plain"
+    raise ApiError(400, "unsupported_file_type", "只支持 PDF / CSV / XLSX / PNG / JPG")
+
+def _refine_zip(raw: bytes) -> str:
+    """ZIP 头的文件必须确认是 OOXML 工作簿，否则拒绝（防止把随便一个 zip 当 xlsx）。"""
+    try:
+        names = zipfile.ZipFile(io.BytesIO(raw)).namelist()
+    except zipfile.BadZipFile:
+        raise ApiError(400, "unsupported_file_type", "文件损坏或不是有效的 XLSX")
+    if "xl/workbook.xml" in names:
+        return XLSX_MIME
+    raise ApiError(400, "unsupported_file_type", "只支持 PDF / CSV / XLSX / PNG / JPG")
 
 def _is_probably_text(head: bytes) -> bool:
     """前 8KB 不含 NUL 字节，且能用 §2.2 的候选编码之一解码。"""
 ```
 
-CSV 没有魔数，判据就是上面的 `_is_probably_text`；不满足则按 `unsupported_file_type` 拒绝。ZIP 头的文件要再打开一次确认里面有 `xl/workbook.xml`，否则拒绝（防止把随便一个 zip 当 xlsx）。
+CSV 没有魔数，判据就是上面的 `_is_probably_text`；不满足则按 `unsupported_file_type` 拒绝。
+
+**归一化是硬约定**：`sniff_mime()` 只会返回下面 5 个值之一，`ImportContext.mime`（§0.2）存的就是这个归一化结果，因此 §1.3 的 `ALLOWED_EXT` 只需要这 5 个键，`ALLOWED_EXT[mime]` 不会 KeyError；§2 的 `extract()` 分派也因此不会把 xlsx 落到 `extract_csv()`（`.endswith("spreadsheetml.sheet")` 分支一定先命中）。
+
+```python
+ALLOWED_EXT = {
+    "application/pdf": "pdf",
+    "text/plain":      "csv",     # .csv / .txt 都存成 .csv
+    XLSX_MIME:         "xlsx",
+    "image/png":       "png",
+    "image/jpeg":      "jpg",
+}
+```
+
+第 7 条校验（MIME 与扩展名一致）就是 `ALLOWED_EXT[sniff_mime(raw)] == _canonical_ext(user_ext)`，其中 `_canonical_ext` 把 `txt→csv`、`jpeg→jpg` 折叠掉。
 
 ### 1.3 存储路径与保留策略
 
@@ -307,16 +362,20 @@ def sanitize_filename(raw: str, max_len: int = 120) -> str:
 
 ```python
 def extract(ctx: ImportContext) -> Extraction:
+    # ctx.mime 是 §1.2 sniff_mime() 归一化后的值，只可能是这 5 个之一，
+    # 所以这里写成穷举 + else raise，不留 fallthrough。
     if ctx.mime == "application/pdf":
         ex = extract_pdf_text(ctx)                                         # §2.1
         if ex.mode == "text" and _text_is_sufficient(ex):
             return ex
         return extract_pdf_raster(ctx, degrade_reason=ex.degrade_reason)   # §2.5
-    if ctx.mime.startswith("image/"):
+    if ctx.mime in ("image/png", "image/jpeg"):
         return extract_image(ctx)                                          # §2.4
-    if ctx.mime.endswith("spreadsheetml.sheet"):
+    if ctx.mime == XLSX_MIME:
         return extract_xlsx(ctx)                                           # §2.3
-    return extract_csv(ctx)                                                # §2.2
+    if ctx.mime == "text/plain":
+        return extract_csv(ctx)                                            # §2.2
+    raise ImportFailure(f"不支持的文件类型：{ctx.mime}")                     # 不该发生
 ```
 
 新增依赖（写进 `backend/pyproject.toml`；现有依赖清单在 `backend/pyproject.toml:9-24`）：
@@ -344,7 +403,7 @@ TABLE_SETTINGS_TEXT  = {"vertical_strategy": "text",  "horizontal_strategy": "te
 
 def extract_pdf_text(ctx) -> Extraction:
     pages, total_chars, header = [], 0, []
-    off = 1                                   # 全文档行号游标，跨页累加，绝不按页重置
+    off = 1                                   # 全文档行标号游标，跨页累加，绝不按页重置
     with pdfplumber.open(ctx.file_path) as pdf:
         if len(pdf.pages) > 60:
             raise ImportFailure("PDF 页数超过 60 页，请拆分后再上传")
@@ -361,13 +420,26 @@ def extract_pdf_text(ctx) -> Extraction:
             total_chars += sum(len(ln) for ln in lines)
             if pno == 1 and lines:
                 header = _guess_header(lines)
-            pages.append(Page(page_no=pno, lines=lines, line_offset=off))
+            # 行标号随行一起带走，后面任何过滤/分块都不会让它错位
+            pages.append(Page(page_no=pno,
+                              lines=[(off + j, ln) for j, ln in enumerate(lines)]))
             off += len(lines)                 # 下一页接着往下编号
     return Extraction(mode="text", pages=pages, header_lines=header,
                       degrade_reason=None if total_chars else "pdf_no_text")
 ```
 
-`line_offset` 必须**跨页累加**：`source_ref` 是整份文档唯一的行号（§3.1 用 `p.line_offset + j` 还原，§5.1 让模型原样回填）。按页重置成 `1` 会让第 2 页的 "12" 和第 1 页的 "12" 撞车——既指不回原文，又会让 §7.7 的批内去重把两笔真实交易当成重复行合掉。
+行标号游标 `off` 必须**跨页累加**：`source_ref` 要在整份文档里唯一（§3.1 直接取 `p.lines` 里带着的号，§5.1 让模型原样回填）。按页重置成 `1` 会让第 2 页的 "12" 和第 1 页的 "12" 撞车——既指不回原文，又会让 §7.7 的批内去重把两笔真实交易当成重复行合掉。
+
+**`source_ref` 的口径**（三种来源不一样，写进注释和文档，别让人误以为都是"文本编辑器里的行号"）：
+
+| 来源 | `source_ref` 里的数字是什么 | 能不能在原文件里数出来 |
+|---|---|---|
+| 文本 PDF | 抽取后**非空行**在整份文档里的序号（1 起，跨页累加） | 不能——PDF 本来就没有"行"，这是抽取结果的序号 |
+| CSV | 该记录起始的**物理行号**（`csv.reader.line_num` 推出，引号内换行也算对） | 能 |
+| XLSX | **工作表行号**（Excel 左侧那个行号） | 能 |
+| 视觉路径 | `p{页}:行序` / `p{页}-{半}:行序`，模型自己数的页内行序 | 不能，只能定位到页 |
+
+review 界面显示 `source_ref` 时按这三种口径分别标注（"第 137 行（抽取序号）" / "原文件第 137 行" / "第 3 页第 7 行"）。
 
 **"无文本"判定阈值**（任一条满足即降级为视觉路径，`degrade_reason` 记原因）：
 
@@ -385,7 +457,7 @@ _DATE_HINT = re.compile(r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}|\d{1,2}[-/]\d{1,2}[-
 _AMOUNT_HINT = re.compile(r"[-+(]?\s?[¥$€£]?\s?\d{1,3}(,\d{3})*(\.\d{1,2})?\)?")
 
 def _text_is_sufficient(ex) -> bool:
-    lines = [ln for p in ex.pages for ln in p.lines]
+    lines = [ln for p in ex.pages for _, ln in p.lines]
     chars = sum(len(ln) for ln in lines)
     if chars < 50 * max(len(ex.pages), 1):
         ex.degrade_reason = "pdf_text_too_short"; return False
@@ -435,7 +507,7 @@ def locate_header(rows: list[list[str]]) -> int:
     命中数 ≥3 才算数；找不到返回 0（把第一行当表头）。"""
 ```
 
-同时用 `csv.Sniffer().sniff(sample, delimiters=",;\t|")` 猜分隔符，失败时默认 `,`。表头之前的行全部丢弃，但**行号仍按原文件计**（`source_ref` 要能指回原文件，用户在文本编辑器里数得到）。
+同时用 `csv.Sniffer().sniff(sample, delimiters=",;\t|")` 猜分隔符，失败时默认 `,`。表头之前的行全部丢弃，但**行号仍按原文件的物理行计**——不是"第几条记录"。两者会差开：说明行、空行被丢弃，而带引号的字段里可以有换行（一条记录占两三行）。所以行号要从 `csv.reader.line_num` 推出来、跟着记录一起走，不能事后用 `line_offset + 序号` 反算。
 
 三种导出的字段名示例（用来核对 `locate_header` 的词表；实施时以真实样本为准）：
 
@@ -452,16 +524,21 @@ def locate_header(rows: list[list[str]]) -> int:
 ```python
 def extract_csv(ctx) -> Extraction:
     text, enc = decode_bytes(read_file(ctx.file_path))
-    rows = list(csv.reader(io.StringIO(text, newline=""), _sniff_dialect(text[:8192])))
+    reader = csv.reader(io.StringIO(text, newline=""), _sniff_dialect(text[:8192]))
+    rows: list[tuple[int, list[str]]] = []     # (物理行号, 字段列表)
+    prev = 0
+    for rec in reader:
+        rows.append((prev + 1, rec))           # 该记录起始的物理行号
+        prev = reader.line_num                 # 引号内换行时会一次跳好几行
     if len(rows) > 2000 + 40:
         raise ImportFailure("行数超过 2000，请拆分账单后再上传")
-    h = locate_header(rows)
-    header = ["\t".join(rows[h])] if rows else []
-    lines = ["\t".join(c.strip() for c in r) for r in rows[h + 1:] if any(c.strip() for c in r)]
+    h = locate_header([r for _, r in rows])
+    header = ["\t".join(rows[h][1])] if rows else []
+    lines = [(no, "\t".join(c.strip() for c in r))
+             for no, r in rows[h + 1:] if any(c.strip() for c in r)]
     if not lines:
         raise ImportFailure("没有识别到任何数据行")
-    return Extraction(mode="text",
-                      pages=[Page(page_no=1, lines=lines, line_offset=h + 2)],
+    return Extraction(mode="text", pages=[Page(page_no=1, lines=lines)],
                       header_lines=header, degrade_reason=None)
 ```
 
@@ -481,16 +558,17 @@ def extract_xlsx(ctx) -> Extraction:
                    if (s.max_row or 0) >= 2 and _has_any_value(s)), None)
         if ws is None:
             raise ImportFailure("表格里没有数据")
-        grid = [[_cell_to_str(v) for v in r] for r in ws.iter_rows(values_only=True)]
+        # enumerate 从 1 起 = Excel 左侧那个行号，直接当行标号用
+        grid = [(i, [_cell_to_str(v) for v in r])
+                for i, r in enumerate(ws.iter_rows(values_only=True), start=1)]
     finally:
         wb.close()
     if len(grid) > 2040:
         raise ImportFailure("行数超过 2000，请拆分账单后再上传")
-    h = locate_header(grid)                       # 与 CSV 共用
-    lines = ["\t".join(r) for r in grid[h + 1:] if any(c.strip() for c in r)]
-    return Extraction(mode="text",
-                      pages=[Page(page_no=1, lines=lines, line_offset=h + 2)],
-                      header_lines=["\t".join(grid[h])], degrade_reason=None)
+    h = locate_header([r for _, r in grid])       # 与 CSV 共用
+    lines = [(no, "\t".join(r)) for no, r in grid[h + 1:] if any(c.strip() for c in r)]
+    return Extraction(mode="text", pages=[Page(page_no=1, lines=lines)],
+                      header_lines=["\t".join(grid[h][1])], degrade_reason=None)
 ```
 
 `_cell_to_str`：`datetime` / `date` 用 `isoformat()`（Excel 里的日期是真日期类型，转成 `YYYY-MM-DD` 后 LLM 完全不用猜格式，也绕开了 §7.1 的 DD/MM 歧义）；`float` / `Decimal` 用 `repr` 保留精度；`None` → 空串。合并单元格在 `read_only=True` 下只有左上角有值、其余为 `None`——这正是我们要的（表头跨列合并时不会重复）。
@@ -581,7 +659,7 @@ def _fit(img, long_side: int) -> bytes:
 
 - 每块约 **150 行**（决策 §5），按整行切，不切断行。
 - 每块前面重复注入 `header_lines`（表头），否则第二块起 LLM 不知道每列是什么。
-- 每行前面加**原文行号**，这是 `source_ref` 能对得上的前提：
+- 每行前面加**行标号**（口径见 §2.1 的表），这是 `source_ref` 能对得上的前提。行标号在抽取阶段就和行文本绑成 `(no, line)` 元组，分块时**直接取用**，不再用"基址 + 序号"反算——CSV 的空行、引号内换行都会让反算错位：
 
 ```python
 CHUNK_LINES = 150
@@ -591,8 +669,7 @@ def chunk(ex: Extraction) -> list[Chunk]:
         return [Chunk(index=i, kind="image", text=None, png=p.png, page_no=p.page_no,
                       sub_index=p.sub_index, line_offset=0)
                 for i, p in enumerate(ex.pages)]
-    numbered = [(p.page_no, p.line_offset + j, ln)
-                for p in ex.pages for j, ln in enumerate(p.lines)]
+    numbered = [(p.page_no, no, ln) for p in ex.pages for no, ln in p.lines]
     out = []
     head = ("表头：\n" + "\n".join(ex.header_lines) + "\n\n") if ex.header_lines else ""
     for i in range(0, len(numbered), CHUNK_LINES):
@@ -631,10 +708,33 @@ def call_llm(ctx, ck, llm):
             last = e
             if attempt < MAX_ATTEMPTS - 1:
                 time.sleep(BACKOFF[attempt] * (1 + random.random() * 0.3))
+        except TruncatedLLMError:                # finish_reason == "length"
+            # 纯重试没用：同样的输入还会截断。只能把块切小再各自跑一遍。
+            halves = split_chunk(ck)
+            if halves is None:                   # 已经切不动了（1 行文本 / 已切过的半页）
+                raise ImportFailure(
+                    f"第 {ck.index + 1} 块输出被截断且无法再拆分，请拆分账单后重试",
+                    chunk_index=ck.index)
+            return _merge(call_llm(ctx, h, llm) for h in halves)
         except FatalLLMError:                    # 401/403/404 model not found
             raise
     raise ImportFailure(f"第 {ck.index + 1} 块解析失败：{last.user_message}",
                         chunk_index=ck.index)
+
+def split_chunk(ck: Chunk) -> list[Chunk] | None:
+    """把一个块对半切。切不动返回 None。
+
+    - 文本块：按行数对半（行前的标号已经在 text 里，切开不会丢）；只有 1 行时返回 None。
+    - 图片块：用 §2.5 的 `_split_if_dense` 强切上下两半（重叠 6%）；
+      `ck.sub_index != 0` 说明这页已经被切过一次，不再切，返回 None。
+
+    两个子块**沿用父块的 `page_no` / `sub_index` / `line_offset`**（图片块的 sub_index
+    由 `_split_if_dense` 重新编号），`index` 沿用父块的 `ck.index`——它只用于错误信息里
+    的"第 N 块"和 §3.3 的排序，子块之间的先后由 `_merge` 按拼接顺序保证。
+    """
+
+def _merge(results: Iterable[LLMResult]) -> LLMResult:
+    """按顺序拼 rows，envelope 里的 usage 相加、content 拼成数组。"""
 ```
 
 | 情况 | 是否重试 | 整批结果 |
@@ -643,7 +743,7 @@ def call_llm(ctx, ck, llm):
 | 返回体不是合法 JSON 或不满足 schema | 是（2 次；重试时 `strict_reminder=True`，在 user message 末尾追加"上次输出不是合法 JSON，请严格按 schema 只输出 JSON 对象"） | 同上 |
 | HTTP 401 / 403 | 否 | 立刻 `failed`，`error` = "LLM 密钥无效，请到设置里更新" |
 | HTTP 404 model not found | 否 | 立刻 `failed`，`error` = "模型不存在，请到设置里更换模型" |
-| `finish_reason == "length"` | 是，且**把该块切成两半**分别重发（纯重试没用） | 两半都失败 → `failed` |
+| `finish_reason == "length"` | 不走退避重试，直接 `split_chunk` 切成两半分别重发（纯重试没用）；切不动则整批 `failed` | 任一半失败 → `failed` |
 | 某块返回 `rows: []` | 否，视为合法 | 该块 0 行；若**全部块**都 0 行 → `failed`，`error` = "没有识别到任何交易" |
 
 **整批 failed 时记录失败块号**：`import_batches.error` 存人话，`import_batches.error_chunk` 存 0 起的块序号（新增列，见 §待决 5）。重试（`POST .../retry`）从头跑，不做断点续传——单批最多几十次调用，重跑的成本远低于维护断点状态的复杂度。
@@ -850,7 +950,7 @@ def render_prompt_categories() -> str:
   卡号末四位、订单摘要。没有就填 null。
 - category_l1 / category_l2：分类 code，见下面「分类」。拿不准就填 null，不要硬猜。
 - confidence：0 到 1 的数字，表示你对这一行整体（尤其是金额、日期、方向）的把握。
-- source_ref：这一行来自原文的哪一行。原文每行前面有形如 "[137] " 的行号，就填 "137"。
+- source_ref：这一行来自原文的哪一行。原文每行前面有形如 "[137] " 的行标号，就填 "137"。
 
 # 符号规则（最重要，错了整笔账就反了）
 - 支出：amount 为负数，kind="expense"。例：买咖啡 32 元 → amount = -32
@@ -924,7 +1024,7 @@ def render_prompt_categories() -> str:
 ### 5.2 USER_TEXT_TEMPLATE（文本路径 user message）
 
 ```text
-下面是账单原文的第 {chunk_no}/{chunk_total} 块。每行前面方括号里的数字是原文行号，
+下面是账单原文的第 {chunk_no}/{chunk_total} 块。每行前面方括号里的数字是行标号，
 请把它原样填进该行的 source_ref。
 
 {chunk_text}
@@ -935,7 +1035,7 @@ def render_prompt_categories() -> str:
 一个真实填充后的例子（招商银行信用卡账单，第 1 块）：
 
 ```text
-下面是账单原文的第 1/2 块。每行前面方括号里的数字是原文行号，
+下面是账单原文的第 1/2 块。每行前面方括号里的数字是行标号，
 请把它原样填进该行的 source_ref。
 
 表头：
@@ -979,11 +1079,17 @@ def render_prompt_categories() -> str:
 替换掉的 `source_ref` 说明：
 
 ```text
-- source_ref：这一行在图片里的位置，格式 "p{page_no}:行序" 或 "p{page_no}-{sub_index}:行序"
+- source_ref：这一行在图片里的位置，格式 "p{{page_no}}:行序" 或 "p{{page_no}}-{{sub_index}}:行序"
   （页面被切成上下两半时用后者，sub_index=1 是上半、2 是下半）。
   行序从这张图里最上面的一行交易数据起，从 1 开始数，跳过表头。
   例：第 3 页下半页的第 7 行数据 → "p3-2:7"。
 ```
+
+上面片段里的 `{{page_no}}` / `{{sub_index}}` 是 Python 源码里的写法：整段会和 `SYSTEM_TEXT`
+一起过 `str.format`（§5.1），双写的花括号被转义成单个花括号，模型看到的是字面量
+`p{page_no}:行序`——那是**给模型看的格式说明**，不是运行时占位符，`format()` 不需要
+（也不该）为它们提供实参。**这一页真实的页码和上下半标号由本节末尾的 user message 给出**，
+模型照着填即可。
 
 追加的一节：
 
@@ -1204,8 +1310,27 @@ def reconcile_sign(kind, amount, transfer_role) -> tuple[Decimal, bool]:
 | 情况 | 处理 |
 |---|---|
 | `kind='transfer'` 且 `transfer_role` 为空 | 按符号补：`amount < 0` → `out`，否则 `in`；打 `needs_review` |
-| `kind='transfer'` 且 `transfer_subtype` 为空 | 账户类型是 `credit` 且 `role='in'` → `repayment`；否则 `plain`；不打 review |
+| `kind='transfer'` 且 `transfer_subtype` 为空，账户类型是 `credit` 且 `role='in'` | → `repayment`，不打 review |
+| `kind='transfer'` 且 `transfer_subtype` 为空，`role='out'` 且 `merchant`/`note` 命中还款关键词表 | → `repayment`，打 `needs_review`（服务端替模型做的判断，请用户过目） |
+| `kind='transfer'` 且 `transfer_subtype` 仍为空 | → `plain`；不打 review |
 | `kind != 'transfer'` 但填了 `transfer_role` / `transfer_subtype` | 两者一律置 `None`（约束要求） |
+
+第二条是给**储蓄卡侧**兜底的：还款的转出腿出现在储蓄卡/借记卡账单上，账户类型不是 `credit`，
+只按第一条判会被补成 `plain`，于是 §8.3 的还款配对对这类账单**永远不触发**。关键词表写死在
+`normalize.py`：
+
+```python
+REPAYMENT_HINTS = ("还款", "信用卡还款", "自动还款", "偿还信用卡", "卡还款", "还信用卡",
+                   "credit card payment", "payment to card", "card payment",
+                   "autopay credit card", "cc payment")
+
+def _looks_like_repayment(merchant: str | None, note: str | None) -> bool:
+    hay = unicodedata.normalize("NFKC", f"{merchant or ''} {note or ''}").lower()
+    return any(k in hay for k in REPAYMENT_HINTS)
+```
+
+匹配前统一 `NFKC` + 转小写；中文关键词大小写无关，英文关键词靠小写命中。宁可多标
+`needs_review` 也不要漏配对——漏了就是两张账单各记一笔，净值凭空少 3000。
 
 ### 7.5 分类 code 校验
 
@@ -1294,7 +1419,7 @@ def dedup_in_batch(rows: list[DraftRow]) -> list[DraftRow]:
 | 7 | `currency` 匹配 `^[A-Z]{3}$` | 用账户默认币种 | 仅当原值非空 |
 | 8 | 符号与 `kind` 一致 | 按 `kind` 翻转符号 | 是 |
 | 9 | `kind` ∈ 四个枚举 | 按符号兜底 | 是 |
-| 10 | transfer 有 role / subtype | 按符号与账户类型补 | 补 role 时是 |
+| 10 | transfer 有 role / subtype | 按符号与账户类型补；`role='out'` 且命中还款关键词时补 `repayment` | 补 role 时是；关键词兜底补 subtype 时也是 |
 | 11 | 非 transfer 无 role / subtype | 置空 | 否 |
 | 12 | `category_l1` 在对应收支组内 | 一二级都置空 | 仅当原值非空 |
 | 13 | `category_l2` 属于该一级 | 只清二级 | 是 |
@@ -1364,6 +1489,8 @@ def flag_duplicates(db, ctx, rows):
 
 `matched_transaction_id` 在这里只在**唯一命中**时预填，作用是让 review 界面能一键跳去看那笔已有交易。它和 §8.2 的用途不同（那边是退款原单），两者同时命中时以 `refund_candidate` 的填充为准，`duplicate` 只保留标记（见 §待决 3）。
 
+**这就要求 §8.2 无条件先清空这个列再查候选**：一行既命中 duplicate、退款候选又为空（原单可退额度已用完）时，若不清空，§9.2 会把这个 duplicate 目标当成退款原单写进 `refund_of`，指向一笔可能不是 `expense` 的交易，违反决策 §1.1。§8.2 的伪代码里 `r.matched_transaction_id = None` 放在 `cands = ...` 之前就是为了这个；对应用例见 §12.5。
+
 ### 8.2 refund_candidate
 
 触发条件（决策 §5、§1.1）：`kind = 'refund'`，**或者** `amount > 0` 且目标账户 `type = 'credit'`（信用卡上的正数入账绝大多数是退款或还款；还款已被 §8.3 接走，剩下的当退款候选）。
@@ -1421,6 +1548,11 @@ def flag_refund_candidates(db, ctx, rows):
             continue
         if not (r.kind == "refund" or (r.amount > 0 and ctx.source_type == "credit")):
             continue
+        # 进入退款判定的行，先清掉 §8.1 可能预填的 duplicate 目标：那是"同日同额的已有
+        # 交易"，语义上不是"退款原单"，留着会被 §9.2 写进 refund_of（可能指向一笔非
+        # expense 交易，违反决策 §1.1）。清空必须在查候选之前，否则 `if not cands` 直接
+        # continue 就漏掉了。
+        r.matched_transaction_id = None
         cands = db.execute(_REFUND_STMT, {...}).all()
         if not cands:
             continue
@@ -1449,7 +1581,7 @@ def flag_refund_candidates(db, ctx, rows):
 
 ### 8.3 repayment
 
-触发条件：`transfer_subtype = 'repayment'`（归一化后，§7.4 会给信用卡上的 `transfer/in` 自动补上）。
+触发条件：`transfer_subtype = 'repayment'`（归一化后，§7.4 会给信用卡上的 `transfer/in`、以及储蓄卡上命中还款关键词的 `transfer/out` 自动补上）。
 
 信用卡还款在两个账户上各出现一次：储蓄卡账单上是"转出 −3000"，信用卡账单上是"还款 +3000"。用户很可能两份账单都导。
 
@@ -1568,7 +1700,7 @@ def flag_repayments(db, ctx, rows):
 | `merchant` | `merchant` | ≤200 |
 | `note` | `note` | ≤500，卡号已脱敏（§11.2） |
 | `category_l1` / `category_l2` | 同名 | transfer 为 NULL |
-| `matched_transaction_id`（仅 `kind='refund'` 且用户确认） | `refund_of` | 决策 §1.1 |
+| `matched_transaction_id`（三个条件同时成立才写：`'refund_candidate' in flags`、`kind='refund'`、用户在 review 里确认过） | `refund_of` | 决策 §1.1。加 `refund_candidate` 这一条是因为 `matched_transaction_id` 也被 §8.1 的 duplicate 用来存"同日同额的已有交易"，那笔不一定是 `expense`，写进 `refund_of` 会违反决策 §1.1 的外键语义。§8.2 已经在查候选前把它清空了，这里是第二道闸 |
 | batch.`id` | `import_batch_id` | 撤销靠它 |
 | batch.`created_by` | `created_by`、`updated_by` | 上传人（决策 §2） |
 | — | `created_at` / `updated_at` | `now()` |
@@ -1623,8 +1755,7 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID) -> CommitResult:
             db.add_all(txs)
             if i % 200 == 0:
                 db.flush()                    # 分批 flush，让 CHECK 约束尽早报错
-            r.transaction_id = txs[0].id
-            r.status = "committed"
+            r.transaction_id = txs[0].id     # status 不动：见下方说明
             created.extend(txs)
         db.flush()
         batch.status = "committed"
@@ -1636,6 +1767,7 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID) -> CommitResult:
 - **一个事务**（决策 §5）：任何一行违反 CHECK 约束都整批回滚，批次保持 `ready`，用户改完再提交。
 - `with_for_update()` 的行锁挡住"同一批次被点两次提交"的竞态；第二个请求拿到锁时看到 `status='committed'`，返回 409 `import_not_ready`。
 - 分批 flush（每 200 行）比逐条 flush 快一个数量级；约束报错时定位不到具体行，此时在出错路径上再对该批逐行 flush 一次定位（只有出错时才慢）。
+- **提交不改 `import_rows.status`**：决策 §5 给这个列的取值只有 `pending` / `edited` / `skipped`，本章不擅自扩枚举。"这一行提交过没有"由 `transaction_id IS NULL` 回答，语义更直接，也不会把用户改过行的 `edited` 标记冲掉。若 `02-database.md` 最终选择加第四个值 `committed`，则撤销时必须能还原成 `edited`/`pending`，见 §待决 14。
 
 ### 9.5 撤销
 
@@ -1651,7 +1783,7 @@ def revert_batch(db: Session, batch_id: UUID, actor_id: UUID) -> RevertResult:
                        .where(Transaction.import_batch_id == batch_id)).rowcount
         db.execute(update(ImportRow)
                    .where(ImportRow.batch_id == batch_id)
-                   .values(status="pending", transaction_id=None))
+                   .values(transaction_id=None))    # status 不动，保住 edited/skipped
         batch.status = "reverted"
         batch.reverted_at = func.now()
     return RevertResult(deleted_count=n)
@@ -1901,6 +2033,10 @@ def fake_llm(monkeypatch, request):
 | `kind="income", l1="food"` | — | l1/l2 都 `None` | `needs_review` |
 | `kind="expense", l1="food", l2="taxi"` | — | l1=`food`, l2=`None` | `needs_review` |
 | `kind="transfer", l1="food"` | — | l1/l2 都 `None` | — |
+| `kind="transfer", role="in", subtype=None`，账户 `credit` | — | subtype=`repayment` | — |
+| `kind="transfer", role="out", subtype=None`，账户 `checking`，note=`"信用卡还款 招行"` | — | subtype=`repayment` | `needs_review` |
+| `kind="transfer", role="out", subtype=None`，账户 `checking`，note=`"Credit Card Payment"` | — | subtype=`repayment` | `needs_review` |
+| `kind="transfer", role="out", subtype=None`，账户 `checking`，note=`"转账给房东"` | — | subtype=`plain` | — |
 | `kind="expense", l1=None` | — | 原样 `None` | — |
 | `currency=""`，账户币种 CNY | — | `CNY` | — |
 | `currency="XYZ"` | — | `XYZ` | `needs_review` |
@@ -1926,6 +2062,7 @@ def fake_llm(monkeypatch, request):
 | 同上但一笔商户相同、一笔不同 | 商户相同的高 20 分 → 预填它 |
 | `kind=refund` 32 元，库里只有 100 天前的 32 元支出 | 无候选 |
 | `kind=refund` 32 元，库里那笔 32 元支出已被别的退款退完 | 无候选（可退额度 = 0） |
+| `kind=refund` 32 元，**同时**命中 §8.1 的 duplicate（库里有同日同额同账户交易），但退款候选为空（原单可退额度已为 0） | `flags` 含 `duplicate`、不含 `refund_candidate`；`matched_transaction_id` 必须是 `None`（§8.2 在查候选前已清空）；照常 commit 后该交易 `refund_of IS NULL` |
 | `kind=refund` 32 元，库里 100 元支出已退 68 元 | 命中（剩余 32，+80 分） |
 | `kind=refund` 50 元，库里只有 30 元支出 | 无候选（`abs(amount) < 退款额`） |
 | 信用卡账户，正数入账，`kind=income` + 收入分类，命中唯一候选 | `kind` 改成 `refund`，收入分类被 `sanitize_category` 置空后沿用原单分类，行带 `needs_review` |
@@ -1934,6 +2071,7 @@ def fake_llm(monkeypatch, request):
 | 同上但对手腿已有 `transfer_pair_id` | 不标 `duplicate`（已配对过） |
 | `subtype=repayment`，库里没有对手腿，账本只有 1 个 checking | 预填该 checking，`needs_review` |
 | `subtype=repayment`，库里没有对手腿，账本有 3 个 checking | `counterpart_source_id=None`，`needs_review` |
+| checking 账户，`kind=transfer`、`role=out`、note 含"信用卡还款"、模型未给 `transfer_subtype`（§7.4 兜底） | `transfer_subtype='repayment'` + `needs_review`；随后 §8.3 能正常找对手腿 |
 
 ### 12.6 端到端用例
 
@@ -1995,6 +2133,8 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | 未配 LLM 就上传 | 400 `llm_not_configured` |
 | 11 MB 文件 | 413 `file_too_large` |
 | `.exe` 改名成 `.pdf` | 400 `unsupported_file_type` |
+| 真 xlsx 上传，测试环境**没装 libmagic**（`monkeypatch` 让 `import magic` 抛 `ImportError`） | `sniff_mime` 返回 `XLSX_MIME`（不是 `application/zip`），`ALLOWED_EXT[mime] == "xlsx"` 不抛 KeyError，`extract()` 走 `extract_xlsx` 而不是 `extract_csv` |
+| 普通 `.zip`（里面没有 `xl/workbook.xml`）改名成 `.xlsx` | 400 `unsupported_file_type`，两条嗅探分支都拒绝 |
 | 本账本已有 parsing 批次 | 409 `import_in_progress` |
 | 1 小时内第 11 批 | 429 `rate_limited` |
 | 归档账户作为目标 | 400 `source_archived` |
@@ -2003,8 +2143,9 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | `committed` 批次 `PATCH rows` | 409 |
 | 同一批次并发两次 commit | 一次 200、一次 409，交易只建一遍 |
 | 扫描件 fixture 走完全程 | 所有行都带 `needs_review`，`batch.parse_mode == "vision"` |
-| 3 页文本 PDF fixture | 各页 `source_ref` 互不重复（第 2 页首行行号 = 第 1 页行数 + 1），无行被 §7.7 误合并 |
+| 3 页文本 PDF fixture | 各页 `source_ref` 互不重复（第 2 页首行标号 = 第 1 页非空行数 + 1），无行被 §7.7 误合并 |
 | 提交后再撤销、再重新上传同一文件 | 新批次独立，`duplicate` 标记命中所有行 |
+| 提交后**不撤销**、直接重新上传同一文件 | 所有行 `duplicate`；其中那条退款行因为原单可退额度已为 0 而没有退款候选，`matched_transaction_id` 为 `None`；若强行 commit，新建的退款交易 `refund_of IS NULL`，不会指向一笔非 `expense` 的交易 |
 
 ### 12.7 不测什么
 
@@ -2026,6 +2167,7 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | 4 | 欧陆数字格式 `1.234,56` 是否支持 | 本版本不支持；命中启发式时整批 `needs_review` 并提示用户 |
 | 5 | 是否需要 `import_batches.error_chunk` 列存失败块号 | 需要，`INTEGER NULL`；若 `02-database.md` 不加，退化为写进 `error` 文本 |
 | 6 | 是否需要 `import_batches.parse_mode`（text/vision）、`progress`、`chunk_total` 三列 | 需要：前端要显示"正在识别 3/12"和缩略图入口 |
+| 6b | §9.4 / §9.5 还用到 `import_batches` 的另外三个新列 | 需要：`committed_at TIMESTAMPTZ NULL`（提交时刻，列表页排序与审计）、`committed_transaction_count INTEGER NULL`（提交生成的交易数，撤销确认框要显示"将删除 N 笔"，不用现算）、`reverted_at TIMESTAMPTZ NULL`（撤销时刻）。`02-database.md` 的 `import_batches` DDL 要一并收录 |
 | 7 | 视觉路径的页面缩略图怎么给前端 | `GET .../rows/{rid}/thumbnail` 现渲染，长边 480px，`Cache-Control: private, max-age=3600`，不落库 |
 | 8 | `UPLOAD_DIR` 的生产卷 | `infra/docker-compose.prod.yml` 的 `api` 服务加 `wallet_uploads:/var/lib/wallet/uploads`（当前该服务无 volumes，见 `infra/docker-compose.prod.yml:46-59`）。属 infra 改动，本章不做 |
 | 9 | 一次导入是否允许多文件（多张截图） | 不允许，一批一文件；多张截图分多批 |
@@ -2033,6 +2175,7 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | 11 | 不带 BOM 的 UTF-16 CSV 怎么办 | 不支持，提示用户另存为 UTF-8 |
 | 12 | 提示词是否要注入账本里已有的商户名列表以提高分类准确率 | 不注入。会显著涨 token，且容易让模型"对齐"到错误的历史数据 |
 | 13 | `merged_duplicates` 是否要在 review 表格里单独筛选 | 要，和 `duplicate` / `needs_review` 一样是筛选器的一个选项 |
+| 14 | `import_rows.status` 要不要第四个值 `committed`（决策 §5 只给了 `pending` / `edited` / `skipped`） | **不要**。本章 §9.4 提交时不动 `status`，"提交过没有"看 `transaction_id IS NOT NULL`；§9.5 撤销时也只清 `transaction_id`，`edited` / `skipped` 原样保留。若最终决定要加这个值，`02-database.md` 的 CHECK 要覆盖，并且撤销**不能**一律置回 `pending`（会丢掉 `edited`），得还原成"改过 → `edited`，没改过 → `pending`"，那就还要一个"是否被 PATCH 过"的记号——所以建议就别加 |
 
 ---
 
