@@ -1,0 +1,206 @@
+# 目标设计：决策记录（v3.0）
+
+本文件是 `docs/target-design/` 其余各章的**唯一事实来源**。它记录了 2026-09 设计评审中逐条确认的改动决定。各章只能展开、细化这里的决定，不得与之矛盾；发现矛盾以本文件为准并修改各章。现状（as-is）见 [`../current-design/`](../current-design/README.md)，本文件里"现状"二字均指那套文档描述的状态。
+
+## 0. 范围与优先级
+
+1. 顺序：**先把网页端全功能做好（含 LLM 接入、账单导入、UI 重设计）→ 部署上线 → Android/iOS**。本目标设计只覆盖第一步，部署沿用 `docs/current-design/05-infra-and-ops.md` 的方案，App 不在本设计范围。
+2. 不再使用 GSD 规划工具；`.planning/` 里的 GSD 提示词后续清理，本设计不引用它。
+3. UI 做全新视觉重设计；实现前先出 mockup 给用户看，现有 `.planning/research/ui-redesign-v2/spec.md` 只作参考。
+4. 界面语言中英双语（i18n，默认跟随系统），分类名、错误信息也双语。
+5. 用户范围：开放给亲友注册。需要注册开关（环境变量 `REGISTRATION_OPEN`，默认 `true`）、限流、上传大小限制。
+6. 网页布局响应式：窄屏底部 tab + 中央"记一笔"按钮；宽屏（≥1024px）左侧导航栏 + 宽内容区。账单导入的 review 表格必须在桌面上好用。
+7. 明确**不做**（本版本）：预算、找回密码/邮箱验证、分类管理、标签、实时协同、移动 App、钱迹的"不计收支"标记、交易时间（`occurred_at` 仍为日期）。
+
+## 1. 交易种类（kind）
+
+现状：没有种类列，金额正负决定方向。目标：
+
+| kind | 金额符号 | 分类 | 说明 |
+|---|---|---|---|
+| `expense` | 负 | 必填一级，可选二级 | 支出 |
+| `income` | 正 | 必填一级，可选二级 | 收入 |
+| `refund` | 正 | 必填一级，可选二级（沿用原支出的） | 退款，统计时按退款日期冲减该分类的支出 |
+| `transfer` | 转出腿负、转入腿正 | 无（必须为空） | 本人账户间划转，含信用卡还款 |
+
+规则：**只有统计口径不同的东西才成为 kind**，四种之外不再加。
+
+### 1.1 退款
+
+- 可选字段 `refund_of` 指向原支出交易（同账本、`kind='expense'`）；关联后分类自动沿用原单，可改。
+- 部分退款 = 多条 `refund` 行指向同一原单。累计退款超过原单金额时前端警告但允许保存。
+- 原单被删除时退款行的 `refund_of` 置空（`ON DELETE SET NULL`），退款行保留。
+- 选原单的界面复用交易列表的搜索筛选：默认 `kind=expense`、同账户预填但可改、最近 90 天，每条显示已退/可退金额。
+
+### 1.2 转账
+
+- `transfer_role`：`out` / `in`，转账必填。
+- `transfer_subtype`：`plain` / `repayment`（信用卡还款），转账必填，单独一列 `VARCHAR(16)`，非转账为 NULL。
+- `transfer_pair_id`：**可空**。对方账户在应用里时两腿共用同一个 `transfer_pair_id`；对方不在应用里（别人给我转、给别人转、用未录入的工资卡还信用卡）时单腿，`transfer_pair_id` 为 NULL，可填 `counterparty` 文本（如"老婆""工资卡"）。
+- 单腿转账计入账户余额，**不计入**收入/支出统计。
+- 表单和导入的默认逻辑：外部转入默认建议记为 `income`（分类"人情往来"等），用户明确选转账才记转账，避免真正的收入消失在统计之外。
+- 两腿转账支持跨币种：两腿各自存自己的 `currency` 和 `amount`（出 100 USD / 入 720 CNY），不要求金额相等。手续费另记一笔 `expense`（分类 其他/手续费）。
+- 有 `transfer_pair_id` 的两腿只能通过 `POST /ledgers/{id}/transactions/transfer` 一起创建、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}` 一起修改/删除；对单腿用普通交易接口。
+- 导入时的还款去重：对手账户 ±3 天内同金额、`subtype=repayment` 的反向腿已存在则标"可能重复"。
+
+### 1.3 分类（固定常量）
+
+- 分类表是后端代码里的一个常量（`backend/app/core/categories.py`），一级、二级都**不可由用户修改**，没有分类管理接口和页面。想改就改代码发版，改含义时写数据迁移重映射。
+- `transactions.category_l1`（必填于 expense/income/refund，transfer 为 NULL）、`category_l2`（可空）存分类 code。服务端校验：code 在表内；二级属于该一级；一级的收支种类与 kind 匹配（expense/refund 用支出分类，income 用收入分类）。
+- 前端通过公开接口 `GET /api/v1/categories` 取表并永久缓存（带 `version`）；导入用的 LLM 提示词也从同一常量生成。
+- 现有 `transaction_tags` 表、`?tag=` 筛选、标签输入框全部移除。
+- 导入时 LLM 拿不准的行分类留空，review 表标"待归类"，提交前必须补一级分类。
+
+冻结的分类表（code 唯一；zh / en 显示名都写进常量）：
+
+**支出（16 个一级）**
+
+| code | 一级 zh / en | 二级（code: zh） |
+|---|---|---|
+| `clothing` | 服饰 / Clothing | `clothes` 衣服、`shoes` 鞋子、`bags` 包、`accessories` 配饰 |
+| `food` | 餐饮 / Food & Dining | `breakfast` 早餐、`lunch` 午餐、`dinner` 晚餐、`late_snack` 夜宵、`snacks_drinks` 零食饮料 |
+| `housing` | 居住 / Housing | `rent` 房租、`mortgage` 房贷 |
+| `transport` | 交通 / Transport | `public_transit` 公交地铁、`taxi` 打车、`fuel` 加油、`parking` 停车、`train` 火车、`flight` 飞机 |
+| `health` | 健康 / Health | `medical` 看病、`medicine` 买药、`checkup` 体检、`wellness` 保健、`fitness` 健身 |
+| `entertainment` | 娱乐 / Entertainment | `movies` 电影、`games` 游戏、`ktv` KTV、`outing` 出去玩 |
+| `groceries` | 生活购物 / Groceries & Household | `fresh_food` 买菜、`toiletries` 洗护清洁、`kitchenware` 厨房用品、`household` 家居耗材 |
+| `shopping` | 消费购物 / Shopping | `electronics` 数码、`appliances` 家电、`furniture` 家具、`misc_goods` 日用杂货 |
+| `pet` | 宠物 / Pets | `pet_food` 宠物粮、`pet_medical` 宠物医疗、`pet_supplies` 宠物用品 |
+| `childcare` | 育儿 / Childcare | `formula_diapers` 奶粉尿布、`toys` 玩具、`education` 教育、`kids_clothes` 衣物、`kids_medical` 医疗 |
+| `parents` | 父母 / Parents | `filial` 孝敬、`gifts` 礼物、`parents_medical` 医疗 |
+| `bills` | 固定支出 / Bills & Utilities | `water` 水费、`electricity` 电费、`gas` 燃气、`property_fee` 物业、`internet` 宽带、`mobile` 话费 |
+| `culture` | 精神文化支出 / Culture & Learning | `books` 书籍、`courses` 课程、`stationery` 文具、`paid_content` 知识付费、`exhibitions` 展览、`subscriptions` 订阅 |
+| `travel` | 旅游 / Travel | `flights` 机票、`hotels` 酒店、`tickets` 门票、`local_transport` 当地交通、`travel_food` 旅游餐饮 |
+| `social` | 人情往来 / Social & Gifts | `red_packet` 红包礼金、`treat` 请客、`lend` 借出、`transfer_out` 转给他人 |
+| `other` | 其他 / Other | `fines` 罚款、`fees` 手续费 |
+
+**收入（6 个一级）**
+
+| code | 一级 zh / en | 二级（code: zh） |
+|---|---|---|
+| `salary` | 工资 / Salary | `base_salary` 基本工资、`bonus` 奖金、`rsu` RSU |
+| `side_income` | 兼职 / Side Income | — |
+| `investment` | 理财 / Investment | `interest` 利息、`dividend` 分红、`fund` 基金 |
+| `reimbursement` | 报销 / Reimbursement | — |
+| `social_income` | 人情往来 / Social & Gifts | `red_packet_in` 红包礼金、`borrow` 借入、`transfer_in` 他人转入 |
+| `other_income` | 其他 / Other | — |
+
+边界约定：生活购物 = 必需品，消费购物 = 非必需品；LLM 遇到淘宝/京东/Shopee 这类分不清的**留空**不硬猜。退款不是收入分类（它是 kind）。
+
+### 1.4 备注与商户
+
+- `transactions.description` 改名为 `note`（≤500 字），语义"这笔账的备注"；手工记账自由填，导入时由 LLM 填（原文摘要清理后 + 外币原值等）。
+- `merchant`（≤200 字）保留为独立字段，搜索、退款匹配、去重都靠它。
+
+## 2. 账本与成员
+
+现状：一切挂在 `users.id` 下，没有账本概念。目标：
+
+- `ledgers`：id、name、base_currency、created_by、created_at、updated_at。**基准币种属于账本**，用户自己的 `users.base_currency` 只作新建账本的默认值。
+- `ledger_members`：(ledger_id, user_id) 主键、role（`owner` / `member`）、joined_at。创建者自动 owner；每本账恰有一个 owner（应用层保证）。
+- `ledger_invites`：id、ledger_id、code（6 位数字）、created_by、expires_at（生成后 10 分钟）、used_by、used_at。一次性使用。
+- 注册时自动建一本"默认账本"（名字"我的账本"，基准币种 = 用户默认币种）。
+- 加入流程：owner 在账本设置里生成邀请码 → 线下告诉对方 → 对方在"加入账本"输入 → 服务端校验（存在、未过期、未使用、非本人已在成员）→ 写入成员、作废邀请码。错码限流：同一用户 15 分钟内最多 5 次尝试。
+- 权限：owner 可生成邀请码、移除成员、改账本名/基准币种、转让 owner、删除账本（级联删除账户、交易、导入）；member 可做其余一切（记账、改账、导入、管理账户）。member 可自行退出；owner 必须先转让再退出。
+- 归属：`finance_sources`、`transactions`、`import_batches` 都属于账本（`ledger_id`），每行记录 `created_by`，交易和账户另记 `updated_by`。账本内账户完全共享。
+- 软限制：每人最多 10 本账，每本最多 10 人。
+- 并发：不做实时同步。`transactions`、`finance_sources`、`ledgers` 带 `updated_at`；PATCH 请求体带客户端看到的 `updated_at`，不一致返回 409 `stale_update`，前端提示重新加载。列表在窗口重新聚焦时自动刷新。
+- 所有业务接口改为 `/api/v1/ledgers/{ledger_id}/...` 前缀，鉴权 = "当前用户是该账本成员"。LLM 设置仍是每用户一份（`/api/v1/me/llm-settings`）。
+
+## 3. 资金账户（finance_sources）
+
+- 挂账本；字段：id、ledger_id、name、type（`checking` / `savings` / `credit` / `cash` / `other`）、default_currency、opening_balance（`NUMERIC(18,4)`，默认 0）、archived、created_by、updated_by、created_at、updated_at。
+- 余额 = opening_balance + 该账户所有交易 `amount` 之和（含单腿转账）。
+- 归档规则维持：归档后不能再记账、不能作为导入目标，历史保留；有交易的账户不能删除，只能归档。
+
+## 4. 搜索与筛选
+
+`GET /api/v1/ledgers/{id}/transactions` 参数：`q`（ILIKE 匹配 merchant / note）、`kind`（可多个）、`category_l1`、`category_l2`、`source_id`（可多个）、`from` / `to`（日期）、`currency`、`min_amount` / `max_amount`（绝对值）、`limit` / `offset`；返回 `{items, total}`。ILIKE 足够，不做全文索引。筛选状态放在前端 URL 里。
+
+## 5. 账单导入
+
+- 支持：文本型 PDF、CSV、XLSX、图片（JPG/PNG）、扫描版 PDF。能抽出文本就送文本（pdfplumber / openpyxl / csv），抽不到才把页面渲染成图片送视觉模型；视觉路径解析出的行默认打 `needs_review` 标记，review 界面旁边显示该页缩略图。密表格页可裁成上下两半分别送。
+- 一份账单对应一个目标账户，上传时由用户选，不让 LLM 猜。
+- 状态机：`uploaded → parsing → ready → committed`，`parsing → failed`（可重试）。`ready` 状态下才能编辑草稿和提交；`committed` 后可整批撤销（删除这批建的所有交易，不限时限，撤销前确认并显示条数）。
+- 后台任务：FastAPI 后台任务 + 数据库状态轮询（`GET /ledgers/{id}/imports/{batch_id}`），不引入队列。服务重启把仍为 `parsing` 的批次标 `failed`（启动时执行）。同一账本同时只允许一个批次在 `parsing`。
+- 限制：文件 ≤10 MB，单批 ≤2000 行，文本按约 150 行分块调用 LLM。
+- 两张表：`import_batches`（一次上传：账本、目标账户、上传人、文件名、MIME、大小、状态、错误、所用模型、LLM 原始响应、行数、时间戳）和 `import_rows`（草稿行：批次、行号、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、merchant、note、category_l1、category_l2、confidence、source_ref、flags、matched_transaction_id、counterpart_source_id、transfer_subtype、提交后的 transaction_id）。原因：草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键。
+- 服务端在 `ready` 时自动打三种标记（写进 `flags`）：`duplicate`（同账户同日同金额已存在）、`refund_candidate`（正数入账，按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`repayment`（信用卡账单里的还款行，按 §1.2 规则找对手账户，去重）。退款候选匹配以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
+- review 表格：每行所有字段可改、可标跳过、可改 kind、可选分类、可关联退款原单、可选对手账户；没一级分类的行显示"待归类"，提交前必须补齐。
+- 提交：`POST .../imports/{batch_id}/commit`，一个数据库事务内建所有交易（两腿还款一起建），每条交易记 `import_batch_id`；成功后批次 `committed`。
+
+## 6. LLM 设置与接口
+
+- 每用户一份 `user_llm_settings`：user_id、base_url（默认 `https://openrouter.ai/api/v1`）、api_key（服务端 Fernet 加密存，接口只回显尾 4 位）、model、vision_model（可空，导图片时用，不填用 model）、updated_at。任何 OpenAI 兼容端点都可用（`/chat/completions`）。
+- 设置页"测试连接"：发一个最小请求，返回模型是否可用、是否接受图片输入。
+- 没配 key 的用户进入导入时直接引导去配置；**没有**服务端共享 key。
+- LLM 调用在服务端，用操作者自己的 key。
+- 输入：system prompt = 分类表（code + zh/en 名）+ 账户币种/类型 + 输出 JSON schema + 规则（支出为负、收入为正、还款标 transfer/repayment、分不清的分类留空、退款标 refund）；user 内容 = 文本块或页面图片。
+- 输出（强制 JSON，`response_format` json_schema）：`{"rows":[{"date","amount","currency","kind","merchant","note","category_l1","category_l2","confidence","source_ref"}]}`。服务端校验：分类 code 不在表里置空；日期/金额解析失败的行标 `needs_review` 而不是丢弃；`source_ref` 指回原文行号或页码+行序。
+- 成本量级：一页账单约 1–3k 输入 token、约 3k 输出 token；图片按页约 1.1–1.6k token，与文本同量级，输出占大头。
+
+## 7. 统计与首页
+
+- 账户余额（§3），按账本基准币种折算后给合计。
+- 按月（可切换月份）支出/收入按一级分类汇总，可下钻二级；退款按退款日期冲减对应分类；转账不计入。
+- 最近 12 个月支出/收入趋势。
+- 全部按账本基准币种折算。不做预算。
+
+## 8. 汇率
+
+- **读取时计算**，不落库；统一为一个函数（现状两套公式不一致的问题就此消除）。
+- 交易与统计用**发生日**汇率（一经公布不再变）；账户余额用**最新**汇率。
+- 无行情日（周末、节假日、当天尚未公布）回退到最近一个已公布的交易日。
+- 汇率来源与缓存表 `exchange_rates` 沿用现状（Frankfurter）。
+
+## 9. 认证与安全
+
+- 邮箱 + 密码 + JWT 不变；不做找回密码、邮箱验证；提供管理员重置密码脚本 `backend/scripts/reset_password.py`。
+- 注册开关 `REGISTRATION_OPEN`；登录限流（同 IP 每分钟 10 次）；邀请码尝试限流（§2）；导入限流（每用户每小时 10 批）；上传 ≤10 MB。
+- 错误响应统一 `{"detail": "...", "code": "snake_case_code"}`。
+
+## 10. 目标数据库表一览
+
+`users`、`user_llm_settings`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`transactions`、`import_batches`、`import_rows`、`exchange_rates`。删除 `transaction_tags`。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM。`transactions` 的关键约束：
+
+- `kind IN ('expense','income','refund','transfer')`
+- 符号：expense 为负；income、refund 为正；transfer out 为负、in 为正
+- `(kind='transfer') = (transfer_role IS NOT NULL)`，`(kind='transfer') = (transfer_subtype IS NOT NULL)`
+- `kind='transfer'` → `category_l1 IS NULL AND category_l2 IS NULL`；其他 kind → `category_l1 IS NOT NULL`
+- `refund_of IS NULL OR kind='refund'`
+- `UNIQUE (transfer_pair_id, transfer_role)`（NULL 不参与）
+- `transfer_pair_id IS NULL OR counterparty IS NULL`（有对腿就不填对方文本）
+
+## 11. API 目录（全部在 `/api/v1`）
+
+| 分组 | 端点 |
+|---|---|
+| 认证 | 现有 `auth` 接口保留（注册受 `REGISTRATION_OPEN` 控制） |
+| 我 | `GET /me`、`PATCH /me`（默认币种、语言）、`GET/PUT/DELETE /me/llm-settings`、`POST /me/llm-settings/test` |
+| 分类 | `GET /categories`（公开，带 `version`，`Cache-Control: immutable`） |
+| 账本 | `GET /ledgers`、`POST /ledgers`、`GET/PATCH/DELETE /ledgers/{id}`、`GET /ledgers/{id}/members`、`DELETE /ledgers/{id}/members/{user_id}`、`POST /ledgers/{id}/leave`、`POST /ledgers/{id}/transfer-ownership`、`POST /ledgers/{id}/invites`、`POST /ledgers/join` |
+| 账户 | `GET/POST /ledgers/{id}/sources`（GET 含余额）、`GET/PATCH/DELETE /ledgers/{id}/sources/{sid}` |
+| 交易 | `GET/POST /ledgers/{id}/transactions`、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}` |
+| 统计 | `GET /ledgers/{id}/stats/summary?month=YYYY-MM`、`GET /ledgers/{id}/stats/trend?months=12` |
+| 导入 | `POST /ledgers/{id}/imports`（multipart）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`POST .../retry`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready/failed = 丢弃；committed = 撤销） |
+| 汇率 | 现有 `rates` 接口保留 |
+
+## 12. 前端
+
+- 页面：登录/注册、账本列表与切换、首页（统计）、交易列表（含筛选栏）、记一笔（四种 kind 的表单，转账含对手账户可选）、账户列表/表单、导入（上传→进度→review 表格→历史）、账本设置（成员、邀请码、基准币种）、个人设置（LLM、默认币种、语言）。
+- 当前账本 id 放在 URL 里；筛选条件放在 URL query。
+- 技术栈沿用 Expo / react-native-web / TanStack Query / axios；API 客户端按 §11 重写；i18n 引入语言包。
+- 视觉重设计的方向在 `04-frontend.md` 里提方案，实现前出 mockup。
+
+## 13. 从现状迁移
+
+一次性 Alembic 迁移链（在 head `8a4f4d66d893` 之后）：
+
+1. 建 `ledgers`、`ledger_members`、`ledger_invites`、`user_llm_settings`、`import_batches`、`import_rows`。
+2. 每个现有用户建默认账本 + owner 成员，`base_currency` 复制自 `users.base_currency`。
+3. `finance_sources`、`transactions` 加 `ledger_id`（回填为该用户默认账本）、`created_by`、`updated_by`、`updated_at`；账户加 `opening_balance`、`type` 增加 `cash`。
+4. `transactions`：`description` → `note`；加 `kind`（回填：`transfer_pair_id` 非空 → transfer，否则金额 <0 → expense、≥0 → income）、`transfer_role`（按符号）、`transfer_subtype`（回填 `plain`）、`refund_of`、`counterparty`、`category_l1` / `category_l2`（现有 expense/income 行回填 `other` / `other_income`）、`import_batch_id`；加 §10 的 CHECK。
+5. 删除 `transaction_tags`。
+6. 把 `users.base_currency` 保留为"新建账本默认币种"。
+
+现有数据只有测试数据，迁移允许粗回填，但迁移脚本必须可在空库和有数据的库上都跑通，并有 Postgres 迁移测试。
