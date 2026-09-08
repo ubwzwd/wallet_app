@@ -800,7 +800,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    - `parsing` → 409 `import_in_progress`（等它结束或失败）。
    - 撤销时如果某条被导入的交易已被别的 `refund` 行指向，那些 refund 行的 `refund_of` 按 §1.9 置空。
 
-**服务重启**：启动时把所有仍为 `parsing` 的批次标 `failed`、`error='服务重启导致解析中断'`，用户可以重试（决策 §5）。
+**服务重启**：启动时把所有仍为 `parsing` 的批次标 `failed`、`error_code = 'import_interrupted'`、`error_message` 记一句人话（例如「服务重启中断了这次解析」）（决策 §5、§14.14）；接口按决策 §14.15 只回 `error: {code, message}`，`error_chunk` 只留在服务端日志里，用户可以重试。
 
 ---
 

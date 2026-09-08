@@ -133,7 +133,8 @@ def extract(ctx: ImportContext) -> Extraction: ...
 def chunk(ex: Extraction) -> list[Chunk]: ...
 def call_llm(ctx, ck: Chunk, llm: "LLMSettings") -> "LLMResult":   # 内部重试 2 次
     ...
-def normalize(ctx, raw_rows: list[dict], mode: str) -> list["DraftRow"]: ...
+def normalize(ctx, raw_rows: list[tuple["Chunk", dict]], mode: str) -> list["DraftRow"]: ...
+    # 每条原始行都带着产出它的那个 Chunk，§7.8 据此填 DraftRow.page_no
 def flag_rows(db: Session, ctx, rows: list["DraftRow"]) -> None: ...
 def finalize(db: Session, ctx, rows, raw_response: dict) -> None:
     """写 import_rows、import_batches.row_count/model/raw_response，status='ready'。"""
@@ -170,11 +171,20 @@ def finalize(db: Session, ctx, rows, raw_response: dict) -> None:
 | `flags` | `set[str]` | 落 `import_rows.flags`（排序后的 JSON 数组，§7.8） |
 | `matched_transaction_id` | `UUID \| None` | 落 `import_rows.matched_transaction_id`（§8.1 / §8.2 写；§9.2 据它写 `refund_of`） |
 | `counterpart_source_id` | `UUID \| None` | 落 `import_rows.counterpart_source_id`（§8.3 预填，用户可改） |
-| `note_hint` | `str \| None` | 落 `import_rows.hint`（`VARCHAR(200) NULL`，见 [`02-database.md`](./02-database.md) §1.9）。由 §8.1 / §8.3 写，只给 review 界面当提示用；**不**拼进 `note`——`note` 会原样进 `transactions.note`（§9.2），把"另一个账户里已有这笔还款的对应腿"这种话带进正式交易备注是污染 |
+| `hint` | `str \| None` | 落 `import_rows.hint`（`VARCHAR(200) NULL`，见 [`02-database.md`](./02-database.md) §1.9；字段名与列名一律是 `hint`，决策 §14.19）。由 §7.2 / §8.1 / §8.3 通过 `_add_hint()` 写，**后写者追加不覆盖**，总长截到 200 字符；只给 review 界面当提示用；**不**拼进 `note`——`note` 会原样进 `transactions.note`（§9.2），把"另一个账户里已有这笔还款的对应腿"这种话带进正式交易备注是污染 |
 | `candidate_ids` | `list[UUID]` | **仅内存**：退款候选列表不落列，也不单独建接口——由 `GET /ledgers/{lid}/transactions`（[`03-backend-api.md`](./03-backend-api.md) §5.28）现查（§8.2，决策 §14.11） |
 | `merged_count` | `int` | **仅内存**：§7.7 的合并计数，结果已拼进 `note`，不单独落列 |
 
 `import_rows.counterparty VARCHAR(100) NULL`（决策 §14.10）**不是** `DraftRow` 的字段：解析阶段一律写 `NULL`，模型不猜对手账户；只有用户在 review 里 `PATCH .../rows/{rid}` 才会填，提交单腿转账时进 `transactions.counterparty`（§9.2）。
+
+`hint` 有三处写入点（§7.2 的欧陆金额格式提示、§8.1 的重复提示、§8.3 的还款对手提示），统一走同一个小函数，**后写者追加而不是覆盖**（决策 §14.19）：
+
+```python
+def _add_hint(r: "DraftRow", text: str) -> None:
+    """给这一行追加一句 review 提示；先写的留着，用「；」拼接，总长截到列宽 200。"""
+    r.hint = f"{r.hint}；{text}" if r.hint else text
+    r.hint = r.hint[:200]
+```
 
 `run_import` 的骨架（错误处理是本函数的主要内容）：
 
@@ -189,8 +199,8 @@ def run_import(batch_id: UUID) -> None:
         chunks = chunk(ex)
         _set_progress(db, batch_id, done=0, total=len(chunks))
         raw_rows, raw_resp = [], []
-        for done, res in enumerate(_map_concurrent(chunks, ctx, llm), start=1):
-            raw_rows.extend(res.rows)
+        for done, (ck, res) in enumerate(zip(chunks, _map_concurrent(chunks, ctx, llm)), start=1):
+            raw_rows.extend((ck, r) for r in res.rows)   # 块信息随行带下去，§7.8 用它填 page_no
             raw_resp.append(res.envelope)
             _set_progress(db, batch_id, done=done, total=len(chunks))
         rows = normalize(ctx, raw_rows, ex.mode)
@@ -1418,7 +1428,7 @@ def parse_amount(v) -> Decimal | None:
 
 - 后缀一定按 `len(suf)` 截，别写死 `s[:-2]`：`"1234.56借"` 只有一个字符的后缀，`s[:-2]` 会把 `6` 一起吃掉，静默变成 `-1234.5` 且不打任何标记。
 - 千分位可能是 `,`（中英）、`'`（瑞士）、空格（法国）——空格已被 `_NOISE` 吃掉。
-- 欧陆格式 `1.234,56`（点做千分位、逗号做小数点）**不在本版本支持范围**：上面的规则会把它解析成 `1234`（`,56` 被吃掉后剩 `1.234`）。同批 ≥3 行命中"整数部分含 `.` 且 `,` 后恰好 2 位"的模式时，整批打 `needs_review`，并在这些行的 `hint` 里附一条"金额格式可能被解析错，请核对"的提示（见 §待决 4）。
+- 欧陆格式 `1.234,56`（点做千分位、逗号做小数点）**不在本版本支持范围**：上面的规则会把它解析成 `1234`（`,56` 被吃掉后剩 `1.234`）。同批 ≥3 行命中"整数部分含 `.` 且 `,` 后恰好 2 位"的模式时，整批打 `needs_review`，并对这些行调用 `_add_hint(r, "金额格式可能被解析错，请核对")`（§0.2 的追加式写入，不会覆盖 §8.1 / §8.3 后面写的提示）（见 §待决 4）。
 - `amount is None` 或 `amount == 0` → 该行 `amount = 0` 并打 `needs_review`（数据库不禁止 0，决策 §10 只约束符号）。
 - `|amount| > 100_000_000` → `needs_review`（多半是把余额或卡号读成了金额）。
 
@@ -1556,10 +1566,10 @@ def dedup_in_batch(rows: list[DraftRow]) -> list[DraftRow]:
 
 四个字段要特别说明归宿（§0.2 的表也标了）：
 
-- `note_hint`（§8.1 / §8.3 写的那句人话提示，例如"请选择还款是从哪个账户出的；不在应用里就留空"）落 `import_rows.hint VARCHAR(200) NULL`（列见 [`02-database.md`](./02-database.md) §1.9），由 `GET .../rows` 带给前端，在 review 表格里显示成该行的提示条。它**不**拼进 `note`：`note` 会原样进 `transactions.note`（§9.2），把"另一个账户里已有这笔还款的对应腿"这种话带进正式交易备注是污染。
+- `hint`（§7.2 / §8.1 / §8.3 通过 `_add_hint()` 追加的那句人话提示，例如"请选择还款是从哪个账户出的；不在应用里就留空"；字段名按决策 §14.19 就叫 `hint`）落 `import_rows.hint VARCHAR(200) NULL`（列见 [`02-database.md`](./02-database.md) §1.9），由 `GET .../rows` 带给前端，在 review 表格里显示成该行的提示条。它**不**拼进 `note`：`note` 会原样进 `transactions.note`（§9.2），把"另一个账户里已有这笔还款的对应腿"这种话带进正式交易备注是污染。
 - `candidate_ids` 只在内存里，也不单独建接口：退款候选列表由 `GET /ledgers/{lid}/transactions`（[`03-backend-api.md`](./03-backend-api.md) §5.28）现查（§8.2，决策 §14.11）。
 - `merged_count` 只在内存里，合并结果已经在 §7.7 拼进 `note` 了。
-- `page_no` 落 `import_rows.page_no`：取产出这一行的那个 `Chunk.page_no`（块信息本来就在手上，不从 `source_ref` 反解），文本路径恒为 `NULL`。review 界面靠它把行和缩略图侧栏对上（决策 §14.12，见 [`04-frontend.md`](./04-frontend.md) §4.11.6）。
+- `page_no` 落 `import_rows.page_no`：取产出这一行的那个 `Chunk.page_no`——§0.2 的 `run_import` 骨架把每条原始行和它的块配成 `(ck, row)` 传给 `normalize`，所以块信息本来就在手上，不用从 `source_ref` 反解。被 §3.4 `split_chunk` 切出的子块由 `_merge` 合回父块的那一次结果，因此用的是**父块**的 `page_no`（上下半页同属一页）；文本路径恒为 `NULL`。review 界面靠它把行和缩略图侧栏对上（决策 §14.12，见 [`04-frontend.md`](./04-frontend.md) §4.11.6）。
 - `import_rows.counterparty` 在这一步一律写 `NULL`：它是用户在 review 里填的对手文本（决策 §14.10），解析阶段不产出。
 
 ### 7.9 规则速查表
@@ -1638,7 +1648,7 @@ def flag_duplicates(db, ctx, rows):
             r.flags.add("duplicate")
             if len(hits) == 1:
                 r.matched_transaction_id = hits[0].id
-            r.note_hint = f"账户里已有 {len(hits)} 笔同日同额交易"
+            _add_hint(r, f"账户里已有 {len(hits)} 笔同日同额交易")
 ```
 
 一次查询搞定整批，不要在循环里查库（2000 行 × 一次查询 = 2000 次往返）。
@@ -1785,15 +1795,15 @@ def flag_repayments(db, ctx, rows):
             r.flags.add("duplicate")
             r.counterpart_source_id = legs[0].source_id
             r.matched_transaction_id = legs[0].id
-            r.note_hint = "另一个账户里已有这笔还款的对应腿"
+            _add_hint(r, "另一个账户里已有这笔还款的对应腿")
         elif len(legs) > 1:
             r.flags.add("needs_review")
-            r.note_hint = f"找到 {len(legs)} 个可能的对手账户，请选一个"
+            _add_hint(r, f"找到 {len(legs)} 个可能的对手账户，请选一个")
         else:
             # 库里没有对手腿：用户要么选对手账户，要么选"不在应用里"（决策 §1.2 单腿转账）
             r.flags.add("needs_review")
             r.counterpart_source_id = _guess_counterpart(db, ctx)
-            r.note_hint = "请选择还款是从哪个账户出的；不在应用里就留空"
+            _add_hint(r, "请选择还款是从哪个账户出的；不在应用里就留空")
 ```
 
 `_guess_counterpart`：账本里只有**一个**非归档的 `checking` 账户时预填它（绝大多数人只有一张主力储蓄卡）；否则返回 `None`，界面强制用户选。这只是预填，用户可改。
@@ -1835,7 +1845,8 @@ def flag_repayments(db, ctx, rows):
 | 要写进 `refund_of` 的 `matched_transaction_id` 仍指向同账本的 `kind='expense'` 交易（§9.2 的两个条件成立时才查） | 400 | `refund_target_invalid` |
 | 目标账户、以及任何被选中的 `counterpart_source_id` 仍未归档 | 409 | `source_archived` |
 | 这批不是"所有行都被跳过"（提交出 0 条交易没有意义） | 409 | `rows_all_skipped`（已在 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里） |
-| 请求体带了 `updated_at` 时与批次一致（乐观锁，决策 §2、03 §4.4） | 409 | `stale_update` |
+
+`POST .../commit` **没有请求体**，也不做 `updated_at` 乐观锁校验（决策 §14.18）：重复提交靠上面那条 `batch_already_committed` 保护，接口形状见 [`03-backend-api.md`](./03-backend-api.md) §5.44。
 
 **transfer 行不作对手校验**：`counterpart_source_id` 为空就是"对手不在应用里"，按决策 §1.2 建单腿（`transfer_pair_id = NULL` + `counterparty` 文本），服务端不拦——这与 [`03-backend-api.md`](./03-backend-api.md) §5.44 的写入规则一致。§8.3 给这类行打的 `needs_review` 只是让 review 界面提醒用户"确认一下这笔是从哪个账户出的"，不是提交的硬条件。
 

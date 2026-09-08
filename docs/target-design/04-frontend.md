@@ -369,7 +369,7 @@ export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 120_0
 
 三条贯穿全表的约定：**所有列表端点都返回 `{items, total}` 信封**（[`./03-backend-api.md`](./03-backend-api.md) §4.3），所以列表类函数的返回类型一律是 `Paged<T>`，没有裸数组；**所有 PATCH 请求体都必须带 `updated_at`**（§4.4 的乐观并发）；**折算三件套统一叫 `amount_base` / `rate_used` / `rate_date`**，取不到汇率时三者同时为 `null`。
 
-例外只有导入的四个字段，它们由决策 §14 的补充裁定引入，**以裁定为准**：`ImportBatch.error` 是 `{code, message}` 对象（决策 §14.15，`error_chunk` 只落库不进响应）、`ImportBatch.pages` 与 `ImportRow.page_no` 是缩略图的传输形态（决策 §14.12）、`ImportRow.counterparty` 是单腿转账的对手文本且 `PATCH` 可改（决策 §14.10）。[`./03-backend-api.md`](./03-backend-api.md) §5.40 / §5.42 / §5.43 已按裁定收录这四个字段，第三轮校对逐字段核对无误。
+例外只有导入的四个字段，它们由决策 §14 的补充裁定引入，**以裁定为准**：`ImportBatch.error` 是 `{code, message}` 对象（决策 §14.15，`error_chunk` 只落库不进响应）、`ImportBatch.pages` 与 `ImportRow.page_no` 是缩略图的传输形态（决策 §14.12）、`ImportRow.counterparty` 是单腿转账的对手文本，**解析阶段恒为 `null`**、只有用户在 review 里 `PATCH` 才有值（决策 §14.10、§14.16）。[`./03-backend-api.md`](./03-backend-api.md) §5.40 / §5.42 / §5.43 已按裁定收录这四个字段，第三轮校对逐字段核对无误。
 
 ```ts
 // ---------- 通用 ----------
@@ -535,7 +535,8 @@ export interface TransactionListParams {
   q?: string; kind?: TxKind[]; category_l1?: string; category_l2?: string;
   source_id?: Uuid[]; from?: IsoDate; to?: IsoDate; currency?: string;
   min_amount?: number; max_amount?: number; limit?: number; offset?: number;
-  with_refund_totals?: boolean;   // 退款候选选择器用；03 §5.28 目前无条件返回，见待决 D-4
+  // 没有额外的"要不要带退款汇总"开关：03 §5.28 在 kind='expense' 行上无条件返回
+  // refunded_total / refundable，退款候选选择器直接用（见待决 D-4）
 }
 
 // 退款关联选择器用（决策 §1.1：每条显示已退/可退）。字段就是 Transaction 上
@@ -623,6 +624,12 @@ export interface ImportBatch {
   created_at: IsoDateTime; updated_at: IsoDateTime;
   committed_at: IsoDateTime | null;
 }
+// 列表形状（03 §5.38 的 202 响应与 §5.39 的列表项）：比单条详情少六个字段——
+// source_name / used_vision / pages / flags_summary / row_status_summary /
+// uncategorized_count 这些汇总只在 §5.40 的单条详情里给（raw_response 同样只在单条里）
+export interface ImportBatchListItem extends Omit<ImportBatch,
+  'source_name' | 'used_vision' | 'pages' |
+  'flags_summary' | 'row_status_summary' | 'uncategorized_count'> {}
 // GET/PATCH .../imports/{bid}/rows（03 §5.42、§5.43）；行号列名是 row_no（决策 §14.5）
 export interface ImportRow {
   id: Uuid; batch_id: Uuid; row_no: number; status: ImportRowStatus;
@@ -636,7 +643,8 @@ export interface ImportRow {
   transfer_role: TransferRole | null;       // 转账腿方向，review 里可改（03 §5.43）
   transfer_subtype: TransferSubtype | null;
   hint: string | null;                      // 服务端给 review 的只读提示，不可改、不进 note
-  counterparty: string | null;              // 单腿转账的对手文本，review 里可填（决策 §14.10）
+  counterparty: string | null;              // 单腿转账的对手文本；解析阶段恒为 null，
+                                            // 只有 review 里 PATCH 才有值（决策 §14.10、§14.16）
   transaction_id: Uuid | null;              // 提交后回填
   page_no: number | null;                   // 视觉路径的页号，配 ImportBatch.pages 定位缩略图
                                             // （决策 §14.12；文本路径为 null）
@@ -667,7 +675,7 @@ export interface ImportDeleteResult {
   deleted_transactions?: number;       // 真删时给
 }
 
-// ---------- 汇率（03 §5.46）----------
+// ---------- 汇率（03 §5.47）----------
 export interface CurrencyList { currencies: Record<string, string>; }
 ```
 
@@ -712,8 +720,8 @@ export interface CurrencyList { currencies: Record<string, string>; }
 | `DELETE /ledgers/{id}/transactions/transfer/{pair_id}` | `txApi.removeTransfer(l: Uuid, pairId: Uuid): Promise<void>` |
 | `GET /ledgers/{id}/stats/summary?month=` | `statsApi.summary(l: Uuid, p: { month: string }): Promise<StatsSummary>` |
 | `GET /ledgers/{id}/stats/trend?months=` | `statsApi.trend(l: Uuid, p: { months: number; end?: string }): Promise<StatsTrend>` |
-| `POST /ledgers/{id}/imports`（multipart） | `importsApi.upload(l: Uuid, b: { source_id: Uuid; file: File \| Blob }, onProgress?): Promise<ImportBatch>` |
-| `GET /ledgers/{id}/imports` | `importsApi.list(l: Uuid, p?: { status?: ImportStatus[]; limit?: number; offset?: number }): Promise<Paged<ImportBatch>>` |
+| `POST /ledgers/{id}/imports`（multipart） | `importsApi.upload(l: Uuid, b: { source_id: Uuid; file: File \| Blob }, onProgress?): Promise<ImportBatchListItem>`（202 的响应体是列表形状，没有 `pages` / 三个汇总字段，03 §5.38） |
+| `GET /ledgers/{id}/imports` | `importsApi.list(l: Uuid, p?: { status?: ImportStatus[]; limit?: number; offset?: number }): Promise<Paged<ImportBatchListItem>>`（列表项不带 `pages` / `flags_summary` / `row_status_summary` / `uncategorized_count`，需要就查单条，03 §5.39） |
 | `GET /ledgers/{id}/imports/{bid}` | `importsApi.get(l: Uuid, bid: Uuid): Promise<ImportBatch>` |
 | `POST /ledgers/{id}/imports/{bid}/retry` | `importsApi.retry(l: Uuid, bid: Uuid): Promise<ImportBatch>` |
 | `GET /ledgers/{id}/imports/{bid}/rows` | `importsApi.rows(l: Uuid, bid: Uuid, p?: ImportRowListParams): Promise<Paged<ImportRow>>`（`p` 可带 `status` / `flag` / `uncategorized` / `limit`≤500 / `offset`，03 §5.42） |
@@ -722,9 +730,9 @@ export interface CurrencyList { currencies: Record<string, string>; }
 | `DELETE /ledgers/{id}/imports/{bid}` | `importsApi.remove(l: Uuid, bid: Uuid, p?: { dry_run?: boolean }): Promise<ImportDeleteResult>`（ready/failed = 丢弃；committed = 撤销；先 `dry_run` 拿条数再确认，03 §5.45） |
 | `GET /rates/currencies` | `ratesApi.currencies(): Promise<CurrencyList>` |
 
-**页面缩略图不需要新函数**（决策 §14.12）：`image_url` 直接来自 `importsApi.get` 返回的 `batch.pages`，前端**用 `apiClient` 取 blob** 再 `URL.createObjectURL` 挂到 `<img>` 上（`useQuery` 缓存 blob URL，组件卸载时 `revokeObjectURL`）。不能直接把 `image_url` 塞进 `<img src>`：令牌在 `Authorization` 头里（§3.2），浏览器发原生图片请求时不会带这个头，只会拿到 401——除非后端改成 cookie 鉴权，而全站是 Bearer 令牌，不为一张图破例。
+**页面缩略图不需要新函数**（决策 §14.12）：`image_url` 直接来自 `importsApi.get` 返回的 `batch.pages`，它是**相对 API 根、不含 `/api/v1` 前缀**的路径（决策 §14.17、03 §5.40），所以前端**直接 `apiClient.get(p.image_url, { responseType: 'blob' })` 取 blob**（`apiClient` 的 baseURL 已经是 `/api/v1`，§3.2，前缀只拼一次；`image_url` 里不要再手动加前缀，也不需要另设 `baseURL: ''` 的实例），再 `URL.createObjectURL` 挂到 `<img>` 上（`useQuery` 缓存 blob URL，组件卸载时 `revokeObjectURL`）。不能直接把 `image_url` 塞进 `<img src>`：令牌在 `Authorization` 头里（§3.2），浏览器发原生图片请求时不会带这个头，只会拿到 401——除非后端改成 cookie 鉴权，而全站是 Bearer 令牌，不为一张图破例。
 
-退款候选选择器复用 `txApi.list`（决策 §14.11 明确**不另设** `refund-candidates` 接口）：`refunded_total` / `refundable` 本来就是 03 §5.28 在 `kind='expense'` 行上返回的可选字段，选择器只是把它们当必填用（`RefundCandidate`）。是让它们默认就返回，还是加一个 `?with_refund_totals=1` 开关，见 [待决 D-4](#待决)。
+退款候选选择器复用 `txApi.list`（决策 §14.11 明确**不另设** `refund-candidates` 接口）：`refunded_total` / `refundable` 本来就是 03 §5.28 在 `kind='expense'` 行上返回的可选字段，选择器只是把它们当必填用（`RefundCandidate`）。本章按"默认返回"实现（03 §5.28 正是这么写的），因此 `TransactionListParams` 里**没有**额外的开关参数；要不要再加一个省 JOIN 的查询开关，见 [待决 D-4](#待决)。
 
 ### 3.5 Query key 规范
 
@@ -1287,7 +1295,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 - 出现条件：`batch.used_vision && batch.pages.length > 0`（决策 §14.12）；非视觉批次 `pages` 是空数组，侧栏整块不渲染。
 - 侧栏纵向排列 `batch.pages` 里的每一页（按 `page_no` 升序）；点某页 → 表格滚动并高亮 `row.page_no === page_no` 的行；反过来，光标停在某一行 → 侧栏按该行的 `page_no` 高亮并滚动到对应页（`page_no` 为 `null` 的行不联动）。
-- 图片按 §3.4 的说明用 `apiClient` 取 blob 后显示（`image_url` 指向鉴权接口 `GET /ledgers/{id}/imports/{bid}/pages/{page_no}`，Bearer 令牌在请求头里，`<img src>` 直连会 401）。
+- 图片按 §3.4 的说明取 blob 后显示：`apiClient.get(p.image_url, { responseType: 'blob' })`。`image_url` 是**相对 API 根、不含 `/api/v1` 前缀**的路径（决策 §14.17、03 §5.40），`apiClient` 的 baseURL 会补上前缀，所以既不要手动拼前缀、也不要改 `baseURL`；它指向鉴权接口 `GET /api/v1/ledgers/{id}/imports/{bid}/pages/{page_no}`，Bearer 令牌在请求头里，`<img src>` 直连会 401。
 - 点缩略图放大成可缩放的浮层（滚轮缩放、拖拽平移），方便对照原始账单核对金额。
 - 窄屏：侧栏收成表格上方的一条横向缩略图带，点击弹出全屏查看。
 
@@ -1769,9 +1777,9 @@ token 定义在 `frontend/src/theme/tokens.ts`，由一个 `ThemeProvider` 按 `
 |---|---|---|
 | D-1 | 路由库选 Expo Router v6 还是 `@react-navigation/native` + 手写 `linking`？（§1.1） | **Expo Router v6**：Web 上直接是真实 URL，将来做 App（决策 §0.1）时深链接零成本 |
 | D-2 | 决策 §11 同时写了「现有 `auth` 接口保留」和 `GET /me` / `PATCH /me`。现状是 `GET /auth/me` / `PATCH /auth/me`。两者共存还是迁走？（§2.1） | **迁到 `/me`**，`/auth` 下只留 `register` / `login`；旧路径不保留（只有测试数据，决策 §13） |
-| D-4 | 退款关联选择器需要每条候选的「已退/可退」（决策 §1.1）。**「要不要单开接口」这一半已由决策 §14.11 裁定**：不单开，选择器复用 `GET /ledgers/{id}/transactions`；剩下的一半是这两个字段默认返回还是靠 `?with_refund_totals=1` 开关（§3.4） | **默认返回**：[`./03-backend-api.md`](./03-backend-api.md) §5.28 已经把 `refunded_total` / `refundable` 写成"`kind == 'expense'` 的行上无条件出现的可选字段"，`with_refund_totals` 只是留给"想省掉这次 JOIN"的开关；若确认不要这个开关，把 §3.4 `TxListParams` 里的这一行删掉即可 |
+| D-4 | 退款关联选择器需要每条候选的「已退/可退」（决策 §1.1）。**「要不要单开接口」这一半已由决策 §14.11 裁定**：不单开，选择器复用 `GET /ledgers/{id}/transactions`；剩下的一半是这两个字段默认返回，还是靠一个额外的查询开关按需返回（§3.4） | **默认返回**：[`./03-backend-api.md`](./03-backend-api.md) §5.28 已经把 `refunded_total` / `refundable` 写成"`kind == 'expense'` 的行上无条件出现的可选字段"，本章已按此实现，§3.4 的 `TransactionListParams` 里不再声明任何开关参数；若反过来确认要加开关，需在 03 §5.28 的查询参数表里补上它（bool，默认 false） |
 | D-5 | 前端怎么知道 `REGISTRATION_OPEN` 的值，才能在打开 `/register` 时就提示而不是提交后才报错？（§4.2） | 加一个匿名可读的 `GET /api/v1/config`，返回 `{registration_open: bool}`；在此之前前端只按提交后的 403 `registration_closed` 处理 |
-| D-6 | 交易详情页要显示「这笔支出被退了多少」，需要按 `refund_of` 反查退款行。接口形态未定（§4.7） | 详情响应里带 `refunds: RefundSummary[]`（每条含 id、日期、金额）；或复用 D-4 的 `with_refund_totals` |
+| D-6 | 交易详情页要显示「这笔支出被退了多少」，需要按 `refund_of` 反查退款行。接口形态未定（§4.7） | 详情响应里带 `refunds: RefundSummary[]`（每条含 id、日期、金额）；或复用 D-4 里那个按需返回退款汇总的查询开关 |
 | D-7 | 交易列表能否按 `import_batch_id` 筛选（导入结果页的「查看这批交易」需要）？决策 §4 的筛选参数里没有它（§4.10 步骤 4） | **加 `?import_batch_id=` 参数**；不加的话该按钮只能退化成跳到批次详情 |
 | D-8 | `GET /categories` 的 `version` 是什么形态（语义版本 / 内容哈希 / 日期串）？（§3.3 的 `CategoryTree`）。**结构那一半已由 [`./03-backend-api.md`](./03-backend-api.md) §5 回答**：一级/二级是嵌套 `children[]`，不是扁平带 `parent` | `version` **用日期串**（如 `"2026-09-09"`），与 [`./03-backend-api.md`](./03-backend-api.md) §5.11 正文和该章待决 16 一致——初稿这里写"内容哈希"，校对时统一到日期串 |
 | D-9 | ~~`ImportRow` 的页面缩略图怎么给前端~~ | **已由决策 §14.12 裁定**（本章按裁定改过）：批次响应在 `used_vision = true` 时带 `pages: [{page_no, image_url}]`，行上带 `page_no`，图片走带鉴权的 `GET /ledgers/{id}/imports/{bid}/pages/{page_no}`；服务端把整页图存在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`（[`./05-import-and-llm.md`](./05-import-and-llm.md) §1.3、§2.5）。前端不新增 API 函数，用 `apiClient` 取 blob 显示（§3.4、§4.11.6）。解析进度那一半早已被 [`./03-backend-api.md`](./03-backend-api.md) §5.40 回答（`progress: {done, total}`）。**跨章核对**：03 §5.40 的 `pages` 与 §5.42 的 `page_no` 已按裁定收录（第三轮已核对） |
