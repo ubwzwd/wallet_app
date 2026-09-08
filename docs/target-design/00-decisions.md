@@ -218,3 +218,10 @@
 7. **导入提交时写 `refund_of` 的条件**：行 `kind = 'refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选），提交时写入 `refund_of`；不引入"用户已确认"这类额外状态。
 8. **篇幅**：各章的行数目标只是参考，不作为验收项。不得为压行数删除被点名要求的内容，也不要把提示词、schema 拆到附录文件。
 9. **导入分块超长时的图片切分**：图片块被模型截断（`finish_reason = length`）时无条件对半切一次（重叠 6%），子块标记为已切分；已切分的子块再次被截断则整批 `failed`，不再递归。
+10. **导入草稿行的对手文本**：`import_rows` 增加 `counterparty VARCHAR(100) NULL`，`PATCH .../rows/{rid}` 可改；提交单腿转账时写入 `transactions.counterparty`。
+11. **退款候选列表**：不单独建接口。review 界面和记账表单的「关联原单」选择器都复用 `GET /ledgers/{id}/transactions`（expense 行自带 `refunded_total` / `refundable`）。
+12. **视觉路径的页面缩略图**：解析时把渲染出的页面图存到 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`；批次响应在 `used_vision = true` 时带 `pages: [{page_no, image_url}]`，草稿行带 `page_no`（非视觉路径为 NULL，`import_rows` 增加 `page_no INTEGER NULL`）；图片经鉴权接口 `GET /ledgers/{id}/imports/{bid}/pages/{page_no}` 返回，批次删除时连同删除。
+13. **账本名长度**：1–100 字符，与账户名一致。
+14. **服务重启时的失败 code**：`import_interrupted`（500），登记进 03 §4.2 注册表；`import_batches.error_code` 写同一个名字。
+15. **批次错误字段的暴露**：数据库存 `error_code` / `error_message` / `error_chunk` 三列；接口响应只暴露 `error: {code, message}`，`error_chunk` 仅用于服务端日志与重试定位，前端不展示。
+
