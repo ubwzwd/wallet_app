@@ -14,7 +14,7 @@
 
 ## 0. 与现状的差异总览
 
-现状一共 20 条注册路由（`backend/app/main.py:27-30` 挂了四个路由器）。目标是 49 条业务路由，其中 7 条原样保留、4 条改语义保留、9 条改前缀、29 条新增，另删除标签相关的全部行为。
+现状一共 20 条注册路由（`backend/app/main.py:27-30` 挂了四个路由器）。目标是 49 条业务路由，其中 **7 条沿用现状路径**（1 条原样保留、2 条保留为别名、2 条保留但修正语义、2 条保留并增强）、**9 条改前缀**、**33 条新增**，另删除标签相关的全部行为。下表的"变化"列可逐行核对这三个桶。
 
 | # | 现状端点 | 目标端点 | 变化 | 说明 |
 |---|---|---|---|---|
@@ -2088,7 +2088,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports?status=ready&status=failed
 -> 200
 {
   "items": [
-    {"id": "d1e2f3a4-...", "source_id": "5b6c7d8e-...", "filename": "2026-08-cmb-credit.pdf",
+    {"id": "d1e2f3a4-...", "ledger_id": "8f0f7b2e-...", "source_id": "5b6c7d8e-...",
+     "filename": "2026-08-cmb-credit.pdf",
      "mime_type": "application/pdf", "size_bytes": 184320, "status": "ready",
      "progress": {"done": 3, "total": 3}, "row_count": 128, "error": null,
      "model": "google/gemini-2.5-flash", "created_by": "4ee1c8fa-...",
@@ -2136,7 +2137,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
 }
 ```
 
-`progress` 的定义（决策 §5"文本按约 150 行分块调用 LLM"）：`total` = 分块总数（图片路径下是页数），`done` = 已经成功解析并落库的块数。`total` 在抽取完成前是 `null`，前端显示不确定进度条。
+`progress` 的定义（决策 §5"文本按约 150 行分块调用 LLM"）：`total` = 分块总数（图片路径下是页数或半页数——密表格页会被切成上下半页各算一块，见 [`./05-import-and-llm.md`](./05-import-and-llm.md) §2.5、§10.3，所以它 ≥ 真实页数），`done` = 已经成功解析并落库的块数。`total` 在抽取完成前是 `null`，前端显示不确定进度条。
 
 `pages` 只在 `used_vision = true`（走了视觉路径）时非空，其余情况一律是空数组 `[]`（决策 §14.12）：
 
@@ -2144,13 +2145,13 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
 {
   "used_vision": true,
   "pages": [
-    {"page_no": 1, "image_url": "/api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/1"},
-    {"page_no": 2, "image_url": "/api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/2"}
+    {"page_no": 1, "image_url": "/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/1"},
+    {"page_no": 2, "image_url": "/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../pages/2"}
   ]
 }
 ```
 
-`image_url` 是本站的相对路径，指向 §5.46 那个带鉴权的端点（图片不放在任何可匿名访问的静态目录下）；`page_no` 与草稿行的 `page_no`（§5.42）是同一个编号，review 界面据此把行和页面缩略图对上。
+`image_url` 是**相对 API 根的路径，不含 `/api/v1` 前缀**（决策 §14.17），指向 §5.46 那个带鉴权的端点（图片不放在任何可匿名访问的静态目录下）；前端用已经配好 baseURL（`/api/v1`）与 `Authorization` 头的 axios 实例直接请求它取 blob，见 [`./04-frontend.md`](./04-frontend.md) §3.4。`pages` 数组由 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/` 目录下**实际存在的 `{page_no}.png` 升序生成**（不按 `chunk_total` 推算），批次仍在 `parsing` 时可能只有前几页；`page_no` 与草稿行的 `page_no`（§5.42）是同一个编号，review 界面据此把行和页面缩略图对上。
 
 失败态：
 
@@ -2293,7 +2294,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 
 | 字段 | 何时有值 | 说明 |
 |---|---|---|
-| `counterparty` | 单腿转账行上可能有值，其余行一般为 `null` | 对手方的自由文本（例如 `"老婆"`、`"工资卡"`），决策 §14.10 新增。上面两行的示例里都是 `null`：第二行的对手账户已经被猜成本账本里的一个账户（`counterpart_source_id`），不需要文本。LLM 从摘要里抽到就填，用户可在 review 里改（§5.43，≤100 字）；提交时原样写进 `transactions.counterparty`（§5.44）。它与 `counterpart_source_id` 是两件事：后者是"对手账户也在本应用里"，两者同时有值时以 `counterpart_source_id` 为准建两腿转账，`counterparty` 不写入 |
+| `counterparty` | 单腿转账行上可能有值，其余行一般为 `null` | 对手方的自由文本（例如 `"老婆"`、`"工资卡"`），决策 §14.10 新增。上面两行的示例里都是 `null`：第二行的对手账户已经被猜成本账本里的一个账户（`counterpart_source_id`），不需要文本。解析阶段一律为 `null`（决策 §14.16、[`./05-import-and-llm.md`](./05-import-and-llm.md) §0.2：它不是 `DraftRow` 的字段，模型也不猜对手账户），只有用户在 review 里 `PATCH .../rows/{rid}` 填写才会有值（§5.43，≤100 字）；提交时原样写进 `transactions.counterparty`（§5.44）。它与 `counterpart_source_id` 是两件事：后者是"对手账户也在本应用里"，两者同时有值时以 `counterpart_source_id` 为准建两腿转账，`counterparty` 不写入 |
 | `page_no` | 仅 `used_vision = true` 的批次；文本路径一律 `null` | 这一行来自原件的第几页（1 起，决策 §14.12），与 §5.40 的 `pages[].page_no` 同一个编号。review 表格用它把当前行和 §5.46 取回来的页面缩略图对上；它是**只读**的，不在 §5.43 的可改字段里 |
 
 `flags` 的含义（决策 §5，服务端在批次进入 `ready` 时自动打）：
@@ -2512,12 +2513,12 @@ Content-Length: 240118
 
 | 状态码 | code | 条件 |
 |---|---|---|
-| 404 | `not_found` | 账本或批次不可见；批次 `used_vision = false`（这批根本没有页面图）；`page_no` 超出这批的页数（越界判断用 `import_batches.chunk_total`，视觉路径下它就是页数，§5.40）；或文件在磁盘上已丢失 |
+| 404 | `not_found` | 账本或批次不可见；批次 `used_vision = false`（这批根本没有页面图）；`page_no` 在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/` 下没有对应的 `{page_no}.png`（越界判断就是这张图在不在，与 §5.40 的 `pages` 同源；**不要拿 `import_batches.chunk_total` 当上界**——决策 §14.9 的图片对半切与 [`./05-import-and-llm.md`](./05-import-and-llm.md) §2.5 的密表格半页切分都会让 `chunk_total` 大于真实页数，见决策 §14.17） |
 | 422 | `validation_error` | `page_no` 不是 ≥ 1 的整数 |
 
-四种 404 的响应完全一样，不区分"没有这个批次"和"没有这一页"（§3.3 的不泄露原则）。
+三种 404 的响应完全一样，不区分"没有这个批次"和"没有这一页"（§3.3 的不泄露原则）。
 
-副作用：只读。一次查库（成员校验 + 批次行，拿 `used_vision` / `chunk_total`）+ 一次磁盘读取，不调 LLM、不调汇率。文件路径由 `UPLOAD_DIR` 与三段已校验过的值（两个 UUID + 一个整数）拼出，用户提供的字符串不参与拼接（§9.3）。
+副作用：只读。一次查库（成员校验 + 批次行，拿 `used_vision`）+ 一次磁盘读取，不调 LLM、不调汇率。文件路径由 `UPLOAD_DIR` 与三段已校验过的值（两个 UUID + 一个整数）拼出，用户提供的字符串不参与拼接（§9.3）。
 
 ### 5.47 `GET /api/v1/rates/currencies`
 

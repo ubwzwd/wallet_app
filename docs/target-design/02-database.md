@@ -462,14 +462,15 @@ CREATE TABLE import_rows (
         CHECK (transfer_subtype IS NULL OR transfer_subtype IN ('plain', 'repayment')),
     CONSTRAINT ck_import_rows_confidence
         CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
-    CONSTRAINT ck_import_rows_row_no CHECK (row_no >= 1)
+    CONSTRAINT ck_import_rows_row_no CHECK (row_no >= 1),
+    CONSTRAINT ck_import_rows_page_no CHECK (page_no IS NULL OR page_no >= 1)
 );
 CREATE UNIQUE INDEX uq_import_rows_batch_row ON import_rows (batch_id, row_no);
 CREATE INDEX ix_import_rows_transaction_id
     ON import_rows (transaction_id) WHERE transaction_id IS NOT NULL;
 ```
 
-列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`transfer_role`（`out` / `in`）和 `transfer_subtype`（`plain` / `repayment`）在 review 阶段就要能改：提交时它们直接落到 `transactions` 的同名列（[`05-import-and-llm.md`](./05-import-and-llm.md) §9.2），不靠金额符号现推，否则用户在 review 里改不了转账方向。`hint` 是服务端写给 review 界面的一句提示（"请确认这笔还款是从哪个账户转出的"），**只读、不进** `transactions.note`——`note` 会原样进正式交易，把这类话带进去是污染（[`05-import-and-llm.md`](./05-import-and-llm.md) §0.2）。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6），外加一个 `merged_duplicates`（同批原文里的完全重复行被合并到这一行，[`05-import-and-llm.md`](./05-import-and-llm.md) §7.7；它在决策 §5 的三种标记之外，见 README 的待决汇总）。`counterparty` 是单腿转账的对手文本（"老婆""工资卡"，决策 §14.10）：LLM 解析出来后可由 `PATCH .../rows/{rid}` 修改（≤100 字），提交时原样写进 `transactions.counterparty`（[`03-backend-api.md`](./03-backend-api.md) §5.43、§5.44）。`page_no` 是这一行来自原件的第几页（1 起，决策 §14.12）：只有视觉路径（`import_batches.used_vision = TRUE`）才填，文本路径为 NULL；review 界面用它把行和 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png` 那张页面缩略图对上（图片经 [`03-backend-api.md`](./03-backend-api.md) §5.46 的鉴权接口取，不入库）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
+列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`transfer_role`（`out` / `in`）和 `transfer_subtype`（`plain` / `repayment`）在 review 阶段就要能改：提交时它们直接落到 `transactions` 的同名列（[`05-import-and-llm.md`](./05-import-and-llm.md) §9.2），不靠金额符号现推，否则用户在 review 里改不了转账方向。`hint` 是服务端写给 review 界面的一句提示（"请确认这笔还款是从哪个账户转出的"），**只读、不进** `transactions.note`——`note` 会原样进正式交易，把这类话带进去是污染（[`05-import-and-llm.md`](./05-import-and-llm.md) §0.2）。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6），外加一个 `merged_duplicates`（同批原文里的完全重复行被合并到这一行，[`05-import-and-llm.md`](./05-import-and-llm.md) §7.7；它在决策 §5 的三种标记之外，见 README 的待决汇总）。`counterparty` 是单腿转账的对手文本（"老婆""工资卡"，决策 §14.10）：**解析阶段恒为 NULL**（LLM 输出 schema 里没有这个字段，模型不猜对手账户，决策 §14.16），由用户在 review 里 `PATCH .../rows/{rid}` 填写（≤100 字），提交时原样写进 `transactions.counterparty`（[`03-backend-api.md`](./03-backend-api.md) §5.43、§5.44）。`page_no` 是这一行来自原件的第几页（1 起，决策 §14.12）：只有视觉路径（`import_batches.used_vision = TRUE`）才填，文本路径为 NULL；review 界面用它把行和 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png` 那张页面缩略图对上（图片经 [`03-backend-api.md`](./03-backend-api.md) §5.46 的鉴权接口取，不入库）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
 
 ### 1.10 `exchange_rates`
 
@@ -654,7 +655,7 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 上传 ≤10 MB、单批 ≤2000 行 | `ck_import_batches_size`、`ck_import_batches_row_count` | 决策 §5 |
 | 解析进度不会倒挂（`0 ≤ chunk_done ≤ chunk_total`） | `ck_import_batches_chunks` | 决策 §5（进度轮询，[`03-backend-api.md`](./03-backend-api.md) §5.40） |
 | 草稿行状态三选一、kind 四选一、转账腿二选一、子类型二选一 | `ck_import_rows_status`、`ck_import_rows_kind`、`ck_import_rows_transfer_role`、`ck_import_rows_transfer_subtype` | 决策 §1、§5 |
-| 批次行号从 1 起 | `ck_import_rows_row_no` | 决策 §14.5 |
+| 批次行号从 1 起；页码要么为空要么从 1 起 | `ck_import_rows_row_no`、`ck_import_rows_page_no` | 决策 §14.5、§14.12 |
 | 汇率 (date, base, symbol) 唯一且为正、币种大写、base ≠ symbol | 主键 `pk_exchange_rates (date, base, symbol)` + `ck_exchange_rates_rate_positive` / `_base_upper` / `_symbol_upper` / `_not_self` | 决策 §8、§14.1 |
 
 ### 3.2 应用层保证（数据库不管）
@@ -1277,6 +1278,8 @@ owner 调用 `DELETE /ledgers/{id}`（决策 §2）。数据库侧五条 CASCADE
 ```
 import_rows -> transactions -> import_batches -> finance_sources -> ledger_invites -> ledger_members -> ledgers
 ```
+
+**磁盘侧**：同一次操作还要 `shutil.rmtree(UPLOAD_DIR/{ledger_id}/, ignore_errors=True)`，把该账本所有批次的 `{batch_id}.<ext>` 原文件与 `{batch_id}/pages/` 页面图一并删掉（[`03-backend-api.md`](./03-backend-api.md) §5.16），同样是先提交事务再删盘。
 
 删除前要求二次确认并显示"将删除 N 笔交易、M 个账户"。
 
