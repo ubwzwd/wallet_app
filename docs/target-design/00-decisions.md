@@ -224,4 +224,8 @@
 13. **账本名长度**：1–100 字符，与账户名一致。
 14. **服务重启时的失败 code**：`import_interrupted`（500），登记进 03 §4.2 注册表；`import_batches.error_code` 写同一个名字。
 15. **批次错误字段的暴露**：数据库存 `error_code` / `error_message` / `error_chunk` 三列；接口响应只暴露 `error: {code, message}`，`error_chunk` 仅用于服务端日志与重试定位，前端不展示。
+16. **`import_rows.counterparty` 的来源**：解析阶段恒为 NULL（LLM 不猜对手账户，输出 schema 里没有这个字段），只有用户在 review 里通过 `PATCH .../rows/{rid}` 填写才有值。
+17. **缩略图 `image_url` 的形态**：相对 API 根的路径（例如 `/ledgers/{id}/imports/{bid}/pages/1`，不含 `/api/v1` 前缀），前端用已配置 baseURL 与鉴权头的 axios 实例直接请求并取 blob；`pages` 数组按磁盘上实际存在的 `{page_no}.png` 升序生成，越界判断也以此为准，不用 `chunk_total`。
+18. **`POST .../imports/{bid}/commit` 无请求体**：不做乐观锁校验，重复提交靠 409 `batch_already_committed` 保护。
+19. **草稿行提示字段名**：统一叫 `hint`（对应 `import_rows.hint`），不再使用 `note_hint`。
 
