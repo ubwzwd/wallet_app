@@ -105,6 +105,7 @@
 | `base_currency` | CHAR(3) | **新建账本时的默认基准币种**，不再直接参与任何换算（决策 §2、§13.6） | 是 |
 | `language` | VARCHAR(8) | 界面语言，`zh` / `en`；**可空，NULL 表示跟随系统**；`PATCH /me` 可改（决策 §14.6） | 否 |
 | `created_at` | TIMESTAMP | 注册时间 | 是 |
+| `updated_at` | TIMESTAMP | 最后修改时间（审计用；`PATCH /me` 不做乐观并发） | 是 |
 
 现状的 `users.default_source_id` (backend/app/models/user.py:20) 在多账本模型里语义不再成立（账户属于账本，一个用户可能在 10 本账里各有账户），**决策 §14.6 已裁定删除该列**：记账表单改用前端本地记住的"该账本内上次使用的账户"。
 
@@ -195,7 +196,7 @@
 | `created_at` | TIMESTAMP | | 是 |
 | `updated_at` | TIMESTAMP | 乐观并发用 | 是 |
 
-**余额是算出来的，不落库**：`balance = opening_balance + Σ amount`（该账户所有交易，含单腿转账，决策 §3）。精确定义见 §5.4。
+**余额是算出来的，不落库**：`balance = opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`——该账户的所有交易（含单腿转账、含两腿转账的每一条腿），同币种不换算（决策 §3、§14.2）。精确定义与算例见 §5.4。
 
 与现状的差别：现状没有 `opening_balance`、没有 `cash` 类型 (backend/app/schemas/finance_source.py:21-26)、也没有删除接口（`backend/app/api/finance_sources.py` 只注册了 post / get / get / patch 四个路由）。
 
@@ -272,13 +273,21 @@
 | `filename` | VARCHAR(255) | 原始文件名 | 是 |
 | `mime_type` | VARCHAR(128) | 上传时的 MIME | 是 |
 | `size_bytes` | INTEGER | 文件大小，≤ 10 MB | 是 |
-| `status` | VARCHAR(16) | `uploaded` / `parsing` / `ready` / `committed` / `failed` | 是 |
-| `error` | TEXT | 失败原因（`failed` 时非空） | 否 |
-| `model` | VARCHAR(128) | 本次实际使用的模型 id（文本或视觉） | 否 |
-| `llm_raw_response` | TEXT | LLM 原始响应，排障用 | 否 |
-| `row_count` | INTEGER | 解析出的草稿行数 | 否 |
+| `status` | VARCHAR(16) | `uploaded` / `parsing` / `ready` / `committed` / `failed`（只有这五个，撤销 = 整批删除，不是第六个状态；见 §4.2、[`./02-database.md`](./02-database.md) §6.6） | 是 |
+| `error_code` | VARCHAR(64) | 失败时的错误 code，取 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的名字（`failed` 时非空） | 否 |
+| `error_message` | VARCHAR(2000) | 失败原因的人话描述（已脱敏、已截断） | 否 |
+| `error_chunk` | INTEGER | 失败发生在第几块（0 起；非分块阶段失败为空） | 否 |
+| `model` | VARCHAR(200) | 本次实际使用的模型 id（文本或视觉） | 否 |
+| `used_vision` | BOOLEAN | 是否走了视觉路径（决策 §5） | 是 |
+| `raw_response` | JSON | LLM 原始响应，排障用 | 否 |
+| `row_count` | INTEGER | 解析出的草稿行数 | 是 |
+| `chunk_done` / `chunk_total` | INTEGER | 解析进度：已完成块数 / 总块数（抽取完成前 `chunk_total` 为空） | 否 |
+| `committed_transaction_count` | INTEGER | 提交时建出的交易数 | 否 |
 | `created_at` | TIMESTAMP | | 是 |
 | `updated_at` | TIMESTAMP | 状态最后变化时间 | 是 |
+| `parsed_at` / `committed_at` | TIMESTAMP | 解析完成、提交完成的时刻 | 否 |
+
+完整 DDL 见 [`./02-database.md`](./02-database.md) §1.8。
 
 ### 1.12 导入草稿行 `import_rows`（决策 §5）
 
@@ -288,7 +297,7 @@
 |---|---|---|---|
 | `id` | UUID | 主键 | 是 |
 | `batch_id` | UUID | 外键 `import_batches.id`，`ON DELETE CASCADE` | 是 |
-| `row_no` | INTEGER | 批内序号，决定 review 表格顺序 | 是 |
+| `row_no` | INTEGER | 批内序号（**从 1 起**），决定 review 表格顺序 | 是 |
 | `status` | VARCHAR(16) | `pending` / `edited` / `skipped` | 是 |
 | `date` | DATE | 解析出的发生日；解析失败为 NULL 并打 `needs_review` | 否 |
 | `amount` | NUMERIC(18,4) | 带符号金额；解析失败为 NULL 并打 `needs_review` | 否 |
@@ -299,14 +308,17 @@
 | `category_l1` | VARCHAR(32) | 一级分类 code；LLM 拿不准就留空，review 表显示"待归类" | 否 |
 | `category_l2` | VARCHAR(32) | 二级分类 code | 否 |
 | `confidence` | NUMERIC(3,2) | LLM 自评置信度 0.00–1.00 | 否 |
-| `source_ref` | VARCHAR(64) | 指回原文的行号，或"页码+行序" | 否 |
-| `flags` | 字符串数组 | 服务端标记：`duplicate` / `refund_candidate` / `repayment` / `needs_review` | 否 |
+| `source_ref` | VARCHAR(200) | 指回原文的行号，或"页码+行序"（如 `p1:l14`） | 否 |
+| `flags` | 字符串数组 | 服务端标记：`duplicate` / `refund_candidate` / `repayment` / `needs_review`，外加归一化时的 `merged_duplicates` | 否 |
 | `matched_transaction_id` | UUID | 退款候选原单（唯一候选时预填） | 否 |
 | `counterpart_source_id` | UUID | 还款行的对手账户（找到时预填） | 否 |
+| `transfer_role` | VARCHAR(8) | `out` / `in`；review 里可改，提交时原样落到交易上 | 否 |
 | `transfer_subtype` | VARCHAR(16) | `plain` / `repayment` | 否 |
+| `hint` | VARCHAR(200) | 服务端给 review 界面的一句提示，**只读、不进** `transactions.note` | 否 |
 | `transaction_id` | UUID | 提交后建出来的交易 id | 否 |
+| `created_at` / `updated_at` | TIMESTAMP | | 是 |
 
-限制：单批 ≤ 2000 行（决策 §5）。解析流水线、分块、提示词、输出 schema、标记算法见 [`./05-import-and-llm.md`](./05-import-and-llm.md)。
+限制：单批 ≤ 2000 行（决策 §5）。完整 DDL 见 [`./02-database.md`](./02-database.md) §1.9。解析流水线、分块、提示词、输出 schema、标记算法见 [`./05-import-and-llm.md`](./05-import-and-llm.md)。
 
 ### 1.13 汇率 `exchange_rates`（决策 §8、§10）
 
@@ -768,12 +780,12 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    - 建 `import_batches` 行，`status='uploaded'`，返回 202 + `batch_id`。
 2. **解析**：FastAPI 后台任务立即把 `status` 改成 `parsing`，抽文本或渲染图片、分块调 LLM（约 150 行一块）、写 `import_rows`。
    - 解析成功 → `status='ready'`，`row_count` 写入，服务端在这一步自动打三种标记（`duplicate` / `refund_candidate` / `repayment`，决策 §5）以及 `needs_review`（视觉路径的行、日期或金额解析失败的行）。
-   - 解析失败（LLM 401 / 超时 / 文件损坏 / 行数 > 2000）→ `status='failed'`，`error` 写原因。
+   - 解析失败（LLM 401 / 超时 / 文件损坏 / 行数 > 2000）→ `status='failed'`，`error_code` 写注册表里的 code、`error_message` 写人话原因、`error_chunk` 写失败块号。
    - 行数 0 也算成功，进 `ready`，review 表显示"没解析出任何行"。
 3. **轮询**：前端 `GET /ledgers/{id}/imports/{bid}` 轮询状态（不引入队列，决策 §5）。
-4. **重试**：`failed` 状态下 `POST /ledgers/{id}/imports/{bid}/retry` → 清空该批已有 `import_rows`、`error` 置空、`status` 回到 `parsing` 重新解析。只有 `failed` 能重试，其他状态 → 409 `batch_not_failed`。
+4. **重试**：`failed` 状态下 `POST /ledgers/{id}/imports/{bid}/retry` → 清空该批已有 `import_rows`、三个 `error_*` 列置空、进度归零、`status` 回到 `parsing` 重新解析。只有 `failed` 能重试，其他状态 → 409 `batch_not_failed`。
 5. **Review**：只有 `ready` 才能读写草稿行（决策 §5）。
-   - `GET .../rows` 列出草稿行；`PATCH .../rows/{rid}` 改单行，任何字段可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`matched_transaction_id`（关联退款原单）、`counterpart_source_id`（选还款对手账户）、`transfer_subtype`，以及把 `status` 改成 `skipped`（跳过这行）。
+   - `GET .../rows` 列出草稿行；`PATCH .../rows/{rid}` 改单行，任何字段可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`matched_transaction_id`（关联退款原单）、`counterpart_source_id`（选还款对手账户）、`transfer_role`、`transfer_subtype`，以及把 `status` 改成 `skipped`（跳过这行）。
    - 任何一次 PATCH 把该行 `status` 从 `pending` 变成 `edited`（除非用户显式设成 `skipped`）。
    - 非 `ready` 状态下 PATCH → 409 `batch_not_ready`。
 6. **提交**：`POST .../imports/{bid}/commit`。
@@ -862,9 +874,9 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
          v       |                              |   且非 transfer 行必须有 category_l1，
       +--------------+                          |   否则 409 rows_uncategorized，留在 ready）
       |    failed    |                          v
-      | error 非空   |                    +-------------+
-      +--------------+                    |  committed  |  交易已建，带 import_batch_id
-              |                           +-------------+
+      | error_code   |                    +-------------+
+      | 非空         |                    |  committed  |  交易已建，带 import_batch_id
+      +--------------+                    +-------------+
               |                                  |
               | DELETE（丢弃）                    | DELETE（撤销：删掉这批建的所有交易，
               |                                  |         不限时限，确认后执行）

@@ -598,7 +598,9 @@ export type LlmSettingsTestRequest = Partial<LlmSettingsPut>;   // 空体 {} = �
 // ---------- 导入（决策 §5）----------
 export type ImportStatus = 'uploaded' | 'parsing' | 'ready' | 'committed' | 'failed';
 export type ImportRowStatus = 'pending' | 'edited' | 'skipped';
-export type ImportFlag = 'duplicate' | 'refund_candidate' | 'repayment' | 'needs_review';
+export type ImportFlag =
+  | 'duplicate' | 'refund_candidate' | 'repayment' | 'needs_review'
+  | 'merged_duplicates';   // 同批原文里的完全重复行被合并到这一行（05 §7.7）
 
 // GET/POST /ledgers/{id}/imports、GET .../imports/{bid}（03 §5.38–§5.40）
 export interface ImportBatch {
@@ -626,7 +628,9 @@ export interface ImportRow {
   flags: ImportFlag[];
   matched_transaction_id: Uuid | null;      // refund_candidate 预填的原支出
   counterpart_source_id: Uuid | null;       // repayment 的对手账户
+  transfer_role: TransferRole | null;       // 转账腿方向，review 里可改（03 §5.43）
   transfer_subtype: TransferSubtype | null;
+  hint: string | null;                      // 服务端给 review 的只读提示，不可改、不进 note
   transaction_id: Uuid | null;              // 提交后回填
   page_image_url: string | null;            // 视觉路径的页面缩略图（§4.11，见待决 D-9）
 }
@@ -639,7 +643,8 @@ export interface ImportRowListParams {
 export type ImportRowPatch = Partial<Pick<ImportRow,
   'status' | 'date' | 'amount' | 'currency' | 'kind' | 'merchant' | 'note' |
   'category_l1' | 'category_l2' | 'matched_transaction_id' |
-  'counterpart_source_id' | 'transfer_subtype'>>;
+  'counterpart_source_id' | 'transfer_role' | 'transfer_subtype'>>;
+// 注意 hint / flags / confidence / source_ref 不在可改字段里（03 §5.43）
 // POST .../imports/{bid}/commit（03 §5.44）
 export interface ImportCommitResult {
   batch_id: Uuid; status: 'committed';
@@ -805,7 +810,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 }
 ```
 
-`errors.*` 语言包：`errorMessage()` 查的是 `errors.${e.code}`，所以**每个 key 必须是 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的 code 原名**（决策 §14.4）。下表覆盖注册表的全部 44 个 code，外加一个纯前端的 `network_error` 和兜底的 `unknown`；顺序与注册表一致。
+`errors.*` 语言包：`errorMessage()` 查的是 `errors.${e.code}`，所以**每个 key 必须是 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的 code 原名**（决策 §14.4）。下表覆盖注册表的全部 45 个 code，外加一个纯前端的 `network_error` 和兜底的 `unknown`；顺序与注册表一致。
 
 | code | HTTP | zh | en |
 |---|---|---|---|
@@ -850,6 +855,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | `batch_already_committed` | 409 | 这批账单已经提交过了 | This batch has already been submitted |
 | `batch_not_failed` | 409 | 只有解析失败的批次才能重试 | Only a failed batch can be retried |
 | `rows_uncategorized` | 409 | 还有行没有选一级分类，补齐后才能提交 | Some rows still need a top-level category |
+| `rows_all_skipped` | 409 | 这批账单的所有行都被跳过了，没有可提交的内容 | Every row is skipped — there's nothing to submit |
 | `llm_not_configured` | 409 | 还没配置模型，先去个人设置里填 | Set up your model first in Settings |
 | `llm_error` | 502 | 模型调用失败：{{detail}} | The model call failed: {{detail}} |
 | `fx_unavailable` | 503 | 暂时拿不到汇率，折算金额可能缺失 | Exchange rates are unavailable right now |
@@ -1191,7 +1197,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 #### 步骤 4 — 结果与撤销
 
 - `status='committed'`：显示「已导入 N 条交易」，按钮「查看这批交易」（跳交易列表并按批次筛选，见 [待决 D-7](#待决)）与「撤销这批导入」。
-- **撤销**（决策 §5，不限时限）：`confirm` 里必须显示条数——「这会删除这批导入建立的 128 条交易，无法恢复」，`tone: 'danger'`，要求二次点击。调 `DELETE /ledgers/{id}/imports/{bid}`。
+- **撤销**（决策 §5，不限时限）：先带 `?dry_run=true` 调一次拿条数，`confirm` 里必须显示它——「这会删除这批导入建立的 128 条交易，并把这条导入记录一并移除，无法恢复」，`tone: 'danger'`，要求二次点击；确认后再调 `DELETE /ledgers/{id}/imports/{bid}`（[`./03-backend-api.md`](./03-backend-api.md) §5.45）。**撤销后这一批会从历史列表里消失**（没有 `reverted` 这种状态，见 [`./05-import-and-llm.md`](./05-import-and-llm.md) §9.5），所以成功后要 `invalidate` 列表并跳回导入首页。
 - **历史批次列表**（`/l/:ledgerId/imports`）：表格/卡片列表，列：文件名、目标账户、上传时间、上传人、状态徽章、行数、已建交易数。`ready` 的批次带「继续 review」按钮；`failed` 带「重试 / 丢弃」；`committed` 带「撤销」。分页 20 条一页。
 
 ### 4.11 导入 review 表格（`status='ready'`，决策 §5）
@@ -1233,11 +1239,11 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | 备注 | ✓ | 文本框 | `note`（≤500） |
 | 一级分类 | ✓ | 级联选择器 | `category_l1`；transfer 行置为 `—` 且禁用（决策 §10） |
 | 二级分类 | ✓ | 级联选择器 | `category_l2`；随一级过滤 |
-| 对手账户 | ✓ | Picker | `counterpart_source_id`，仅 `kind='transfer'` 行可用；另有 `transfer_subtype` 的普通/还款切换（在同一格的小开关里） |
+| 对手账户 | ✓ | Picker | `counterpart_source_id`，仅 `kind='transfer'` 行可用；同一格里另有 `transfer_role`（转出/转入）与 `transfer_subtype`（普通/还款）两个小开关 |
 | 关联原单 | ✓ | 弹层 | `matched_transaction_id`，仅 `kind='refund'` 行可用，复用 §4.6.3 的选择器 |
 | 状态/标记 | 部分 | 徽章 + 跳过开关 | `status` 与 `flags`（下表） |
 
-`confidence` 不单独占列：`< 0.6` 的行整行左侧加一条浅色竖线，悬停显示「模型把握不大」。
+`confidence` 不单独占列：`< 0.6` 的行整行左侧加一条浅色竖线，悬停显示「模型把握不大」。服务端给的 `hint`（只读）显示成该行下方的一条小字提示，不进 `note`。
 
 #### 4.11.3 标记徽章（决策 §5）
 
@@ -1247,6 +1253,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | ⚑ 疑似退款 | `flags` 含 `refund_candidate` | 强调色 | 已把 `kind` 置 `refund` 并预填 `matched_transaction_id`（唯一候选时）。悬停显示匹配到的原单摘要 |
 | ⚑ 还款 | `flags` 含 `repayment` | 强调色 | 已把 `kind` 置 `transfer`、`transfer_subtype='repayment'`，并可能预填 `counterpart_source_id`。若还找到了对手账户的反向腿，同时叠加「可能重复」 |
 | ⚑ 需核对 | `flags` 含 `needs_review` | 警告色 | 视觉路径解析出的行，或日期/金额解析失败的行（决策 §5、§6）。点徽章 → 侧栏跳到对应页缩略图 |
+| ⚑ 已合并 | `flags` 含 `merged_duplicates` | 中性 | 原文里有多行完全相同，归一化时合并成了这一行（[`./05-import-and-llm.md`](./05-import-and-llm.md) §7.7）；合并说明已拼在 `note` 末尾。筛选「有标记」包含它 |
 | ⚠︎ 待归类 | 派生：`category_l1 == null && kind !== 'transfer' && status !== 'skipped'` | 阻断色 | **提交前必须补齐**（决策 §1.3、§5） |
 | 已跳过 | `status === 'skipped'` | 中性 | 整行置灰删除线，不参与提交，不参与「待归类」计数 |
 | 已编辑 | `status === 'edited'` | 中性细标 | 用户改过这一行 |
@@ -1755,7 +1762,7 @@ token 定义在 `frontend/src/theme/tokens.ts`，由一个 `ThemeProvider` 按 `
 | D-5 | 前端怎么知道 `REGISTRATION_OPEN` 的值，才能在打开 `/register` 时就提示而不是提交后才报错？（§4.2） | 加一个匿名可读的 `GET /api/v1/config`，返回 `{registration_open: bool}`；在此之前前端只按提交后的 403 `registration_closed` 处理 |
 | D-6 | 交易详情页要显示「这笔支出被退了多少」，需要按 `refund_of` 反查退款行。接口形态未定（§4.7） | 详情响应里带 `refunds: RefundSummary[]`（每条含 id、日期、金额）；或复用 D-4 的 `with_refund_totals` |
 | D-7 | 交易列表能否按 `import_batch_id` 筛选（导入结果页的「查看这批交易」需要）？决策 §4 的筛选参数里没有它（§4.10 步骤 4） | **加 `?import_batch_id=` 参数**；不加的话该按钮只能退化成跳到批次详情 |
-| D-8 | `GET /categories` 的响应结构：一级/二级是嵌套 `children` 还是扁平带 `parent`？`version` 是什么形态（语义版本 / 内容哈希）？（§3.3 的 `CategoryTree`） | 嵌套 `children`（前端级联选择器直接用），`version` 用内容哈希字符串 |
+| D-8 | `GET /categories` 的响应结构：一级/二级是嵌套 `children` 还是扁平带 `parent`？`version` 是什么形态（语义版本 / 内容哈希 / 日期串）？（§3.3 的 `CategoryTree`） | 嵌套 `children`（前端级联选择器直接用）；`version` **用日期串**（如 `"2026-09-09"`），与 [`./03-backend-api.md`](./03-backend-api.md) §5.11 正文和该章待决 16 一致——初稿这里写"内容哈希"，校对时统一到日期串 |
 | D-9 | `ImportRow` 的页面缩略图怎么给前端？决策 §5 只说「review 界面旁边显示该页缩略图」（§4.11.6）。**注意**：解析进度这一半已被 [`03-backend-api.md`](./03-backend-api.md) §5.40 回答（批次返回 `progress: {done, total}`，`total` 在抽取完成前为 `null`），只剩缩略图的传输形态未定 | 批次响应里给 `pages: [{page_no, image_url}]`，行上给 `page_no`；图片走带鉴权的 `GET .../imports/{bid}/pages/{n}.png` |
 | D-11 | 账本内是否需要「按人筛选」（只看某个成员记的账）？决策 §4 的筛选参数没有 `created_by` | **本版本不做**。多人账本刚起步，等有实际需求再加 |
 | D-12 | 语言字段 `users.language` | **已由决策 §14.6 裁定**：`users.language VARCHAR(8) NULL`，取值 `zh` / `en`，NULL 表示跟随系统；`PATCH /me` 可改。前端的 `User.language` 与 `UserUpdate.language` 已按此定义（§3.3、§5.1）。DDL 见 [`02-database.md`](./02-database.md)，同一结论也记在 [`01-domain-and-flows.md`](./01-domain-and-flows.md) 待决 2 |

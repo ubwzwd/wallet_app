@@ -372,10 +372,14 @@ CREATE TABLE import_batches (
     status         VARCHAR(16)  NOT NULL DEFAULT 'uploaded',
     error_code     VARCHAR(64),
     error_message  VARCHAR(2000),
+    error_chunk    INTEGER,
     model          VARCHAR(200),
     used_vision    BOOLEAN      NOT NULL DEFAULT FALSE,
     raw_response   JSON,
     row_count      INTEGER      NOT NULL DEFAULT 0,
+    chunk_done     INTEGER      NOT NULL DEFAULT 0,
+    chunk_total    INTEGER,
+    committed_transaction_count INTEGER,
     created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     updated_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     parsed_at      TIMESTAMP WITHOUT TIME ZONE,
@@ -393,6 +397,8 @@ CREATE TABLE import_batches (
         CHECK (size_bytes > 0 AND size_bytes <= 10485760),
     CONSTRAINT ck_import_batches_row_count
         CHECK (row_count >= 0 AND row_count <= 2000),
+    CONSTRAINT ck_import_batches_chunks
+        CHECK (chunk_done >= 0 AND (chunk_total IS NULL OR chunk_done <= chunk_total)),
     CONSTRAINT ck_import_batches_failed_has_error
         CHECK (status <> 'failed' OR error_code IS NOT NULL),
     CONSTRAINT ck_import_batches_committed_at
@@ -404,7 +410,7 @@ CREATE UNIQUE INDEX uq_import_batches_one_parsing
     ON import_batches (ledger_id) WHERE status = 'parsing';
 ```
 
-列语义：一行 = 一次上传（决策 §5）。`source_id` 是用户上传时选定的目标账户，不让 LLM 猜（决策 §5）；外键 NO ACTION，配合"有导入记录的账户不能删除"的应用层规则。`status` 的取值就是决策 §5 的状态机 `uploaded → parsing → ready → committed`、`parsing → failed`。`size_bytes ≤ 10 MB`、`row_count ≤ 2000` 直接把决策 §5 的限制写进 CHECK。`raw_response` 存 LLM 原始响应（决策 §5），列类型见 §1.11。`used_vision` 记录是否走了视觉路径，review 界面据此决定要不要显示页面缩略图（决策 §5）。部分唯一索引 `uq_import_batches_one_parsing` 把"同一账本同时只允许一个批次在 parsing"（决策 §5）交给数据库——Postgres 与 SQLite（3.8+）都支持带 `WHERE` 的唯一索引，SQLAlchemy 里写成 `Index(..., unique=True, postgresql_where=..., sqlite_where=...)`。
+列语义：一行 = 一次上传（决策 §5）。`source_id` 是用户上传时选定的目标账户，不让 LLM 猜（决策 §5）；外键 NO ACTION，配合"有导入记录的账户不能删除"的应用层规则。`status` 的取值就是决策 §5 的状态机 `uploaded → parsing → ready → committed`、`parsing → failed`。`size_bytes ≤ 10 MB`、`row_count ≤ 2000` 直接把决策 §5 的限制写进 CHECK。`raw_response` 存 LLM 原始响应（决策 §5），列类型见 §1.11。`used_vision` 记录是否走了视觉路径（`TRUE` = 决策 §5 的"抽不到文本才渲染成图片送视觉模型"那条路），review 界面据此决定要不要显示页面缩略图；[`05-import-and-llm.md`](./05-import-and-llm.md) 里说的"视觉路径"就是这一列，不另设 `parse_mode`。`chunk_done` / `chunk_total` 是解析进度：`chunk_total` 是分块总数（图片路径下是页数），抽取完成前为 `NULL`（前端显示不确定进度条），`chunk_done` 是已成功解析并落库的块数；[`03-backend-api.md`](./03-backend-api.md) §5.40 的 `progress: {done, total}` 就是这两列。`error_chunk` 是整批 `failed` 时的失败块序号（0 起，非分块阶段失败为 `NULL`），`committed_transaction_count` 是提交那次建出的交易数（撤销确认框要显示"将删除 N 笔"，不用现算）。部分唯一索引 `uq_import_batches_one_parsing` 把"同一账本同时只允许一个批次在 parsing"（决策 §5）交给数据库——Postgres 与 SQLite（3.8+）都支持带 `WHERE` 的唯一索引，SQLAlchemy 里写成 `Index(..., unique=True, postgresql_where=..., sqlite_where=...)`。
 
 ### 1.9 `import_rows`
 
@@ -422,7 +428,9 @@ CREATE TABLE import_rows (
     note                   VARCHAR(500),
     category_l1            VARCHAR(32),
     category_l2            VARCHAR(32),
+    transfer_role          VARCHAR(8),
     transfer_subtype       VARCHAR(16),
+    hint                   VARCHAR(200),
     confidence             NUMERIC(3,2),
     source_ref             VARCHAR(200),
     flags                  JSON,
@@ -444,6 +452,8 @@ CREATE TABLE import_rows (
         CHECK (status IN ('pending', 'edited', 'skipped')),
     CONSTRAINT ck_import_rows_kind
         CHECK (kind IS NULL OR kind IN ('expense', 'income', 'refund', 'transfer')),
+    CONSTRAINT ck_import_rows_transfer_role
+        CHECK (transfer_role IS NULL OR transfer_role IN ('out', 'in')),
     CONSTRAINT ck_import_rows_transfer_subtype
         CHECK (transfer_subtype IS NULL OR transfer_subtype IN ('plain', 'repayment')),
     CONSTRAINT ck_import_rows_confidence
@@ -455,7 +465,7 @@ CREATE INDEX ix_import_rows_transaction_id
     ON import_rows (transaction_id) WHERE transaction_id IS NOT NULL;
 ```
 
-列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
+列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`transfer_role`（`out` / `in`）和 `transfer_subtype`（`plain` / `repayment`）在 review 阶段就要能改：提交时它们直接落到 `transactions` 的同名列（[`05-import-and-llm.md`](./05-import-and-llm.md) §9.2），不靠金额符号现推，否则用户在 review 里改不了转账方向。`hint` 是服务端写给 review 界面的一句提示（"请确认这笔还款是从哪个账户转出的"），**只读、不进** `transactions.note`——`note` 会原样进正式交易，把这类话带进去是污染（[`05-import-and-llm.md`](./05-import-and-llm.md) §0.2）。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6），外加一个 `merged_duplicates`（同批原文里的完全重复行被合并到这一行，[`05-import-and-llm.md`](./05-import-and-llm.md) §7.7；它在决策 §5 的三种标记之外，见 README 的待决汇总）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
 
 ### 1.10 `exchange_rates`
 
@@ -553,9 +563,11 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  |    default_currency CHR(3)| src |    filename/mime_type/size_bytes     |
  |    open_balance  NUM(18,4)|     |    status VC(16) uploaded|parsing|   |
  |    archived        BOOL   |     |           ready|committed|failed     |
- | FK created_by/updated_by  |     |    error_code / error_message        |
+ | FK created_by/updated_by  |     |    error_code/error_message/chunk    |
  |    created_at/updated_at  |     |    model/used_vision/raw_resp        |
- +---------------------------+     |    row_count / 4 个时间戳            |
+ +---------------------------+     |    row_count/chunk_done/chunk_total  |
+                                   |    committed_transaction_count       |
+                                   |    4 个时间戳                        |
    |1                    ^         +--------------------------------------+
    | source_id           | counterpart_    |1                    |1
    | (NO ACTION)         | source_id       | batch_id (CASCADE)  | import_batch_id
@@ -571,19 +583,20 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  |    occurred_at DATE  NN            |  |    date/amount/currency           |
  |    kind      VC(16)  NN            |  |    kind/merchant/note             |
  |    note VC(500) / merchant VC(200) |  |    category_l1/category_l2        |
- |    category_l1/category_l2 VC(32)  |  |    transfer_subtype/confidence    |
- |    transfer_role    VC(8)  out|in  |  |    source_ref / flags JSON|JSONB  |
- |    transfer_subtype VC(16) plain|  |  | FK matched_transaction_id ------->| (SET NULL)
- |                     repayment      |  | FK counterpart_source_id -------->| (SET NULL)
- |    transfer_pair_id UUID (无 FK)   |  | FK transaction_id --------------->| (SET NULL)
- |    counterparty     VC(100)        |  |    created_at/updated_at TS       |
- | FK refund_of --+ 自引用 SET NULL   |  +-----------------------------------+
- | FK import_batch_id  UUID SET NULL  |
- | FK created_by/updated_by ---> users|  +--------------------------------------+
- |    created_at/updated_at TS NN     |  | exchange_rates (独立缓存表, 无外键)  |
- +------------------------------------+  |--------------------------------------|
-   ^            |                        | PK date       DATE                   |
-   +------------+ refund_of              | PK base       CHAR(3)                |
+ |    category_l1/category_l2 VC(32)  |  |    transfer_role/transfer_subtype |
+ |    transfer_role    VC(8)  out|in  |  |    hint / confidence              |
+ |    transfer_subtype VC(16) plain|  |  |    source_ref / flags JSON|JSONB  |
+ |                     repayment      |  | FK matched_transaction_id ------->| (SET NULL)
+ |    transfer_pair_id UUID (无 FK)   |  | FK counterpart_source_id -------->| (SET NULL)
+ |    counterparty     VC(100)        |  | FK transaction_id --------------->| (SET NULL)
+ | FK refund_of --+ 自引用 SET NULL   |  |    created_at/updated_at TS       |
+ | FK import_batch_id  UUID SET NULL  |  +-----------------------------------+
+ | FK created_by/updated_by ---> users|
+ |    created_at/updated_at TS NN     |  +--------------------------------------+
+ +------------------------------------+  | exchange_rates (独立缓存表, 无外键)  |
+   ^            |                        |--------------------------------------|
+   +------------+ refund_of              | PK date       DATE                   |
+                                         | PK base       CHAR(3)                |
                                          | PK symbol     CHAR(3)                |
                                          |    rate       NUMERIC(18,8)          |
                                          |    fetched_at TS                     |
@@ -635,6 +648,9 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 同一账本同时只有一个 parsing 批次 | 部分唯一索引 `uq_import_batches_one_parsing` | 决策 §5 |
 | 批次内行号唯一 | `uq_import_rows_batch_row` | 决策 §5 |
 | 上传 ≤10 MB、单批 ≤2000 行 | `ck_import_batches_size`、`ck_import_batches_row_count` | 决策 §5 |
+| 解析进度不会倒挂（`0 ≤ chunk_done ≤ chunk_total`） | `ck_import_batches_chunks` | 决策 §5（进度轮询，[`03-backend-api.md`](./03-backend-api.md) §5.40） |
+| 草稿行状态三选一、kind 四选一、转账腿二选一、子类型二选一 | `ck_import_rows_status`、`ck_import_rows_kind`、`ck_import_rows_transfer_role`、`ck_import_rows_transfer_subtype` | 决策 §1、§5 |
+| 批次行号从 1 起 | `ck_import_rows_row_no` | 决策 §14.5 |
 | 汇率 (date, base, symbol) 唯一且为正、币种大写、base ≠ symbol | 主键 `pk_exchange_rates (date, base, symbol)` + `ck_exchange_rates_rate_positive` / `_base_upper` / `_symbol_upper` / `_not_self` | 决策 §8、§14.1 |
 
 ### 3.2 应用层保证（数据库不管）

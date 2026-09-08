@@ -49,7 +49,7 @@
  │ ④ 抽取 extract()                                │      前端轮询
  │   pdf(文本)→pdfplumber  csv→csv+编码探测        │  GET .../imports/{bid}
  │   xlsx→openpyxl         image→原图              │   每 2s，读 status
- │   pdf(无文本)→pypdfium2 渲染 = 视觉路径           │   与 progress
+ │   pdf(无文本)→pypdfium2 渲染 = 视觉路径           │   与 chunk_done/total
  │   ── 文本量不足阈值 → 自动降级为视觉路径 ──         │
  └───────────────┬────────────────────────────────┘
                  ▼
@@ -96,10 +96,10 @@
  └───────────────┬────────────────────────────────┘
                  │ DELETE .../imports/{bid}（committed 时 = 撤销）
                  ▼
-        删掉本批建的所有交易，批次行保留为 'reverted'
+        删掉本批建的所有交易，再删批次行、草稿行与原文件（整批消失）
 ```
 
-失败分支：④⑤⑥⑦⑧ 任一步抛出未捕获异常 → `status='failed'`、`error` 记人话原因 + 失败块号；用户可 `POST .../retry`（重跑 ③ 起，不重新上传文件）。服务重启时把仍为 `parsing` 的批次标 `failed`（决策 §5）。
+失败分支：④⑤⑥⑦⑧ 任一步抛出未捕获异常 → `status='failed'`、`error_code` 记注册表里的 code、`error_message` 记人话原因、`error_chunk` 记失败块号；用户可 `POST .../retry`（重跑 ③ 起，不重新上传文件）。服务重启时把仍为 `parsing` 的批次标 `failed`（决策 §5）。
 
 ### 0.2 与后台任务模型的接口
 
@@ -180,16 +180,16 @@ def run_import(batch_id: UUID) -> None:
     db = SessionLocal()
     try:
         ctx = load_context(db, batch_id)
-        _set_status(db, batch_id, "parsing", progress=0.05)
+        _set_status(db, batch_id, "parsing")          # chunk_done=0, chunk_total=NULL
         llm = load_llm_settings(db, ctx.operator_id)     # 解密 api_key，只在内存里
         ex = extract(ctx)
         chunks = chunk(ex)
-        _set_progress(db, batch_id, 0.10, chunk_total=len(chunks))
+        _set_progress(db, batch_id, done=0, total=len(chunks))
         raw_rows, raw_resp = [], []
         for done, res in enumerate(_map_concurrent(chunks, ctx, llm), start=1):
             raw_rows.extend(res.rows)
             raw_resp.append(res.envelope)
-            _set_progress(db, batch_id, 0.10 + 0.80 * done / len(chunks))
+            _set_progress(db, batch_id, done=done, total=len(chunks))
         rows = normalize(ctx, raw_rows, ex.mode)
         flag_rows(db, ctx, rows)
         finalize(db, ctx, rows, {"prompt_version": PROMPT_VERSION, "chunks": raw_resp})
@@ -204,7 +204,7 @@ def run_import(batch_id: UUID) -> None:
         db.close()
 ```
 
-`progress`（0.0–1.0）的定义见 §10.3。`_set_status` / `_set_progress` 各自 `commit()`，让轮询接口能看到中间态。
+进度用 `import_batches.chunk_done` / `chunk_total` 两列表示，定义见 §10.3；轮询接口把它们包成 `progress: {done, total}` 返回（[`03-backend-api.md`](./03-backend-api.md) §5.40）。`_set_status` / `_set_progress` 各自 `commit()`，让轮询接口能看到中间态。
 
 ---
 
@@ -345,18 +345,18 @@ UPLOAD_DIR/{ledger_id}/{batch_id}.{ext}
 - `UPLOAD_DIR` 是新增配置项，默认 `./uploads`，生产用绝对路径。配置类的写法照抄现有 `Settings`（`backend/app/core/config.py:8-38`），新增一行 `UPLOAD_DIR: str = "./uploads"`。
 - 路径里**只用服务端生成的 UUID**，绝不把用户文件名拼进路径——这是防目录穿越最省心的做法。扩展名从白名单里取（`ext = ALLOWED_EXT[mime]`），不从用户输入取。
 - 目录 `0o700`，文件 `0o600`，不给执行位（§11.3）。
-- 生产部署需要给 `api` 服务挂一个持久卷；当前 `infra/docker-compose.prod.yml:46-59` 的 `api` 服务**没有任何 volumes**（只有 db 和 caddy 有，见 `infra/docker-compose.prod.yml:24-25, 72-76`），实施时要加 `wallet_uploads:/var/lib/wallet/uploads`。这属于 infra 改动，不在本章范围（见 §待决 8）。
+- 生产部署需要给 `api` 服务挂一个持久卷；当前 `infra/docker-compose.prod.yml:46-59` 的 `api` 服务**没有任何 volumes**（只有 db 和 caddy 有，见 `infra/docker-compose.prod.yml:24-25, 72-76`），实施时要加 `wallet_uploads:/data/uploads`（与 [`03-backend-api.md`](./03-backend-api.md) §2.2 里 `.env` 模板的 `UPLOAD_DIR=/data/uploads` 对齐）。这属于 infra 改动，不在本章范围（见 §待决 8）。
 
 保留策略（决策 §5 的状态机）：
 
 | 事件 | 文件 | 批次行 | 草稿行 |
 |---|---|---|---|
 | `ready` / `failed` 时 `DELETE .../imports/{bid}`（丢弃） | 删除 | 删除 | 级联删除 |
-| `committed` 后 `DELETE .../imports/{bid}`（撤销） | **保留** | 保留，`status='reverted'` | 保留 |
+| `committed` 后 `DELETE .../imports/{bid}`（撤销） | 删除 | 删除 | 级联删除 |
 | 账本删除（决策 §2 级联） | 删除整个 `UPLOAD_DIR/{ledger_id}/` | 级联删除 | 级联删除 |
-| 定期清理 | `reverted` / `committed` 批次的文件保留 ≥ 180 天后可由运维脚本清理 | — | — |
+| 定期清理 | `committed` 批次的文件保留 ≥ 180 天后可由运维脚本清理 | — | — |
 
-`committed` 后保留原文件的理由：撤销后用户往往要重新导入同一份账单；出现记账争议时要能回看原始凭据。这是"追溯"需求，不是"再解析一遍"需求——重新导入走新的批次。
+`committed` 期间保留原文件的理由：出现记账争议时要能回看原始凭据。**撤销是终态删除**——决策 §5 的状态机只有 `uploaded` / `parsing` / `ready` / `committed` / `failed` 五个状态，没有第六个，`DELETE` 就是删除：删交易、删批次、删草稿行、删文件（[`02-database.md`](./02-database.md) §6.6、[`03-backend-api.md`](./03-backend-api.md) §5.45）。要重新导入同一份账单，重新上传一次即可。
 
 ### 1.4 文件名脱敏
 
@@ -1815,7 +1815,7 @@ def flag_repayments(db, ctx, rows):
 | `category_l2` 属于该 `category_l1`；transfer 行 `category_l1 IS NULL AND category_l2 IS NULL` | 400 | `category_invalid` |
 | 要写进 `refund_of` 的 `matched_transaction_id` 仍指向同账本的 `kind='expense'` 交易（§9.2 的两个条件成立时才查） | 400 | `refund_target_invalid` |
 | 目标账户、以及任何被选中的 `counterpart_source_id` 仍未归档 | 409 | `source_archived` |
-| 这批不是"所有行都被跳过"（提交出 0 条交易没有意义） | 409 | `rows_all_skipped`（**需 03 §4.2 注册表新增**，见 待决 16；在注册表补上之前退化用 `batch_not_ready` + detail 说明） |
+| 这批不是"所有行都被跳过"（提交出 0 条交易没有意义） | 409 | `rows_all_skipped`（已在 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里） |
 | 请求体带了 `updated_at` 时与批次一致（乐观锁，决策 §2、03 §4.4） | 409 | `stale_update` |
 
 **transfer 行不作对手校验**：`counterpart_source_id` 为空就是"对手不在应用里"，按决策 §1.2 建单腿（`transfer_pair_id = NULL` + `counterparty` 文本），服务端不拦——这与 [`03-backend-api.md`](./03-backend-api.md) §5.44 的写入规则一致。§8.3 给这类行打的 `needs_review` 只是让 review 界面提醒用户"确认一下这笔是从哪个账户出的"，不是提交的硬条件。
@@ -1938,20 +1938,27 @@ def build_single(row, batch, ctx) -> Transaction:
 `DELETE /api/v1/ledgers/{lid}/imports/{bid}`，批次为 `committed` 时语义是撤销（决策 §5、§11），无时间限制；前端先弹确认框并显示条数。
 
 ```python
-def revert_batch(db: Session, batch_id: UUID, actor_id: UUID) -> RevertResult:
+def delete_batch(db: Session, batch_id: UUID, actor_id: UUID,
+                 dry_run: bool = False) -> DeleteResult:
+    """DELETE .../imports/{bid} 的实现。committed = 撤销，其余可删状态 = 丢弃；
+    两种语义最终都让这一批整个消失（决策 §5、§11，端点见 03 §5.45）。"""
     with db.begin():
         batch = db.get(ImportBatch, batch_id, with_for_update=True)
-        if batch.status != "committed":
-            raise ApiError(409, "batch_not_committed", "该批次不是已提交状态")
-        n = db.execute(delete(Transaction)
-                       .where(Transaction.import_batch_id == batch_id)).rowcount
-        db.execute(update(ImportRow)
-                   .where(ImportRow.batch_id == batch_id)
-                   .values(transaction_id=None))    # status 不动，保住 edited/skipped
-        batch.status = "reverted"
-        batch.reverted_at = func.now()
-    return RevertResult(deleted_count=n)
+        if batch.status == "parsing":
+            raise ApiError(409, "import_in_progress", "该批次正在解析，请等它结束")
+        mode = "revert" if batch.status == "committed" else "discard"
+        path = batch_file_path(batch)                # 先取出来，批次行马上就没了
+        n = db.scalar(select(func.count()).select_from(Transaction)
+                      .where(Transaction.import_batch_id == batch_id))
+        if dry_run:                                  # 只回条数，供确认框显示
+            return DeleteResult(mode=mode, count=n, deleted=False)
+        db.execute(delete(Transaction).where(Transaction.import_batch_id == batch_id))
+        db.delete(batch)                             # import_rows 随 ON DELETE CASCADE 消失
+    unlink_quietly(path)                             # 事务提交后再删磁盘文件
+    return DeleteResult(mode=mode, count=n, deleted=True)
 ```
+
+顺序是**先删交易、再删批次**，不依赖 `transactions.import_batch_id` 的 `ON DELETE SET NULL`——那条 `SET NULL` 只是防呆兜底（[`02-database.md`](./02-database.md) §6.6）。磁盘文件在事务提交之后才删：事务回滚了文件还在，比文件没了行还在好收拾。
 
 撤销的连带影响，全部由数据库外键处理，不用应用代码兜：
 
@@ -1960,10 +1967,10 @@ def revert_batch(db: Session, batch_id: UUID, actor_id: UUID) -> RevertResult:
 | 被删的支出有退款行指向它（`refund_of`） | 退款行的 `refund_of` 置 NULL，退款行保留 | 决策 §1.1 `ON DELETE SET NULL` |
 | 被删的是两腿转账的一腿 | 两腿都属于本批、都被删；只删一腿的情况不存在 | 两腿同 `import_batch_id` |
 | 被删的交易被后来手工编辑过 | 照删不误 | 撤销就是"当初这批不该导" |
-| `reverted` 批次再次撤销 | 409 `batch_not_committed`（**需 03 §4.2 注册表新增**，见 待决 16） | |
-| `reverted` 批次重新提交 | **不允许**，重新导入 = 新建批次 | 见 §待决 2 |
+| 撤销后再次调 `DELETE` | 404 `not_found`（批次行已经没了；删除是幂等终态） | [`03-backend-api.md`](./03-backend-api.md) §5.45 |
+| 撤销后想重新导入 | 重新上传 = 新建批次；草稿行不保留 | 决策 §5 的状态机只有五个状态 |
 
-`reverted` 是 `import_batches.status` 的第六个取值（`uploaded` / `parsing` / `ready` / `failed` / `committed` / `reverted`）。决策 §5 只列了前五个 + "撤销"这个行为；本章把撤销后的状态命名为 `reverted`，需要 [`02-database.md`](./02-database.md) 的 CHECK 约束覆盖（见 §待决 1）。
+**没有第六个状态**：`import_batches.status` 的取值就是决策 §5 的五个（`uploaded` / `parsing` / `ready` / `committed` / `failed`，[`02-database.md`](./02-database.md) §1.8 的 `ck_import_batches_status` 只列这五个）。撤销之后这一批整个消失，所以不需要 `reverted`、也不需要 `reverted_at`。初稿曾提议保留为 `reverted`，与 [`03-backend-api.md`](./03-backend-api.md) §5.45 和 [`02-database.md`](./02-database.md) §6.6 冲突，校对时按后两章统一（见 README 的待决汇总）。
 
 ---
 
@@ -2003,23 +2010,23 @@ def revert_batch(db: Session, batch_id: UUID, actor_id: UUID) -> RevertResult:
 
 抽取阶段本身：pdfplumber 一页约 30–150 ms；pypdfium2 渲染一页 170 dpi 约 80–200 ms；都远小于 LLM 调用，可以忽略。
 
-前端轮询间隔 2 s。`parsing` 超过 10 分钟仍未结束的批次由服务下一次启动（或一个每 5 分钟跑的看门狗）标 `failed`，与决策 §5 的"重启把 parsing 标 failed"是同一套逻辑。
+前端轮询间隔 2 s 起、逐步退避到 5 s（[`04-frontend.md`](./04-frontend.md) §4.10）。`parsing` 超过 10 分钟仍未结束的批次由服务下一次启动（或一个每 5 分钟跑的看门狗）标 `failed`，与决策 §5 的"重启把 parsing 标 failed"是同一套逻辑。
 
-### 10.3 progress 的计算
+### 10.3 进度（`chunk_done` / `chunk_total`）的计算
 
-`import_batches.progress`（`NUMERIC(4,3)`，0.000–1.000）：
+进度不是一个 0–1 的小数，而是**两个整数列**：`import_batches.chunk_done`（已成功解析并落库的块数，默认 0）和 `chunk_total`（分块总数，抽取完成前为 `NULL`）。接口把它们原样包成 `progress: {done, total}`（[`03-backend-api.md`](./03-backend-api.md) §5.40），前端据此渲染（[`04-frontend.md`](./04-frontend.md) §4.10）：
 
-| 阶段 | progress |
-|---|---|
-| `uploaded` | 0.00 |
-| `parsing` 刚开始 | 0.05 |
-| 抽取完成（此时才知道块数） | 0.10 |
-| 每完成一块 LLM 调用 | `0.10 + 0.80 × 已完成块数 / 总块数` |
-| 归一化 + 标记完成 | 0.95 |
-| `ready` / `committed` | 1.00 |
-| `failed` | 保持失败时的值 |
+| 阶段 | `chunk_done` | `chunk_total` | 前端显示 |
+|---|---|---|---|
+| `uploaded` | 0 | `NULL` | 「排队中」 |
+| `parsing`，抽取中（块数未知） | 0 | `NULL` | 不确定进度条 +「正在提取文本…」 |
+| 抽取完成，开始调 LLM | 0 | 块数 | 确定进度条 +「正在识别第 0/12 块…」 |
+| 每完成一块 | +1 | 不变 | 「正在识别第 3/12 块…」 |
+| 归一化 + 标记 | = `chunk_total` | 不变 | 「正在整理结果…」 |
+| `ready` / `committed` | = `chunk_total` | 不变 | 进度条满 |
+| `failed` | 停在失败时的值 | 不变 | 显示失败与 `error_chunk` |
 
-块数在抽取后才知道，所以 0.05 → 0.10 这一段前端显示"正在读取文件"，之后显示"正在识别 3/12"（块数由 `import_batches.chunk_total` 提供）。每完成一块就 `UPDATE import_batches SET progress = ...` 并 commit——一次导入最多 60 次小事务，可以接受。
+块数在抽取之后才知道，这就是 `chunk_total` 允许为 `NULL` 的原因。每完成一块就 `UPDATE import_batches SET chunk_done = chunk_done + 1` 并 commit——一次导入最多 60 次小事务，可以接受。图片路径下"块"就是页（或半页），所以同一套显示对两条路径都成立。
 
 ---
 
@@ -2267,7 +2274,8 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 
     # 2. 后台任务（TestClient 会同步跑完 BackgroundTasks）→ ready
     b = client.get(f"/api/v1/ledgers/{ledger.id}/imports/{bid}", headers=auth).json()
-    assert b["status"] == "ready" and b["row_count"] == 5 and b["progress"] == 1.0
+    assert b["status"] == "ready" and b["row_count"] == 5
+    assert b["progress"] == {"done": b["progress"]["total"], "total": b["progress"]["total"]}
 
     # 3. review：第 2 行没有一级分类，先确认 commit 被拦
     rows = client.get(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/rows",
@@ -2296,12 +2304,17 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
     assert sum(1 for t in txs if t["kind"] == "refund") == 1
 
     # 7. 撤销
+    dry = client.delete(f"/api/v1/ledgers/{ledger.id}/imports/{bid}?dry_run=true",
+                        headers=auth)
+    assert dry.json() == {"batch_id": bid, "mode": "revert",
+                          "would_delete_transactions": 6, "deleted": False}
     d = client.delete(f"/api/v1/ledgers/{ledger.id}/imports/{bid}", headers=auth)
-    assert d.status_code == 200 and d.json()["deleted_count"] == 6
+    assert d.status_code == 200 and d.json()["deleted_transactions"] == 6
     assert client.get(f"/api/v1/ledgers/{ledger.id}/transactions",
                       headers=auth).json()["total"] == 0
+    # 撤销 = 整批消失（决策 §5 没有第六个状态，§9.5）
     assert client.get(f"/api/v1/ledgers/{ledger.id}/imports/{bid}",
-                      headers=auth).json()["status"] == "reverted"
+                      headers=auth).status_code == 404
 ```
 
 其它端到端用例：
@@ -2320,7 +2333,7 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | `failed` 批次 `POST retry` | 重跑成 `ready` |
 | `committed` 批次 `PATCH rows` | 409 `batch_not_ready` |
 | 同一批次并发两次 commit | 一次 200、一次 409 `batch_already_committed`，交易只建一遍 |
-| 扫描件 fixture 走完全程 | 所有行都带 `needs_review`，`batch.parse_mode == "vision"` |
+| 扫描件 fixture 走完全程 | 所有行都带 `needs_review`，`batch.used_vision is True` |
 | 3 页文本 PDF fixture | 各页 `source_ref` 互不重复（第 2 页首行标号 = 第 1 页非空行数 + 1），无行被 §7.7 误合并 |
 | review 里把一条 `kind=transfer` / `subtype=plain` 的行选上对手账户后 commit | 走 `build_transfer_pair`（§9.3），两腿共享一个 `transfer_pair_id`、**两腿的 `transfer_subtype` 都是 `plain`**（不是 `repayment`）；再导一次同一份账单时 §8.3 不会把它当还款腿配对 |
 | 提交后再撤销、再重新上传同一文件 | 新批次独立，`duplicate` 标记命中所有行 |
@@ -2340,24 +2353,24 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 
 | # | 问题 | 建议默认值 |
 |---|---|---|
-| 1 | 撤销后的批次状态叫什么？决策 §5 只给了 `uploaded/parsing/ready/committed/failed` 五个值和"撤销"这个行为 | 加第六个值 `reverted`，需要 `02-database.md` 的 CHECK 覆盖 |
-| 2 | `reverted` 的批次能否重新提交（草稿还在） | 不能；重新导入 = 新建批次。理由：撤销之后用户往往要换账户或换文件 |
+| 1 | ~~撤销后的批次状态叫什么~~ | **校对时已统一**：不加第六个状态。撤销 = 删交易 + 删批次 + 删草稿行 + 删文件，`status` 仍是决策 §5 的五个值（§9.5、[`02-database.md`](./02-database.md) §6.6、[`03-backend-api.md`](./03-backend-api.md) §5.45）。这条统一写法本身仍需用户确认，见 README 的待决汇总 |
+| 2 | ~~撤销后的批次能否重新提交~~ | **随 待决 1 一并消失**：批次已经不存在了，重新导入 = 重新上传一份新批次 |
 | 3 | 一行同时命中 `duplicate` 和 `refund_candidate` 时，`matched_transaction_id` 归谁 | **已由决策 §14.7 裁定**：`refund_of` 只看"`kind='refund'` 且 `matched_transaction_id` 非空"，所以退款行上的这一列必须归退款候选——§8.2 在查候选前无条件清空它，§9.2 不再看 `flags`、也不引入"用户已确认"状态 |
 | 4 | 欧陆数字格式 `1.234,56` 是否支持 | 本版本不支持；命中启发式时整批 `needs_review` 并提示用户 |
-| 5 | 是否需要 `import_batches.error_chunk` 列存失败块号 | 需要，`INTEGER NULL`；若 `02-database.md` 不加，退化为写进 `error` 文本 |
-| 6 | 是否需要 `import_batches.parse_mode`（text/vision）、`progress`、`chunk_total` 三列 | 需要：前端要显示"正在识别 3/12"和缩略图入口 |
-| 6b | §9.4 / §9.5 还用到 `import_batches` 的另外三个新列 | 需要：`committed_at TIMESTAMPTZ NULL`（提交时刻，列表页排序与审计）、`committed_transaction_count INTEGER NULL`（提交生成的交易数，撤销确认框要显示"将删除 N 笔"，不用现算）、`reverted_at TIMESTAMPTZ NULL`（撤销时刻）。`02-database.md` 的 `import_batches` DDL 要一并收录 |
-| 7 | 视觉路径的页面缩略图怎么给前端 | `GET .../rows/{rid}/thumbnail` 现渲染，长边 480px，`Cache-Control: private, max-age=3600`，不落库 |
-| 8 | `UPLOAD_DIR` 的生产卷 | `infra/docker-compose.prod.yml` 的 `api` 服务加 `wallet_uploads:/var/lib/wallet/uploads`（当前该服务无 volumes，见 `infra/docker-compose.prod.yml:46-59`）。属 infra 改动，本章不做 |
+| 5 | ~~是否需要 `import_batches.error_chunk` 列存失败块号~~ | **校对时已落地**：`error_chunk INTEGER NULL` 已进 [`02-database.md`](./02-database.md) §1.8 的 DDL |
+| 6 | ~~是否需要 `parse_mode` / `progress` / `chunk_total` 三列~~ | **校对时已落地**：不设 `parse_mode`（视觉路径用 [`02-database.md`](./02-database.md) §1.8 已有的 `used_vision` 布尔列表示）；进度用两个整数列 `chunk_done` / `chunk_total`（不是 0–1 小数），已进 02 章 DDL，接口形状是 `progress: {done, total}`（§10.3、[`03-backend-api.md`](./03-backend-api.md) §5.40） |
+| 6b | ~~§9.4 / §9.5 还用到的另外几个 `import_batches` 列~~ | **校对时已落地**：`committed_at` 与 `committed_transaction_count` 已进 [`02-database.md`](./02-database.md) §1.8 的 DDL；`reverted_at` 不再需要（随 待决 1 消失）。时间列的类型是 `TIMESTAMP WITHOUT TIME ZONE` 存 naive UTC（02 章 §7.2），不是 `TIMESTAMPTZ` |
+| 7 | 视觉路径的页面缩略图怎么给前端。**注意** [`04-frontend.md`](./04-frontend.md) 待决 D-9 给的是另一种形态（批次响应里给 `pages: [{page_no, image_url}]`，图片走 `GET .../imports/{bid}/pages/{n}.png`），两章的建议不一致，需要用户择一 | 本章建议 `GET .../imports/{bid}/rows/{rid}/thumbnail` 现渲染，长边 480px，`Cache-Control: private, max-age=3600`，不落库 |
+| 8 | `UPLOAD_DIR` 的生产卷 | `infra/docker-compose.prod.yml` 的 `api` 服务加 `wallet_uploads:/data/uploads`（当前该服务无 volumes，见 `infra/docker-compose.prod.yml:46-59`），容器内路径与 [`03-backend-api.md`](./03-backend-api.md) §2.2 的 `UPLOAD_DIR=/data/uploads` 一致。属 infra 改动，本章不做 |
 | 9 | 一次导入是否允许多文件（多张截图） | 不允许，一批一文件；多张截图分多批 |
 | 10 | 单批 2000 行上限是否含被合并、被跳过的行 | 含。以归一化后的行数计 |
 | 11 | 不带 BOM 的 UTF-16 CSV 怎么办 | 不支持，提示用户另存为 UTF-8 |
 | 12 | 提示词是否要注入账本里已有的商户名列表以提高分类准确率 | 不注入。会显著涨 token，且容易让模型"对齐"到错误的历史数据 |
-| 13 | `merged_duplicates` 是否要在 review 表格里单独筛选 | 要，和 `duplicate` / `needs_review` 一样是筛选器的一个选项 |
+| 13 | `merged_duplicates` 是否要在 review 表格里单独筛选（它是决策 §5 的三种标记之外的第五个 `flags` 取值） | 要，和 `duplicate` / `needs_review` 一样是筛选器的一个选项。校对时已把这个取值同步进 [`02-database.md`](./02-database.md) §1.9、[`03-backend-api.md`](./03-backend-api.md) §5.42、[`04-frontend.md`](./04-frontend.md) §3.3/§4.11；**这个取值本身超出决策 §5，仍需用户确认**（见 README 的待决汇总） |
 | 14 | `import_rows.status` 要不要第四个值 `committed`（决策 §5 只给了 `pending` / `edited` / `skipped`） | **不要**。本章 §9.4 提交时不动 `status`，"提交过没有"看 `transaction_id IS NOT NULL`；§9.5 撤销时也只清 `transaction_id`，`edited` / `skipped` 原样保留。若最终决定要加这个值，`02-database.md` 的 CHECK 要覆盖，并且撤销**不能**一律置回 `pending`（会丢掉 `edited`），得还原成"改过 → `edited`，没改过 → `pending`"，那就还要一个"是否被 PATCH 过"的记号——所以建议就别加 |
-| 15 | `import_rows` 还差两列：`hint VARCHAR(200) NULL`（装 §0.2 的 `note_hint`，给 review 界面显示"请选择还款是从哪个账户出的"这类提示；不拼进 `note`，否则会污染提交后的 `transactions.note`）和 `transfer_role VARCHAR(8) NULL`（§6 的输出 schema、§7.4 的补齐、§9.2 的字段映射都要它，[`02-database.md`](./02-database.md) §1.9 当前的 DDL 里没有） | 两列都加，`02-database.md` 的 `import_rows` DDL 要收录：`hint` 无约束；`transfer_role` 加 `CHECK (transfer_role IS NULL OR transfer_role IN ('out','in'))`。若最终不加 `transfer_role`，退化方案是提交时按 `amount` 符号现推（`< 0` → `out`，否则 `in`），但那样用户在 review 里改不了方向 |
-| 16 | 本章用到、而 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表里还没有的两个 code（决策 §14.4 不允许各章自造，只能提请注册表新增） | 新增 `rows_all_skipped`（409，commit 时所有行都被标 skipped，建不出任何交易）和 `batch_not_committed`（409，对非 `committed` 批次调撤销）。在注册表补上之前，前者退化用 `batch_not_ready` + detail 说明，后者只会出现在 `reverted` 批次上（见 待决 17） |
-| 17 | 撤销后批次是**保留**为 `reverted`（本章 §9.5：批次行、草稿行、原文件都留着，供追溯与再次导入）还是**整批删除**（[`03-backend-api.md`](./03-backend-api.md) §5.45 现在的写法：删交易 → 删草稿行 → 删批次 → 删文件）。两章现在不一致 | 建议按本章保留为 `reverted`：决策 §5 只说"删除这批建的所有交易"，没说删批次；保留才能回答"这批当初导了什么、为什么撤销"，也才有 §1.3 保留原文件的意义。若采纳，`02-database.md` 要把 `reverted` 加进 `ck_import_batches_status`（同 待决 1）、并放宽 `ck_import_batches_committed_at`；`03-backend-api.md` §5.45 要改成"撤销 = 删交易 + 批次转 `reverted`" |
+| 15 | ~~`import_rows` 还差 `hint` 与 `transfer_role` 两列~~ | **校对时已落地**：两列都已进 [`02-database.md`](./02-database.md) §1.9 的 DDL（`hint VARCHAR(200) NULL` 无约束；`transfer_role VARCHAR(8) NULL` 带 `ck_import_rows_transfer_role`），并已出现在 [`03-backend-api.md`](./03-backend-api.md) §5.42 / §5.43 的响应与可改字段、[`04-frontend.md`](./04-frontend.md) §3.3 的 `ImportRow` 类型里 |
+| 16 | ~~本章用到、而 §4.2 注册表里还没有的 code~~ | **校对时已落地**：`rows_all_skipped`（409）已加进 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表和 [`04-frontend.md`](./04-frontend.md) §3.7 的文案表；`batch_not_committed` 不再需要——撤销后批次直接消失，重复调用返回 404 `not_found` |
+| 17 | 撤销后批次是保留为 `reverted` 还是整批删除。初稿里本章与 [`03-backend-api.md`](./03-backend-api.md) §5.45、[`02-database.md`](./02-database.md) §6.6 不一致 | **校对时按"整批删除"统一**（三章现已一致，本章 §9.5 已改写）。理由：决策 §5 的状态机只列了五个状态，`DELETE` 端点的语义就是删除；保留 `reverted` 要额外加状态值、`reverted_at` 列并放宽 `ck_import_batches_committed_at`。代价是失去"这批当初导了什么"的追溯能力——**若用户更看重追溯，请改回保留方案**，这条列在 README 的待决汇总里 |
 
 ---
 
