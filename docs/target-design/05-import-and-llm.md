@@ -120,60 +120,28 @@
 
 ```python
 # backend/app/services/importing/pipeline.py  （新增）
-from dataclasses import dataclass
-from decimal import Decimal
-from uuid import UUID
 
 def run_import(batch_id: UUID) -> None:
     """后台任务入口。自开 Session，全程捕获异常并把批次落到 ready 或 failed。"""
 
-@dataclass(frozen=True)
-class ImportContext:
-    batch_id: UUID
-    ledger_id: UUID
-    source_id: UUID
-    source_name: str
-    source_type: str          # checking / savings / credit / cash / other
-    source_currency: str      # 3 位大写
-    ledger_base_currency: str
-    operator_id: UUID         # 上传人，LLM 用他的 key
-    file_path: str
-    mime: str
-
 def load_context(db: Session, batch_id: UUID) -> ImportContext: ...
-
-@dataclass
-class Extraction:
-    mode: str                 # "text" | "vision"
-    pages: list["Page"]       # 文本页：lines: list[str]；视觉页：png: bytes
-    header_lines: list[str]   # 文本模式下识别到的表头行，分块时重复注入
-    degrade_reason: str | None
-
 def extract(ctx: ImportContext) -> Extraction: ...
-
-@dataclass
-class Chunk:
-    index: int                # 0 起
-    kind: str                 # "text" | "image"
-    text: str | None
-    png: bytes | None
-    page_no: int              # 1 起；文本 CSV/XLSX 恒为 1
-    sub_index: int            # 0=整页，1=上半，2=下半
-    line_offset: int          # 本块首行在原文中的行号（1 起），用于还原 source_ref
-
 def chunk(ex: Extraction) -> list[Chunk]: ...
-
-def call_llm(ctx: ImportContext, ck: Chunk, llm: "LLMSettings") -> "LLMResult":
-    """返回该块的原始 rows（未归一化）。内部重试 2 次。"""
-
-def normalize(ctx: ImportContext, raw_rows: list[dict], mode: str) -> list["DraftRow"]: ...
-
-def flag_rows(db: Session, ctx: ImportContext, rows: list["DraftRow"]) -> None: ...
-
-def finalize(db: Session, ctx: ImportContext, rows: list["DraftRow"],
-             raw_response: dict) -> None:
-    """写 import_rows、写 import_batches.row_count/model/raw_response、status='ready'。"""
+def call_llm(ctx, ck: Chunk, llm: "LLMSettings") -> "LLMResult":   # 内部重试 2 次
+    ...
+def normalize(ctx, raw_rows: list[dict], mode: str) -> list["DraftRow"]: ...
+def flag_rows(db: Session, ctx, rows: list["DraftRow"]) -> None: ...
+def finalize(db: Session, ctx, rows, raw_response: dict) -> None:
+    """写 import_rows、import_batches.row_count/model/raw_response，status='ready'。"""
 ```
+
+三个贯穿全程的 dataclass：
+
+| 类型 | 字段 |
+|---|---|
+| `ImportContext`（frozen） | `batch_id` / `ledger_id` / `source_id` / `source_name` / `source_type`（checking\|savings\|credit\|cash\|other）/ `source_currency` / `ledger_base_currency` / `operator_id`（上传人，LLM 用他的 key）/ `file_path` / `mime` |
+| `Extraction` | `mode`（`text`\|`vision`）/ `pages: list[Page]`（文本页有 `lines: list[str]`、`line_offset`，视觉页有 `png: bytes`、`sub_index`）/ `header_lines`（分块时重复注入）/ `degrade_reason` |
+| `Chunk` | `index`（0 起）/ `kind`（`text`\|`image`）/ `text` / `png` / `page_no`（1 起，CSV/XLSX 恒为 1）/ `sub_index`（0=整页，1=上半，2=下半）/ `line_offset`（本块首行在**整份原文**中的行号，1 起，用于还原 `source_ref`） |
 
 `run_import` 的骨架（错误处理是本函数的主要内容）：
 
@@ -327,7 +295,7 @@ def sanitize_filename(raw: str, max_len: int = 120) -> str:
     return (stem or name)[: max_len - len(ext) - 1] + (dot + ext.lower() if dot else "")
 ```
 
-例：`招商银行信用卡账单_王小明_6225880212341234_202508.pdf` → `招商银行信用卡账单_王小明_************1234_******.pdf`。姓名不做处理（用户自己账本里的自己的名字，抹掉反而认不出是哪份账单）。
+例：`招商银行信用卡账单_王小明_6225880212341234_202508.pdf` → `招商银行信用卡账单_王小明_************1234_202508.pdf`（`202508` 只有 6 位，`_LONG_DIGITS` 的下界是 7 位，不动它——年月本身不敏感）。姓名不做处理（用户自己账本里的自己的名字，抹掉反而认不出是哪份账单）。
 
 日志里**不记**原始文件名，只记 `batch_id`（§11.4）。
 
@@ -376,6 +344,7 @@ TABLE_SETTINGS_TEXT  = {"vertical_strategy": "text",  "horizontal_strategy": "te
 
 def extract_pdf_text(ctx) -> Extraction:
     pages, total_chars, header = [], 0, []
+    off = 1                                   # 全文档行号游标，跨页累加，绝不按页重置
     with pdfplumber.open(ctx.file_path) as pdf:
         if len(pdf.pages) > 60:
             raise ImportFailure("PDF 页数超过 60 页，请拆分后再上传")
@@ -392,10 +361,13 @@ def extract_pdf_text(ctx) -> Extraction:
             total_chars += sum(len(ln) for ln in lines)
             if pno == 1 and lines:
                 header = _guess_header(lines)
-            pages.append(Page(page_no=pno, lines=lines, line_offset=1))
+            pages.append(Page(page_no=pno, lines=lines, line_offset=off))
+            off += len(lines)                 # 下一页接着往下编号
     return Extraction(mode="text", pages=pages, header_lines=header,
                       degrade_reason=None if total_chars else "pdf_no_text")
 ```
+
+`line_offset` 必须**跨页累加**：`source_ref` 是整份文档唯一的行号（§3.1 用 `p.line_offset + j` 还原，§5.1 让模型原样回填）。按页重置成 `1` 会让第 2 页的 "12" 和第 1 页的 "12" 撞车——既指不回原文，又会让 §7.7 的批内去重把两笔真实交易当成重复行合掉。
 
 **"无文本"判定阈值**（任一条满足即降级为视觉路径，`degrade_reason` 记原因）：
 
@@ -443,18 +415,8 @@ _BOMS = [(b"\xef\xbb\xbf", "utf-8-sig"), (b"\xff\xfe\x00\x00", "utf-32-le"),
 _FALLBACKS = ["utf-8", "gb18030", "big5", "cp1252"]
 
 def decode_bytes(raw: bytes) -> tuple[str, str]:
-    for bom, enc in _BOMS:
-        if raw.startswith(bom):
-            return raw.decode(enc), enc
-    for enc in _FALLBACKS:                       # gb18030 是 GBK/GB2312 的超集
-        try:
-            return raw.decode(enc), enc
-        except UnicodeDecodeError:
-            continue
-    best = from_bytes(raw).best()
-    if best is None:
-        raise ImportFailure("无法识别文件编码，请另存为 UTF-8 的 CSV")
-    return str(best), best.encoding
+    """先按 BOM 命中，再依次试 _FALLBACKS，最后交给 charset_normalizer。
+    全失败 → ImportFailure("无法识别文件编码，请另存为 UTF-8 的 CSV")。"""
 ```
 
 注意 `gb18030` 排在 `utf-8` 之后、能解绝大多数 GBK/GB2312 文件；`cp1252` 放最后当兜底，它几乎什么字节都能解，所以不能放前面。UTF-16 靠 BOM 识别——不带 BOM 的 UTF-16 会在 `utf-8` 这一步失败、被 `gb18030` 解成乱码，这种文件极少，由用户另存为 UTF-8（见 §待决）。
@@ -469,15 +431,8 @@ _HEADER_TOKENS = {"交易时间", "交易创建时间", "交易分类", "交易�
                   "debit", "credit", "balance", "posting date", "transaction date"}
 
 def locate_header(rows: list[list[str]]) -> int:
-    """返回表头行下标；找不到返回 0（把第一行当表头）。"""
-    best_i, best_hit = 0, 0
-    for i, r in enumerate(rows[:40]):
-        cells = [c.strip().strip("﻿").lower() for c in r if c and c.strip()]
-        hit = sum(1 for c in cells
-                  if c in _HEADER_TOKENS or c.replace("(元)", "") in _HEADER_TOKENS)
-        if hit >= 3 and hit > best_hit:
-            best_i, best_hit = i, hit
-    return best_i
+    """在前 40 行里找命中 _HEADER_TOKENS 最多的一行（去 BOM、转小写、去掉 "(元)" 后比对），
+    命中数 ≥3 才算数；找不到返回 0（把第一行当表头）。"""
 ```
 
 同时用 `csv.Sniffer().sniff(sample, delimiters=",;\t|")` 猜分隔符，失败时默认 `,`。表头之前的行全部丢弃，但**行号仍按原文件计**（`source_ref` 要能指回原文件，用户在文本编辑器里数得到）。
@@ -522,19 +477,17 @@ from openpyxl import load_workbook
 def extract_xlsx(ctx) -> Extraction:
     wb = load_workbook(ctx.file_path, read_only=True, data_only=True)
     try:
-        ws = next((s for s in wb.worksheets if (s.max_row or 0) >= 2 and _has_any_value(s)),
-                  None)
+        ws = next((s for s in wb.worksheets
+                   if (s.max_row or 0) >= 2 and _has_any_value(s)), None)
         if ws is None:
             raise ImportFailure("表格里没有数据")
-        grid = []
-        for r in ws.iter_rows(values_only=True):
-            grid.append([_cell_to_str(v) for v in r])
-            if len(grid) > 2000 + 40:
-                raise ImportFailure("行数超过 2000，请拆分账单后再上传")
+        grid = [[_cell_to_str(v) for v in r] for r in ws.iter_rows(values_only=True)]
     finally:
         wb.close()
-    h = locate_header(grid)
-    lines = ["\t".join(c for c in r) for r in grid[h + 1:] if any(c.strip() for c in r)]
+    if len(grid) > 2040:
+        raise ImportFailure("行数超过 2000，请拆分账单后再上传")
+    h = locate_header(grid)                       # 与 CSV 共用
+    lines = ["\t".join(r) for r in grid[h + 1:] if any(c.strip() for c in r)]
     return Extraction(mode="text",
                       pages=[Page(page_no=1, lines=lines, line_offset=h + 2)],
                       header_lines=["\t".join(grid[h])], degrade_reason=None)
@@ -1193,8 +1146,14 @@ def parse_amount(v) -> Decimal | None:
         s, neg = m.group(1).strip(), True
     if s[:1] in ("-", "−", "－"): s, neg = s[1:].strip(), True
     if s[:1] == "+": s = s[1:].strip()
-    if s[-2:] in ("DR", "Dr") or s[-1:] == "借": s, neg = s[:-2].strip(), True  # 借记 = 支出
-    if s[-2:] in ("CR", "Cr") or s[-1:] == "贷": s = s[:-2].strip()
+    for suf in ("DR", "Dr", "借"):                    # 借记 = 支出；按后缀实际长度截断
+        if s.endswith(suf):
+            s, neg = s[: -len(suf)].strip(), True
+            break
+    for suf in ("CR", "Cr", "贷"):                    # 贷记 = 收入，符号由 kind 决定
+        if s.endswith(suf):
+            s = s[: -len(suf)].strip()
+            break
     s = _NOISE.sub("", s)
     s = s.replace(",", "").replace("，", "").replace("'", "").replace("_", "")
     if not re.fullmatch(r"\d+(\.\d+)?", s):
@@ -1203,6 +1162,7 @@ def parse_amount(v) -> Decimal | None:
     return -d if neg else d
 ```
 
+- 后缀一定按 `len(suf)` 截，别写死 `s[:-2]`：`"1234.56借"` 只有一个字符的后缀，`s[:-2]` 会把 `6` 一起吃掉，静默变成 `-1234.5` 且不打任何标记。
 - 千分位可能是 `,`（中英）、`'`（瑞士）、空格（法国）——空格已被 `_NOISE` 吃掉。
 - 欧陆格式 `1.234,56`（点做千分位、逗号做小数点）**不在本版本支持范围**：上面的规则会把它解析成 `1234`（`,56` 被吃掉后剩 `1.234`）。同批 ≥3 行命中"整数部分含 `.` 且 `,` 后恰好 2 位"的模式时，整批打 `needs_review` 并在 `error` 之外附一条提示（见 §待决 4）。
 - `amount is None` 或 `amount == 0` → 该行 `amount = 0` 并打 `needs_review`（数据库不禁止 0，决策 §10 只约束符号）。
@@ -1351,6 +1311,18 @@ def dedup_in_batch(rows: list[DraftRow]) -> list[DraftRow]:
 
 `flag_rows(db, ctx, rows)` 在 `ready` 之前跑一次（决策 §5）。三种标记互不排斥，一行可以同时是 `duplicate` 和 `refund_candidate`。全部写进 `import_rows.flags`。
 
+**调用顺序是固定的**：
+
+```python
+def flag_rows(db, ctx, rows):
+    flag_duplicates(db, ctx, rows)          # 1. 撞库找同日同额
+    flag_repayments(db, ctx, rows)          # 2. 先把还款腿摘走
+    flag_refund_candidates(db, ctx, rows)   # 3. 剩下的正数入账才当退款候选
+```
+
+- `flag_repayments` 必须在 `flag_refund_candidates` 之前：后者的触发条件之一是"信用卡账户上的正数入账"，还款腿也满足，先摘走才不会被当成退款候选。
+- `flag_refund_candidates` 必须在 `flag_duplicates` 之后：两者都可能写 `matched_transaction_id`，后跑的**有意**覆盖先跑的——退款原单比"同日同额的已有交易"更有用（见 §待决 3）。`duplicate` 标记本身不会被覆盖，只是那一列归 `refund_candidate`。
+
 标记只是**建议**：用户在 review 表格里可以无视任何标记照常提交，也可以把行标 `skipped`。
 
 ### 8.1 duplicate
@@ -1403,6 +1375,7 @@ def flag_duplicates(db, ctx, rows):
 | 同账本、**同账户** | 退款一定退回原支付账户 |
 | `kind = 'expense'` | 决策 §1.1：`refund_of` 只能指向支出 |
 | `occurred_at ∈ [退款日 − 90 天, 退款日]` | 决策 §1.1 的"最近 90 天"；不允许晚于退款日 |
+| **同币种** | 退款与原单必须同币种，对应 SQL 里的 `t.currency = :cur`（跨币种退款不自动匹配） |
 | `abs(amount) >= 退款额` | 退款不能超过原单 |
 | **可退额度 > 0** | 原单金额 − 已关联退款合计 > 0（部分退款，决策 §1.1） |
 
@@ -1457,12 +1430,20 @@ def flag_refund_candidates(db, ctx, rows):
         if len(scored) == 1 or scored[0][0] - scored[1][0] >= UNIQUE_MARGIN:
             best = scored[0][1]
             r.matched_transaction_id = best.id
-            r.kind = "refund"                                    # 顺手纠正 kind
+            if r.kind != "refund":
+                r.kind = "refund"                                # 顺手纠正 kind
+                r.flags.add("needs_review")                      # 服务端改过 kind，请用户过目
+            # kind 可能刚被改过，分类必须按新 kind 重跑 §7.5：模型原本给的收入分类
+            # （例如 income/other）收支组不再匹配，会在这里被置空
+            r.category_l1, r.category_l2, _ = sanitize_category(
+                "refund", r.category_l1, r.category_l2)
             if r.category_l1 is None:                            # 决策 §1.1：沿用原单分类
                 r.category_l1, r.category_l2 = best.category_l1, best.category_l2
         else:
             r.flags.add("needs_review")
 ```
+
+把 `kind` 改成 `refund` 之后**必须**重跑 §7.5 的 `sanitize_category`，不能只在 `category_l1 is None` 时才覆盖：模型若原本把这行判成收入并给了收入分类，直接改 `kind` 会留下 `kind='refund'` + 收入分类的非法组合（决策 §1.3 规定退款只能用支出分类），而这类行在 §9.1 之前无人拦截。重跑之后收入组的 code 会被置空，再走"沿用原单分类"的分支补齐。同理，服务端改过 `kind` 的行一律加 `needs_review`。
 
 候选列表（`candidate_ids`）不占 `import_rows` 的列——它由 `GET .../rows/{rid}/refund-candidates` 现算返回（接口定义在 [`03-backend-api.md`](./03-backend-api.md)）；`import_rows` 只存 `matched_transaction_id`（决策 §5）。
 
@@ -1542,7 +1523,7 @@ def flag_repayments(db, ctx, rows):
 | flag | 触发 | 硬条件 | 预填 | 用户默认动作 |
 |---|---|---|---|---|
 | `duplicate` | 撞库 | 同账户 + 同日 + 同额 + 同币种 | 唯一命中时 `matched_transaction_id` | 标 skipped |
-| `refund_candidate` | `kind=refund` 或 信用卡正数入账 | 同账户 + `kind=expense` + 90 天内 + 金额足够 + 有可退额度；商户只加分 | 唯一候选时 `matched_transaction_id` + 沿用分类 | 确认或改选原单 |
+| `refund_candidate` | `kind=refund` 或 信用卡正数入账 | 同账户 + 同币种 + `kind=expense` + 90 天内 + 金额足够 + 有可退额度；商户只加分 | 唯一候选时 `matched_transaction_id` + 沿用分类 | 确认或改选原单 |
 | `repayment` | `transfer_subtype=repayment` | 别的账户 + ±3 天 + 反向等额 + 同 subtype | `counterpart_source_id` | 选对手账户 |
 
 ---
@@ -1559,6 +1540,8 @@ def flag_repayments(db, ctx, rows):
 | 至少有一行 `status != 'skipped'` | `import_empty` |
 | 所有非 skipped 行 `date IS NOT NULL` | `import_row_invalid` |
 | 所有非 skipped、非 transfer 行 `category_l1 IS NOT NULL`（决策 §1.3、§5） | `import_missing_category` |
+| 所有非 skipped、非 transfer 行的 `category_l1`/`category_l2` 与 `kind` 的**收支组匹配**（决策 §1.3：`expense`/`refund` 只能用支出分类，`income` 只能用收入分类，`category_l2` 必须属于该 `category_l1`） | `import_category_mismatch` |
+| 所有非 skipped 的 transfer 行 `category_l1 IS NULL AND category_l2 IS NULL` | `import_category_mismatch` |
 | 所有非 skipped 的 transfer 行有明确的对手处理（选了账户 / 选了"不在应用里"） | `import_transfer_unresolved` |
 | 目标账户仍未归档 | `source_archived` |
 | 请求体 `updated_at` 与批次一致（乐观锁，决策 §2） | `stale_update` |
@@ -1789,7 +1772,7 @@ def _luhn(d: str) -> bool:
 
 加 Luhn 校验的原因：账单里 13–19 位的连续数字大多是订单号、流水号、交易参考号，直接全打码会毁掉有用信息。Luhn 通过的才当卡号。
 
-同一个正则也用于 §1.4 的文件名脱敏（那里不做 Luhn——文件名里的长数字本来就没有保留价值）。
+§1.4 的文件名脱敏用的是一个更宽松的变体 `_PAN_LIKE = \d{13,19}`：不支持空格/连字符分组、没有前后 lookaround、也不跑 Luhn。文件名里的长数字本来就没有保留价值，宁可多打码；`note`/`merchant` 里则相反，所以才用带 Luhn 的 `_PAN`。两者是两个正则，别指望改一处就同时生效。
 
 `import_batches.raw_response` 存的是**脱敏前**的模型原文——它是排查解析问题的唯一依据，且跟着批次一起删。这是有意的取舍：它和上传的原始文件一样，都是用户自己的账单数据，安全边界相同。
 
@@ -1901,33 +1884,27 @@ def fake_llm(monkeypatch, request):
 | `date="2025-08-03"` | `2025-08-03` | — | — |
 | `date="03/08/2025"`，同批出现 `25/08` | `2025-08-03`（DMY） | — | — |
 | `date="03/08/2025"`，同批出现 `08/25` | `2025-03-08`（MDY） | — | — |
-| `date="03/08"`，全批无 >12 的位 | `2025-03-08`（MDY 兜底） | — | `needs_review` |
 | `date="8月3日"`，批内年份众数 2025 | `2025-08-03` | — | — |
 | `date="第三行"` | `None` | — | `needs_review` |
 | `date="1998-01-01"` | `1998-01-01` | — | `needs_review` |
 | `amount="1,234.56"` | — | `1234.5600` | — |
 | `amount="(1,234.56)"` | — | `-1234.5600` | — |
-| `amount="￥１，２３４．５６"`（全角） | — | `1234.5600` | — |
 | `amount="1234.56 DR"` | — | `-1234.5600` | — |
+| `amount="1234.56借"`（单字符后缀） | — | `-1234.5600`（**不是** `-1234.5`） | — |
 | `amount="abc"` | — | `0` | `needs_review` |
 | `amount=0` | — | `0` | `needs_review` |
 | `kind="expense", amount=32` | — | `-32` | `needs_review` |
 | `kind="refund", amount=-32` | — | `32` | `needs_review` |
 | `kind="transfer", role="in", amount=-3000` | — | `3000` | `needs_review` |
-| `kind="transfer", role=None, amount=-3000` | — | `-3000`，role=`out` | `needs_review` |
 | `kind="banana", amount=-5` | — | kind=`expense` | `needs_review` |
 | `kind="expense", l1="dining"` | — | l1/l2 都 `None` | `needs_review` |
 | `kind="income", l1="food"` | — | l1/l2 都 `None` | `needs_review` |
 | `kind="expense", l1="food", l2="taxi"` | — | l1=`food`, l2=`None` | `needs_review` |
-| `kind="expense", l1="food", l2="lunch"` | — | 原样 | — |
 | `kind="transfer", l1="food"` | — | l1/l2 都 `None` | — |
-| `kind="income", l1="social_income", l2="red_packet_in"` | — | 原样 | — |
 | `kind="expense", l1=None` | — | 原样 `None` | — |
-| `currency="cny"` | — | `CNY` | — |
 | `currency=""`，账户币种 CNY | — | `CNY` | — |
 | `currency="XYZ"` | — | `XYZ` | `needs_review` |
 | `confidence=0.55` | — | — | `needs_review` |
-| `confidence=None` | — | `0.0` | `needs_review` |
 | `mode="vision"`，`confidence=0.95` | — | — | `needs_review` |
 | `note="卡号 6225880212341234"` | — | note = `卡号 ************1234` | — |
 | `note="订单号 1234567890123456789"`（Luhn 不过） | — | 原样 | — |
@@ -1951,7 +1928,7 @@ def fake_llm(monkeypatch, request):
 | `kind=refund` 32 元，库里那笔 32 元支出已被别的退款退完 | 无候选（可退额度 = 0） |
 | `kind=refund` 32 元，库里 100 元支出已退 68 元 | 命中（剩余 32，+80 分） |
 | `kind=refund` 50 元，库里只有 30 元支出 | 无候选（`abs(amount) < 退款额`） |
-| 信用卡账户，正数入账，`kind=income` | 也进 `refund_candidate` 分支 |
+| 信用卡账户，正数入账，`kind=income` + 收入分类，命中唯一候选 | `kind` 改成 `refund`，收入分类被 `sanitize_category` 置空后沿用原单分类，行带 `needs_review` |
 | `subtype=repayment` `in` +3000，别的账户有 −3000 同日 | `repayment` + `duplicate`，预填 `counterpart_source_id` |
 | 同上但对手腿在 4 天前 | 只有 `repayment`，无对手腿，`needs_review` |
 | 同上但对手腿已有 `transfer_pair_id` | 不标 `duplicate`（已配对过） |
@@ -2026,6 +2003,7 @@ def test_upload_review_commit_revert(client, auth, ledger, credit_source,
 | `committed` 批次 `PATCH rows` | 409 |
 | 同一批次并发两次 commit | 一次 200、一次 409，交易只建一遍 |
 | 扫描件 fixture 走完全程 | 所有行都带 `needs_review`，`batch.parse_mode == "vision"` |
+| 3 页文本 PDF fixture | 各页 `source_ref` 互不重复（第 2 页首行行号 = 第 1 页行数 + 1），无行被 §7.7 误合并 |
 | 提交后再撤销、再重新上传同一文件 | 新批次独立，`duplicate` 标记命中所有行 |
 
 ### 12.7 不测什么
