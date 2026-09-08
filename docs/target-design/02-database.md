@@ -3,6 +3,10 @@
 > 本文回答的问题：v3.0 的数据库里有哪些表、每张表的完整 DDL 长什么样、哪些规则由数据库兜底、哪些只能由应用层保证、每个索引服务于哪条查询、从今天的 head `8a4f4d66d893` 怎么一步步迁到目标 schema、一条数据从产生到消失经历了什么、测试在什么样的库上跑。
 >
 > 本文的每个决定都可以追溯到 [`00-decisions.md`](./00-decisions.md) 的某一节，标注形如"（决策 §1.2）"。凡描述**现状**处均带 `path:line` 引用，指向仓库当前代码；凡描述**目标**处一律用 DDL / 伪代码表达，仓库里目前没有对应实现。现状的完整描述见 [`../current-design/02-database.md`](../current-design/02-database.md)。
+>
+> **本版按第一轮审核意见与决策 §14 修订**。相对初稿的实质变化：`exchange_rates` 改成决策 §14.1 定义的缓存表（主键 `(date, base, symbol)`，目标币种列名 `symbol`）并进入迁移第 1 步；账户余额口径按决策 §14.2 改为"以账户 `default_currency` 计价、交易按发生日汇率折算成账户币种后累加"；`import_rows` 的行号列按决策 §14.5 固定为 `row_no`；`users` 按决策 §14.6 删 `default_source_id`、加 `language`，`user_llm_settings` 与 `ledger_invites` 各加 `created_at`；迁移第 3 步补上被漏掉的 `DROP INDEX IF EXISTS`（含 `ix_transactions_user_id`）与 `finance_sources` 孤儿行兜底，第 6 步补上 `fk_users_default_source` 命名分叉的兜底写法。
+>
+> 关于篇幅：本文约 1300 行，超出最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十张表的完整 DDL、六步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
 
 技术栈不变：SQLAlchemy 2.0 同步引擎 + Alembic + Postgres 15，测试用 SQLite 内存库（backend/pyproject.toml:13-14,21）。
 
@@ -23,13 +27,13 @@
 | 7 | `transactions` | 已有 | 加 kind / 分类 / 转账 / 退款 / 导入等列（决策 §1、§10） |
 | 8 | `import_batches` | **新增** | 一次账单上传（决策 §5） |
 | 9 | `import_rows` | **新增** | 导入草稿行（决策 §5） |
-| 10 | `exchange_rates` | **已被删除**，需补建 | Frankfurter 结果缓存（决策 §8，另见 §待决 D-1） |
+| 10 | `exchange_rates` | **新建（重建）** | Frankfurter 日汇率缓存。现状这张表已被迁移 `5ca7fe6e37db` 删除，目标态按决策 §14.1 用**新形状**重建，不是沿用现状（§1.10） |
 
 删除的表：`transaction_tags`（决策 §1.3"现有 `transaction_tags` 表、`?tag=` 筛选、标签输入框全部移除"）。现状模型见 backend/app/models/transaction_tag.py:11-20。
 
 ### 0.1 列级差异
 
-**新增表**：`user_llm_settings`、`ledgers`、`ledger_members`、`ledger_invites`、`import_batches`、`import_rows`；`exchange_rates` 需重新建（现状里它在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被 drop 掉了）。
+**新增表**：`user_llm_settings`、`ledgers`、`ledger_members`、`ledger_invites`、`import_batches`、`import_rows`、`exchange_rates`。最后一张是**重建**：现状里它在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被 drop 掉了；目标态按决策 §14.1 重新定义列与主键（复合主键 `(date, base, symbol)`、没有自增 `id`、没有 `source` 列、新增 `fetched_at`），**不**把初始迁移里的旧形状原样搬回来。
 
 **删除表**：`transaction_tags`。
 
@@ -43,7 +47,7 @@
 
 | 表 | 列 | 现状证据 | 原因 |
 |---|---|---|---|
-| `users` | `default_source_id` | backend/app/models/user.py:20 | 账户已归属账本、一个用户可属于多本账（决策 §3、§2）；决策 §11 的 `PATCH /me` 只剩默认币种与语言。替代方案见 §待决 D-2 |
+| `users` | `default_source_id` | backend/app/models/user.py:20 | 决策 §14.6 明确删除：账户归属账本、一个用户可属于多本账（决策 §3、§2）之后这一列语义失效；决策 §11 的 `PATCH /me` 只剩默认币种与语言。默认账户改由前端本地记住上次使用的账户（决策 §14.6） |
 | `finance_sources` | `user_id` | backend/app/models/finance_source.py:17 | 由 `ledger_id` + `created_by` 取代（决策 §2 归属段） |
 | `transactions` | `user_id` | backend/app/models/transaction.py:17 | 同上 |
 
@@ -51,9 +55,10 @@
 
 | 表 | 新增列 | 依据 |
 |---|---|---|
-| `users` | `language`、`updated_at` | 决策 §11（`PATCH /me` 改语言）、§0.4 |
+| `users` | `language`、`updated_at` | `language VARCHAR(8) NULL` 由决策 §14.6 明确要求（`PATCH /me` 可改，NULL = 跟随系统），取值范围见决策 §0.4、§11；`updated_at` 是审计列 |
 | `finance_sources` | `ledger_id`、`opening_balance`、`created_by`、`updated_by`、`updated_at`；`type` 增加取值 `cash` | 决策 §3 |
 | `transactions` | `ledger_id`、`kind`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`refund_of`、`import_batch_id`、`created_by`、`updated_by`、`updated_at` | 决策 §1、§2、§5、§10 |
+| `user_llm_settings`、`ledger_invites` | `created_at` | 决策 §14.6（这两张新表各要有创建时间） |
 
 **保持不变**：`transactions.amount`（`NUMERIC(18,4)`）、`transactions.occurred_at`（`DATE`，决策 §0.7 明确不加时刻）、`transactions.merchant`、`transactions.transfer_pair_id`（仍可空、仍无外键）、`users.email` / `password_hash` / `base_currency`。
 
@@ -63,7 +68,7 @@
 
 下面给出的是 **Postgres** DDL，也就是 Alembic 迁移在生产库上最终建出来的形状；同一份 schema 由 SQLAlchemy 模型描述，测试库（SQLite）由 `Base.metadata.create_all` 建出（§8）。约定：
 
-- 所有主键都是 `UUID`（`sa.Uuid()`，Python 侧 `uuid.uuid4` 默认值），`exchange_rates` 除外（沿用自增 BIGINT）。
+- 所有主键都是 `UUID`（`sa.Uuid()`，Python 侧 `uuid.uuid4` 默认值），三张例外：`ledger_members` 是复合主键 `(ledger_id, user_id)`、`user_llm_settings` 的主键就是 `user_id`、`exchange_rates` 是复合主键 `(date, base, symbol)`（决策 §14.1，没有代理键）。
 - 所有枚举列都是 `VARCHAR(n) + CHECK`，不使用 Postgres ENUM（决策 §10）。
 - 所有金额 `NUMERIC(18,4)`、所有币种 `CHAR(3)`、所有时间戳 `TIMESTAMP WITHOUT TIME ZONE` 存 naive UTC（§7）。
 - 约束一律显式命名，命名规则见 §5.0；`create_all` 与 Alembic 用同一套 `naming_convention`，这样 `batch_alter_table` 才能按名字 drop 约束。
@@ -109,7 +114,7 @@ CREATE TABLE user_llm_settings (
 );
 ```
 
-列语义：主键就是 `user_id`，一个用户最多一份（决策 §6）。`api_key` 列名沿用决策 §6 的字段清单；存的是 Fernet 密文（决策 §6"服务端 Fernet 加密存"），接口回显时解密后只返回尾 4 位，数据库里**不存明文、也不另存尾 4 位**——建议改名为 `api_key_encrypted` 见 §待决 D-4。`base_url` 的 CHECK 先 `lower()` 再比：裸 `LIKE` 在 SQLite 上对 ASCII 大小写不敏感、在 Postgres 上敏感，不归一化的话 `'HTTP://x'` 两边行为会不一致（§8.1）。`vision_model` 为空表示导入图片时复用 `model`。`ON DELETE CASCADE`：本版本没有删用户的接口（§6.8），级联只是为了将来运维脚本删用户时不留孤儿。
+列语义：主键就是 `user_id`，一个用户最多一份（决策 §6）。`api_key` 列名沿用决策 §6 的字段清单；存的是 Fernet 密文（决策 §6"服务端 Fernet 加密存"），接口回显时解密后只返回尾 4 位，数据库里**不存明文、也不另存尾 4 位**——建议改名为 `api_key_encrypted` 见 §待决 D-4。`base_url` 的 CHECK 先 `lower()` 再比：裸 `LIKE` 在 SQLite 上对 ASCII 大小写不敏感、在 Postgres 上敏感，不归一化的话 `'HTTP://x'` 两边行为会不一致（§8.1）。`vision_model` 为空表示导入图片时复用 `model`。`ON DELETE CASCADE`：本版本没有删用户的接口（§6.9），级联只是为了将来运维脚本删用户时不留孤儿。
 
 ### 1.3 `ledgers`
 
@@ -217,7 +222,7 @@ CREATE TABLE finance_sources (
 CREATE INDEX ix_finance_sources_ledger_id ON finance_sources (ledger_id);
 ```
 
-列语义：账户属于账本、账本内完全共享（决策 §2、§3）。`type` 相对现状（backend/app/models/finance_source.py:19 只有注释、没有 CHECK）新增 `cash` 并加上真正的 CHECK（决策 §3、§13 第 3 步）。`opening_balance` 是账户建立时的初始余额，余额 = `opening_balance + Σ transactions.amount`（决策 §3），因此**不存**余额列。`default_currency` 建后不可改（应用层：`PATCH` 的请求体里没有这个字段）。`archived` 同样没有 `DEFAULT`（初始迁移 e533c88884b7:51 建列时就没给，第 3 步也不补），Python 侧 `default=False`；本表里唯一带 `server_default` 的列是 `opening_balance`，因为它是第 3 步给存量行加的非空列（§5.3）。`archived = TRUE` 的账户不能再记账、不能作为导入目标，历史保留（决策 §3）；有交易的账户不能删除，只能归档——这条由应用层保证，数据库侧 `transactions.source_id` 用 NO ACTION 兜底（§1.7 说明为什么不能用 RESTRICT）。账本内账户重名的问题见 §待决 D-5。
+列语义：账户属于账本、账本内完全共享（决策 §2、§3）。`type` 相对现状（backend/app/models/finance_source.py:19 只有注释、没有 CHECK）新增 `cash` 并加上真正的 CHECK（决策 §3、§13 第 3 步）。`opening_balance` 是账户建立时的初始余额，**以账户自己的 `default_currency` 计价**；账户余额 = `opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`，同币种交易不换算（决策 §3、§14.2）。因此**不存**余额列，也不按币种分桶；接口另给一个 `balance_base`＝按**最新**汇率把余额折算到 `ledgers.base_currency`（决策 §14.2，接口形状见 [`03-backend-api.md`](./03-backend-api.md)）。`default_currency` 建后不可改（应用层：`PATCH` 的请求体里没有这个字段）。`archived` 同样没有 `DEFAULT`（初始迁移 e533c88884b7:51 建列时就没给，第 3 步也不补），Python 侧 `default=False`；本表里唯一带 `server_default` 的列是 `opening_balance`，因为它是第 3 步给存量行加的非空列（§5.3）。`archived = TRUE` 的账户不能再记账、不能作为导入目标，历史保留（决策 §3）；有交易的账户不能删除，只能归档——这条由应用层保证，数据库侧 `transactions.source_id` 用 NO ACTION 兜底（§1.7 说明为什么不能用 RESTRICT）。账本内账户重名的问题见 §待决 D-5。
 
 ### 1.7 `transactions`
 
@@ -260,7 +265,7 @@ CREATE TABLE transactions (
     CONSTRAINT fk_transactions_updated_by_users
         FOREIGN KEY (updated_by) REFERENCES users (id),
 
-    -- 决策 §10 的 7 条关键约束
+    -- 决策 §10 的 7 条要求（落成 8 个约束）
     CONSTRAINT ck_transactions_kind
         CHECK (kind IN ('expense', 'income', 'refund', 'transfer')),
 
@@ -312,7 +317,7 @@ CREATE INDEX ix_transactions_refund_of         ON transactions (refund_of) WHERE
 CREATE INDEX ix_transactions_import_batch_id   ON transactions (import_batch_id) WHERE import_batch_id IS NOT NULL;
 ```
 
-#### 1.7.1 决策 §10 的 7 条约束逐条对照
+#### 1.7.1 决策 §10 的 7 条要求对应的 8 个约束
 
 | 决策 §10 的条目 | 约束名 | SQL 表达式 | SQLite 兼容 |
 |---|---|---|---|
@@ -324,6 +329,8 @@ CREATE INDEX ix_transactions_import_batch_id   ON transactions (import_batch_id)
 | `refund_of IS NULL OR kind='refund'` | `ck_transactions_refund_of` | 原样 | 是 |
 | `UNIQUE (transfer_pair_id, transfer_role)`（NULL 不参与） | `uq_transactions_transfer_pair_role` | 唯一约束 | 是 —— SQLite 与 Postgres 的唯一索引都把 NULL 视为互不相等，因此任意多行 `(NULL, NULL)` 并存 |
 | `transfer_pair_id IS NULL OR counterparty IS NULL` | `ck_transactions_counterparty` | 原样 | 是 |
+
+表里是 8 行而不是 7 行：决策 §10 的第三条 bullet 一句话写了两件事（`(kind='transfer') = (transfer_role IS NOT NULL)` 与 `(kind='transfer') = (transfer_subtype IS NOT NULL)`），落库时必须是两个独立的 CHECK 对象，所以"7 条要求"对应"8 个约束"。全文凡提到这一组时都按"7 条要求 / 8 个约束"表述（另见 §1.7 DDL 里的注释与 §8.2 的约束测试用例）。
 
 关于 `(kind = 'transfer') = (transfer_role IS NOT NULL)` 这种写法：Postgres 里两侧都是 `boolean`，`=` 就是布尔等价；SQLite 里两侧是 `0/1` 整数，`=` 是整数比较——两个方言得到同一语义。因为 `kind` 是 `NOT NULL`，左侧永不为 NULL，CHECK 不会因"结果为 NULL 视为通过"而漏判。若将来需要更保守的写法，等价形式是：
 
@@ -448,29 +455,47 @@ CREATE INDEX ix_import_rows_transaction_id
     ON import_rows (transaction_id) WHERE transaction_id IS NOT NULL;
 ```
 
-列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（`exchange_rates.date` 现状就是这么用的）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
+列语义：草稿行，**与正式交易表完全隔离**——决策 §5 明确"草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键"。除 `batch_id`、`row_no`、`status` 外所有业务列都可空：LLM 解析不出日期或金额的行要保留下来让人补（决策 §6"日期/金额解析失败的行标 `needs_review` 而不是丢弃"）。`date` 列名沿用决策 §5 的字段清单，LLM 输出 JSON 与 API 字段同样叫 `date`（决策 §6）；`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名用（目标态的 `exchange_rates.date` 同样直接叫 `date`，§1.10）。建议改名为 `occurred_at`（与 `transactions` 对齐）见 §待决 D-3。`flags` 是服务端自动标记的数组，取值 `duplicate` / `refund_candidate` / `repayment` / `needs_review`（决策 §5、§6）。`matched_transaction_id` 是退款候选原单（决策 §5"仅在候选唯一时预填"）；`counterpart_source_id` 是还款行的对手账户；`transaction_id` 在 commit 之后回填，指向这行生成的正式交易。三个外键都是 `ON DELETE SET NULL`：草稿引用的交易被删掉时，草稿行本身要留下（否则历史批次会缺行）。
 
 ### 1.10 `exchange_rates`
 
-沿用初始迁移里的形状（backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:24-35），它在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被删掉了，目标态需要补建（决策 §8、§10；见 §待决 D-1）：
+**这张表是新建的，不是"沿用现状"**：初始迁移里曾有一张同名表（backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:24-35），但它已在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被 drop，现状库里根本不存在。目标态按**决策 §14.1** 重新定义形状（列、主键都与旧表不同）：
 
 ```sql
 CREATE TABLE exchange_rates (
-    id      BIGSERIAL      NOT NULL,
-    source  VARCHAR(32)    NOT NULL,
-    base    CHAR(3)        NOT NULL,
-    symbol  CHAR(3)        NOT NULL,
-    rate    NUMERIC(18,8)  NOT NULL,
-    date    DATE           NOT NULL,
-    CONSTRAINT pk_exchange_rates PRIMARY KEY (id),
-    CONSTRAINT uix_base_symbol_date UNIQUE (base, symbol, date),
-    CONSTRAINT ck_exchange_rates_rate_positive CHECK (rate > 0)
+    date        DATE          NOT NULL,
+    base        CHAR(3)       NOT NULL,
+    symbol      CHAR(3)       NOT NULL,
+    rate        NUMERIC(18,8) NOT NULL,
+    fetched_at  TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT pk_exchange_rates PRIMARY KEY (date, base, symbol),
+    CONSTRAINT ck_exchange_rates_rate_positive CHECK (rate > 0),
+    CONSTRAINT ck_exchange_rates_base_upper   CHECK (base = upper(base)),
+    CONSTRAINT ck_exchange_rates_symbol_upper CHECK (symbol = upper(symbol)),
+    CONSTRAINT ck_exchange_rates_not_self     CHECK (base <> symbol)
 );
-CREATE INDEX ix_exchange_rates_date ON exchange_rates (date);
-COMMENT ON TABLE exchange_rates IS 'Daily exchange rates from external API';
+CREATE INDEX ix_exchange_rates_pair_date ON exchange_rates (base, symbol, date DESC);
+COMMENT ON TABLE exchange_rates IS 'Frankfurter daily rate cache; see 00-decisions.md 14.1';
 ```
 
-列语义：这是 Frankfurter 拉回来的**日汇率缓存**，不是"把折算结果落库"——决策 §8 的"读取时计算，不落库"说的是 `converted_amount` 之类的派生值不写进 `transactions`（现状也是这样，见 backend/app/api/transactions.py:117-122 的注释与 `../current-design/02-database.md` §9.2）。`source` 固定 `'frankfurter'`。`(base, symbol, date)` 唯一，写入用 upsert（Postgres `ON CONFLICT DO NOTHING`）。一经公布的历史汇率不再变（决策 §8），因此缓存可以永久保留、不需要失效策略；"最新汇率"取 `date` 最大的一行，"发生日汇率"取 `date <= occurred_at` 里最大的一行——这就是 `ix_exchange_rates_date` 服务的查询。`id BIGSERIAL` 在 SQLAlchemy 里必须写成 `sa.BigInteger().with_variant(sa.Integer, "sqlite")`，否则 SQLite 上 `BIGINT PRIMARY KEY` 不是 rowid 别名、拿不到自增（`INTEGER PRIMARY KEY` 才是）。
+与旧表的差别（都来自决策 §14.1）：
+
+| 旧表（`e533c88884b7`，已删） | 目标表 | 为什么 |
+|---|---|---|
+| `id BIGSERIAL` 代理主键 + `UNIQUE (base, symbol, date)` | 没有代理键，主键就是 `(date, base, symbol)` | 决策 §14.1 直接指定了这个主键；缓存表没有任何东西引用它的行，代理键纯属多余，去掉后少一个索引 |
+| `source VARCHAR(32) NOT NULL` | 没有这一列 | 决策 §8 已经把来源固定成 Frankfurter，列里存常量没有意义 |
+| 无 | `fetched_at TIMESTAMP NOT NULL` | 决策 §14.1 的"同一 `(base, symbol)` 一小时内不重复请求"需要记住上次抓取时刻 |
+| 目标币种叫 `symbol` | 仍叫 `symbol` | 决策 §14.1：与现有 `/rates` 接口的 `symbols` 参数同源，**不用** `quote` 这个名字 |
+
+列语义：一行 = "某天、某个货币对的官方汇率 `1 base = rate symbol`"。这是 Frankfurter 拉回来的**日汇率缓存**，不是"把折算结果落库"——决策 §8 的"读取时计算，不落库"说的是 `converted_amount` 之类的派生值不写进 `transactions`（现状也是这样，见 backend/app/api/transactions.py:117-122 的注释与 `../current-design/02-database.md` §9.2）。
+
+- `date` 是 Frankfurter 给出的**行情日**（周末与节假日没有行情，所以这张表不是每天都有行）。`date` 在 Postgres 与 SQLite 里都只是非保留的类型名，可以直接当列名。
+- `rate` 用 `NUMERIC(18,8)`，8 位小数足够所有主流货币对。
+- `fetched_at` 是这一行被写进来的时刻（naive UTC，§7.2）。决策 §14.1 的节流规则读它：同一 `(base, symbol)` 的最新一行 `fetched_at` 距今不足 1 小时就不再请求 Frankfurter，直接用库里的值。
+- 写入用 upsert：Postgres `INSERT ... ON CONFLICT (date, base, symbol) DO UPDATE SET rate = EXCLUDED.rate, fetched_at = EXCLUDED.fetched_at`；SQLite 用等价的 `ON CONFLICT ... DO UPDATE`（3.24+）。一经公布的历史汇率不再变（决策 §8），所以 `DO UPDATE` 实际只刷新 `fetched_at`。
+- 查询：**发生日汇率**（交易与统计，决策 §8）`SELECT rate FROM exchange_rates WHERE base=? AND symbol=? AND date <= ? ORDER BY date DESC LIMIT 1`——`date <= ?` 就是决策 §8 说的"无行情日回退到最近一个已公布交易日"；**最新汇率**（账户余额折算，决策 §8、§14.2）把 `date <= ?` 换成不加日期条件的 `ORDER BY date DESC LIMIT 1`。两条都被 `ix_exchange_rates_pair_date (base, symbol, date DESC)` 完整覆盖（前导两列等值 + 第三列有序），所以不再需要旧表那个单列 `ix_exchange_rates_date`。
+- 主键 `(date, base, symbol)` 的列序按决策 §14.1 原样写；它对上面两条查询帮不上忙（前导列是 `date`），查询靠 `ix_exchange_rates_pair_date`，主键只负责唯一性和 upsert 的冲突目标。
+- 没有任何外键，也没有任何表引用它——删账本、删用户都不影响这张表（生命周期见 §6.8）。
 
 ### 1.11 JSON 列为什么用 `JSON().with_variant(JSONB, 'postgresql')`
 
@@ -491,7 +516,9 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 ## 2. ER 图
 
 ```
- [users] ---1:1--- [user_llm_settings]        (user_id 既是 PK 又是 FK, ON DELETE CASCADE)
+ [users]  id / email / password_hash / base_currency / language / created_at / updated_at
+   |                                    （已无 default_source_id，决策 §14.6）
+   | ---1:1--- [user_llm_settings]      user_id 既是 PK 又是 FK (ON DELETE CASCADE)
    |
    | created_by / updated_by / used_by  (NO ACTION, 出现在 ledgers, ledger_invites,
    |                                     finance_sources, transactions, import_batches)
@@ -501,7 +528,7 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  |-------------------------| ledger_id  |----------------------------------|
  | PK id            UUID   | (CASCADE)  | PK,FK ledger_id UUID             |
  |    name          VC(100)|            | PK,FK user_id   UUID  ---> users |
- |    base_currency CHAR(3)|            |    role         VC(16) owner|member
+ |    base_currency CHAR(3)|            |    role      VC(16) owner|member |
  | FK created_by ---> users|            |    joined_at    TS               |
  |    created_at    TS     |            +----------------------------------+
  |    updated_at    TS     |          N +----------------------------------+
@@ -523,12 +550,12 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  | FK ledger_id       UUID NN|     | FK ledger_id    UUID NN (CASCADE)    |
  |    name            VC(100)|     | FK source_id ---> finance_sources    |
  |    type            VC(32) |<----| FK created_by ---> users             |
- |    default_currency CHAR(3)| src |    filename/mime_type/size_bytes     |
- |    opening_balance NUM(18,4)|    |    status VC(16) uploaded|parsing|   |
- |    archived        BOOL   |     |           ready|committed|failed      |
+ |    default_currency CHR(3)| src |    filename/mime_type/size_bytes     |
+ |    open_balance  NUM(18,4)|     |    status VC(16) uploaded|parsing|   |
+ |    archived        BOOL   |     |           ready|committed|failed     |
  | FK created_by/updated_by  |     |    error_code / error_message        |
- |    created_at/updated_at  |     |    model / used_vision / raw_response |
- +---------------------------+     |    row_count / 4 个时间戳             |
+ |    created_at/updated_at  |     |    model/used_vision/raw_resp        |
+ +---------------------------+     |    row_count / 4 个时间戳            |
    |1                    ^         +--------------------------------------+
    | source_id           | counterpart_    |1                    |1
    | (NO ACTION)         | source_id       | batch_id (CASCADE)  | import_batch_id
@@ -546,26 +573,33 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  |    note VC(500) / merchant VC(200) |  |    category_l1/category_l2        |
  |    category_l1/category_l2 VC(32)  |  |    transfer_subtype/confidence    |
  |    transfer_role    VC(8)  out|in  |  |    source_ref / flags JSON|JSONB  |
- |    transfer_subtype VC(16) plain|  |  | FK matched_transaction_id -------->| (SET NULL)
- |                     repayment      |  | FK counterpart_source_id --------->| (SET NULL)
- |    transfer_pair_id UUID (无 FK)   |  | FK transaction_id ---------------->| (SET NULL)
+ |    transfer_subtype VC(16) plain|  |  | FK matched_transaction_id ------->| (SET NULL)
+ |                     repayment      |  | FK counterpart_source_id -------->| (SET NULL)
+ |    transfer_pair_id UUID (无 FK)   |  | FK transaction_id --------------->| (SET NULL)
  |    counterparty     VC(100)        |  |    created_at/updated_at TS       |
  | FK refund_of --+ 自引用 SET NULL   |  +-----------------------------------+
  | FK import_batch_id  UUID SET NULL  |
  | FK created_by/updated_by ---> users|  +--------------------------------------+
- |    created_at/updated_at TS NN     |  | exchange_rates  (无外键, 独立缓存表)  |
+ |    created_at/updated_at TS NN     |  | exchange_rates (独立缓存表, 无外键)  |
  +------------------------------------+  |--------------------------------------|
-   ^            |                         | PK id BIGSERIAL                      |
-   +------------+ refund_of               |    source VC(32) / rate NUM(18,8)    |
-                                          |    base CHAR(3) / symbol CHAR(3)     |
-                                          |    date DATE   UNIQUE(base,symbol,date)
-                                          +--------------------------------------+
+   ^            |                        | PK date       DATE                   |
+   +------------+ refund_of              | PK base       CHAR(3)                |
+                                         | PK symbol     CHAR(3)                |
+                                         |    rate       NUMERIC(18,8)          |
+                                         |    fetched_at TS                     |
+                                         +--------------------------------------+
 
- 图例：NN = NOT NULL；VC(n) = VARCHAR(n)；TS = TIMESTAMP WITHOUT TIME ZONE（naive UTC）；
-      箭头从子表指向父表（外键方向），括号内是 ON DELETE 行为；NOACT = NO ACTION。
+ 图例：NN = NOT NULL；VC(n) = VARCHAR(n)；CHR(3) = CHAR(3)；NUM(p,s) = NUMERIC(p,s)；
+      TS = TIMESTAMP WITHOUT TIME ZONE（naive UTC）；NOACT = NO ACTION。
+      每条连线都是一条外键。**方向以线两端的 1 / N 标记为准，不以箭头头部为准**
+      （箭头头部只是排版方向，本图里两种画法都出现过）：
+        · 标 N 的一端是子表（外键列所在的表），标 1 的一端是父表；
+          线旁的标注是子表上那一列的列名与 ON DELETE 行为，例如 ledger_id (CASCADE)。
+        · 没有 1 / N 标记的连线是纯外键指向，一律 子表 -> 父表，旁边标 ON DELETE 行为；
+          写在字段行里的 FK x ---> y 同理（如 FK created_by ---> users）。
       transfer_pair_id 没有外键，是两条转账腿共用的自由 UUID（决策 §1.2）。
-      唯一约束：ledger_invites.code、transactions(transfer_pair_id, transfer_role)、
-      import_rows(batch_id, row_no)、exchange_rates(base, symbol, date)、
+      唯一 / 主键约束：ledger_invites.code（唯一）、transactions(transfer_pair_id, transfer_role)（唯一）、
+      import_rows(batch_id, row_no)（唯一）、exchange_rates(date, base, symbol)（主键，决策 §14.1）、
       import_batches(ledger_id) WHERE status='parsing'（部分唯一）。
 ```
 
@@ -601,7 +635,7 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 同一账本同时只有一个 parsing 批次 | 部分唯一索引 `uq_import_batches_one_parsing` | 决策 §5 |
 | 批次内行号唯一 | `uq_import_rows_batch_row` | 决策 §5 |
 | 上传 ≤10 MB、单批 ≤2000 行 | `ck_import_batches_size`、`ck_import_batches_row_count` | 决策 §5 |
-| 汇率 (base, symbol, date) 唯一且为正 | `uix_base_symbol_date`、`ck_exchange_rates_rate_positive` | 决策 §8 |
+| 汇率 (date, base, symbol) 唯一且为正、币种大写、base ≠ symbol | 主键 `pk_exchange_rates (date, base, symbol)` + `ck_exchange_rates_rate_positive` / `_base_upper` / `_symbol_upper` / `_not_self` | 决策 §8、§14.1 |
 
 ### 3.2 应用层保证（数据库不管）
 
@@ -643,7 +677,7 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 索引 | 服务的查询 | 说明 |
 |---|---|---|
 | `ix_transactions_ledger_occurred (ledger_id, occurred_at DESC, created_at DESC)` | 交易列表主查询：`WHERE ledger_id=? [AND occurred_at BETWEEN ? AND ?] ORDER BY occurred_at DESC, created_at DESC LIMIT ? OFFSET ?`；统计按月汇总 | 决策 §4 的 `from`/`to` 与默认排序都命中它；`created_at` 作为第二排序键保证同一天内顺序稳定、分页不跳行 |
-| `ix_transactions_ledger_source (ledger_id, source_id)` | `source_id` 筛选（决策 §4，可多值 → `IN`）；账户余额 `SELECT SUM(amount) WHERE ledger_id=? AND source_id=?`（决策 §3） | 余额是每次读账户列表都要算的，是最热的聚合查询 |
+| `ix_transactions_ledger_source (ledger_id, source_id)` | `source_id` 筛选（决策 §4，可多值 → `IN`）；账户余额的取数 `SELECT amount, currency, occurred_at FROM transactions WHERE ledger_id=? AND source_id=?`（决策 §3、§14.2） | 余额是每次读账户列表都要算的，是最热的聚合查询。注意**不能**直接 `SUM(amount)`：决策 §14.2 要求把每笔按 `occurred_at` 当日汇率折算成账户 `default_currency` 再累加，同币种才免折算，所以 SQL 只负责取行，折算与求和在服务层做（同币种账户可以退化成一条 `SUM`） |
 | `ix_transactions_ledger_kind_cat (ledger_id, kind, category_l1)` | `kind` / `category_l1` 筛选（决策 §4）；首页按一级分类汇总（决策 §7） | `category_l2` 的筛选量小，落在这个索引取回的行上再过滤 |
 | `ix_transactions_refund_of (refund_of) WHERE refund_of IS NOT NULL` | "这张原单已退多少"：`SELECT SUM(amount) WHERE refund_of = ?`（决策 §1.1 要求每条候选显示已退/可退金额）；原单删除时 `ON DELETE SET NULL` 的反查 | 部分索引：绝大多数行 `refund_of` 为空，只索引退款行 |
 | `uq_transactions_transfer_pair_role (transfer_pair_id, transfer_role)` | 既是约束也是索引：`WHERE transfer_pair_id = ?` 取两腿（`PATCH/DELETE /transactions/transfer/{pair_id}`，决策 §1.2） | 前导列就是 `transfer_pair_id`，**不需要**再单独建 `ix_transactions_transfer_pair_id`（现状那个独立索引 backend/migrations/versions/8a4f4d66d893_add_transfer_pair_id_to_transactions.py:30-34 在目标态被它取代） |
@@ -657,8 +691,8 @@ raw_response = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | `ix_import_rows_transaction_id` | 撤销后回查、以及"这条交易来自哪一行草稿" | 部分索引 |
 | `ix_import_batches_ledger_created (ledger_id, created_at DESC)` | 导入历史列表（决策 §11 `GET /ledgers/{id}/imports`） | — |
 | `uq_import_batches_one_parsing (ledger_id) WHERE status='parsing'`（唯一） | 并发控制而非查询：第二个 parsing 批次插入即冲突（决策 §5） | — |
-| `ix_exchange_rates_date` | 发生日汇率 `WHERE base=? AND symbol=? AND date <= ? ORDER BY date DESC LIMIT 1`；最新汇率 `ORDER BY date DESC LIMIT 1`（决策 §8） | 沿用初始迁移的索引（e533c88884b7:35）。`uix_base_symbol_date` 的前导列是 `base`，对"按日期回退"的查询更有用，两者并存 |
-| `uix_base_symbol_date`（唯一） | upsert 的冲突目标；(base, symbol) 的精确查找 | 沿用现状 |
+| `ix_exchange_rates_pair_date (base, symbol, date DESC)` | 发生日汇率 `WHERE base=? AND symbol=? AND date <= ? ORDER BY date DESC LIMIT 1`；最新汇率 `WHERE base=? AND symbol=? ORDER BY date DESC LIMIT 1`（决策 §8、§14.1）；节流判断"这个货币对上次抓取是什么时候"也走同一条路径取最新行的 `fetched_at` | 前导两列等值、第三列有序，两条查询都只读一行。**不是**沿用初始迁移那个单列 `ix_exchange_rates_date`（e533c88884b7:35）——那张旧表已被删除，本表按决策 §14.1 重建 |
+| `pk_exchange_rates (date, base, symbol)`（主键） | upsert 的冲突目标（`ON CONFLICT (date, base, symbol)`）；按整天批量取汇率 | 决策 §14.1 直接指定的主键。前导列是 `date`，帮不上"按货币对回退"的查询，那条靠上一行的索引 |
 | `ix_ledgers_created_by` | 运维 / 迁移回填时按创建者找账本 | 低频 |
 
 ---
@@ -725,7 +759,9 @@ sa.CheckConstraint("kind IN ('expense','income','transfer','refund')", name="kin
 
 **revision** `b1f3c2a10d41_create_ledgers_llm_and_import_tables`，`down_revision = '8a4f4d66d893'`。
 
-`upgrade()`：按依赖顺序 `op.create_table(...)` 建 `ledgers`、`ledger_members`、`ledger_invites`、`user_llm_settings`、`import_batches`、`import_rows`，DDL 与 §1.2–§1.5、§1.8、§1.9 一致，随后 `op.create_index(...)` 建 §4 里属于这些表的索引（含两个部分唯一索引，用 `postgresql_where=sa.text("status = 'parsing'")`）。
+`upgrade()`：按依赖顺序 `op.create_table(...)` 建 `ledgers`、`ledger_members`、`ledger_invites`、`user_llm_settings`、`import_batches`、`import_rows`、`exchange_rates`，DDL 与 §1.2–§1.5、§1.8、§1.9、§1.10 一致，随后 `op.create_index(...)` 建 §4 里属于这些表的索引（含两个部分唯一索引，用 `postgresql_where=sa.text("status = 'parsing'")`）。
+
+`exchange_rates` 也在本步建（决策 §14.1）：这张表在现状里已被 `5ca7fe6e37db` 删除，目标态是**新建**，形状按 §1.10。它没有任何外键，放在本步的哪个位置都可以。
 
 注意：`import_batches.source_id` 引用 `finance_sources`，`import_rows.matched_transaction_id` 引用 `transactions`——这两张表此时已存在（现状就有），所以外键可以在 `create_table` 里内联。
 
@@ -750,9 +786,26 @@ op.create_index(
     postgresql_where=sa.text("status = 'parsing'"),
     sqlite_where=sa.text("status = 'parsing'"),
 )
+
+# 汇率缓存表（决策 §14.1）；现状里同名表已被 5ca7fe6e37db 删除，这里是新建
+op.create_table(
+    "exchange_rates",
+    sa.Column("date", sa.Date(), nullable=False),
+    sa.Column("base", sa.CHAR(3), nullable=False),
+    sa.Column("symbol", sa.CHAR(3), nullable=False),
+    sa.Column("rate", sa.Numeric(18, 8), nullable=False),
+    sa.Column("fetched_at", sa.DateTime(), nullable=False),
+    sa.PrimaryKeyConstraint("date", "base", "symbol", name="pk_exchange_rates"),
+    sa.CheckConstraint("rate > 0", name="rate_positive"),        # -> ck_exchange_rates_rate_positive
+    sa.CheckConstraint("base = upper(base)", name="base_upper"),      # -> ck_exchange_rates_base_upper
+    sa.CheckConstraint("symbol = upper(symbol)", name="symbol_upper"),  # -> ck_exchange_rates_symbol_upper
+    sa.CheckConstraint("base <> symbol", name="not_self"),        # -> ck_exchange_rates_not_self
+)
+op.create_index("ix_exchange_rates_pair_date", "exchange_rates",
+                ["base", "symbol", sa.text("date DESC")])
 ```
 
-**空库可运行**：是，纯 DDL。`exchange_rates` 是否在本步一并补建见 §待决 D-1。
+**空库可运行**：是，纯 DDL。
 
 ### 5.2 第 2 步：为每个现有用户建默认账本
 
@@ -823,6 +876,17 @@ def upgrade() -> None:
     op.execute("UPDATE finance_sources SET created_by = user_id, updated_by = user_id WHERE created_by IS NULL")
     op.execute("UPDATE finance_sources SET updated_at = created_at WHERE updated_at IS NULL")
     op.execute("UPDATE finance_sources SET default_currency = upper(default_currency)")  # ck_..._currency_upper 之前
+    # 与下面 transactions 的处理对称：本地 SQLite 开发库不开 PRAGMA foreign_keys
+    # (../current-design/02-database.md:53)，可能留下 user_id 指向已删用户的账户行，
+    # 那种行上面的相关子查询取不到 ledger_id，随后的 alter_column(nullable=False) 会失败。
+    # Postgres 上必然是 0 行（users.id 有外键），所以这条只对开发库有意义。
+    delete_and_warn("finance_sources", "ledger_id IS NULL", "no resolvable ledger_id")
+
+    # 必须在 batch 块之前把 user_id 上的索引显式删掉：batch 重建表时 Alembic 会用反射到的
+    # 索引清单在新表上重建索引，而 drop_column("user_id") 不会把它从那份清单里剔除，
+    # 于是新表上重建 ix_*_user_id 时报 OperationalError: no such column: user_id（见下方说明）。
+    for _idx in ("ix_accounts_user_id", "ix_finance_sources_user_id"):
+        op.execute(sa.text(f"DROP INDEX IF EXISTS {_idx}"))
 
     with op.batch_alter_table("finance_sources") as b:
         b.alter_column("ledger_id",  nullable=False)
@@ -839,7 +903,7 @@ def upgrade() -> None:
         b.create_check_constraint("currency_upper",
             "default_currency = upper(default_currency)")                      # -> ck_finance_sources_currency_upper
         b.create_check_constraint("name_not_blank", "length(trim(name)) > 0")   # -> ck_finance_sources_name_not_blank
-        b.drop_column("user_id")          # 旧索引随列消失（Alembic 库里叫 ix_accounts_user_id，create_all 库里叫 ix_finance_sources_user_id）
+        b.drop_column("user_id")          # 索引已在 batch 之前显式 drop（两个名字都跑过 DROP INDEX IF EXISTS）
     op.create_index("ix_finance_sources_ledger_id", "finance_sources", ["ledger_id"])
 
     # --- transactions ---
@@ -859,6 +923,12 @@ def upgrade() -> None:
     # 只可能命中开发用 SQLite 库里的孤儿行（见下方说明）；Postgres 上必然是 0 行。
     # 删之前先数一遍并打 warning，别让回填漏洞被静默吞掉（同 §待决 D-9）。
     delete_and_warn("transactions", "ledger_id IS NULL", "no resolvable ledger_id")
+
+    # 同理：transactions.user_id 上也有索引（迁移侧 e533c88884b7:73 建、模型侧
+    # backend/app/models/transaction.py:17 的 index=True，两条路径同名），
+    # 必须在 batch 块之前删掉，否则 batch 重建会试图在没有 user_id 的新表上重建它。
+    for _idx in ("ix_transactions_user_id",):
+        op.execute(sa.text(f"DROP INDEX IF EXISTS {_idx}"))
 
     with op.batch_alter_table("transactions") as b:
         b.alter_column("ledger_id",  nullable=False)
@@ -890,14 +960,21 @@ def upgrade() -> None:
 |---|---|---|---|
 | `transactions(occurred_at)` | `ix_transactions_occurred_at` | 同名 | `op.drop_index(...)` 直接删 |
 | `transactions(source_id)` | `ix_transactions_account_id` | `ix_transactions_source_id` | 两个名字都跑一遍 `DROP INDEX IF EXISTS` |
-| `finance_sources(user_id)` | `ix_accounts_user_id` | `ix_finance_sources_user_id` | 不用管，随 `drop_column("user_id")` 自动消失 |
+| `finance_sources(user_id)` | `ix_accounts_user_id` | `ix_finance_sources_user_id` | **batch 块之前**先对两个名字各跑一遍 `DROP INDEX IF EXISTS`；不能依赖 `drop_column` 自动清理——SQLite batch 重建会试图在新表上重建它并报 `no such column: user_id` |
+| `transactions(user_id)` | `ix_transactions_user_id`（e533c88884b7:73） | 同名（模型上是 `index=True`，backend/app/models/transaction.py:17） | 同上：**batch 块之前** `DROP INDEX IF EXISTS ix_transactions_user_id` |
 | `transactions(transfer_pair_id)` | `idx_transactions_transfer_pair` | `ix_transactions_transfer_pair_id`（模型上是 `index=True`，backend/app/models/transaction.py:24） | 第 4 步同样两个名字都跑 `DROP INDEX IF EXISTS` |
 
 `DROP INDEX IF EXISTS` 在 Postgres 与 SQLite 上都受支持，所以"两个名字都试"是安全的；如果换成 `op.drop_index("ix_transactions_source_id")`，在生产 Postgres 上会直接报 `index "ix_transactions_source_id" does not exist`，让整条链回滚到第 2 步。
 
+**为什么被 drop 的列上的索引必须自己删、不能等 `drop_column` 顺手带走**（本步两处 `drop_column("user_id")` 都受影响）：在 Postgres 上 `ALTER TABLE ... DROP COLUMN` 确实会连带删掉依赖该列的索引，所以只写 `drop_column` 也能跑通；但本文承诺整条链在 **SQLite** 上也跑得通（§5.0），而 SQLite 走的是 Alembic 的 batch 重建路径——Alembic 1.18.4 + SQLAlchemy 2.0.49 实测：`batch` 在进入块时反射出旧表的全部索引，`drop_column` 只从列清单里去掉这一列、**不**同步清理那份索引清单（`alembic/operations/batch.py` 的 `drop_column` 与 `_gather_indexes_from_both_tables`），于是重建新表后照样按旧清单执行 `CREATE INDEX ix_..._user_id ON ...(user_id)`，而新表已经没有 `user_id` 列，直接抛 `sqlite3.OperationalError: no such column: user_id`，整条链在开发机上就断了。因此凡是"要 drop 的列上带索引"的情况，**一律在进入 `batch_alter_table` 之前把索引显式 `DROP INDEX IF EXISTS` 掉**——这是本步两段 `for _idx in (...)` 前置循环的全部原因，也是它们必须放在 `with` 之外的原因。上表里 `finance_sources(user_id)` 与 `transactions(user_id)` 两行就是这么处理的。
+
 **空库可运行**：是。**有数据库可运行**：是，前提是第 2 步已给每个用户建了账本。
 
-关于 `DELETE FROM transactions WHERE ledger_id IS NULL`：**在 Postgres 上它不会命中任何行**——`transactions.source_id` 是 `NOT NULL` 且带外键（`backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:60,67`），指向已删账户的孤儿交易在库层面就不可能存在，回填的相关子查询必然取到值。它只对**开发用 SQLite 库**有意义：SQLite 默认 `PRAGMA foreign_keys = OFF`，现状也没有在连接上打开它（`../current-design/02-database.md` §1.2 第 53 行），所以本地库里确实可能留下指向已删账户的行。为了不把"回填逻辑写错"和"本来就是脏数据"混为一谈，删除前先 `SELECT count(*)` 并打 warning 日志（与 §待决 D-9 对 `amount = 0` 行的处理一致）：如果生产迁移日志里出现这条 warning，说明回填 SQL 本身有问题，应当中止排查而不是接受静默删除。
+关于两条 `delete_and_warn`（`finance_sources` 一条、`transactions` 一条）：
+
+`DELETE FROM finance_sources WHERE ledger_id IS NULL`：**在 Postgres 上同样不会命中任何行**——`finance_sources.user_id` 是 `NOT NULL` 且带指向 `users` 的外键（`backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:45-55`），第 2 步又给每个用户都建了账本，回填的相关子查询必然取到值。它只对**开发用 SQLite 库**有意义：那里 `PRAGMA foreign_keys` 是关的（`../current-design/02-database.md:53`），本地库里可能留着 `user_id` 指向已删用户的账户行，这种行取不到 `ledger_id`，接下来的 `b.alter_column("ledger_id", nullable=False)` 会直接失败。所以必须和 `transactions` 那条对称地兜底，而不是让本地开发者在第 3 步撞一个没头没尾的 NOT NULL 错误。顺序上它排在 `transactions` 的回填之前，因此被它删掉的账户所对应的交易随后也会因为取不到 `ledger_id` 而被下面那条 `delete_and_warn` 一并清掉——两条日志会同时出现，正好说明是同一批脏数据。
+
+`DELETE FROM transactions WHERE ledger_id IS NULL`：**在 Postgres 上它不会命中任何行**——`transactions.source_id` 是 `NOT NULL` 且带外键（`backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:60,67`），指向已删账户的孤儿交易在库层面就不可能存在，回填的相关子查询必然取到值。它只对**开发用 SQLite 库**有意义：SQLite 默认 `PRAGMA foreign_keys = OFF`，现状也没有在连接上打开它（`../current-design/02-database.md` §1.2 第 53 行），所以本地库里确实可能留下指向已删账户的行。为了不把"回填逻辑写错"和"本来就是脏数据"混为一谈，删除前先 `SELECT count(*)` 并打 warning 日志（与 §待决 D-9 对 `amount = 0` 行的处理一致）：如果生产迁移日志里出现这条 warning，说明回填 SQL 本身有问题，应当中止排查而不是接受静默删除。
 
 ### 5.4 第 4 步：交易的 kind、分类、退款、导入列
 
@@ -976,7 +1053,7 @@ def upgrade() -> None:
                     sqlite_where=sa.text("import_batch_id IS NOT NULL"))
 ```
 
-`TRANSACTION_CHECKS` 是**写在这个迁移文件顶部的字面量列表**，内容是 §1.7 DDL 里那 12 条 CHECK 的 `(后缀, SQL 表达式)` 二元组（含决策 §10 的全部 7 条），照抄字符串、不 import 任何应用代码（§5.0）。这里存的是**后缀**而不是全名——`create_check_constraint` 会经过 naming convention，`ck_transactions_` 前缀由它补上（§5.0），拼出来正好是 §1.7 DDL 里的全名：
+`TRANSACTION_CHECKS` 是**写在这个迁移文件顶部的字面量列表**，内容是 §1.7 DDL 里那 12 条 CHECK 的 `(后缀, SQL 表达式)` 二元组（其中 7 条来自决策 §10 的 8 个约束，第 8 个是 `uq_transactions_transfer_pair_role`，由上一行的 `create_unique_constraint` 单独建，见 §1.7.1），照抄字符串、不 import 任何应用代码（§5.0）。这里存的是**后缀**而不是全名——`create_check_constraint` 会经过 naming convention，`ck_transactions_` 前缀由它补上（§5.0），拼出来正好是 §1.7 DDL 里的全名：
 
 ```python
 TRANSACTION_CHECKS = [
@@ -1033,14 +1110,46 @@ def upgrade() -> None:
         # 同样只写后缀，convention 补 ck_users_ 前缀（§5.0）
         b.create_check_constraint("base_currency_upper", "base_currency = upper(base_currency)")  # -> ck_users_base_currency_upper
         b.create_check_constraint("language", "language IS NULL OR language IN ('zh','en')")     # -> ck_users_language
-        b.drop_constraint("fk_users_default_source", type_="foreignkey")   # 由 76227e076393 建立
-        b.drop_column("default_source_id")
+        # 注意：这个名字只存在于 Alembic 建出的库；create_all 库里这个外键是无名的。
+        # 下方"命名分叉"一段给出兜底写法（这里按写法 A：仅 Postgres 分支执行）。
+        if op.get_bind().dialect.name == "postgresql":
+            b.drop_constraint("fk_users_default_source", type_="foreignkey")  # 由 76227e076393:30-35 建立
+        b.drop_column("default_source_id")     # 决策 §14.6
     if op.get_bind().dialect.name == "postgresql":
         op.execute("COMMENT ON COLUMN users.base_currency IS "
                    "'Default base currency for newly created ledgers (see ledgers.base_currency)'")
 ```
 
-决策 §13 第 6 步只要求"把 `users.base_currency` 保留为新建账本默认币种"——语义上的保留，schema 上只加一句注释。同一步顺带做完 `users` 的其余收尾：`language`（决策 §11 的 `PATCH /me` 要改语言）、`updated_at`，以及删掉 `default_source_id`（决策 §3 之后账户归账本，这个列已无处安放；替代方案见 §待决 D-2）。删掉它同时消除了 `users ↔ finance_sources` 的外键环（§2）。注意语句顺序：`upper()` 归一化必须在 `create_check_constraint("base_currency_upper", ...)`（落库名 `ck_users_base_currency_upper`）之前执行，否则存量小写币种会让加约束失败。第 3 步与第 4 步在加 `ck_finance_sources_currency_upper` / `ck_transactions_currency_upper` 之前也各跑了一条同样的 `upper()` 语句，三步保持对称。这两列在 API 层其实已被 `CurrencyCode`（`^[A-Z]{3}$`，backend/app/schemas/currency.py:9）挡住、存量值大概率已是大写，而 `users.base_currency` 用的是没有 pattern 的裸 `str`（backend/app/schemas/user.py:12,35）——但迁移不应依赖这种非对称的假设，三条语句在空库上都是 no-op。
+**`drop_constraint("fk_users_default_source", ...)` 的命名分叉**（与 §5.3 的索引命名分叉是同一类问题）：这个外键名只存在于 **Alembic 建出的库**——它是 `76227e076393_add_default_source_to_users.py:30-35` 用 `op.create_foreign_key('fk_users_default_source', ...)` 显式命名建出来的；而 `create_all` 建出的开发库里，模型 backend/app/models/user.py:20 只写了 `ForeignKey("finance_sources.id", ondelete="SET NULL")`，没有名字，落库就是一个**无名外键**（`../current-design/02-database.md:373` 的命名分叉表正是这么记的）。在 SQLite 的 batch 重建路径上按名字找不到约束会直接报错，所以照抄上面那行代码只在 Postgres 上可靠。兜底写法二选一：
+
+```python
+# 写法 A（推荐）：SQLite 上跳过 drop_constraint，直接 drop_column
+#   —— batch 重建新表时本来就不会带上这一列，它的外键随之消失，不需要按名字删
+is_pg = op.get_bind().dialect.name == "postgresql"
+with op.batch_alter_table("users") as b:
+    ...
+    if is_pg:
+        b.drop_constraint("fk_users_default_source", type_="foreignkey")
+    b.drop_column("default_source_id")
+
+# 写法 B：给 batch 显式描述表结构，不依赖反射到的约束名
+users_tbl = sa.Table(
+    "users", sa.MetaData(),
+    sa.Column("id", sa.Uuid(), nullable=False),
+    sa.Column("email", sa.String(255), nullable=False),
+    sa.Column("password_hash", sa.String(255), nullable=False),
+    sa.Column("base_currency", sa.CHAR(3), nullable=False),
+    sa.Column("default_source_id", sa.Uuid(), nullable=True),
+    sa.Column("created_at", sa.DateTime(), nullable=False),
+    sa.PrimaryKeyConstraint("id", name="pk_users"),
+)
+with op.batch_alter_table("users", copy_from=users_tbl) as b:
+    b.drop_column("default_source_id")     # copy_from 里没写这个外键 = 重建后它就不存在
+```
+
+写法 A 更短，代价是分支代码；写法 B 没有分支，代价是要把 `users` 在第 6 步之前的形状抄一遍（抄错会静默丢约束）。本文按写法 A 书写，上面代码块里的 `b.drop_constraint(...)` 应理解为"仅 Postgres 分支"。同一条注意事项适用于任何"删一个由 `op.create_foreign_key` 显式命名、而模型侧无名"的约束。
+
+决策 §13 第 6 步只要求"把 `users.base_currency` 保留为新建账本默认币种"——语义上的保留，schema 上只加一句注释。同一步顺带做完 `users` 的其余收尾：`language`（决策 §11 的 `PATCH /me` 要改语言）、`updated_at`，以及删掉 `default_source_id`（决策 §14.6 明确要求；决策 §3 之后账户归账本，这个列已无处安放，默认账户改由前端本地记住上次使用的账户）。删掉它同时消除了 `users ↔ finance_sources` 的外键环（§2）。注意语句顺序：`upper()` 归一化必须在 `create_check_constraint("base_currency_upper", ...)`（落库名 `ck_users_base_currency_upper`）之前执行，否则存量小写币种会让加约束失败。第 3 步与第 4 步在加 `ck_finance_sources_currency_upper` / `ck_transactions_currency_upper` 之前也各跑了一条同样的 `upper()` 语句，三步保持对称。这两列在 API 层其实已被 `CurrencyCode`（`^[A-Z]{3}$`，backend/app/schemas/currency.py:9）挡住、存量值大概率已是大写，而 `users.base_currency` 用的是没有 pattern 的裸 `str`（backend/app/schemas/user.py:12,35）——但迁移不应依赖这种非对称的假设，三条语句在空库上都是 no-op。
 
 **空库可运行**：是。
 
@@ -1048,23 +1157,23 @@ def upgrade() -> None:
 
 | 步 | revision（占位 id）| slug | 关键动作 | 空库可跑 | 有数据可跑 |
 |---|---|---|---|---|---|
-| 1 | `b1f3c2a10d41` | create_ledgers_llm_and_import_tables | 建 6 张新表 + 索引（+ `exchange_rates`，取决于 §待决 D-1）| 是 | 是 |
+| 1 | `b1f3c2a10d41` | create_ledgers_llm_and_import_tables | 建 7 张新表（6 张业务表 + `exchange_rates`，决策 §14.1）+ 索引 | 是 | 是 |
 | 2 | `b1f3c2a10d42` | backfill_default_ledgers | 每用户一本"我的账本" + owner 成员 | 是（0 行） | 是 |
-| 3 | `b1f3c2a10d43` | scope_sources_and_transactions_to_ledger | `ledger_id` / `created_by` / `updated_by` / `updated_at` / `opening_balance`；删 `user_id` | 是 | 是 |
+| 3 | `b1f3c2a10d43` | scope_sources_and_transactions_to_ledger | `ledger_id` / `created_by` / `updated_by` / `updated_at` / `opening_balance`；删两张表的 `user_id`（batch 前先 `DROP INDEX IF EXISTS` 三个索引名）| 是 | 是 |
 | 4 | `b1f3c2a10d44` | transactions_kind_category_refund | `description→note`；kind / 转账 / 分类 / 退款 / 导入列 + 全部 CHECK | 是 | 是（含三条清洗语句） |
 | 5 | `b1f3c2a10d45` | drop_transaction_tags | 删 `transaction_tags` | 是 | 是 |
-| 6 | `b1f3c2a10d46` | users_base_currency_as_ledger_default | `language` / `updated_at`；删 `default_source_id` | 是 | 是 |
+| 6 | `b1f3c2a10d46` | users_base_currency_as_ledger_default | `language`（决策 §14.6）/ `updated_at`；删 `default_source_id`（决策 §14.6，外键名有分叉，见 §5.6）| 是 | 是 |
 
 每步的 `downgrade()` 策略（**只用于开发环境**；生产回退靠恢复备份）：
 
 | 步 | downgrade 做什么 | 是否无损 |
 |---|---|---|
-| 1 | 逆序 `op.drop_table(...)` 六张表，索引随表消失 | 无损（表本来就是新建的） |
+| 1 | 逆序 `op.drop_table(...)` 七张表（含 `exchange_rates`），索引随表消失 | 无损（表本来就是新建的；缓存表丢了会被下次请求重新拉回来） |
 | 2 | `DELETE FROM ledger_members;` 再 `DELETE FROM ledgers;` | **破坏性**：第 2 步之后用户新建的账本与回填的账本无法区分，会一并删掉 |
-| 3 | 加回 `user_id`（从 `created_by` 回填）、删掉新列与新约束、恢复旧索引名（`ix_transactions_account_id` / `ix_accounts_user_id`） | 有损：被 `delete_and_warn` 删掉的孤儿行不可恢复 |
+| 3 | 加回 `user_id`（从 `created_by` 回填）、删掉新列与新约束、重建 upgrade 里 drop 掉的全部旧索引（`ix_transactions_occurred_at`、`ix_transactions_account_id`、`ix_accounts_user_id`、`ix_transactions_user_id`；`create_all` 库上对应 `ix_transactions_source_id` / `ix_finance_sources_user_id`） | 有损：被 `delete_and_warn` 删掉的孤儿行（`finance_sources` 与 `transactions` 各一批）不可恢复 |
 | 4 | 按 §1.7 的**全名** drop 全部新 CHECK / UNIQUE / FK / 索引与新列（§5.0），`note` 改回 `description`，`op.create_index("idx_transactions_transfer_pair", ...)` | 有损：`amount = 0` 的行与被打散的 `transfer_pair_id` 不可恢复 |
 | 5 | `op.create_table("transaction_tags", ...)` 重建空表 | 有损：标签数据不可恢复（这正是决策 §13 允许删表的前提） |
-| 6 | 加回 `default_source_id` 与外键（值全为 NULL），删掉 `language` / `updated_at` 与两条 CHECK | 有损：`default_source_id` 的值不可恢复 |
+| 6 | 加回 `default_source_id`（值全为 NULL）与外键 `fk_users_default_source`（只在 Postgres 分支上按名字建，与 upgrade 的写法 A 对称），删掉 `language` / `updated_at` 与两条 CHECK | 有损：`default_source_id` 的值不可恢复 |
 
 ---
 
@@ -1148,7 +1257,22 @@ import_rows -> transactions -> import_batches -> finance_sources -> ledger_invit
 
 删除前要求二次确认并显示"将删除 N 笔交易、M 个账户"。
 
-### 6.8 用户删除
+### 6.8 汇率缓存（`exchange_rates`）
+
+这张表不属于任何账本、任何用户，生命周期与其它九张表完全独立（决策 §14.1）：
+
+| 事件 | 动作 |
+|---|---|
+| 需要一个 `(base, symbol, date)` 的汇率而库里没有 | 向 Frankfurter 请求那一天，把返回的行 upsert 进来（**按需写入**，没人预热、没有定时任务） |
+| 库里有，但同一 `(base, symbol)` 的最新一行 `fetched_at` 距今 ≥ 1 小时，且要的是"最新汇率" | 重新请求一次并 upsert，刷新 `rate` 与 `fetched_at`（决策 §14.1 的一小时节流） |
+| 库里有且在节流窗口内 | 直接用库里的值，不发请求 |
+| 历史日期的行 | **永不失效、永不清理**——决策 §8"一经公布不再变" |
+| 删账本 / 删账户 / 删用户 / 撤销导入 | 与本表无关，一行都不动（没有任何外键指向它） |
+| Frankfurter 不可用 | 不写入；能否降级用库里的旧值由 [`03-backend-api.md`](./03-backend-api.md) 的汇率接口定，本表不做特殊处理 |
+
+容量：每个货币对每个行情日一行。个人记账场景下的货币对个数是个位数，一年 260 个行情日，十年也只有几万行（§7.4），所以没有清理策略、没有分区。
+
+### 6.9 用户删除
 
 **本版本不提供接口**（决策 §11 的"我"分组只有 `GET /me`、`PATCH /me` 与 LLM 设置四个端点，没有 `DELETE /me`）。因此 `created_by` / `updated_by` / `ledgers.created_by` 上的外键都是 NO ACTION，不会产生悬垂引用。若运维必须删除某个用户，正确顺序是：先把该用户 owner 的账本转让或删除 → 删 `ledger_members` 行 → 删 `user_llm_settings`（有 CASCADE）→ 最后删 `users`；只要该用户在任何账本里创建过交易，最后一步就会因 `fk_transactions_created_by_users` 失败——这是有意的，防止把别人账本里的历史记录删出空洞。
 
@@ -1169,7 +1293,7 @@ import_rows -> transactions -> import_batches -> finance_sources -> ledger_invit
 | 日期 | `sa.Date` | `DATE` | 文本 `YYYY-MM-DD` |
 | 时间戳 | `sa.DateTime` | `TIMESTAMP WITHOUT TIME ZONE` | 文本 `YYYY-MM-DD HH:MM:SS.ffffff` |
 | JSON | `JSON().with_variant(JSONB, "postgresql")` | `JSONB` | `JSON`（TEXT） |
-| 自增主键 | `BigInteger().with_variant(Integer, "sqlite")` | `BIGSERIAL` | `INTEGER PRIMARY KEY`（rowid 别名） |
+| 复合主键 | `PrimaryKeyConstraint("date", "base", "symbol")` | 复合 `PRIMARY KEY` | 同左（`exchange_rates` 没有自增列，决策 §14.1 去掉了旧表的 `BIGSERIAL id`） |
 
 `CHAR(3)` 的一个细节：Postgres 的 `bpchar` 会把短值补空格，`length()` 又会忽略尾部空格——所以不要用 `length(currency) = 3` 做校验，用 `currency = upper(currency)` 加类型长度即可（§1.1）。所有币种在写入前由应用层 `.upper()`（沿用现状 backend/app/api/transactions.py:95）。
 
@@ -1216,7 +1340,7 @@ UPDATE transactions
 
 沿用现状：`backend/tests/conftest.py:10` 在导入任何 `app` 模块前把 `DATABASE_URL` 设成 `sqlite:///:memory:`，`conftest.py:47-50` 建专用引擎，`conftest.py:58-69` 的 session 级 fixture 调 `Base.metadata.create_all` / `drop_all`。目标态对这条路径的要求：
 
-1. **`create_all` 必须能建出全部十张表和全部 CHECK**。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 `ck_user_llm_settings_base_url` 先 `lower()` 再匹配（§1.2）；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.5）。JSON 列用 `with_variant`（§1.11），自增主键用 `with_variant`（§1.10）。
+1. **`create_all` 必须能建出全部十张表和全部 CHECK**（十张表含 `exchange_rates`，模型里必须有它，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 `ck_user_llm_settings_base_url` 先 `lower()` 再匹配（§1.2）；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.5）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要 §7.1 里那种 `BigInteger().with_variant(Integer, "sqlite")` 的写法（决策 §14.1）。
 2. **CHECK 在 SQLite 上是真的生效的**，所以约束测试可以全部跑在内存库上：插入 `kind='expense', amount=100` 必须抛 `IntegrityError`。这是把不变量写进数据库而不是只写在 pydantic 里的最大回报——现状的 `finance_sources.type` 只有注释没有 CHECK（backend/app/models/finance_source.py:19），SQLite 上根本测不到。
 3. **外键在 SQLite 上默认不生效**，现状没有任何 `PRAGMA foreign_keys=ON`（`../current-design/02-database.md` §1.2）。目标态在测试引擎上挂一个连接事件把它打开，否则 `ON DELETE CASCADE` / `SET NULL` 的行为在测试里完全测不到：
 
@@ -1266,8 +1390,10 @@ fixture 思路（`backend/tests/conftest.py`，两个 fixture）：
 | 空库 `upgrade head` | 六步全部执行，`alembic_version` = 最后一个 revision |
 | 空库 `upgrade head` 后再 `downgrade base` | 不报错，表全部消失（验证每个 `downgrade` 都写对了） |
 | 有数据的库升级 | 先在 head `8a4f4d66d893` 上灌入：2 个用户、每人 2 个账户、若干交易（含一对正确的转账、一对同号的错误转账、一条 `amount = 0`、一条 `source_id` 指向已删账户的孤儿行）、若干 `transaction_tags`；升级后断言：每人恰好一本账本且是 owner、`finance_sources.ledger_id` / `transactions.ledger_id` 全部非空且一致、`kind` 回填正确、同号 pair 被打散成单腿、零金额行被删、`transaction_tags` 不存在 |
-| schema 与模型一致 | 升级后用 `alembic revision --autogenerate` 的比较 API（`compare_metadata`）断言 diff 为空——防止迁移与模型漂移，这是现状最大的隐患（现状模型改过而没有对应迁移，`../current-design/02-database.md` §6）。本断言以 §待决 D-1 采纳建议默认值（第 1 步一并 `create_table` 建 `exchange_rates`）为前提；若 D-1 决定继续不落库，则模型里也不能有 `exchange_rates`，否则这条断言必然失败 |
-| 约束真的生效 | 逐条插入违反 §1.7.1 七条约束的行，断言 `IntegrityError`；插入合法行断言成功 |
+| schema 与模型一致 | 升级后用 `alembic revision --autogenerate` 的比较 API（`compare_metadata`）断言 diff 为空——防止迁移与模型漂移，这是现状最大的隐患（现状模型改过而没有对应迁移，`../current-design/02-database.md` §6）。迁移第 1 步和模型都必须有 `exchange_rates`（决策 §14.1），少一边这条断言就会失败 |
+| 约束真的生效 | 逐条插入违反 §1.7.1 八个约束的行，断言 `IntegrityError`；插入合法行断言成功 |
+| 索引被正确 drop | 在 head `8a4f4d66d893` 上灌数据后升级，断言 `ix_transactions_user_id`、`ix_accounts_user_id`、`ix_transactions_account_id`、`idx_transactions_transfer_pair` 都已不在 `pg_indexes` 里（对应 §5.3 / §5.4 那几段 `DROP INDEX IF EXISTS`）。同一组断言在 SQLite 上跑一遍更关键——batch 重建路径正是在这里会报 `no such column: user_id` |
+| `exchange_rates` 可用 | 升级后 upsert 同一 `(date, base, symbol)` 两次，断言只有一行且 `rate` / `fetched_at` 被刷新；插入 `rate = 0` 或 `base = symbol` 断言 `IntegrityError`（决策 §14.1、§1.10）|
 
 CI 里用一个 `postgres:15-alpine` service 提供 `TEST_POSTGRES_URL`；本地开发用 `infra/docker-compose.dev.yml` 已有的 db 容器（它把 5432 发布到宿主机）。没有该环境变量时这些测试自动 skip，`pytest -m "not postgres"` 保持纯 SQLite 的快速回路。
 
@@ -1279,8 +1405,8 @@ CI 里用一个 `postgres:15-alpine` service 提供 `TEST_POSTGRES_URL`；本地
 
 | # | 问题 | 建议默认值 |
 |---|---|---|
-| D-1 | 决策 §10 把 `exchange_rates` 列入目标表清单、§8 说"缓存表沿用现状"，但这张表在现状里已被 `5ca7fe6e37db` 删除，链上并不存在；六步迁移里也没有建它的位置 | 在第 1 步一并 `create_table`，形状沿用初始迁移（§1.10）。若决定继续不落库、每次实时调 Frankfurter，则从目标表清单里划掉这张表，十张表变九张 |
-| D-2 | `users.default_source_id` 删除后，"记一笔"表单的默认账户从哪来 | 不入库：前端按当前账本在 `localStorage` 记住上次使用的账户 id。若要服务端记忆，可加 `ledger_members.default_source_id`（每人每账本一个），但这是新增列，需决策确认 |
+| D-1 | ~~`exchange_rates` 建不建、什么形状~~ | **已由决策 §14.1 裁定**：新建缓存表 `(date, base, symbol, rate, fetched_at)`，主键 `(date, base, symbol)`，目标币种列名 `symbol`；在迁移第 1 步一并建（§1.10、§5.1）。本行只作记录 |
+| D-2 | ~~`users.default_source_id` 删除后默认账户从哪来~~ | **已由决策 §14.6 裁定**：删除该列，默认账户由前端本地记住上次使用的账户，不入库、不加 `ledger_members.default_source_id`（§5.6）。本行只作记录 |
 | D-3 | `import_rows` 的日期列名：决策 §5 字段清单写作 `date`，但 `transactions` 用的是 `occurred_at` | DB 列用 `occurred_at`（与交易表一致、避开与类型名同名），LLM 输出 JSON 与 API 字段保持决策 §6 的 `date` |
 | D-4 | `user_llm_settings` 的密钥列名：决策 §6 写作 `api_key` | 列名用 `api_key_encrypted`，避免被误读为明文；不额外存 `last4`，回显时解密取尾 4 位 |
 | D-5 | 同一账本内账户是否允许重名 | 允许（不加唯一约束），创建时若同名则在响应里带一个 warning 由前端提示。加 `UNIQUE (ledger_id, lower(name))` 会让"招商银行"这类同名不同卡号的场景很别扭 |
