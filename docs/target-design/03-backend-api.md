@@ -1075,7 +1075,7 @@ DELETE /api/v1/ledgers/8f0f7b2e-2a20-4c39-9c0f-2a9d5a1b6c31?confirm_name=%E5%AE%
 | 403 | `not_owner` | 不是 owner |
 | 400 | `validation_error` | `confirm_name` 缺失或与账本名不符 |
 
-副作用（一个事务，靠数据库外键 `ON DELETE CASCADE` 完成，见 [`./02-database.md`](./02-database.md)）：删除该账本的 `import_rows` → `import_batches` → `transactions` → `finance_sources` → `ledger_invites` → `ledger_members` → `ledgers` 本身，并删除 `UPLOAD_DIR` 下属于这些批次的原始文件。用户账号不受影响。
+副作用（一个事务，靠数据库外键 `ON DELETE CASCADE` 完成，见 [`./02-database.md`](./02-database.md)）：删除该账本的 `import_rows` → `import_batches` → `transactions` → `finance_sources` → `ledger_invites` → `ledger_members` → `ledgers` 本身，并删除整个 `UPLOAD_DIR/{ledger_id}/` 目录（该账本所有批次的 `{batch_id}.<ext>` 原文件与 `{batch_id}/pages/` 页面图，`shutil.rmtree(..., ignore_errors=True)`，同样是先提交事务再删盘）。用户账号不受影响。
 
 ### 5.17 `GET /api/v1/ledgers/{id}/members`
 
@@ -2099,7 +2099,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports?status=ready&status=failed
 }
 ```
 
-列表里的批次对象**不含** `raw_response`（LLM 原始响应，可能很大；列名见 [`./02-database.md`](./02-database.md) §1.8），需要时只在 §5.40 的单条里带（且只在 `DEBUG=true` 时带，§9.2）。
+列表里的批次对象**不含** `raw_response`（LLM 原始响应，可能很大；列名见 [`./02-database.md`](./02-database.md) §1.8），需要时只在 §5.40 的单条里带（且只在 `DEBUG=true` 时带，§9.2）。列表项的 `error` 与 §5.40 单条**同形状**，都是 `{"code": "…", "message": "…"}` 或 `null`，不是字符串（决策 §14.15）；列表项也不带 `pages` / `flags_summary` / `row_status_summary` / `uncategorized_count`，需要这些就查单条 §5.40。
 
 错误：404 `not_found`；422 `validation_error`（status 不在枚举内）。副作用：只读。
 
@@ -2451,8 +2451,8 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../commit
 
 | 批次状态 | 语义 | 做什么 |
 |---|---|---|
-| `ready` / `failed` / `uploaded` | **丢弃** | 删 `import_rows` → 删 `import_batches` → 删磁盘上这批的整个目录 `UPLOAD_DIR/{ledger_id}/{batch_id}/`（原文件 + 视觉路径渲染出的 `pages/*.png`，决策 §14.12）。没有任何交易被建过，所以没有别的影响 |
-| `committed` | **撤销** | 先 `DELETE FROM transactions WHERE import_batch_id = :bid`（决策 §5"删除这批建的所有交易，不限时限"），再删草稿行、批次，最后同样删掉整个 `UPLOAD_DIR/{ledger_id}/{batch_id}/` 目录 |
+| `ready` / `failed` / `uploaded` | **丢弃** | 删 `import_rows` → 删 `import_batches` → 删磁盘上这批的**原文件** `UPLOAD_DIR/{ledger_id}/{batch_id}.<ext>`（§5.38 落盘的那个，它是下面那个目录的**兄弟**、不在目录里）**以及**页面图目录 `UPLOAD_DIR/{ledger_id}/{batch_id}/`（视觉路径渲染出的 `pages/*.png`，决策 §14.12）——两件事都要做，只删其一会把用户的账单原件或页面图永久留在盘上。没有任何交易被建过，所以没有别的影响 |
+| `committed` | **撤销** | 先 `DELETE FROM transactions WHERE import_batch_id = :bid`（决策 §5"删除这批建的所有交易，不限时限"），再删草稿行、批次，最后同样**删原文件 `{batch_id}.<ext>` + 删 `{batch_id}/` 目录** |
 | `parsing` | 拒绝 | 409 `import_in_progress`，请等它跑完或失败 |
 
 调用方必须先带 `?dry_run=true` 问一次要删多少条，界面上确认后再真删（决策 §5"撤销前确认并显示条数"）：
@@ -2892,7 +2892,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 - **类型**：读前 4 KB 做魔数嗅探，不信任客户端的 `Content-Type` 和扩展名。白名单：`%PDF-` → pdf；`PK\x03\x04` 且解开后含 `xl/workbook.xml` → xlsx；`\xff\xd8\xff` → jpeg；`\x89PNG\r\n\x1a\n` → png；其余尝试按 UTF-8 / GBK 解码并检测分隔符 → csv。都不匹配 → 415 `unsupported_file`。
 - **路径**：落盘文件名**完全由服务端生成**（`UPLOAD_DIR/<ledger_id>/<batch_id>.<白名单里的扩展名>`），用户提供的 `filename` 只存进数据库列用于展示，绝不参与路径拼接（防目录穿越）。存前对它做长度截断（200 字符）和控制字符过滤。视觉路径的页面图同理：`UPLOAD_DIR/<ledger_id>/<batch_id>/pages/<page_no>.png` 三段全部是服务端已经校验过的值（两个 UUID + 一个 `int`，§5.46 的 `page_no: int = Path(ge=1)`），路径里没有任何一段来自用户提交的字符串，所以 §5.46 不需要额外做路径归一化或 `realpath` 比对。
 - **权限**：`UPLOAD_DIR` 目录 0700，文件 0600，属主是容器里的 `appuser`。
-- **清理**：批次被删（§5.45）时同步删掉这批的整个目录（原文件与 `pages/` 下的页面图，决策 §14.12）；另有一个每次启动时跑的清理，删掉 `UPLOAD_DIR` 下没有对应批次行的孤儿文件与孤儿目录。
+- **清理**：批次被删（§5.45）时同步删掉 `UPLOAD_DIR/<ledger_id>/` 下这批的 `{batch_id}.<ext>` 原文件（`os.remove`）**与** `{batch_id}/` 目录（含 `pages/` 下的页面图，`shutil.rmtree(..., ignore_errors=True)`，决策 §14.12）——原文件与目录是两个平级条目，必须分别删；另有一个每次启动时跑的清理，删掉 `UPLOAD_DIR` 下没有对应批次行的孤儿文件与孤儿目录。
 - **不做**：不解压嵌套压缩包、不跟随 PDF 里的外部引用、渲染 PDF 页面时不执行 JavaScript。
 
 ### 9.4 提示注入防御

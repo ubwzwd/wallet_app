@@ -1268,7 +1268,7 @@ COMMIT;
 顺序选择：**应用层在事务内先删交易再删批次**，列上的 `ON DELETE SET NULL` 只是兜底（万一有人绕过 API 直接删批次，交易不会丢，只是失去归属）。理由：如果反过来依赖 CASCADE 删交易，一次误删批次就会连带删掉用户已经手工编辑过的交易，不可逆；SET NULL 则至少保住数据。撤销时若某条交易是转账的一腿（还款行，决策 §5），两腿都带同一个 `import_batch_id`，会被同一条 `DELETE` 一起删掉。
 
 - **服务重启**：启动时执行 `UPDATE import_batches SET status='failed', error_code='import_interrupted', error_message='server restarted while parsing' WHERE status='parsing'`（决策 §5、§14.14），这样 `uq_import_batches_one_parsing` 不会被僵尸批次长期占用。`import_interrupted` 是 [`03-backend-api.md`](./03-backend-api.md) §4.2 错误注册表里登记的 code（决策 §14.4"不允许各章自造同义名"），写进 `error_code` 列的就是这个名字；接口只把 `error_code` / `error_message` 拼成 `error: {code, message}` 暴露，`error_chunk` 只进服务端日志（决策 §14.15）。
-- **磁盘侧**：批次无论走丢弃还是撤销，删库行之外还要删掉它在磁盘上的整个目录 `UPLOAD_DIR/{ledger_id}/{batch_id}/`——里面既有原始上传文件，也有视觉路径渲染出来的 `pages/{page_no}.png`（决策 §14.12"图片……批次删除时连同删除"）。数据库里没有任何列记这些文件，删库行不会自动带走它们，所以这一步必须由应用层显式做：先提交数据库事务，再 `shutil.rmtree(dir, ignore_errors=True)`；顺序反过来会在事务回滚时留下"库里有批次、磁盘上文件已丢"的坏状态。
+- **磁盘侧**：批次无论走丢弃还是撤销，删库行之外还要删掉它在磁盘上的**两个**条目——原始上传文件 `UPLOAD_DIR/{ledger_id}/{batch_id}.<ext>`（[`03-backend-api.md`](./03-backend-api.md) §5.38 落盘的路径）和页面图目录 `UPLOAD_DIR/{ledger_id}/{batch_id}/`（里面是视觉路径渲染出来的 `pages/{page_no}.png`，决策 §14.12"图片……批次删除时连同删除"）。注意原文件是那个目录的**兄弟**、不在目录里，所以 `os.remove(原文件)` + `shutil.rmtree(目录, ignore_errors=True)` 两句都要写，少一句就会把账单原件或页面图永久留在盘上。数据库里没有任何列记这些文件，删库行不会自动带走它们，所以这一步必须由应用层显式做：先提交数据库事务，再删盘；顺序反过来会在事务回滚时留下"库里有批次、磁盘上文件已丢"的坏状态。
 
 ### 6.7 账本删除
 
@@ -1440,8 +1440,12 @@ def test_upgrade_head_on_sqlite_drops_legacy_indexes(sqlite_migrated_db):
         all_indexes = {row[0] for row in conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE type='index'")}
     assert "ix_transactions_user_id" not in tx_indexes
-    assert "ix_transactions_user_id" not in all_indexes
-    assert "ix_finance_sources_user_id" not in all_indexes
+    # 两个名字都断言：alembic 路径上真正被建出来、需要被 drop 的是
+    # ix_accounts_user_id（初始迁移建表时的名字），ix_finance_sources_user_id
+    # 只出现在 create_all 建出的开发库里（命名分叉见 §5.3），两个都写才两条路径都盖到
+    for name in ("ix_transactions_user_id", "ix_accounts_user_id",
+                 "ix_finance_sources_user_id"):
+        assert name not in all_indexes
 ```
 
 （`PRAGMA index_list` 只看单表，`sqlite_master` 兜住"索引跟着 batch 重建换了张表"的情况，两个都查一遍。空库跑 `upgrade head` 覆盖不到回填分支，但覆盖得到本文最想拦的那类回归：batch 重建时撞上一个没被 drop 掉的旧索引。）
