@@ -369,7 +369,7 @@ export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 120_0
 
 三条贯穿全表的约定：**所有列表端点都返回 `{items, total}` 信封**（[`./03-backend-api.md`](./03-backend-api.md) §4.3），所以列表类函数的返回类型一律是 `Paged<T>`，没有裸数组；**所有 PATCH 请求体都必须带 `updated_at`**（§4.4 的乐观并发）；**折算三件套统一叫 `amount_base` / `rate_used` / `rate_date`**，取不到汇率时三者同时为 `null`。
 
-例外只有导入的四个字段，它们由决策 §14 的补充裁定引入，**以裁定为准**：`ImportBatch.error` 是 `{code, message}` 对象（决策 §14.15，`error_chunk` 只落库不进响应）、`ImportBatch.pages` 与 `ImportRow.page_no` 是缩略图的传输形态（决策 §14.12）、`ImportRow.counterparty` 是单腿转账的对手文本且 `PATCH` 可改（决策 §14.10）。[`./03-backend-api.md`](./03-backend-api.md) §5.40 / §5.42 / §5.43 若还没收录它们，需按裁定回补。
+例外只有导入的四个字段，它们由决策 §14 的补充裁定引入，**以裁定为准**：`ImportBatch.error` 是 `{code, message}` 对象（决策 §14.15，`error_chunk` 只落库不进响应）、`ImportBatch.pages` 与 `ImportRow.page_no` 是缩略图的传输形态（决策 §14.12）、`ImportRow.counterparty` 是单腿转账的对手文本且 `PATCH` 可改（决策 §14.10）。[`./03-backend-api.md`](./03-backend-api.md) §5.40 / §5.42 / §5.43 已按裁定收录这四个字段，第三轮校对逐字段核对无误。
 
 ```ts
 // ---------- 通用 ----------
@@ -535,7 +535,7 @@ export interface TransactionListParams {
   q?: string; kind?: TxKind[]; category_l1?: string; category_l2?: string;
   source_id?: Uuid[]; from?: IsoDate; to?: IsoDate; currency?: string;
   min_amount?: number; max_amount?: number; limit?: number; offset?: number;
-  with_refund_totals?: boolean;   // 退款候选选择器用，见待决 D-4
+  with_refund_totals?: boolean;   // 退款候选选择器用；03 §5.28 目前无条件返回，见待决 D-4
 }
 
 // 退款关联选择器用（决策 §1.1：每条显示已退/可退）。字段就是 Transaction 上
@@ -724,7 +724,7 @@ export interface CurrencyList { currencies: Record<string, string>; }
 
 **页面缩略图不需要新函数**（决策 §14.12）：`image_url` 直接来自 `importsApi.get` 返回的 `batch.pages`，前端**用 `apiClient` 取 blob** 再 `URL.createObjectURL` 挂到 `<img>` 上（`useQuery` 缓存 blob URL，组件卸载时 `revokeObjectURL`）。不能直接把 `image_url` 塞进 `<img src>`：令牌在 `Authorization` 头里（§3.2），浏览器发原生图片请求时不会带这个头，只会拿到 401——除非后端改成 cookie 鉴权，而全站是 Bearer 令牌，不为一张图破例。
 
-退款候选选择器复用 `txApi.list`：`refunded_total` / `refundable` 本来就是 03 §5.28 在 `kind='expense'` 行上返回的可选字段，选择器只是把它们当必填用（`RefundCandidate`）。是让它们默认就返回，还是加一个 `?with_refund_totals=1` 开关，见 [待决 D-4](#待决)。
+退款候选选择器复用 `txApi.list`（决策 §14.11 明确**不另设** `refund-candidates` 接口）：`refunded_total` / `refundable` 本来就是 03 §5.28 在 `kind='expense'` 行上返回的可选字段，选择器只是把它们当必填用（`RefundCandidate`）。是让它们默认就返回，还是加一个 `?with_refund_totals=1` 开关，见 [待决 D-4](#待决)。
 
 ### 3.5 Query key 规范
 
@@ -819,7 +819,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 }
 ```
 
-`errors.*` 语言包：`errorMessage()` 查的是 `errors.${e.code}`，所以**每个 key 必须是 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的 code 原名**（决策 §14.4）。下表覆盖注册表的全部 45 个 code，外加一个纯前端的 `network_error` 和兜底的 `unknown`；顺序与注册表一致。
+`errors.*` 语言包：`errorMessage()` 查的是 `errors.${e.code}`，所以**每个 key 必须是 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的 code 原名**（决策 §14.4）。下表覆盖注册表的全部 46 个 code（含决策 §14.14 新增的 `import_interrupted`），外加一个纯前端的 `network_error` 和兜底的 `unknown`；顺序与注册表一致。
 
 | code | HTTP | zh | en |
 |---|---|---|---|
@@ -865,10 +865,10 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | `batch_not_failed` | 409 | 只有解析失败的批次才能重试 | Only a failed batch can be retried |
 | `rows_uncategorized` | 409 | 还有行没有选一级分类，补齐后才能提交 | Some rows still need a top-level category |
 | `rows_all_skipped` | 409 | 这批账单的所有行都被跳过了，没有可提交的内容 | Every row is skipped — there's nothing to submit |
+| `import_interrupted` | 500 | 解析被服务重启打断了，请重新解析这批账单 | Parsing was interrupted by a server restart — please run it again |
 | `llm_not_configured` | 409 | 还没配置模型，先去个人设置里填 | Set up your model first in Settings |
 | `llm_error` | 502 | 模型调用失败：{{detail}} | The model call failed: {{detail}} |
 | `fx_unavailable` | 503 | 暂时拿不到汇率，折算金额可能缺失 | Exchange rates are unavailable right now |
-| `import_interrupted` | 500 | 解析被服务重启打断了，请重新解析这批账单 | Parsing was interrupted by a server restart — please run it again |
 | `internal_error` | 500 | 服务器出错了，请稍后重试 | Something went wrong on the server. Please try again. |
 | `unknown` | — | 出错了（{{detail}}） | Something went wrong ({{detail}}) |
 
@@ -1769,12 +1769,12 @@ token 定义在 `frontend/src/theme/tokens.ts`，由一个 `ThemeProvider` 按 `
 |---|---|---|
 | D-1 | 路由库选 Expo Router v6 还是 `@react-navigation/native` + 手写 `linking`？（§1.1） | **Expo Router v6**：Web 上直接是真实 URL，将来做 App（决策 §0.1）时深链接零成本 |
 | D-2 | 决策 §11 同时写了「现有 `auth` 接口保留」和 `GET /me` / `PATCH /me`。现状是 `GET /auth/me` / `PATCH /auth/me`。两者共存还是迁走？（§2.1） | **迁到 `/me`**，`/auth` 下只留 `register` / `login`；旧路径不保留（只有测试数据，决策 §13） |
-| D-4 | 退款关联选择器需要每条候选的「已退/可退」（决策 §1.1），接口形态未定：给 `GET .../transactions` 加 `?with_refund_totals=1`，还是单开 `GET .../transactions/{tid}/refunds`？（§3.4） | **加 `?with_refund_totals=1`**：复用同一套筛选（决策 §1.1 明确要求复用列表筛选），少一个端点 |
+| D-4 | 退款关联选择器需要每条候选的「已退/可退」（决策 §1.1）。**「要不要单开接口」这一半已由决策 §14.11 裁定**：不单开，选择器复用 `GET /ledgers/{id}/transactions`；剩下的一半是这两个字段默认返回还是靠 `?with_refund_totals=1` 开关（§3.4） | **默认返回**：[`./03-backend-api.md`](./03-backend-api.md) §5.28 已经把 `refunded_total` / `refundable` 写成"`kind == 'expense'` 的行上无条件出现的可选字段"，`with_refund_totals` 只是留给"想省掉这次 JOIN"的开关；若确认不要这个开关，把 §3.4 `TxListParams` 里的这一行删掉即可 |
 | D-5 | 前端怎么知道 `REGISTRATION_OPEN` 的值，才能在打开 `/register` 时就提示而不是提交后才报错？（§4.2） | 加一个匿名可读的 `GET /api/v1/config`，返回 `{registration_open: bool}`；在此之前前端只按提交后的 403 `registration_closed` 处理 |
 | D-6 | 交易详情页要显示「这笔支出被退了多少」，需要按 `refund_of` 反查退款行。接口形态未定（§4.7） | 详情响应里带 `refunds: RefundSummary[]`（每条含 id、日期、金额）；或复用 D-4 的 `with_refund_totals` |
 | D-7 | 交易列表能否按 `import_batch_id` 筛选（导入结果页的「查看这批交易」需要）？决策 §4 的筛选参数里没有它（§4.10 步骤 4） | **加 `?import_batch_id=` 参数**；不加的话该按钮只能退化成跳到批次详情 |
 | D-8 | `GET /categories` 的 `version` 是什么形态（语义版本 / 内容哈希 / 日期串）？（§3.3 的 `CategoryTree`）。**结构那一半已由 [`./03-backend-api.md`](./03-backend-api.md) §5 回答**：一级/二级是嵌套 `children[]`，不是扁平带 `parent` | `version` **用日期串**（如 `"2026-09-09"`），与 [`./03-backend-api.md`](./03-backend-api.md) §5.11 正文和该章待决 16 一致——初稿这里写"内容哈希"，校对时统一到日期串 |
-| D-9 | ~~`ImportRow` 的页面缩略图怎么给前端~~ | **已由决策 §14.12 裁定**（本章按裁定改过）：批次响应在 `used_vision = true` 时带 `pages: [{page_no, image_url}]`，行上带 `page_no`，图片走带鉴权的 `GET /ledgers/{id}/imports/{bid}/pages/{page_no}`；服务端把整页图存在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`（[`./05-import-and-llm.md`](./05-import-and-llm.md) §1.3、§2.5）。前端不新增 API 函数，用 `apiClient` 取 blob 显示（§3.4、§4.11.6）。解析进度那一半早已被 [`./03-backend-api.md`](./03-backend-api.md) §5.40 回答（`progress: {done, total}`）。**跨章待办**：03 §5.40 / §5.42 若还没收录 `pages` 与 `page_no`，需按裁定回补 |
+| D-9 | ~~`ImportRow` 的页面缩略图怎么给前端~~ | **已由决策 §14.12 裁定**（本章按裁定改过）：批次响应在 `used_vision = true` 时带 `pages: [{page_no, image_url}]`，行上带 `page_no`，图片走带鉴权的 `GET /ledgers/{id}/imports/{bid}/pages/{page_no}`；服务端把整页图存在 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`（[`./05-import-and-llm.md`](./05-import-and-llm.md) §1.3、§2.5）。前端不新增 API 函数，用 `apiClient` 取 blob 显示（§3.4、§4.11.6）。解析进度那一半早已被 [`./03-backend-api.md`](./03-backend-api.md) §5.40 回答（`progress: {done, total}`）。**跨章核对**：03 §5.40 的 `pages` 与 §5.42 的 `page_no` 已按裁定收录（第三轮已核对） |
 | D-11 | 账本内是否需要「按人筛选」（只看某个成员记的账）？决策 §4 的筛选参数没有 `created_by` | **本版本不做**。多人账本刚起步，等有实际需求再加 |
 | D-12 | 语言字段 `users.language` | **已由决策 §14.6 裁定**：`users.language VARCHAR(8) NULL`，取值 `zh` / `en`，NULL 表示跟随系统；`PATCH /me` 可改。前端的 `User.language` 与 `UserUpdate.language` 已按此定义（§3.3、§5.1）。DDL 见 [`02-database.md`](./02-database.md)，同一结论也记在 [`01-domain-and-flows.md`](./01-domain-and-flows.md) 待决 2 |
 | D-13 | 视觉方向最终选 A / B / C 哪个？（§6.2） | 推荐 **A「账本纸张」**；以 ★ 四张 mockup 确认为准（决策 §0.3） |

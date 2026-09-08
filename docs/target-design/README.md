@@ -15,7 +15,7 @@
 | [`00-decisions.md`](./00-decisions.md) | **决策记录**。2026-09 设计评审逐条确认的结论，含评审后的补充裁定 §14。唯一事实来源 | 任何时候拿不准"到底定了什么"就回来查；它与 01–05 冲突时以它为准 |
 | [`01-domain-and-flows.md`](./01-domain-and-flows.md) | 领域模型、四种 kind 的语义、端到端流程、ASCII 状态机、统计口径的精确定义与算例、不变量清单 | 先读这一章。它回答"这个产品在概念上是什么" |
 | [`02-database.md`](./02-database.md) | 十张表的完整 Postgres DDL、ER 图、约束归属（数据库/应用层/无人保证）、索引、六步迁移链、数据生命周期、测试建表方式 | 要写模型或迁移时 |
-| [`03-backend-api.md`](./03-backend-api.md) | 后端模块图、配置字段、鉴权、通用约定、**48 个端点逐个说明**、错误 code 唯一注册表、汇率服务、后台任务、限流、测试计划 | 要写接口或对接接口时 |
+| [`03-backend-api.md`](./03-backend-api.md) | 后端模块图、配置字段、鉴权、通用约定、**49 个端点逐个说明**、错误 code 唯一注册表、汇率服务、后台任务、限流、测试计划 | 要写接口或对接接口时 |
 | [`04-frontend.md`](./04-frontend.md) | 路由与信息架构、全局状态、API 客户端与全部 TypeScript 类型、每个页面的交互、i18n、视觉重设计方向、前端测试 | 要写前端时 |
 | [`05-import-and-llm.md`](./05-import-and-llm.md) | 账单导入流水线：上传 → 抽取 → 分块 → LLM → 归一化 → 自动标记 → 提交 / 撤销；含完整提示词、输出 JSON Schema、成本估算、安全与测试 | 要做导入功能时 |
 
@@ -171,6 +171,12 @@ frontend/src/
 | 各章 | `import_rows` 的行号列名 | §14.5：`row_no`（本轮统一为**从 1 起**） |
 | 各章 | `kind` 能不能跨 `transfer` 边界互改 | §14.3：不能，400 `kind_change_not_allowed` |
 | 各章 | 篇幅 | §14.8：行数只是参考，不作为验收项 |
+| 05 待决 15 | 单腿转账的对手文本在草稿行里怎么存 | §14.10：`import_rows` 加 `counterparty VARCHAR(100) NULL`，`PATCH .../rows/{rid}` 可改，提交时写进 `transactions.counterparty` |
+| 04 D-4 · 05 §8.2 | 退款候选要不要单独一个接口 | §14.11：**不单独建接口**。记账表单与 review 的「关联原单」选择器都复用 [03 §5.28](./03-backend-api.md#528-get-apiv1ledgersidtransactions)（expense 行自带 `refunded_total` / `refundable`） |
+| 02 D-8 · 04 D-9 · 05 待决 7 | 视觉路径的页面缩略图存哪里、怎么给前端 | §14.12：不入库，存 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`；批次响应在 `used_vision = true` 时带 `pages: [{page_no, image_url}]`，草稿行带新增列 `import_rows.page_no`；图片经鉴权端点 [03 §5.46](./03-backend-api.md#546-get-apiv1ledgersidimportsbidpagespage_no) 取，批次删除时连同删掉 |
+| 各章 | 账本名的长度上限 | §14.13：1–100 字符，与账户名一致 |
+| 05 待决 16 | 服务重启时把 `parsing` 批次标 `failed` 用哪个 code | §14.14：`import_interrupted`（500），已登记进 [03 §4.2](./03-backend-api.md#42-全局-code-清单) 注册表，`import_batches.error_code` 写同一个名字 |
+| 05 待决 5 | 批次错误的三列怎么暴露 | §14.15：库里存 `error_code` / `error_message` / `error_chunk` 三列，接口只回 `error: {code, message}`；`error_chunk` 只进服务端日志，前端不展示 |
 
 ### 6.2 校对时为消除跨章矛盾做的统一（请追认，或告诉我改回去）
 
@@ -239,11 +245,11 @@ frontend/src/
 |---|---|---|
 | 04-D-1 | 路由库选 Expo Router v6 还是 `@react-navigation/native` + 手写 linking | Expo Router v6（Web 上是真实 URL，将来做 App 深链接零成本） |
 | 04-D-2 | `/auth/me` 还是 `/me`（与 03-1 是同一件事） | 迁到 `/me`，`/auth` 下只留 register / login |
-| 04-D-4 | 退款关联选择器要的"已退/可退"金额从哪来 | 给 `GET .../transactions` 加 `?with_refund_totals=1`，复用同一套筛选 |
+| 04-D-4 | 退款关联选择器要的"已退/可退"金额怎么给（**"要不要单开接口"已由 §14.11 裁定为不单开**，只剩这一半） | 默认返回：03 §5.28 已把 `refunded_total` / `refundable` 写成 expense 行上无条件出现的可选字段；`?with_refund_totals=1` 只是省 JOIN 的开关，不要就删掉 |
 | 04-D-5 | 前端怎么提前知道 `REGISTRATION_OPEN` | 加匿名可读的 `GET /api/v1/config` 回 `{registration_open}`；在此之前只按提交后的 403 处理 |
 | 04-D-6 | 交易详情要显示"这笔支出被退了多少" | 详情响应里带 `refunds: RefundSummary[]`，或复用 D-4 |
 | 04-D-7 | 交易列表能否按 `import_batch_id` 筛选 | 加 `?import_batch_id=` 参数 |
-| 04-D-9 · 05-7 | 视觉路径的页面缩略图怎么给前端。**两章建议不同**：04 建议批次响应给 `pages: [{page_no, image_url}]` + `GET .../imports/{bid}/pages/{n}.png`；05 建议 `GET .../imports/{bid}/rows/{rid}/thumbnail` 现渲染 | 需要择一。缩略图本身不落库（02 D-8 已定），只是传输形态未定 |
+| 04-D-8 | `GET /categories` 的响应结构：一级/二级是嵌套 `children` 还是扁平带 `parent` | 嵌套 `children`（前端级联选择器直接用）；`version` 形态见 U-9 |
 | 04-D-11 | 要不要"按人筛选"（只看某成员记的账） | 本版本不做 |
 | 04-D-13 | 视觉方向最终选 A / B / C 哪个 | 推荐 A「账本纸张」；以四张 mockup 确认为准 |
 
@@ -266,15 +272,15 @@ frontend/src/
 
 | 文件 | 行数 |
 |---|---|
-| [`00-decisions.md`](./00-decisions.md) | 220 |
+| [`00-decisions.md`](./00-decisions.md) | 227 |
 | [`01-domain-and-flows.md`](./01-domain-and-flows.md) | 1270 |
-| [`02-database.md`](./02-database.md) | 1447 |
-| [`03-backend-api.md`](./03-backend-api.md) | 2978 |
-| [`04-frontend.md`](./04-frontend.md) | 1784 |
-| [`05-import-and-llm.md`](./05-import-and-llm.md) | 2387 |
-| 本文 `README.md` | 336 |
+| [`02-database.md`](./02-database.md) | 1486 |
+| [`03-backend-api.md`](./03-backend-api.md) | 3054 |
+| [`04-frontend.md`](./04-frontend.md) | 1795 |
+| [`05-import-and-llm.md`](./05-import-and-llm.md) | 2408 |
+| 本文 `README.md` | 381 |
 
-各章都超出了最初给写作者的行数参考区间。这是**有意的**：决策 §14.8 明确"各章的行数目标只是参考，**不作为验收项**"，并且不得为压行数删掉被点名要求的内容，也不要把提示词、schema 拆到附录文件。十张表的完整 DDL、48 个端点的请求响应、完整的 system prompt 与输出 schema 必须一次给全，读者才能照着实现。行数只在这里作为一个规模参考，不代表质量。
+各章都超出了最初给写作者的行数参考区间。这是**有意的**：决策 §14.8 明确"各章的行数目标只是参考，**不作为验收项**"，并且不得为压行数删掉被点名要求的内容，也不要把提示词、schema 拆到附录文件。十张表的完整 DDL、49 个端点的请求响应、完整的 system prompt 与输出 schema 必须一次给全，读者才能照着实现。行数只在这里作为一个规模参考，不代表质量。
 
 ---
 
@@ -283,7 +289,7 @@ frontend/src/
 - [`00-decisions.md`](./00-decisions.md) — 决策记录（唯一事实来源，含 §14 评审后的补充裁定）
 - [`01-domain-and-flows.md`](./01-domain-and-flows.md) — 领域模型、流程、状态机、统计口径、不变量
 - [`02-database.md`](./02-database.md) — 十张表的 DDL、ER 图、约束、索引、迁移链、生命周期
-- [`03-backend-api.md`](./03-backend-api.md) — 模块图、配置、鉴权、48 个端点、错误 code 注册表、汇率、后台任务、限流、测试
+- [`03-backend-api.md`](./03-backend-api.md) — 模块图、配置、鉴权、49 个端点、错误 code 注册表、汇率、后台任务、限流、测试
 - [`04-frontend.md`](./04-frontend.md) — 路由、状态、API 客户端与类型、页面、i18n、视觉方向、测试
 - [`05-import-and-llm.md`](./05-import-and-llm.md) — 抽取、分块、提示词、输出 schema、归一化、自动标记、提交与撤销、成本、安全、测试
 
@@ -291,7 +297,11 @@ frontend/src/
 
 ## 9. 校对记录
 
-本轮（第二轮）除新增本文外，还以 [`00-decisions.md`](./00-decisions.md)（含 §14）为准，逐项核对并修改了 01–05。实际改动如下——**没有改 `00-decisions.md`，也没有改 `../current-design/`、`backend/`、`frontend/`、`infra/`、`.planning/`**。
+这套文档写完后做过两轮跨章校对，改动逐条记在这里。两轮都**没有改 `00-decisions.md`，也没有改 `../current-design/`、`backend/`、`frontend/`、`infra/`、`.planning/`**。
+
+### 9.0 第二轮改动
+
+第二轮除新增本文外，还以 [`00-decisions.md`](./00-decisions.md)（含 §14）为准，逐项核对并修改了 01–05。实际改动如下。
 
 **错误 code（决策 §14.4）**
 
@@ -321,6 +331,41 @@ frontend/src/
 - 限制数值：10 MB、2000 行、150 行/块、6 位码、10 分钟、15 分钟 5 次、每小时 10 批、每分钟 10 次登录、10 本 / 10 人，各章一致。
 - 余额口径（§14.2）、kind 互改规则（§14.3）、`exchange_rates` 的 `symbol` 列（§14.1）：01/02/03/04 均已按裁定写，本轮未发现残留。
 - 每章 `## 另见` 都已链接 README、`00-decisions.md`、其余各章与相关的 `../current-design/` 章节。
+
+### 9.1 第三轮（收尾）改动
+
+第三轮只做终审点名的局部修正与全套终校，没有重写任何章节；同样**没有改 `00-decisions.md`，也没有改 `../current-design/`、`backend/`、`frontend/`、`infra/`、`.planning/`**。
+
+**README 自身**
+
+- 端点数：03 按决策 §14.12 新增 `GET .../imports/{bid}/pages/{page_no}` 后是 **49** 个（03 §0 的"目标是 49 条业务路由 = 7 保留 + 4 改语义 + 9 改前缀 + 29 新增"、§5.1–§5.49 的小节数、§0 对照表的行数三者一致）。本文 §0、§7、§8 里遗留的"48 个端点"三处已改成 49。
+- §7 文档规模表按 `wc -l` 的实际数字重填。
+- §6.1 补齐决策 §14.10–§14.15 六条裁定；§6.3 里已被裁定的条目（原 `04-D-9 · 05-7` 页面缩略图）移出，`02-D-8` 不再出现在"仍需你决定"区（它已由 §14.12 裁定，02 章待决表也已标注）。
+- §6.3 补上 **04-D-8 的另一半**：`GET /categories` 的响应结构（嵌套 `children` 还是扁平带 `parent`）；`version` 形态那一半仍在 §6.2 的 U-9。
+- §6.3 的 `04-D-4` 改写：决策 §14.11 已裁定"不单开退款候选接口"，只剩"两个金额字段默认返回还是靠开关"这一半。
+
+**决策 §14.10–§14.15 的落地核对**
+
+| 裁定 | 落地位置 | 结论 |
+|---|---|---|
+| §14.10 `import_rows.counterparty` | [02 §1.9](./02-database.md#19-import_rows) DDL 与列语义 · [03 §5.43](./03-backend-api.md#543-patch-apiv1ledgersidimportsbidrowsrid) 可改字段 + [§5.44](./03-backend-api.md#544-post-apiv1ledgersidimportsbidcommit) 写入 `transactions.counterparty` · [04 §3.3](./04-frontend.md#33-类型定义) `ImportRow.counterparty` · [05 §0.2](./05-import-and-llm.md#02-与后台任务模型的接口) 说明它不是 `DraftRow` 字段 | 四章齐备 |
+| §14.10 / §14.12 `import_rows.page_no` | [02 §1.9](./02-database.md#19-import_rows) · [03 §5.42](./03-backend-api.md#542-get-apiv1ledgersidimportsbidrows)（只读字段）· [04 §3.3](./04-frontend.md#33-类型定义) / §4.11.6 · [05 §0.2](./05-import-and-llm.md#02-与后台任务模型的接口) | 四章齐备 |
+| §14.11 退款候选复用列表接口 | [03 §5.28](./03-backend-api.md#528-get-apiv1ledgersidtransactions)（明确不另设 `refund-candidates`）· [04 §3.4](./04-frontend.md#34-函数清单与决策-11-逐条对应) / §4.6.3 · [05 §0.2](./05-import-and-llm.md#02-与后台任务模型的接口) / §8.2 / §8.4 | 三章齐备；04 待决 D-4 只剩"默认返回还是开关" |
+| §14.12 页面缩略图端点 | [03 §5.46](./03-backend-api.md#546-get-apiv1ledgersidimportsbidpagespage_no)（唯一返回 `image/png` 的路由）· [04 §4.11.6](./04-frontend.md#4116-视觉路径的页面缩略图侧栏决策-5) · [05 §1.3](./05-import-and-llm.md#13-存储路径与保留策略) / [§2.5](./05-import-and-llm.md#25-扫描-pdfpypdfium2-渲染--视觉) | 三章齐备；02 §6.6 也写了批次删除要 `rmtree` 掉 `pages/` |
+| §14.13 账本名 1–100 | [01 §3.2](./01-domain-and-flows.md#32-创建账本决策-2) · [03 §5.13](./03-backend-api.md#513-post-apiv1ledgers) / [§5.15](./03-backend-api.md#515-patch-apiv1ledgersid) · [04 §4.3](./04-frontend.md#43-账本列表-ledgers新建-ledgersnew加入-ledgersjoin) 的新建账本表单 | 三章齐备 |
+| §14.14 `import_interrupted` | [02 §6.6](./02-database.md#66-导入批次的丢弃与撤销) · [03 §4.2](./03-backend-api.md#42-全局-code-清单) 注册表 + §7.4 · [04 §3.7](./04-frontend.md#37-错误归一化与-detail-code--文案) 文案表 · [05 §0.1](./05-import-and-llm.md#01-全景-ascii-流程图) / [§3.4](./05-import-and-llm.md#34-单块失败与重试) 的失败 code 表 | 四章齐备 |
+| §14.15 `error: {code, message}` | [02 §1.8](./02-database.md#18-import_batches) 存三列 · [03 §5.40](./03-backend-api.md#540-get-apiv1ledgersidimportsbid) 只暴露两字段 · [04 §3.3](./04-frontend.md#33-类型定义) / §4.10 · [05 §3.4](./05-import-and-llm.md#34-单块失败与重试) | 四章齐备；`error_chunk` 全套文档里都只出现在库/日志侧 |
+
+**错误 code 全量比对（决策 §14.4）**
+
+- 注册表现有 **46** 个 code（第二轮 45 个 + 决策 §14.14 的 `import_interrupted`）。
+- 脚本把 01 / 02 / 04 / 05 里所有"出现在谈错误的行上的 snake_case 反引号标识符"与注册表求差，只剩两个不在注册表里的名字，都是**有意的**：04 §3.7 的 `network_error`（纯前端伪 code，请求根本没发出去时用）和 05 待决 16 里带说明的 `batch_not_committed`（明确写着"不再需要"，只作记录）。除此之外零例外。
+- 04 §3.7 的文案表：46 个注册 code 一一对应，外加 `network_error` 与兜底的 `unknown`，共 48 行；本轮把"覆盖全部 45 个 code"改成 46，并把 `import_interrupted` 一行挪到 `rows_all_skipped` 之后，与注册表顺序一致。
+
+**其余残留**
+
+- 04 待决 D-9、04 §3.3 引言、05 待决 15 / 16 里"03 若还没收录……需回补"这类**跨章待办**，本轮逐条到 03 里核对后已经全部落地，措辞改成"已核对"，避免读者以为还有欠账。
+- 01 §3.2 的账本名校验补上 `（决策 §14.13）` 出处标注；05 待决 16 里指向 §10.2 的失效小节号改成 §0.1 / §3.4。
 
 ---
 

@@ -415,7 +415,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 - **触发者**：任何已登录用户。
 - **前置**：该用户当前拥有（作为成员参与的）账本数 < 10。
 - **步骤**：`POST /api/v1/ledgers`，体 `{"name", "base_currency"}`（`base_currency` 缺省取 `users.base_currency`）→ 事务内建 `ledgers` + `ledger_members(role='owner')` → 201 返回账本。
-- **服务端校验**：`name` 长度 1–100；`base_currency` 3 位大写字母；账本数已达 10 → 409 `ledger_limit_reached`。
+- **服务端校验**：`name` 长度 1–100（决策 §14.13，与账户名一致）；`base_currency` 3 位大写字母；账本数已达 10 → 409 `ledger_limit_reached`。
 - **状态变化**：新账本进入 `GET /ledgers` 列表；前端把当前账本 id 切到新账本（放在 URL 里，决策 §12）。
 - **失败分支**：校验失败无副作用。
 
