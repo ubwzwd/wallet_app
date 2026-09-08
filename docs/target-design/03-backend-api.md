@@ -6,6 +6,10 @@
 
 阅读前提：读者没看过这个仓库。全部路径相对于仓库根目录。技术栈沿用现状：FastAPI 0.109.2 + SQLAlchemy 2.0.44 + Alembic + PostgreSQL 15（测试用 SQLite），汇率来自 Frankfurter。
 
+> **修订说明**：本版按终审意见与 [`00-decisions.md`](./00-decisions.md) §14「评审后的补充裁定」修订。§4.2 的 code 清单是全仓库**唯一的错误 code 注册表**（决策 §14.4），01 / 04 / 05 章引用的每个 code 都必须能在这里找到；本版补齐了 `kind_change_not_allowed`、`llm_test_rate_limited`、`register_rate_limited`，把描述与触发条件不符的 `source_currency_mismatch` 改名为 `same_source` 并在 §5.33 / §5.34 真正使用。另外：`import_rows` 的行号列统一为 `row_no`（决策 §14.5）；账户余额口径改为决策 §14.2；`exchange_rates` 的目标币种列统一为 `symbol`（决策 §14.1）；`kind` 跨 transfer 边界互改被明确禁止（决策 §14.3，见 §5.31）。
+>
+> **第二轮修订**：§4.2 的 `validation_error` 明确为 **422（schema 层）/ 400（业务层）** 双状态码，正文里的 400 与 422 用法都在这一条之下；§5.6 的 `language` 允许显式 `null`（恢复「跟随系统」，决策 §14.6）；§5.30 补一句说明——那里的 `pair` 是精简引用，与 §5.33 / §5.34 的转账对象不是同一个形状。
+
 ---
 
 ## 0. 与现状的差异总览
@@ -36,7 +40,7 @@
 | 20 | — | `POST /api/v1/ledgers/{id}/transfer-ownership` | 新增 | |
 | 21 | — | `POST /api/v1/ledgers/{id}/invites` | 新增 | 6 位数字码、10 分钟过期（决策 §2） |
 | 22 | — | `POST /api/v1/ledgers/join` | 新增 | 错码限流 15 分钟 5 次（决策 §2） |
-| 23 | `GET /api/v1/finance-sources` | `GET /api/v1/ledgers/{id}/sources` | 改前缀 + 增强 | 挂账本；每行带 `balance`、`balance_base`（决策 §3、§7） |
+| 23 | `GET /api/v1/finance-sources` | `GET /api/v1/ledgers/{id}/sources` | 改前缀 + 增强 | 挂账本；每行带 `balance`（账户币种）、`balance_base`（账本基准币种）+ `balance_rate` / `balance_rate_date`（决策 §3、§7、§14.2） |
 | 24 | `POST /api/v1/finance-sources` | `POST /api/v1/ledgers/{id}/sources` | 改前缀 + 增强 | 新增 `opening_balance`；`type` 增加 `cash`（决策 §3） |
 | 25 | `GET /api/v1/finance-sources/{source_id}` | `GET /api/v1/ledgers/{id}/sources/{sid}` | 改前缀 | |
 | 26 | `PATCH /api/v1/finance-sources/{source_id}` | `PATCH /api/v1/ledgers/{id}/sources/{sid}` | 改前缀 + 增强 | 带 `updated_at` 乐观并发；可改 `default_currency`、`opening_balance` |
@@ -314,7 +318,9 @@ def trend(db: Session, ledger: Ledger, months: int, end: date) -> dict:
     """最近 N 个月的 expense / income / net。"""
 
 def source_balances(db: Session, ledger: Ledger) -> dict[UUID, tuple[Decimal, Decimal]]:
-    """每个账户的 (balance 原币, balance_base 折算)；余额用最新汇率（决策 §8）。"""
+    """每个账户的 (balance 账户币种, balance_base 账本基准币种)。
+    balance 按决策 §14.2：opening_balance + Σ convert(amount, tx.currency -> 账户币种, 发生日)；
+    balance_base 用最新汇率折算（决策 §8）。见 §5.23。"""
 ```
 
 #### `services/ledger_service.py`（决策 §2）
@@ -508,7 +514,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 
 | code | HTTP | 触发条件 |
 |---|---|---|
-| `validation_error` | 422 | 请求体 / 查询参数 / 路径参数不满足 schema |
+| `validation_error` | 422 / 400 | **422**：请求体 / 查询参数 / 路径参数不满足 pydantic schema（由 §4.1 的 `RequestValidationError` 处理器统一产出）。**400**：schema 过了、但业务层校验没过且没有更专属的 code（币种不在支持列表、金额为 0、符号与 `kind` 冲突、非转账行却带了 `transfer_role` 等）。两种情形共用这一个 code，用状态码区分：422 = 形状不对，400 = 形状对但值不合法 |
 | `unauthorized` | 401 | 缺令牌、令牌无效或过期 |
 | `invalid_credentials` | 401 | 登录邮箱或口令错 |
 | `not_found` | 404 | 资源不存在，或对当前用户不可见（§3.3） |
@@ -530,11 +536,14 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 | `invite_rate_limited` | 429 | 15 分钟内错码尝试超过 5 次 |
 | `login_rate_limited` | 429 | 同 IP 每分钟登录超过 10 次 |
 | `import_rate_limited` | 429 | 每用户每小时上传批数超过 10 |
+| `llm_test_rate_limited` | 429 | 每用户每分钟调用「测试连接」超过 6 次（§8.2） |
+| `register_rate_limited` | 429 | 同 IP 每小时注册超过 5 次（§8.2） |
 | `source_archived` | 409 | 用已归档账户记账，或作为导入目标 |
 | `source_has_transactions` | 409 | 删除有交易的账户 |
-| `source_currency_mismatch` | 400 | 转账两腿引用了不属于本账本的账户，或转出转入是同一个账户 |
+| `same_source` | 400 | 两腿转账的转出账户与转入账户是同一个账户 |
 | `category_invalid` | 400 | 分类 code 不在表内，或二级不属于该一级 |
 | `category_kind_mismatch` | 400 | 分类的收支侧与 `kind` 不匹配 |
+| `kind_change_not_allowed` | 400 | PATCH 想让 `kind` 跨越 `transfer` / 非 `transfer` 的边界（决策 §14.3） |
 | `refund_target_invalid` | 400 | `refund_of` 指向的交易不在同账本、或 `kind != 'expense'` |
 | `transfer_pair_incomplete` | 409 | `pair_id` 找不到恰好两腿（数据损坏时的保护） |
 | `import_in_progress` | 409 | 同一账本已有批次处于 `parsing` |
@@ -549,6 +558,8 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 | `llm_error` | 502 | LLM 端点返回错误、超时、或输出不是合法 JSON |
 | `fx_unavailable` | 503 | 汇率上游不可用且缓存里也没有可用值 |
 | `internal_error` | 500 | 未捕获异常（处理器兜底） |
+
+这张表是**唯一注册表**（决策 §14.4）：其他章节（01 / 04 / 05）在描述错误时只能引用这里的名字，不允许另起同义名。前端的中英文案表按 code 一一对应，见 [`./04-frontend.md`](./04-frontend.md) §3.7。新增 code 等同于扩展对外契约，必须先加进这张表。
 
 ### 4.3 分页
 
@@ -734,12 +745,14 @@ GET /api/v1/me
 
 鉴权：bearer。决策 §11（默认币种、语言）。
 
-请求体（两个字段都可选，`exclude_unset` 语义；显式 `null` 一律拒绝为 422，不再像现状那样把 `null` 写进 NOT NULL 列导致 500）：
+请求体（两个字段都可选，`exclude_unset` 语义；显式 `null` 默认拒绝为 422，不再像现状那样把 `null` 写进 NOT NULL 列导致 500。**`language` 是唯一的例外**，见下表）：
 
 | 字段 | 类型 | 校验 |
 |---|---|---|
-| `base_currency` | str | `^[A-Za-z]{3}$`，`.upper()` 后必须在 Frankfurter 支持列表里，否则 400 |
-| `language` | str | `zh` \| `en` |
+| `base_currency` | str | `^[A-Za-z]{3}$`，`.upper()` 后必须在 Frankfurter 支持列表里，否则 400；不接受 `null` |
+| `language` | `'zh' \| 'en' \| null` | 只接受这三个值。显式传 `null` 是合法的，表示**恢复「跟随系统」**（写 `users.language = NULL`，决策 §14.6）；这是本端点唯一接受显式 `null` 的字段 |
+
+所以「跟随系统 → 中文 → 跟随系统」这条路是通的：前端在语言设置里选「跟随系统」就发 `{"language": null}`。
 
 ```json
 PATCH /api/v1/me
@@ -1231,7 +1244,7 @@ POST /api/v1/ledgers/join
 
 ### 5.23 `GET /api/v1/ledgers/{id}/sources`
 
-鉴权：成员。决策 §3、§11（"GET 含余额"）、§8（余额用最新汇率）。
+鉴权：成员。决策 §3、§11（"GET 含余额"）、§8（余额用最新汇率）、§14.2（余额以账户 `default_currency` 计价）。
 
 | query 参数 | 类型 | 默认 | 说明 |
 |---|---|---|---|
@@ -1271,7 +1284,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../sources?include_archived=true
       "archived": true,
       "balance": "54.5000",
       "balance_base": "452.3500",
-      "balance_rate": "8.29816514",
+      "balance_rate": "8.30000000",
       "balance_rate_date": "2026-09-08",
       "created_by": "4ee1c8fa-...",
       "updated_by": "77aa1122-...",
@@ -1283,12 +1296,23 @@ GET /api/v1/ledgers/8f0f7b2e-.../sources?include_archived=true
 }
 ```
 
-字段语义：
+字段语义（口径由决策 §14.2 钉死，与 [`./01-domain-and-flows.md`](./01-domain-and-flows.md) §5.4 逐字一致）：
 
-- `balance`：账户**原币**余额 = `opening_balance + SUM(transactions.amount WHERE source_id = 该账户)`（决策 §3）。包含单腿转账；两腿转账的每一腿各自计入自己那个账户。一条 `GROUP BY source_id` 的聚合查询算完全部账户，不做 N+1。
-- `balance_base`：按**最新**汇率折算到账本 `base_currency`（决策 §8："账户余额用最新汇率"）。`balance_rate` / `balance_rate_date` 把这次用的汇率和它的日期一并回给前端，界面上可以标"按 2026-09-08 汇率折算"。
+- `balance`：余额，**以账户自己的 `default_currency` 计价**：
+
+```text
+balance(a) = a.opening_balance
+           + Σ  convert(t.amount, t.currency → a.default_currency, on = t.occurred_at)
+              t.source_id = a.id
+```
+
+  也就是说：`opening_balance` 本来就是账户币种；与账户币种**相同**的交易直接相加（绝大多数情况，一次换算都不发生）；与账户币种**不同**的交易（用人民币账户刷了一笔欧元）按**该笔交易发生日**的汇率折算成账户币种后再加（决策 §8"交易用发生日汇率"）。**不按币种分桶**，接口只回一个标量。包含单腿转账；两腿转账的每一腿各自计入自己那个账户。
+
+  实现：一条 `GROUP BY source_id, currency, occurred_at` 的聚合查询把全部账户的分组小计一次取回，再交给 `fx.convert_many`（§6.3）批量折算后在应用层求和——不做 N+1，上游请求数只与"出现过的币种数"有关。
+
+- `balance_base`：把 `balance` 按**最新**汇率折算到账本 `base_currency`（决策 §8"账户余额用最新汇率"、§14.2）：`balance_base = convert(balance, a.default_currency → ledger.base_currency, 最新)`。`balance_rate` / `balance_rate_date` 就是这一步用到的汇率和它的行情日，界面上可以标"按 2026-09-08 汇率折算"。
 - 账户币种 == 账本基准币种时 `balance_rate = "1.00000000"`，`balance_rate_date` = 今天。
-- 汇率上游不可用且缓存里也没有可用值时，`balance_base` / `balance_rate` / `balance_rate_date` 三个字段为 `null`，其余字段照常返回 200（列表接口不因为汇率而失败，沿用现状的容错取向）。
+- 汇率上游不可用且缓存里也没有可用值时：折不动的**异币种交易按原值计入 `balance`** 会算错，所以这种情况下 `balance` 仍然返回（只把折不动的那部分按 0 计），并把 `balance_base` / `balance_rate` / `balance_rate_date` 三个字段置 `null`，其余字段照常返回 200（列表接口不因为汇率而失败，沿用现状的容错取向）。账户上全部交易都是账户币种时（最常见）这条分支根本不会触发。
 
 `transactions.amount` 的符号约定由数据库 CHECK 保证（决策 §10），所以求和就是余额，不需要按 kind 分支。
 
@@ -1360,7 +1384,7 @@ PATCH /api/v1/ledgers/8f0f7b2e-.../sources/1022fd24-78a1-4c09-9de9-1cd7fbb0877f
 -> 200
 {"id": "1022fd24-...", "ledger_id": "8f0f7b2e-...", "name": "Revolut EUR", "type": "other",
  "default_currency": "EUR", "opening_balance": "100.0000", "archived": true,
- "balance": "54.5000", "balance_base": "452.3500", "balance_rate": "8.29816514",
+ "balance": "54.5000", "balance_base": "452.3500", "balance_rate": "8.30000000",
  "balance_rate_date": "2026-09-08", "created_by": "4ee1c8fa-...", "updated_by": "4ee1c8fa-...",
  "created_at": "2026-09-03T05:51:45.953116Z", "updated_at": "2026-09-09T05:10:00.000000Z"}
 ```
@@ -1642,6 +1666,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e0615
 
 非转账、或单腿转账时 `pair` 为 `null`。
 
+注意这个 `pair` 是个**精简引用**：`out` / `in` 各只有 `transaction_id`（不是 `id`）、`source_id`、`amount`、`currency` 四个字段，`pair` 上也没有 `occurred_at` / `subtype` / `note`。它和 §5.33 / §5.34 响应里那个带完整两条交易的转账对象**不是同一个形状**，前端要用两个不同的类型（[`./04-frontend.md`](./04-frontend.md) §3.3 的 `TransactionPairRef` 与 `TransferPair`）。
+
 错误：404 `not_found`（不存在、属于别的账本、账本不可见）。副作用：只读。
 
 ### 5.31 `PATCH /api/v1/ledgers/{id}/transactions/{tid}`
@@ -1650,7 +1676,27 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e0615
 
 请求体：§5.29 的全部字段都可选，外加必填的 `updated_at`。不可改的是 `id`、`ledger_id`、`transfer_pair_id`、`import_batch_id`、`created_by`、`created_at`。改 `source_id` 是允许的（记错账户很常见），但新账户同样不能是归档账户。
 
-改 `kind` 也是允许的（比如把误记为 income 的行改成 refund），但必须在同一个请求里把相关字段一起改对：目标 kind 的符号、分类、transfer 字段都要满足 §5.29 的规则；服务端是拿"改完之后的整行"去校验的，不是只看请求里出现的字段。
+改 `kind` 在 `expense` / `income` / `refund` **三者之间**是允许的（比如把误记为 income 的行改成 refund），但必须在同一个请求里把相关字段一起改对：目标 kind 的符号、分类、transfer 字段都要满足 §5.29 的规则；服务端是拿"改完之后的整行"去校验的，不是只看请求里出现的字段。
+
+**硬规则：`kind` 不能跨越 `transfer` / 非 `transfer` 的边界**（决策 §14.3，与 [`./01-domain-and-flows.md`](./01-domain-and-flows.md) §2.3 和 [`./04-frontend.md`](./04-frontend.md) §4.7 的编辑页规则一致）。这条必须**单独判**，不能指望"整行校验"兜住：一条单腿转账（`transfer_pair_id IS NULL`，走的正是本端点）只要在同一个请求里清掉 `transfer_role` / `transfer_subtype`、补上 `category_l1`、把金额改成负数，§10 的每一条 CHECK 就都满足了，整行校验根本挡不住它变成 `expense`。所以服务端在应用改动之前先比一次：
+
+```text
+crosses_transfer_boundary = (row.kind == 'transfer') != (new_kind == 'transfer')
+if crosses_transfer_boundary:
+    raise ApiError(400, "kind_change_not_allowed",
+                   "Cannot change kind between transfer and non-transfer; delete and re-enter instead")
+```
+
+允许与禁止的完整矩阵：
+
+| 从 → 到 | 允许？ | 说明 |
+|---|---|---|
+| `expense` ⇄ `income` ⇄ `refund`（任意方向） | ✓ | 服务端按目标 kind 重新校验符号与分类；分类的收支侧不对就是 400 `category_kind_mismatch` |
+| 非 `transfer` → `transfer` | ✗ | 400 `kind_change_not_allowed` |
+| `transfer` → 非 `transfer` | ✗ | 400 `kind_change_not_allowed` |
+| `transfer` → `transfer` | ✓ | 单腿转账可以改 `transfer_subtype`、金额、日期、账户、备注；两腿的腿走 §5.34，本端点直接 409 `use_transfer_endpoint` |
+
+理由（决策 §1.2）：转账牵扯对腿、`transfer_pair_id`、`transfer_subtype`，"改 kind"没有一个语义清楚的定义。要改就删掉重记。
 
 ```json
 PATCH /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e061571
@@ -1680,6 +1726,7 @@ PATCH /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e06
 | 409 | `stale_update` | 版本戳不一致 |
 | 409 | `use_transfer_endpoint` | 该行 `transfer_pair_id` 非空 |
 | 409 | `source_archived` | 改到一个已归档账户 |
+| 400 | `kind_change_not_allowed` | 请求会让 `kind` 跨越 `transfer` / 非 `transfer` 的边界（决策 §14.3） |
 | 400 | `category_invalid` / `category_kind_mismatch` / `refund_target_invalid` | 同 §5.29，按"改完之后的整行"判定 |
 | 400 | `validation_error` | 符号与 kind 冲突等 |
 
@@ -1710,7 +1757,7 @@ DELETE /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e0
 | 字段 | 类型 | 必填 | 校验 |
 |---|---|---|---|
 | `from_source_id` | UUID | 是 | 属于本账本、未归档 |
-| `to_source_id` | UUID | 是 | 属于本账本、未归档；**不能等于** `from_source_id` |
+| `to_source_id` | UUID | 是 | 属于本账本、未归档；**不能等于** `from_source_id`，否则 400 `same_source` |
 | `amount_out` | Decimal | 是 | > 0（服务端存成负数）；4 位小数 |
 | `currency_out` | str | 是 | `^[A-Za-z]{3}$` |
 | `amount_in` | Decimal | 是 | > 0；**不要求等于** `amount_out`（跨币种，决策 §1.2） |
@@ -1768,7 +1815,8 @@ POST /api/v1/ledgers/8f0f7b2e-.../transactions/transfer
 |---|---|---|
 | 404 | `not_found` | 账本不可见；某个 `source_id` 不属于本账本 |
 | 409 | `source_archived` | 任一账户已归档 |
-| 400 | `validation_error` | 两个账户相同；金额 ≤ 0；币种不支持；`subtype` 不在枚举内 |
+| 400 | `same_source` | `to_source_id == from_source_id`（转出转入是同一个账户） |
+| 400 | `validation_error` | 金额 ≤ 0；币种不支持；`subtype` 不在枚举内 |
 
 副作用（**一个事务**）：生成一个新的 `pair_id`（服务端生成，客户端不能指定），插入两行 `transactions`，`kind='transfer'`、`transfer_pair_id = pair_id`、`transfer_role` 分别为 `out` / `in`、`transfer_subtype = subtype`、`category_l1/l2` 为 NULL、`counterparty` 为 NULL。数据库唯一约束 `UNIQUE (transfer_pair_id, transfer_role)`（决策 §10）保证一个 pair 最多两腿。任一腿失败整个事务回滚——这正是现状 H-01"前端发两次 POST、第二次失败要靠客户端补偿删除"的问题所修复的地方。
 
@@ -1812,7 +1860,8 @@ PATCH /api/v1/ledgers/8f0f7b2e-.../transactions/transfer/77777777-8888-4999-aaaa
 | 409 | `transfer_pair_incomplete` | 该 `pair_id` 下不是恰好两腿（数据损坏保护） |
 | 409 | `stale_update` | 两腿中任意一腿的 `updated_at` 比请求里的新 |
 | 409 | `source_archived` | 换到已归档账户 |
-| 400 | `validation_error` | 两个账户相同；金额 ≤ 0；币种不支持 |
+| 400 | `same_source` | 改完之后两腿指向同一个账户 |
+| 400 | `validation_error` | 金额 ≤ 0；币种不支持 |
 
 副作用（一个事务）：`SELECT … WHERE transfer_pair_id = :pair_id FOR UPDATE`（锁住两行）→ 两条 `UPDATE transactions`。
 
@@ -2143,7 +2192,7 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../retry
 | `uncategorized` | bool | — | `true` 只返回 `category_l1 IS NULL` 的行（review 表格的"待归类"筛选） |
 | `limit` / `offset` | int | 100 / 0 | 上限 500（review 表格一次要看很多行） |
 
-排序：`row_index ASC`（原账单里的顺序，稳定）。
+排序：`row_no ASC`（原账单里的顺序，稳定；列名由决策 §14.5 统一为 `row_no`）。
 
 ```json
 GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
@@ -2153,7 +2202,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
     {
       "id": "e5f6a7b8-...",
       "batch_id": "d1e2f3a4-5566-4778-899a-bbccddeeff00",
-      "row_index": 0,
+      "row_no": 0,
       "status": "pending",
       "date": "2026-08-03",
       "amount": "-128.5000",
@@ -2174,7 +2223,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
     {
       "id": "f6a7b8c9-...",
       "batch_id": "d1e2f3a4-5566-4778-899a-bbccddeeff00",
-      "row_index": 1,
+      "row_no": 1,
       "status": "pending",
       "date": "2026-08-05",
       "amount": "3000.0000",
@@ -2238,7 +2287,7 @@ PATCH /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows/e5f6a7b8-...
 {"category_l1": "food", "category_l2": "lunch", "merchant": "全家"}
 
 -> 200
-{"id": "e5f6a7b8-...", "batch_id": "d1e2f3a4-...", "row_index": 0, "status": "edited",
+{"id": "e5f6a7b8-...", "batch_id": "d1e2f3a4-...", "row_no": 0, "status": "edited",
  "date": "2026-08-03", "amount": "-128.5000", "currency": "CNY", "kind": "expense",
  "merchant": "全家", "note": "FAMILYMART 3521", "category_l1": "food", "category_l2": "lunch",
  "confidence": 0.86, "source_ref": "p1:l14", "flags": [], "matched_transaction_id": null,
@@ -2465,7 +2514,22 @@ POST /api/v1/rates/convert
 
 结果是同一条交易在"创建响应"和"列表"里显示的换算金额末位不同、汇率精度不同；而且两条路径都用 `/latest`（当天汇率），上游返回的 `date` 被丢弃（`backend/app/services/rates.py:89-93`），`conversion_date` 填的是服务器 `date.today()`。
 
-目标（决策 §8）把这一切收敛成 `services/fx.py` 里的一个函数族：**读取时计算、不落算好的结果；交易与统计用发生日汇率，账户余额用最新汇率；无行情日回退到最近一个已公布交易日。** 汇率本身缓存在 `exchange_rates` 表里（这张表在现状里已经被迁移 `backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25` 删掉了，目标设计要重新建，见 [`./02-database.md`](./02-database.md)）。
+目标（决策 §8）把这一切收敛成 `services/fx.py` 里的一个函数族：**读取时计算、不落算好的结果；交易与统计用发生日汇率，账户余额用最新汇率；无行情日回退到最近一个已公布交易日。** 汇率本身缓存在 `exchange_rates` 表里。
+
+**这张表在现状里不存在，必须新建**：迁移 `backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25` 已经把它删掉了，现状每次响应都现拉 Frankfurter。目标结构由决策 §14.1 定死，DDL 见 [`./02-database.md`](./02-database.md)：
+
+```text
+exchange_rates(
+  date       DATE       NOT NULL,
+  base       CHAR(3)    NOT NULL,
+  symbol     CHAR(3)    NOT NULL,   -- 目标币种；统一叫 symbol，不叫 quote（决策 §14.1）
+  rate       NUMERIC(18,8) NOT NULL,-- 1 base = rate symbol
+  fetched_at TIMESTAMP  NOT NULL,
+  PRIMARY KEY (date, base, symbol)
+)
+```
+
+列名用 `symbol` 是为了和现有 `/rates/latest?symbols=` 参数（§5.47）同源；本文与 [`./01-domain-and-flows.md`](./01-domain-and-flows.md) §1.13 用同一套列名（决策 §14.1）。换算时缺哪一天就向 Frankfurter 取哪一天并落库；"最新汇率" = 最近一个已公布日的行，同一 `(base, symbol)` 一小时内不重复请求。
 
 顺带修掉的两个现状问题：`tenacity` 的重试装饰器（`backend/app/services/rates.py:18-23` 和 `:56-61`）因为异常在函数内部就被换成了 `HTTPException` 而从未生效（`../current-design/06-known-issues.md` M-04）——新实现里 HTTP 客户端只负责抛 `httpx` 异常，转换成 `ApiError` 的动作放在调用层，重试才会真的发生；`EXCHANGE_RATE_API_URL` 的默认值也改成 `https://api.frankfurter.dev/v1`（H-03）。
 
@@ -2502,7 +2566,7 @@ convert(amount, C, B, on):
        GET {EXCHANGE_RATE_API_URL}/{start}..{on}?from=C&to=B
        其中 start = on - 10 天（Frankfurter 的区间端点只返回有行情的日期，
        所以"回退到最近交易日"就是取返回结果里 <= on 的最大日期）
-     把返回的每一天都写进 exchange_rates（幂等，唯一键 (base, symbol, date)）
+     把返回的每一天都写进 exchange_rates（幂等，主键 (date, base, symbol)）
   4. 区间里仍然一天都没有（比如 on 早于该币种上线日）：
        再试一次 GET /latest?from=C&to=B，用最新汇率并把 rate_date 设为它的日期
   5. 还是没有                      -> ApiError(503, fx_unavailable)
@@ -2782,13 +2846,13 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 | `DELETE /ledgers/{id}` | `confirm_name` 不符 → 400；成功后账户 / 交易 / 批次全被级联删 |
 | 成员与邀请 | owner 生成码 → member 用码加入 → 第二次用同一个码 400 `invite_used`；过期码 400 `invite_expired`；乱码 400 `invite_invalid` × 5 次后第 6 次 429；自己用自己的码 409 `already_member`；满 10 人 409 |
 | `transfer-ownership` / `leave` | owner 转让后失去 owner 权限；owner 直接 `/leave` → 409 `owner_must_transfer`；member `/leave` 后该账本变 404 |
-| `GET /sources` | `balance` = `opening_balance` + 交易和（含单腿转账）；`balance_base` 用最新汇率；汇率桩失败时三个字段为 null 但仍 200 |
+| `GET /sources` | `balance` = `opening_balance` + Σ 交易折算到账户币种（含单腿转账、含一笔异币种交易按发生日汇率折算，决策 §14.2）；`balance_base` 用最新汇率；汇率桩失败时 `balance_base` / `balance_rate` / `balance_rate_date` 为 null 但仍 200 |
 | `DELETE /sources/{sid}` | 无交易 → 204；有交易 → 409 `source_has_transactions` |
 | `POST /transactions` | 四种 kind 各建一条；符号与 kind 不匹配 → 400；transfer 带分类 → 400；expense 用收入分类 → 400 `category_kind_mismatch`；`refund_of` 指向 income → 400；`refund_of` 跨账本 → 400；不给分类的 refund 沿用原单分类；归档账户 → 409 |
 | `GET /transactions` | 决策 §4 的 12 个参数**逐个**有用例 + 一个组合用例；`{items,total}` 的 total 是过滤后的；排序稳定；`refunded_total` / `refundable` 只出现在 expense 行且数值正确；跨账本的 `source_id` → 404 |
-| `PATCH /transactions/{tid}` | 旧 `updated_at` → 409；改 kind 时整行重校验；对两腿中的一腿 → 409 `use_transfer_endpoint` |
+| `PATCH /transactions/{tid}` | 旧 `updated_at` → 409；`expense` → `refund` 整行重校验通过；`expense` → `transfer`（同时补齐 `transfer_role` / `transfer_subtype` 并清掉分类，即所有 CHECK 都能满足的那种请求）→ 400 `kind_change_not_allowed`；单腿 `transfer` → `expense` 同样 400；对两腿中的一腿 → 409 `use_transfer_endpoint` |
 | `DELETE /transactions/{tid}` | 单条删除只删一行；删被 refund 引用的 expense 后退款行还在且 `refund_of` 为 null；对两腿中的一腿 → 409 `use_transfer_endpoint` |
-| `POST /transactions/transfer` | 建出两行、同 `pair_id`、符号相反、跨币种金额不等也 OK；同一账户 → 400；归档账户 → 409；第二腿插入失败时第一腿也不存在（用 `mock` 让第二次 flush 抛异常，验证回滚） |
+| `POST /transactions/transfer` | 建出两行、同 `pair_id`、符号相反、跨币种金额不等也 OK；同一账户 → 400 `same_source`；归档账户 → 409；第二腿插入失败时第一腿也不存在（用 `mock` 让第二次 flush 抛异常，验证回滚） |
 | `PATCH/DELETE /transactions/transfer/{pair_id}` | 两腿一起改 / 一起删；不存在的 `pair_id` → 404；只剩一腿时 PATCH → 409 `transfer_pair_incomplete`、DELETE → 204 |
 | `stats/summary` | 转账不计入；退款按退款日期冲减对应分类（跨月的用例：8 月支出、9 月退款，验证 8 月不变、9 月减）；多币种按发生日汇率折算；`share` 之和约等于 1 |
 | `stats/trend` | 空月份补 0；`months=12` 返回 12 个元素且时间连续 |
@@ -2870,10 +2934,10 @@ cd backend && poetry run pytest --cov=app --cov-report=term-missing
 5. **时间戳是否改成带时区**。决策没提。本文按 `timestamptz` + ISO-8601 `Z` 写（现状是 naive `utcnow()`）。**建议**：迁移里把三张表的时间列改成 `timestamptz`，一次改干净。
 6. **删除类端点的返回**。本文用 204 无体（`DELETE /imports/{bid}` 例外，因为要回撤销条数）。**建议**：保持 204，前端不依赖响应体。
 7. **`GET /ledgers/{id}/imports/{bid}` 是否返回 `llm_raw_response`**。本文按"只在 `DEBUG=true` 时返回"。**建议**：生产永远不返回，需要排查时直接查库。
-8. **`llm_test` 与 `register` 两个限流点**（§8.2）。决策 §9 只列了登录、邀请码、导入三处。本文补了这两个，阈值分别是 6 次/分钟和 5 次/小时。**建议**：采纳，尤其是 `register`——注册开着的时候它是唯一的无鉴权写接口。
+8. **`llm_test` 与 `register` 两个限流点**（§8.2）。决策 §9 只列了登录、邀请码、导入三处。本文补了这两个，阈值分别是 6 次/分钟和 5 次/小时；对应的 `llm_test_rate_limited` / `register_rate_limited` 已经进了 §4.2 注册表（决策 §14.4 要求任何被引用的 code 都在注册表里，前端才能为它们准备文案）。**建议**：采纳阈值，尤其是 `register`——注册开着的时候它是唯一的无鉴权写接口。若不采纳，请连同注册表里的两行一起删。
 9. **`DELETE /imports/{bid}` 撤销时的孤儿退款**。撤销会把某些 expense 删掉，指向它们的手工 refund 行的 `refund_of` 会被置 NULL。本文建议在 `dry_run` 响应里加一个 `orphaned_refunds` 计数让用户知情。**建议**：加。
 10. **`stats/summary` 里退款把分类冲成负数**。决策 §1.1 允许累计退款超过原单，因此某个分类当月可能是负数。本文按"照实返回负数"写。**建议**：照实返回，由前端决定怎么显示（比如显示为 `-¥12.00` 并加一个提示）。
-11. **`exchange_rates` 表要重建**。决策 §8 说"缓存表 `exchange_rates` 沿用现状"，但现状里这张表已经被迁移 `5ca7fe6e37db` 删掉了；决策 §10 的目标表清单里又有它。本文按"重新建这张表"处理。**建议**：确认按 §10 的清单来，表结构由 [`./02-database.md`](./02-database.md) 定义。
+11. ~~**`exchange_rates` 表要重建**~~ —— **已由决策 §14.1 裁定**：新建 `exchange_rates(date, base, symbol, rate, fetched_at)`，主键 `(date, base, symbol)`，目标币种列名用 `symbol` 不用 `quote`。本文 §6 已按此写，DDL 落在 [`./02-database.md`](./02-database.md)。
 12. **回退窗口 `FX_MAX_BACKFILL_DAYS = 10 天`**（§6.2）。决策只说"回退到最近一个已公布的交易日"，没给上限。**建议**：10 天，覆盖春节等长假；超过就说明这个币种在那段时间没有行情，落到 `/latest` 分支。
 13. **`occurred_at` 允许的最大未来日期**（§5.29 写的是"今天 + 1 天"）。决策没提。**建议**：保留 +1 天的宽容（时区差），更远的日期直接 422。
 14. **`GET /transactions` 的 `limit` 上限 200、导入草稿行 500**。决策 §4 只说有 `limit` / `offset`。**建议**：采纳这两个上限。
