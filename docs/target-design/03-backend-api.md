@@ -2100,7 +2100,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports?status=ready&status=failed
 }
 ```
 
-列表里的批次对象**不含** `raw_response`（LLM 原始响应，可能很大；列名见 [`./02-database.md`](./02-database.md) §1.8），需要时只在 §5.40 的单条里带（且只在 `DEBUG=true` 时带，§9.2）。列表项的 `error` 与 §5.40 单条**同形状**，都是 `{"code": "…", "message": "…"}` 或 `null`，不是字符串（决策 §14.15）；列表项也不带 `pages` / `flags_summary` / `row_status_summary` / `uncategorized_count`，需要这些就查单条 §5.40。
+列表里的批次对象**不含** `raw_response`（LLM 原始响应，可能很大；列名见 [`./02-database.md`](./02-database.md) §1.8），需要时只在 §5.40 的单条里带（且只在 `DEBUG=true` 时带，§9.2）。列表项的 `error` 与 §5.40 单条**同形状**，都是 `{"code": "…", "message": "…"}` 或 `null`，不是字符串（决策 §14.15）；列表项也不带 `source_name` / `used_vision` / `pages` / `flags_summary` / `row_status_summary` / `uncategorized_count`（与 §5.38 的 202 响应同形状，见 [`./04-frontend.md`](./04-frontend.md) §3.3 的 `ImportBatchListItem`），需要这些就查单条 §5.40。
 
 错误：404 `not_found`；422 `validation_error`（status 不在枚举内）。副作用：只读。
 
