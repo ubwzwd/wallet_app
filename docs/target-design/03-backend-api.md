@@ -125,8 +125,10 @@ backend/
       fx.py            [新]    统一汇率换算（取代现状 services/rates.py 的两套公式）
       rates_client.py  [改名]  Frankfurter HTTP 客户端（现状 backend/app/services/rates.py 的网络部分）
       llm_client.py    [新]    OpenAI 兼容 /chat/completions 客户端
-      import_pipeline.py [新]  上传 → 抽取 → 分块 → LLM → 落草稿行 → 打标记 → 提交
-      extractors/      [新]    base.py（协议）、pdf.py、csv_.py、xlsx.py、image.py
+      importing/       [新]    账单导入包（目录结构与各文件职责见 ./05-import-and-llm.md §0.2）：
+                               pipeline.py（run_import 与状态机推进）、storage.py（落盘/读回/删除）、
+                               extract/{pdf_text,tabular,raster}.py、chunking.py、normalize.py、
+                               flagging.py、commit.py、llm/{client,prompts,schema}.py
       stats.py         [新]    汇总、趋势、账户余额的 SQL 聚合
       ledger_service.py [新]   账本 / 成员 / 邀请码的业务逻辑
     models/                    User、UserLLMSettings、Ledger、LedgerMember、LedgerInvite、FinanceSource、
@@ -224,7 +226,7 @@ def prompt_lines(lang: str = "zh") -> str:
 
 ```python
 def encrypt_secret(plaintext: str) -> str:
-    """Fernet 加密，返回 urlsafe base64 字符串，存 user_llm_settings.api_key_encrypted。"""
+    """Fernet 加密，返回 urlsafe base64 字符串，存 user_llm_settings.api_key。"""
 
 def decrypt_secret(ciphertext: str) -> str:
     """解密；密钥轮换或密文损坏时抛 ApiError(409, llm_not_configured, …)，
@@ -287,24 +289,31 @@ def test_connection(cfg: LLMConfig) -> TestResult:
     """POST /me/llm-settings/test 用；返回 {ok, model, supports_vision, error}（§5.10）。"""
 ```
 
-#### `services/import_pipeline.py`（决策 §5；算法详见 `./05-import-and-llm.md`）
+#### `services/importing/`（决策 §5；包内文件划分与算法详见 [`./05-import-and-llm.md`](./05-import-and-llm.md) §0.2）
 
 ```python
-def start_batch(batch_id: UUID) -> None:
+# importing/pipeline.py
+def run_import(batch_id: UUID) -> None:
     """后台入口。整个函数体跑在线程池里（§7.2）：抽取 → 分块 → 逐块调 LLM →
-    写 import_rows → 打标记 → 批次置 ready；任何异常 → failed 并写 error。"""
+    写 import_rows → 打标记 → 批次置 ready；任何异常 → failed 并写
+    error_code / error_message / error_chunk。"""
 
-def extract(path: Path, mime: str) -> Extraction:
-    """按 MIME 分派到 services/extractors/*；返回文本块或页面图片。"""
+# importing/extract/__init__.py
+def extract(ctx: ImportContext) -> Extraction:
+    """按 MIME 分派到 extract/{pdf_text,tabular,raster}.py；返回文本块或页面图片。"""
 
-def flag_rows(db: Session, batch: ImportBatch) -> None:
+# importing/flagging.py
+def flag_rows(db: Session, ctx, rows: list[DraftRow]) -> None:
     """写 duplicate / refund_candidate / repayment 三种 flags（决策 §5）。"""
 
-def commit_batch(db: Session, batch: ImportBatch, actor: User) -> CommitResult:
+# importing/commit.py
+def commit_batch(db: Session, batch_id: UUID, actor_id: UUID) -> CommitResult:
     """一个事务内把所有非 skipped 行建成交易（还款两腿一起建）。"""
 
-def revert_batch(db: Session, batch: ImportBatch) -> int:
-    """撤销：删掉该批次建的全部交易，返回条数。"""
+def delete_batch(db: Session, batch_id: UUID, actor_id: UUID,
+                 dry_run: bool = False) -> DeleteResult:
+    """§5.45 的实现：committed 时先删这批建的交易再删批次（撤销），
+    其余可删状态直接删批次（丢弃）；dry_run 只回条数。"""
 ```
 
 #### `services/stats.py`（决策 §7）
@@ -389,7 +398,7 @@ def remove_member(db: Session, ledger: Ledger, user_id: UUID) -> None: ...
 | `ENVIRONMENT` | str | `development` | `/health`、SQL echo | — |
 | `REGISTRATION_OPEN` `[新]` | bool | `true` | `POST /auth/register` 的开关 | §0.5、§9 |
 | `ENCRYPTION_KEY` `[新]` | str | 无默认，**必填**（与 `SECRET_KEY` 分开的独立密钥） | `core/crypto.py` 的 Fernet 密钥；32 字节 urlsafe base64，用 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` 生成 | §6、§9 |
-| `UPLOAD_DIR` `[新]` | str | `/data/uploads` | 账单原文件落盘目录；开发默认可写成 `./uploads` | §5 |
+| `UPLOAD_DIR` `[新]` | str | `./uploads` | 账单原文件落盘目录。字段默认值是相对路径（开发直接可用，与 [`./05-import-and-llm.md`](./05-import-and-llm.md) §1.3 一致）；**生产在 `.env` 里覆盖成 `/data/uploads`**（§2.2 的模板已经这么写），并给 `api` 容器挂同名卷 | §5 |
 | `MAX_UPLOAD_MB` `[新]` | int | `10` | 上传大小上限 | §5、§9 |
 | `IMPORT_MAX_ROWS` `[新]` | int | `2000` | 单批草稿行上限 | §5 |
 | `IMPORT_CHUNK_ROWS` `[新]` | int | `150` | 文本分块的行数 | §5 |
@@ -554,6 +563,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 | `batch_already_committed` | 409 | 重复 commit（幂等保护） |
 | `batch_not_failed` | 409 | 对非 `failed` 批次调 retry |
 | `rows_uncategorized` | 409 | commit 时仍有行缺一级分类 |
+| `rows_all_skipped` | 409 | commit 时所有行都被标 `skipped`，一条交易也建不出来（[`./05-import-and-llm.md`](./05-import-and-llm.md) §9.1） |
 | `llm_not_configured` | 409 | 当前用户没有可用的 LLM 设置 |
 | `llm_error` | 502 | LLM 端点返回错误、超时、或输出不是合法 JSON |
 | `fx_unavailable` | 503 | 汇率上游不可用且缓存里也没有可用值 |
@@ -612,7 +622,7 @@ PATCH /api/v1/ledgers/8f0f.../transactions/1c2d...
 | 币种 | 大写三字母；请求里允许小写、服务端统一 `.upper()` | `"CNY"` |
 | 枚举（`kind`、`type`、`status`、`role`…） | 小写 snake_case 字符串 | `"expense"` |
 
-时间戳带时区是对现状的修正：现状用 `datetime.utcnow()` 存 naive 值、序列化时不带 `Z`（`../current-design/03-backend-api.md` §4.0）。目标统一为 `timestamptz`（见 [`./02-database.md`](./02-database.md)），API 层一律输出 `Z`。
+时间戳的序列化是对现状的修正：现状用 `datetime.utcnow()` 存 naive 值、序列化时不带 `Z`（`../current-design/03-backend-api.md` §4.0），客户端没法确定它是哪个时区。目标态**存储形状不变**——仍是 `TIMESTAMP WITHOUT TIME ZONE` 里的 naive UTC 值（[`./02-database.md`](./02-database.md) §7.2 给了理由：本应用没有任何按用户时区展示时刻的需求，改 `timestamptz` 要全表 ALTER 而收益为零）——但**写入一律取 UTC**、API 层序列化时一律补 `Z`，对外契约因此是明确的 UTC ISO-8601。
 
 `occurred_at` 仍然只有日期没有时间（决策 §0.7 明确不做交易时间）。所有"今天"的判断用 UTC 日历日，与 `date.today()` 在 UTC 容器里的行为一致。
 
@@ -833,7 +843,7 @@ PUT /api/v1/me/llm-settings
 |---|---|---|
 | 400 | `validation_error` | 首次写入却省略 `api_key`；`base_url` 不是 https 绝对地址 |
 
-副作用：`INSERT`/`UPDATE user_llm_settings`，`api_key` 经 `core/crypto.encrypt_secret` 加密后写 `api_key_encrypted`，同时冗余存 `api_key_last4` 明文尾 4 位供回显。不会去调用 LLM（要验证请调 §5.10）。
+副作用：`INSERT`/`UPDATE user_llm_settings`，明文 `api_key` 经 `core/crypto.encrypt_secret` 加密后写进**唯一的** `api_key` 列（列名沿用决策 §6 的字段清单，存的是密文，见 [`./02-database.md`](./02-database.md) §1.2）。响应里的 `api_key_last4` 是**读时算出来的**（解密后取尾 4 位），数据库里不另存这一列。不会去调用 LLM（要验证请调 §5.10）。
 
 ### 5.9 `DELETE /api/v1/me/llm-settings`
 
@@ -1181,7 +1191,7 @@ POST /api/v1/ledgers/8f0f7b2e-2a20-4c39-9c0f-2a9d5a1b6c31/invites
 
 `code` 只在这一次响应里出现（决策 §2 说流程是"生成 → 线下告诉对方"）；`GET` 邀请码列表的接口不存在，刷新页面就得重新生成。
 
-生成规则：`secrets.randbelow(1_000_000)` 补零成 6 位；与"未过期且未使用"的码去重，冲突就重试（最多 5 次，全撞则 500）。同一账本可以有多个同时有效的码。
+生成规则：`secrets.randbelow(1_000_000)` 补零成 6 位；`code` 是**全表唯一**的（[`./02-database.md`](./02-database.md) §1.5 的 `uq_ledger_invites_code`），插入撞唯一约束就重新摇一个（最多 5 次，全撞则 500）。已用 / 已过期的行由 [`./02-database.md`](./02-database.md) §6.3 的清理规则回收，码空间才不会耗尽。同一账本可以有多个同时有效的码。
 
 错误：
 
@@ -1226,7 +1236,7 @@ POST /api/v1/ledgers/join
 9. ratelimit.reset("invite", user_id)                        （成功后清零）
 ```
 
-第 1 步的限流键是**用户 id**（决策 §2："同一用户 15 分钟内最多 5 次尝试"）。第 2 步整表按 `code` 查——`code` 上有唯一部分索引（只对未使用且未过期的行唯一，见 `./02-database.md`），所以不需要用户先知道账本 id。第 5–7 步的失败**不算**错码，会在返回前把这次消耗的令牌退回去（`ratelimit.reset` 只在真正成功时调用，因此实现上第 5–7 步各自单独退还一个令牌）。
+第 1 步的限流键是**用户 id**（决策 §2："同一用户 15 分钟内最多 5 次尝试"）。第 2 步整表按 `code` 查——`code` 上有**全表**唯一索引 `uq_ledger_invites_code`（[`./02-database.md`](./02-database.md) §1.5；`now()` 不是不可变函数，做不了「未过期」这种部分索引谓词，所以是全表唯一 + 定期清理），所以不需要用户先知道账本 id。第 5–7 步的失败**不算**错码，会在返回前把这次消耗的令牌退回去（`ratelimit.reset` 只在真正成功时调用，因此实现上第 5–7 步各自单独退还一个令牌）。
 
 错误：
 
@@ -2015,7 +2025,7 @@ MIME 白名单（决策 §5）：`application/pdf`、`text/csv`、`application/v
 7. 魔数嗅探                                             -> 415 unsupported_file
 8. INSERT import_batches(status='uploaded')
 9. UPDATE import_batches SET status='parsing'
-10. background_tasks.add_task(import_pipeline.start_batch, batch.id)
+10. background_tasks.add_task(run_import_task, batch.id)   # 见 §7.1，最终跑 importing.pipeline.run_import
 11. 202 Accepted
 ```
 
@@ -2083,13 +2093,13 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports?status=ready&status=failed
 }
 ```
 
-列表里的批次对象**不含** `llm_raw_response`（可能很大），需要时只在 §5.40 的单条里带（且只在 `DEBUG=true` 时带，§9.2）。
+列表里的批次对象**不含** `raw_response`（LLM 原始响应，可能很大；列名见 [`./02-database.md`](./02-database.md) §1.8），需要时只在 §5.40 的单条里带（且只在 `DEBUG=true` 时带，§9.2）。
 
 错误：404 `not_found`；422 `validation_error`（status 不在枚举内）。副作用：只读。
 
 ### 5.40 `GET /api/v1/ledgers/{id}/imports/{bid}`
 
-鉴权：成员。决策 §5（"后台任务 + 数据库状态轮询"）。这是前端解析进度条的轮询目标，建议 1.5 s 一次。
+鉴权：成员。决策 §5（"后台任务 + 数据库状态轮询"）。这是前端解析进度条的轮询目标；轮询节奏由前端定，见 [`./04-frontend.md`](./04-frontend.md) §4.10（2 s 起，逐步退避到 5 s，标签页隐藏时不轮询）。
 
 ```json
 GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
@@ -2108,7 +2118,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-5566-4778-899a-bbccddeeff00
   "error": null,
   "model": "google/gemini-2.5-flash",
   "used_vision": false,
-  "flags_summary": {"duplicate": 0, "refund_candidate": 0, "repayment": 0, "needs_review": 0},
+  "flags_summary": {"duplicate": 0, "refund_candidate": 0, "repayment": 0,
+                    "needs_review": 0, "merged_duplicates": 0},
   "row_status_summary": {"pending": 84, "edited": 0, "skipped": 0},
   "uncategorized_count": 5,
   "created_by": "4ee1c8fa-...",
@@ -2188,11 +2199,11 @@ POST /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../retry
 | query 参数 | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | `status` | str | — | 可多值：`pending` \| `edited` \| `skipped` |
-| `flag` | str | — | 可多值：`duplicate` \| `refund_candidate` \| `repayment` \| `needs_review`；命中任意一个即返回 |
+| `flag` | str | — | 可多值：`duplicate` \| `refund_candidate` \| `repayment` \| `needs_review` \| `merged_duplicates`；命中任意一个即返回 |
 | `uncategorized` | bool | — | `true` 只返回 `category_l1 IS NULL` 的行（review 表格的"待归类"筛选） |
 | `limit` / `offset` | int | 100 / 0 | 上限 500（review 表格一次要看很多行） |
 
-排序：`row_no ASC`（原账单里的顺序，稳定；列名由决策 §14.5 统一为 `row_no`）。
+排序：`row_no ASC`（原账单里的顺序，稳定；列名由决策 §14.5 统一为 `row_no`，**从 1 起**，见 [`./02-database.md`](./02-database.md) §1.9 的 `ck_import_rows_row_no`）。
 
 ```json
 GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
@@ -2202,7 +2213,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
     {
       "id": "e5f6a7b8-...",
       "batch_id": "d1e2f3a4-5566-4778-899a-bbccddeeff00",
-      "row_no": 0,
+      "row_no": 1,
       "status": "pending",
       "date": "2026-08-03",
       "amount": "-128.5000",
@@ -2217,13 +2228,15 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
       "flags": [],
       "matched_transaction_id": null,
       "counterpart_source_id": null,
+      "transfer_role": null,
       "transfer_subtype": null,
+      "hint": null,
       "transaction_id": null
     },
     {
       "id": "f6a7b8c9-...",
       "batch_id": "d1e2f3a4-5566-4778-899a-bbccddeeff00",
-      "row_no": 1,
+      "row_no": 2,
       "status": "pending",
       "date": "2026-08-05",
       "amount": "3000.0000",
@@ -2238,7 +2251,9 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
       "flags": ["repayment"],
       "matched_transaction_id": null,
       "counterpart_source_id": "34fa63d8-5776-4775-982b-4d58deb0ace9",
+      "transfer_role": "in",
       "transfer_subtype": "repayment",
+      "hint": "请确认这笔还款是从哪个账户转出的",
       "transaction_id": null
     }
   ],
@@ -2254,6 +2269,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 | `refund_candidate` | 正数入账且按决策 §1.1 的规则找到**唯一**候选原单，`matched_transaction_id` 已预填 |
 | `repayment` | 信用卡账单里的还款行，`counterpart_source_id` 是猜到的对手账户，`transfer_subtype='repayment'` |
 | `needs_review` | 视觉路径解析出的行、或日期 / 金额解析失败的行（决策 §5、§6） |
+| `merged_duplicates` | 同一批原文里有多行完全相同，归一化时合并成了这一行（[`./05-import-and-llm.md`](./05-import-and-llm.md) §7.7）。它是决策 §5 三种自动标记之外的第五个取值，见 README 的待决汇总 |
 
 错误：404 `not_found`；422 `validation_error`。副作用：只读。
 
@@ -2278,7 +2294,10 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 | `category_l2` | str \| null | 属于 `category_l1` |
 | `matched_transaction_id` | UUID \| null | 只在 `kind='refund'` 时允许非 null；校验同 §5.29 的 `refund_of` |
 | `counterpart_source_id` | UUID \| null | 只在 `kind='transfer'` 时允许非 null；必须属于本账本、未归档、不等于批次的 `source_id` |
+| `transfer_role` | str \| null | `out` \| `in`；`kind='transfer'` 时必须非 null（决定这一腿的方向与金额符号） |
 | `transfer_subtype` | str \| null | `plain` \| `repayment`；`kind='transfer'` 时必须非 null |
+
+`hint` 是服务端写给 review 界面的一句提示（例如「请确认这笔还款是从哪个账户转出的」），**只读**，不在可改字段里，也不会进 `transactions.note`（[`./05-import-and-llm.md`](./05-import-and-llm.md) §0.2、[`./02-database.md`](./02-database.md) §1.9）。
 
 草稿行的校验比正式交易**宽松**：允许 `date` / `amount` / `category_l1` 暂时为 `null`（LLM 拿不准就留空，决策 §1.3），这些空值到 commit 时才拦（§5.44）。但只要给了值就必须合法。
 
@@ -2287,11 +2306,12 @@ PATCH /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows/e5f6a7b8-...
 {"category_l1": "food", "category_l2": "lunch", "merchant": "全家"}
 
 -> 200
-{"id": "e5f6a7b8-...", "batch_id": "d1e2f3a4-...", "row_no": 0, "status": "edited",
+{"id": "e5f6a7b8-...", "batch_id": "d1e2f3a4-...", "row_no": 1, "status": "edited",
  "date": "2026-08-03", "amount": "-128.5000", "currency": "CNY", "kind": "expense",
  "merchant": "全家", "note": "FAMILYMART 3521", "category_l1": "food", "category_l2": "lunch",
  "confidence": 0.86, "source_ref": "p1:l14", "flags": [], "matched_transaction_id": null,
- "counterpart_source_id": null, "transfer_subtype": null, "transaction_id": null}
+ "counterpart_source_id": null, "transfer_role": null, "transfer_subtype": null,
+ "hint": null, "transaction_id": null}
 ```
 
 标记跳过：
@@ -2634,16 +2654,16 @@ def convert_many(items, to_currency):
 ```text
 POST /imports 的处理函数（同步 def，跑在 Starlette 的线程池里）
   ├── 校验、落盘、INSERT import_batches(status='parsing')
-  ├── background_tasks.add_task(run_import, batch_id)
+  ├── background_tasks.add_task(run_import_task, batch_id)
   └── return 202                       ← 响应立刻发出
 
-响应发出之后，Starlette 执行 run_import：
-  run_import 是 async def
-  └── await run_in_threadpool(import_pipeline.start_batch, batch_id)
+响应发出之后，Starlette 执行 run_import_task：
+  run_import_task 是 async def 的薄包装
+  └── await run_in_threadpool(importing.pipeline.run_import, batch_id)
         ├── 打开自己的 Session（不能复用请求的 Session，它在响应结束时已经关了）
         ├── 抽取（pdfplumber / openpyxl / csv / PIL）  ← 全是阻塞的 CPU + IO
         ├── 分块 → 逐块 httpx.post 调 LLM             ← 阻塞 IO，每块最长 LLM_TIMEOUT_SECONDS
-        ├── 每块结束后 commit 一次（progress.done += 1）
+        ├── 每块结束后 commit 一次（chunk_done += 1，见 05 §10.3）
         ├── flag_rows(...)（决策 §5 的三种标记）
         └── UPDATE import_batches SET status='ready'
 ```
@@ -2718,8 +2738,8 @@ app = FastAPI(..., lifespan=lifespan)
   |  POST /imports   |                              |                            |
   |----------------->|  校验 + 落盘 + INSERT(parsing)|                            |
   |<--- 202 batch ---|                              |                            |
-  |                  |--- add_task -----------------> start_batch                |
-  |  GET /imports/{bid} (每 1.5s)                    |  extract()                 |
+  |                  |--- add_task -----------------> run_import_task            |
+  |  GET /imports/{bid} (每 2s)                      |  extract()                 |
   |----------------->|  SELECT batch                |  chunk 1 ------------------>|
   |<-- parsing 0/3 --|                              |<--- rows                   |
   |----------------->|                              |  INSERT rows; done=1       |
@@ -2778,7 +2798,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 
 决策 §6："api_key 服务端 Fernet 加密存，接口只回显尾 4 位。"
 
-- `user_llm_settings` 只有 `api_key_encrypted`（Fernet 密文字符串）和 `api_key_last4`（明文 4 字符）两列，**没有明文列**。
+- `user_llm_settings` 只有一列 `api_key`，存的是 Fernet 密文字符串（列名沿用决策 §6，见 [`./02-database.md`](./02-database.md) §1.2），**没有明文列、也没有单独的 last4 列**；接口回显的 `api_key_last4` 是解密后现取的尾 4 位。
 - 密钥来自 `ENCRYPTION_KEY`，与 `SECRET_KEY` 分开（§2.1）：JWT 密钥泄露只影响会话，加密密钥泄露才影响所有人的第三方 key，两者的轮换周期也不同。
 - 解密只发生在真正要发出 LLM 请求的那一刻（`services/llm_client` 调用前），解密后的字符串不放进任何 dataclass 的 `repr`（`LLMConfig` 用 `field(repr=False)`）。
 - 密钥轮换时 `decrypt_secret` 会抛 `InvalidToken`，映射为 409 `llm_not_configured`，用户重新填一次 key 即可；不提供"批量重加密"脚本（数据量太小，不值得）。
@@ -2786,8 +2806,8 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 ### 9.2 日志脱敏
 
 - 任何日志、任何异常信息里都不得出现 api_key、Bearer 令牌、口令。统一用一个 `logging.Filter`，对消息做正则替换：`sk-[A-Za-z0-9_\-]{8,}` → `sk-***`，`Bearer\s+[A-Za-z0-9._\-]+` → `Bearer ***`。
-- LLM 的错误摘要（§5.10 的 `error` 字段、`import_batches.error`）在写库前先过同一个脱敏函数，并截断到 200 字符。
-- `import_batches.llm_raw_response` 存的是模型的输出（账单内容），属于用户隐私：不写日志、不进错误信息，API 只在 `DEBUG=true` 时才在 §5.40 的响应里带上它。
+- LLM 的错误摘要（§5.10 的 `error` 字段、`import_batches.error_message`）在写库前先过同一个脱敏函数，并截断到 200 字符。
+- `import_batches.raw_response` 存的是模型的输出（账单内容），属于用户隐私：不写日志、不进错误信息，API 只在 `DEBUG=true` 时才在 §5.40 的响应里带上它。
 - `DEBUG` 在生产必须是 `False`（`infra/.env.example:32` 已经是），否则 Starlette 的调试页会把堆栈和局部变量吐给客户端。
 
 ### 9.3 上传文件的处理
@@ -2931,9 +2951,9 @@ cd backend && poetry run pytest --cov=app --cov-report=term-missing
 2. **`PATCH /auth/me` 的 `default_source_id` 字段**。现状有这个字段（`users.default_source_id`），账户改挂账本后它没有意义了。本文按"移除"处理。**建议**：迁移里 drop 这一列。
 3. **成员的显示名**。`users` 表只有 email，成员列表和"谁记的这笔"只能显示邮箱。**建议**：给 `users` 加一个可空的 `display_name`（≤ 40 字符），`PATCH /me` 可改，不填时前端显示邮箱 `@` 前的部分。
 4. **`created_by` / `updated_by` 是否在交易列表里展开成用户信息**。本文只回 UUID，前端要自己拿 `GET /ledgers/{id}/members` 的结果去映射。**建议**：保持只回 UUID（成员最多 10 人，前端映射零成本）。
-5. **时间戳是否改成带时区**。决策没提。本文按 `timestamptz` + ISO-8601 `Z` 写（现状是 naive `utcnow()`）。**建议**：迁移里把三张表的时间列改成 `timestamptz`，一次改干净。
+5. **时间戳是否改成带时区**。决策没提。初稿本文写 `timestamptz`、[`./02-database.md`](./02-database.md) §7.2 写 naive UTC，两章不一致；**校对时统一到 naive UTC 存储 + API 输出带 `Z`**（§4.5），理由见 02 章 §7.2。**建议**：采纳这个统一写法；若日后真要按用户时区展示时刻，再单独出一版迁移把三张表的时间列改成 `timestamptz`。
 6. **删除类端点的返回**。本文用 204 无体（`DELETE /imports/{bid}` 例外，因为要回撤销条数）。**建议**：保持 204，前端不依赖响应体。
-7. **`GET /ledgers/{id}/imports/{bid}` 是否返回 `llm_raw_response`**。本文按"只在 `DEBUG=true` 时返回"。**建议**：生产永远不返回，需要排查时直接查库。
+7. **`GET /ledgers/{id}/imports/{bid}` 是否返回 `raw_response`**。本文按"只在 `DEBUG=true` 时返回"。**建议**：生产永远不返回，需要排查时直接查库。
 8. **`llm_test` 与 `register` 两个限流点**（§8.2）。决策 §9 只列了登录、邀请码、导入三处。本文补了这两个，阈值分别是 6 次/分钟和 5 次/小时；对应的 `llm_test_rate_limited` / `register_rate_limited` 已经进了 §4.2 注册表（决策 §14.4 要求任何被引用的 code 都在注册表里，前端才能为它们准备文案）。**建议**：采纳阈值，尤其是 `register`——注册开着的时候它是唯一的无鉴权写接口。若不采纳，请连同注册表里的两行一起删。
 9. **`DELETE /imports/{bid}` 撤销时的孤儿退款**。撤销会把某些 expense 删掉，指向它们的手工 refund 行的 `refund_of` 会被置 NULL。本文建议在 `dry_run` 响应里加一个 `orphaned_refunds` 计数让用户知情。**建议**：加。
 10. **`stats/summary` 里退款把分类冲成负数**。决策 §1.1 允许累计退款超过原单，因此某个分类当月可能是负数。本文按"照实返回负数"写。**建议**：照实返回，由前端决定怎么显示（比如显示为 `-¥12.00` 并加一个提示）。
