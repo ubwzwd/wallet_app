@@ -4,13 +4,13 @@
 
 ## 0. 范围与优先级
 
-1. 顺序：**先把网页端全功能做好（含 LLM 接入、账单导入、UI 重设计）→ 部署上线 → Android/iOS**。本目标设计只覆盖第一步，部署沿用 `docs/current-design/05-infra-and-ops.md` 的方案，App 不在本设计范围。
+1. 顺序：**先把网页端全功能做好（含账单导入、UI 重设计）→ 部署上线 → Android/iOS**。账单的读取交给用户自己的 ChatGPT / Claude（§5、§6），应用不接入 LLM。本目标设计只覆盖第一步，部署沿用 `docs/current-design/05-infra-and-ops.md` 的方案，App 不在本设计范围。
 2. 不再使用 GSD 规划工具；`.planning/` 里的 GSD 提示词后续清理，本设计不引用它。
 3. UI 做全新视觉重设计；实现前先出 mockup 给用户看，现有 `.planning/research/ui-redesign-v2/spec.md` 只作参考。
 4. 界面语言中英双语（i18n，默认跟随系统），分类名、错误信息也双语。
 5. 用户范围：开放给亲友注册。需要注册开关（环境变量 `REGISTRATION_OPEN`，默认 `true`）、限流、上传大小限制。
 6. 网页布局响应式：窄屏底部 tab + 中央"记一笔"按钮；宽屏（≥1024px）左侧导航栏 + 宽内容区。账单导入的 review 表格必须在桌面上好用。
-7. 明确**不做**（本版本）：预算、找回密码/邮箱验证、分类管理、标签、实时协同、移动 App、钱迹的"不计收支"标记、交易时间（`occurred_at` 仍为日期）。
+7. 明确**不做**（本版本）：预算、找回密码/邮箱验证、分类管理、标签、实时协同、移动 App、钱迹的"不计收支"标记、交易时间（`occurred_at` 仍为日期）、应用内调用 LLM（API key、模型设置、服务端解析，2026-09-10 决定）。
 
 ## 1. 交易种类（kind）
 
@@ -132,7 +132,7 @@
 - 归属：`finance_sources`、`transactions`、`import_batches` 都属于账本（`ledger_id`），每行记录 `created_by`，交易和账户另记 `updated_by`。账本内账户完全共享。
 - 软限制：每人最多 10 本账，每本最多 10 人。
 - 并发：不做实时同步。`transactions`、`finance_sources`、`ledgers` 带 `updated_at`；PATCH 请求体带客户端看到的 `updated_at`，不一致返回 409 `stale_update`，前端提示重新加载。列表在窗口重新聚焦时自动刷新。
-- 所有业务接口改为 `/api/v1/ledgers/{ledger_id}/...` 前缀，鉴权 = "当前用户是该账本成员"。LLM 设置仍是每用户一份（`/api/v1/me/llm-settings`）。
+- 所有业务接口改为 `/api/v1/ledgers/{ledger_id}/...` 前缀，鉴权 = "当前用户是该账本成员"。
 
 ## 3. 资金账户（finance_sources）
 
@@ -144,27 +144,29 @@
 
 `GET /api/v1/ledgers/{id}/transactions` 参数：`q`（ILIKE 匹配 merchant / note）、`kind`（可多个）、`category_l1`、`category_l2`、`source_id`（可多个）、`from` / `to`（日期）、`currency`、`min_amount` / `max_amount`（绝对值）、`limit` / `offset`；返回 `{items, total}`。ILIKE 足够，不做全文索引。筛选状态放在前端 URL 里。
 
-## 5. 账单导入
+## 5. 账单导入（2026-09-10 改版：应用不接入 LLM）
 
-- 支持：PDF（文本型或扫描版都一样对待）、图片（JPG/PNG）、CSV、XLSX。**只有一条流水线，全部送同一个支持视觉的模型**（2026-09-09 用户决定，见 §14.24）：PDF 每页渲染成图片、图片原样送；CSV / XLSX 读成纯文本分块送（没有页面可渲染，画成图片没有意义）；不做本地文字抽取（不用 pdfplumber）。同一份提示词、同一个输出 schema、同一个 review 流程。PDF / 图片批次的 review 界面旁边显示该页缩略图；密表格页可裁成上下两半分别送。`needs_review` 只按置信度和解析异常打，不再按"走了哪条路"默认打。
-- 一份账单对应一个目标账户，上传时由用户选，不让 LLM 猜。
-- 状态机：`uploaded → parsing → ready → committed`，`parsing → failed`（可重试）。`ready` 状态下才能编辑草稿和提交；`committed` 后可整批撤销（删除这批建的所有交易，不限时限，撤销前确认并显示条数）。撤销 = **整批删除**：删交易 → 删批次与草稿行 → 删原文件；不保留 `reverted` 之类的历史状态，批次状态只有这五个值（2026-09-09 用户确认，对应 README U-1）。
-- 后台任务：FastAPI 后台任务 + 数据库状态轮询（`GET /ledgers/{id}/imports/{batch_id}`），不引入队列。服务重启把仍为 `parsing` 的批次标 `failed`（启动时执行）。同一账本同时只允许一个批次在 `parsing`。
-- 限制：文件 ≤10 MB，单批 ≤2000 行，文本按约 150 行分块调用 LLM。
-- 两张表：`import_batches`（一次上传：账本、目标账户、上传人、文件名、MIME、大小、状态、错误、所用模型、LLM 原始响应、行数、时间戳）和 `import_rows`（草稿行：批次、行号、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、merchant、note、category_l1、category_l2、confidence、source_ref、flags、matched_transaction_id、counterpart_source_id、transfer_subtype、提交后的 transaction_id）。原因：草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键。
-- 服务端在 `ready` 时自动打三种标记（写进 `flags`）：`duplicate`（同账户同日同金额已存在）、`refund_candidate`（正数入账，按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`repayment`（信用卡账单里的还款行，按 §1.2 规则找对手账户，去重）。退款候选匹配以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
-- review 表格：每行所有字段可改、可标跳过、可改 kind、可选分类、可关联退款原单、可选对手账户；没一级分类的行显示"待归类"，提交前必须补齐。
-- 提交：`POST .../imports/{batch_id}/commit`，一个数据库事务内建所有交易（两腿还款一起建），每条交易记 `import_batch_id`；成功后批次 `committed`。
+- **原则**：应用本身不调用任何大模型。用户在自己的 ChatGPT / Claude（网页或 App，用自己的订阅）里安装我们提供的 skill，把任意账单（PDF、图片、Excel、CSV……交给聊天工具去读）整理成**标准导入文件**，再上传到应用。应用只负责校验、review、入账。
+- **标准导入格式**（唯一契约，"只要结构符合都可以"）：
+  - JSON（首选）：`{"version": "2026-09-10", "rows": [{"date": "2026-08-03", "amount": -45.00, "currency": "CNY", "kind": "expense", "transfer_role": null, "transfer_subtype": null, "merchant": "瑞幸咖啡", "note": "美团外卖-订单尾号8821", "category_l1": "food", "category_l2": "snacks_drinks", "source_ref": "L17"}]}`。字段语义与 §1 完全一致：支出为负、收入与退款为正、转账按 `transfer_role` 定号；`transfer_role` / `transfer_subtype` 只在 `kind='transfer'` 时有值；分类 code 取 §1.3 的表，拿不准留 `null`；`source_ref` 可选，指回账单原文位置。
+  - CSV：固定表头 `date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref`，UTF-8（可带 BOM），首行可以是 `# version: 2026-09-10`。
+  - 粘贴：应用内也提供一个文本框，直接粘贴 JSON 或 CSV 文本。
+- **校验**（服务端同步完成，秒级）：结构错误（JSON 不可解析、CSV 表头不符、`rows` 不是数组）→ 400，按行号返回错误，不建批次。行级问题不丢行、只打标记：`date` 必须是 `YYYY-MM-DD`，否则 `needs_review`；`amount` 非数字或为 0 → `needs_review`；`currency` 不是三位字母 → 用目标账户币种并 `needs_review`；`kind` 不在四种之内 → 按金额符号推断并 `needs_review`；分类 code 不在表内、二级不属于一级、收支方向与 kind 不符 → 对应字段置空（待归类）；`version` 缺失或与应用分类表版本不一致 → 批次级警告"skill 可能过期"，不阻断。上限：文件 ≤2 MB、单批 ≤2000 行。
+- **一份文件对应一个目标账户**，上传时由用户选；文件里不含账户信息。
+- **状态机**：`ready → committed`。校验通过即 `ready`（同步返回批次和全部草稿行，没有 parsing / 进度 / 轮询）；`ready` 下可编辑草稿和提交；`committed` 后可整批撤销 = 整批删除（§14.22）。校验不通过不产生批次。
+- **两张表**：`import_batches`（账本、目标账户、上传人、来源 `json` / `csv` / `paste`、原文件名与大小、原文件保留在 `UPLOAD_DIR/{ledger_id}/{batch_id}.{ext}` 供追溯、`skill_version`、状态、行数、警告、时间戳）与 `import_rows`（批次、`row_no`、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、transfer_role、transfer_subtype、merchant、note、category_l1、category_l2、source_ref、`hint`、flags、matched_transaction_id、counterpart_source_id、counterparty、提交后的 transaction_id）。不再有 confidence、page_no、chunk_*、raw_response、error_* 列。
+- **自动标记**不变：`ready` 时打 `duplicate`（同账户同日同金额已存在）、`refund_candidate`（按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`repayment`（按 §1.2 规则找对手账户、去重）；外加上面的 `needs_review`。退款候选以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
+- **review 表格**不变：每行所有字段可改、可标跳过、可改 kind、可选分类、可关联退款原单、可选对手账户；没一级分类的行显示"待归类"，提交前必须补齐；不再有页面缩略图（应用拿不到原始账单）。
+- **提交**：`POST .../imports/{batch_id}/commit`，一个数据库事务内建所有交易（两腿还款一起建），每条交易记 `import_batch_id`；成功后批次 `committed`。
+- **限制与限流**：导入每用户每小时 10 批；上传 ≤2 MB。
 
-## 6. LLM 设置与接口
+## 6. 导入 skill（取代原"LLM 设置与接口"）
 
-- 每用户一份 `user_llm_settings`：user_id、base_url（默认 `https://openrouter.ai/api/v1`）、api_key（服务端 Fernet 加密存，接口只回显尾 4 位）、model、updated_at。**`model` 必须支持图片输入**，没有单独的 `vision_model`（2026-09-09 用户决定，见 §14.24）。任何 OpenAI 兼容端点都可用（`/chat/completions`）。
-- 设置页"测试连接"：发一个带小图片的最小请求，模型不接受图片输入即判定不可用，不能保存为导入用模型。
-- 没配 key 的用户进入导入时直接引导去配置；**没有**服务端共享 key。
-- LLM 调用在服务端，用操作者自己的 key。
-- 输入：system prompt = 分类表（code + zh/en 名）+ 账户币种/类型 + 输出 JSON schema + 规则（支出为负、收入为正、还款标 transfer/repayment、分不清的分类留空、退款标 refund）；user 内容 = 文本块或页面图片。
-- 输出（强制 JSON，`response_format` json_schema）：`{"rows":[{"date","amount","currency","kind","merchant","note","category_l1","category_l2","confidence","source_ref"}]}`。服务端校验：分类 code 不在表里置空；日期/金额解析失败的行标 `needs_review` 而不是丢弃；`source_ref` 指回原文行号或页码+行序。
-- 成本量级：一页账单约 1–3k 输入 token、约 3k 输出 token；图片按页约 1.1–1.6k token，与文本同量级，输出占大头。
+- 应用**不存任何模型设置**：没有 `user_llm_settings` 表，没有 `/me/llm-settings` 接口，没有 API key，没有"测试连接"。
+- **skill 是仓库里的交付物** `skills/wallet-import/`：一份主文本（角色、输入任意账单、输出上面的标准 JSON 文件并提供下载、也可直接输出代码块），两种包装——Claude 的 `SKILL.md`（Claude.ai 项目 / Claude Code 皆可安装）和 ChatGPT 的 Custom GPT / Project 指令文本。规则沿用原提示词：支出为负、收入为正、退款标 `refund` 并尽量注明来源、信用卡还款标 `transfer` + `repayment`、本人账户间划转标 `transfer` + `plain`、外币原值写进 `note`、清理商户名噪音、日期一律 `YYYY-MM-DD`、分不清的分类**留空不猜**、不得自创 code、不输出卡号全号。
+- **分类表与版本同源**：skill 文本里的分类清单（code + 中文名 + 一级判据 §1.3）由脚本从 `backend/app/core/categories.py` 生成，`version` 就是 `CATEGORY_VERSION`；改分类表必须重新生成并发布 skill。应用校验 `version` 不一致时提示用户更新 skill。
+- **应用内"导入指南"页**：三步说明（安装 skill → 在你的 ChatGPT / Claude 里上传账单让它整理 → 把生成的文件上传到这里），附 skill 文本的复制 / 下载按钮，以及标准格式的示例文件。
+- 将来若要做"应用内一键导入"，标准格式已是契约，只需加一条可选的服务端调用路径，不改现有设计。
 
 ## 7. 统计与首页
 
@@ -183,12 +185,12 @@
 ## 9. 认证与安全
 
 - 邮箱 + 密码 + JWT 不变；不做找回密码、邮箱验证；提供管理员重置密码脚本 `backend/scripts/reset_password.py`。
-- 注册开关 `REGISTRATION_OPEN`；登录限流（同 IP 每分钟 10 次）；邀请码尝试限流（§2）；导入限流（每用户每小时 10 批）；上传 ≤10 MB。
+- 注册开关 `REGISTRATION_OPEN`；登录限流（同 IP 每分钟 10 次）；邀请码尝试限流（§2）；导入限流（每用户每小时 10 批）；上传 ≤2 MB（标准导入文件是纯文本）。
 - 错误响应统一 `{"detail": "...", "code": "snake_case_code"}`。
 
 ## 10. 目标数据库表一览
 
-`users`、`user_llm_settings`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`transactions`、`import_batches`、`import_rows`、`exchange_rates`。删除 `transaction_tags`。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM。`transactions` 的关键约束：
+`users`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`transactions`、`import_batches`、`import_rows`、`exchange_rates`（九张；`user_llm_settings` 已随 2026-09-10 的导入改版取消）。删除 `transaction_tags`。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM。`transactions` 的关键约束：
 
 - `kind IN ('expense','income','refund','transfer')`
 - 符号：expense 为负；income、refund 为正；transfer out 为负、in 为正
@@ -203,18 +205,18 @@
 | 分组 | 端点 |
 |---|---|
 | 认证 | 现有 `auth` 接口保留（注册受 `REGISTRATION_OPEN` 控制） |
-| 我 | `GET /me`、`PATCH /me`（默认币种、语言）、`GET/PUT/DELETE /me/llm-settings`、`POST /me/llm-settings/test` |
+| 我 | `GET /me`、`PATCH /me`（默认币种、语言） |
 | 分类 | `GET /categories`（公开，带 `version`，`Cache-Control: immutable`） |
 | 账本 | `GET /ledgers`、`POST /ledgers`、`GET/PATCH/DELETE /ledgers/{id}`、`GET /ledgers/{id}/members`、`DELETE /ledgers/{id}/members/{user_id}`、`POST /ledgers/{id}/leave`、`POST /ledgers/{id}/transfer-ownership`、`POST /ledgers/{id}/invites`、`POST /ledgers/join` |
 | 账户 | `GET/POST /ledgers/{id}/sources`（GET 含余额）、`GET/PATCH/DELETE /ledgers/{id}/sources/{sid}` |
 | 交易 | `GET/POST /ledgers/{id}/transactions`、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}` |
 | 统计 | `GET /ledgers/{id}/stats/summary?month=YYYY-MM`、`GET /ledgers/{id}/stats/trend?months=12` |
-| 导入 | `POST /ledgers/{id}/imports`（multipart）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`POST .../retry`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready/failed = 丢弃；committed = 撤销） |
+| 导入 | `POST /ledgers/{id}/imports`（multipart 文件，或 JSON 体 `{source_id, text}` 粘贴；同步校验，直接返回批次与草稿行）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready = 丢弃；committed = 撤销）；`GET /import-format`（公开：标准格式说明、示例文件、skill 文本，带 version） |
 | 汇率 | 现有 `rates` 接口保留 |
 
 ## 12. 前端
 
-- 页面：登录/注册、账本列表与切换、首页（统计）、交易列表（含筛选栏）、记一笔（四种 kind 的表单，转账含对手账户可选）、账户列表/表单、导入（上传→进度→review 表格→历史）、账本设置（成员、邀请码、基准币种）、个人设置（LLM、默认币种、语言）。
+- 页面：登录/注册、账本列表与切换、首页（统计）、交易列表（含筛选栏）、记一笔（四种 kind 的表单，转账含对手账户可选）、账户列表/表单、导入（导入指南 → 上传或粘贴 → review 表格 → 历史）、账本设置（成员、邀请码、基准币种）、个人设置（默认币种、语言）。
 - 当前账本 id 放在 URL 里；筛选条件放在 URL query。
 - 技术栈沿用 Expo / react-native-web / TanStack Query / axios；API 客户端按 §11 重写；i18n 引入语言包。
 - 视觉重设计的方向在 `04-frontend.md` 里提方案，实现前出 mockup。
@@ -223,7 +225,7 @@
 
 一次性 Alembic 迁移链（在 head `8a4f4d66d893` 之后）：
 
-1. 建 `ledgers`、`ledger_members`、`ledger_invites`、`user_llm_settings`、`import_batches`、`import_rows`。
+1. 建 `ledgers`、`ledger_members`、`ledger_invites`、`import_batches`、`import_rows`。
 2. 每个现有用户建默认账本 + owner 成员，`base_currency` 复制自 `users.base_currency`。
 3. `finance_sources`、`transactions` 加 `ledger_id`（回填为该用户默认账本）、`created_by`、`updated_by`、`updated_at`；账户加 `opening_balance`、`type` 增加 `cash`。
 4. `transactions`：`description` → `note`；加 `kind`（回填：`transfer_pair_id` 非空 → transfer，否则金额 <0 → expense、≥0 → income）、`transfer_role`（按符号）、`transfer_subtype`（回填 `plain`）、`refund_of`、`counterparty`、`category_l1` / `category_l2`（现有 expense/income 行回填 `other` / `other_income`）、`import_batch_id`；加 §10 的 CHECK。
@@ -260,3 +262,5 @@
 22. **撤销导入整批删除**（2026-09-09 用户决定，README U-1）：不引入 `reverted` 状态，不为追溯保留已撤销批次，避免数据库里留垃圾。
 23. **解析进度用小数**（2026-09-09 用户决定，README U-2，推翻校对时的整数对）：`GET /ledgers/{id}/imports/{bid}` 返回 `progress: number | null`，取值 0–1、保留两位（`chunk_done / chunk_total`），切块完成前（总数未知）为 `null`；数据库仍存 `chunk_done` / `chunk_total` 两列，接口不暴露。前端显示百分比，`null` 时显示"正在读取账单…"。**各章待同步**：03 §5.40 响应、04 `ImportBatch` 类型与进度页、05 §10.3 进度计算。
 24. **导入只有一条视觉流水线**（2026-09-09 用户决定，取代 U-3 与 §5 原"文字优先、视觉兜底"）：用户必须配置支持图片输入的模型（`vision_model` 字段删除，测试连接验证图片能力）；PDF 每页渲染成图片、图片原样、CSV / XLSX 读成纯文本，都送同一个模型、同一份提示词、同一个 schema；不做本地 PDF 文字抽取。批次表删除 `used_vision`，PDF / 图片批次一律有 `pages` 缩略图；`needs_review` 只按置信度与解析异常打标。**各章待同步**：01 实体字段、02 `import_batches` / `user_llm_settings` 列、03 §5.9–5.10 与 §5.40/§5.46、04 设置页与 `ImportBatch` 类型、05 §2–§3 抽取与分块整章、README。
+25. **应用不接入 LLM，导入改为"用户自己的 ChatGPT / Claude + 标准格式文件"**（2026-09-10 用户决定，§5、§6 已整体改写）。由此**作废**的条目：§14.9（图片切分）、§14.12（页面缩略图与 pages 接口）、§14.14（`import_interrupted`，不再有后台解析）、§14.15（批次错误三列，校验错误同步返回）、§14.17（`image_url`）、§14.23（进度小数，校验同步无进度）、§14.24（视觉流水线）；README 的 U-2、U-3 随之作废。§14.10（`counterparty`）、§14.11（退款候选复用列表）、§14.19（`hint`）继续有效。**各章待同步**：01 §1 实体与 §3 导入流程、02 删 `user_llm_settings` 并精简 `import_batches` / `import_rows`、03 删 LLM 设置与 pages / retry 端点、导入端点改同步、04 删 LLM 设置页并加导入指南页、05 章重写为"标准导入格式 + skill 规范 + 校验规则 + 自动标记"、README。新增交付物：`skills/wallet-import/` 与生成脚本。
+
