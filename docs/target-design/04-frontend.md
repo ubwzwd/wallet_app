@@ -300,7 +300,7 @@ useQuery({
 
 - 服务端给 `Cache-Control: immutable` 且响应体带 `version`（决策 §11），HTTP 层已经不会重复请求。
 - 额外持久化一份到 `localStorage['wallet:categories']`，形如 `{version, expense, income}`；启动时先用它 `setQueryData` 把界面点亮，再后台请求；**返回的 `version` 与本地不同就整体替换并写回**。这样离线打开也能显示分类名。
-- 分类名**不进语言包**（§5.3）：接口给 `name_zh` / `name_en`，界面按当前语言取。
+- 分类名与一级分类的说明文字**都不进语言包**（§5.3）：接口给 `name_zh` / `name_en` 和 `desc_zh` / `desc_en`，界面按当前语言取（决策 §14.21）。
 - 用它派生三个查找表：`byL1: Record<code, Category>`、`l2Of(l1): Category[]`、`kindAllows(kind): Category[]`（`expense`/`refund` → 支出树，`income` → 收入树，`transfer` → 空，决策 §1.3）。
 
 ### 2.4 QueryClient 默认值
@@ -402,7 +402,12 @@ export interface AuthResponse { access_token: string; token_type: 'bearer'; }
 
 // ---------- 分类（决策 §1.3）----------
 // GET /categories（03 §5.11）：children 永远是数组，没有二级时是空数组
-export interface Category { code: string; name_zh: string; name_en: string; children: Category[]; }
+// desc_zh / desc_en 只有一级非空，二级恒为 null（决策 §14.21）
+export interface Category {
+  code: string; name_zh: string; name_en: string;
+  desc_zh: string | null; desc_en: string | null;
+  children: Category[];
+}
 export interface CategoryTree { version: string; expense: Category[]; income: Category[]; }
 
 // ---------- 账本（决策 §2）----------
@@ -960,7 +965,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 - **区块**（窄屏纵向堆叠，宽屏两列）：
   1. **净资产条**：所有未归档账户 `balance_base` 之和，账本基准币种（决策 §7、§8：余额用最新汇率）。信用卡账户余额为负，正常参与求和。
   2. **账户余额卡片**：横向可滚的卡片行（宽屏是网格）。每张显示账户名、类型图标、`balance` + 币种；`default_currency !== base_currency` 时第二行小字显示 `balance_base`。点击 → 交易列表并预填 `?source_id=`。归档账户默认不显示。
-  3. **本月汇总**：月份切换器（`‹ 2026 年 8 月 ›`，写进 `?month=`，不能越过当前月）。支出 / 收入两个大数（支出已按退款日期冲减，决策 §7）。下面是按一级分类的条形排行（前 8 条 + 「其他 N 项」），点一条展开二级分类。转账不出现（决策 §1）。
+  3. **本月汇总**：月份切换器（`‹ 2026 年 8 月 ›`，写进 `?month=`，不能越过当前月）。支出 / 收入两个大数（支出已按退款日期冲减，决策 §7）。下面是按一级分类的条形排行（前 8 条 + 「其他 N 项」），点一条展开二级分类。一级分类名带 tooltip（触摸端长按），内容是分类缓存里该 code 的 `categoryDesc()`——统计接口不下发说明文字，按 `byL1[code]` 从 §2.3 的缓存里取（决策 §14.21）。转账不出现（决策 §1）。
   4. **12 个月趋势**：支出/收入双折线，X 轴月份，Y 轴基准币种。点某个月 → 切到该月汇总。
 - **状态**：三块各自骨架屏，互不阻塞；某块失败只在该块内显示重试；账户为 0 时余额区显示空态「先添加一个账户」+ 按钮；本月无交易时汇总区显示「这个月还没有记账」+「记一笔」按钮。
 - **交互**：下拉刷新（原生）/ 顶部刷新按钮（Web）；`refetchOnWindowFocus` 保证切回标签页即最新（§2.4）。
@@ -1012,6 +1017,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 #### 4.6.1 支出 tab（`kind=expense`）
 
 - 分类：一级必填、二级可选（决策 §1），从支出树取（§2.3）。选择器是两级面板：左列一级、右列二级；窄屏是「先选一级 → 滑出二级」。最近用过的 6 个分类置顶（本地记录）。
+- **一级选项是两行**（决策 §14.21）：第一行是 `categoryName()`，第二行用 `categoryDesc()` 显示归类判据（12.5px、次要色、单行截断）。它就是「生活购物 = 用完就没了 / 消费购物 = 买一次用几年」这类边界的唯一提示位置，所以不要因为窄屏省掉。截断的全文靠长按（触摸）或 hover（指针）弹出显示。二级选项没有说明文字（`desc` 为 `null`），保持单行，不留空行。
 - 端点：`POST /ledgers/{id}/transactions`，body：
 
 ```json
@@ -1255,8 +1261,8 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | kind | ✓ | 下拉 | 支出 / 收入 / 退款 / 转账（决策 §1）；改 kind 联动分类树与对手账户列的可用性 |
 | 商户 | ✓ | 文本框 | `merchant`（≤200） |
 | 备注 | ✓ | 文本框 | `note`（≤500） |
-| 一级分类 | ✓ | 级联选择器 | `category_l1`；transfer 行置为 `—` 且禁用（决策 §10） |
-| 二级分类 | ✓ | 级联选择器 | `category_l2`；随一级过滤 |
+| 一级分类 | ✓ | 级联选择器 | `category_l1`；transfer 行置为 `—` 且禁用（决策 §10）。选择器展开后每个一级选项是两行：名称 + `categoryDesc()` 的说明文字（12.5px、次要色、单行截断，长按 / hover 看全文），决策 §14.21——这一列的错分成本最高，判据必须就在眼前 |
+| 二级分类 | ✓ | 级联选择器 | `category_l2`；随一级过滤。二级没有说明文字（`desc` 为 `null`），选项保持单行 |
 | 对手账户 | ✓ | Picker + 文本框 | `counterpart_source_id`，仅 `kind='transfer'` 行可用；Picker 里选「不在应用里」时露出一个文本框写 `counterparty`（≤100 字，决策 §14.10），提交时按单腿建（`transfer_pair_id = NULL` + 这段文本）。同一格里另有 `transfer_role`（转出/转入）与 `transfer_subtype`（普通/还款）两个小开关 |
 | 关联原单 | ✓ | 弹层 | `matched_transaction_id`，仅 `kind='refund'` 行可用，复用 §4.6.3 的选择器（`txApi.list` 按同账户 + `kind=expense` 筛，不另建候选接口，决策 §14.11） |
 | 状态/标记 | 部分 | 徽章 + 跳过开关 | `status` 与 `flags`（下表） |
@@ -1286,7 +1292,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 #### 4.11.5 批量操作
 
-- **批量设分类**：选中若干行 → 选一个一级（可选二级）→ 逐行 `PATCH`（并发上限 6，带整体进度条，失败的行留在选中集合里可重试）。kind 不匹配的行（如给收入行设支出分类）自动排除并在结果里说明。
+- **批量设分类**：选中若干行 → 选一个一级（可选二级）→ 逐行 `PATCH`（并发上限 6，带整体进度条，失败的行留在选中集合里可重试）。kind 不匹配的行（如给收入行设支出分类）自动排除并在结果里说明。这里的一级列表同样是两行选项（名称 + `categoryDesc()` 的说明文字，12.5px、次要色、单行截断，长按 / hover 看全文，决策 §14.21）：一次改几十行，选错的代价比单条更大。
 - **批量跳过 / 取消跳过**：把 `status` 设成 `skipped` / `pending`。
 - **批量设 kind**、**批量设币种**：同机制。
 - 顶部筛选切片：全部 / 待归类 / 有标记 / 已跳过 / 低置信度。切片只影响显示，不影响选中集合（切走再切回来选中还在）。
@@ -1465,11 +1471,16 @@ frontend/src/i18n/
 
 ### 5.3 分类名不进语言包（决策 §1.3）
 
-分类是后端常量，接口 `GET /categories` 同时给 `name_zh` 和 `name_en`（决策 §1.3、§11）。前端：
+分类是后端常量，接口 `GET /categories` 同时给 `name_zh` / `name_en` 与一级分类的 `desc_zh` / `desc_en`（决策 §1.3、§11、§14.21）。前端：
 
 ```ts
 export function categoryName(c: Category, lang: string): string {
   return lang.startsWith('zh') ? c.name_zh : c.name_en;
+}
+
+// 一级分类的说明文字（归类判据）；二级恒为 null，调用方据此决定要不要渲染那一行
+export function categoryDesc(c: Category, lang: string): string | null {
+  return lang.startsWith('zh') ? c.desc_zh : c.desc_en;
 }
 ```
 
@@ -1623,6 +1634,7 @@ token 定义在 `frontend/src/theme/tokens.ts`，由一个 `ThemeProvider` 按 `
 | `ProgressBar` | 上传进度、解析不确定进度、批量操作进度 |
 | `StatTile` | 首页大数：标题 + 大数 + 环比小字 |
 | `BarList` / `TrendChart` | 分类排行与 12 月趋势（数值标签必须直接可读，不只靠 tooltip） |
+| `CategoryPicker` | 两级分类选择器（记一笔、review 表格分类列、批量设分类共用）。**一级是带说明文字的两行选项**（名称 + `categoryDesc()`，12.5px、次要色、单行截断，长按 / hover 看全文），二级是单行；带输入过滤与最近使用置顶（决策 §14.21） |
 | `KeyboardHint` | review 表格的快捷键帮助浮层 |
 
 ### 6.5 实现前要出的 mockup 清单（决策 §0.3）
@@ -1634,7 +1646,7 @@ token 定义在 `frontend/src/theme/tokens.ts`，由一个 `ThemeProvider` 按 `
 | 1 ★ | 首页（有数据：3 个账户、本月 8 个分类、12 月趋势） | ✓ | ✓ |
 | 2 ★ | 交易列表（有数据 + 筛选栏展开，含四种 kind 各一行、跨币种一行、单腿转账一行） | ✓ | ✓ |
 | 3 ★ | 导入 review 表格（含四种徽章、待归类阻断条、缩略图侧栏） | ✓（卡片流降级） | ✓ |
-| 4 ★ | 记一笔 — 支出 tab | ✓ | ✓ |
+| 4 ★ | 记一笔 — 支出 tab（含展开的分类选择器：一级是带说明文字的两行选项，决策 §14.21） | ✓ | ✓ |
 | 5 | 记一笔 — 转账 tab（两腿跨币种展开态 + 单腿 counterparty 态两张） | ✓ | ✓ |
 | 6 | 记一笔 — 退款 tab + 关联原支出选择器浮层 | ✓ | ✓ |
 | 7 | 交易详情（两腿转账） | ✓ | ✓ |

@@ -203,6 +203,8 @@ class Category:
     code: str
     name_zh: str
     name_en: str
+    desc_zh: str | None = None            # 归类判据说明；只有一级有，二级恒为 None（决策 §14.21）
+    desc_en: str | None = None
     children: tuple["Category", ...] = ()
 
 EXPENSE_CATEGORIES: tuple[Category, ...]   # 16 个一级，见决策 §1.3 的冻结表
@@ -220,8 +222,11 @@ def category_table() -> dict:
     """GET /categories 的响应体（§5.11），也是 LLM system prompt 的分类清单来源。"""
 
 def prompt_lines(lang: str = "zh") -> str:
-    """给 services/llm_client 用：把分类表压成提示词里的一段列表文本。"""
+    """给 services/llm_client 用：把分类表压成提示词里的一段列表文本。
+    一级行带 desc_zh 作判据（05 §5）。"""
 ```
+
+`desc_zh` / `desc_en` 写的是这一级的归类判据和易混淆项的去向（逐字见决策 §1.3 的说明文字表），三个用途共用同一份常量：`GET /categories` 下发给前端选分类时显示（§5.11、04 §4.6/§4.11）、`prompt_lines()` 注入 LLM 提示词作判据（05 §5）。它们**与分类表一起冻结**——改名字、改二级、改说明文字，任何一种都必须同时递增 `CATEGORY_VERSION`，否则前端的永久缓存不会失效（决策 §1.3、§14.21）。
 
 #### `core/crypto.py`
 
@@ -919,40 +924,81 @@ ETag: "2026-09-09"
 {
   "version": "2026-09-09",
   "expense": [
-    {"code": "food", "name_zh": "餐饮", "name_en": "Food & Dining", "children": [
-      {"code": "breakfast", "name_zh": "早餐", "name_en": "Breakfast", "children": []},
-      {"code": "lunch", "name_zh": "午餐", "name_en": "Lunch", "children": []},
-      {"code": "dinner", "name_zh": "晚餐", "name_en": "Dinner", "children": []},
-      {"code": "late_snack", "name_zh": "夜宵", "name_en": "Late-night Snack", "children": []},
-      {"code": "snacks_drinks", "name_zh": "零食饮料", "name_en": "Snacks & Drinks", "children": []}
+    {"code": "food", "name_zh": "餐饮", "name_en": "Food & Dining",
+     "desc_zh": "日常吃喝：堂食、外卖、咖啡奶茶、零食。旅途中的吃喝归旅游",
+     "desc_en": "Everyday eating and drinking, incl. delivery, coffee, snacks. Meals on trips go under Travel",
+     "children": [
+      {"code": "breakfast", "name_zh": "早餐", "name_en": "Breakfast", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "lunch", "name_zh": "午餐", "name_en": "Lunch", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "dinner", "name_zh": "晚餐", "name_en": "Dinner", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "late_snack", "name_zh": "夜宵", "name_en": "Late-night Snack", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "snacks_drinks", "name_zh": "零食饮料", "name_en": "Snacks & Drinks", "desc_zh": null, "desc_en": null, "children": []}
     ]},
-    {"code": "transport", "name_zh": "交通", "name_en": "Transport", "children": [
-      {"code": "public_transit", "name_zh": "公交地铁", "name_en": "Public Transit", "children": []},
-      {"code": "taxi", "name_zh": "打车", "name_en": "Taxi & Ride-hailing", "children": []},
-      {"code": "fuel", "name_zh": "加油", "name_en": "Fuel", "children": []},
-      {"code": "parking", "name_zh": "停车", "name_en": "Parking", "children": []},
-      {"code": "train", "name_zh": "火车", "name_en": "Train", "children": []},
-      {"code": "flight", "name_zh": "飞机", "name_en": "Flight", "children": []}
+    {"code": "transport", "name_zh": "交通", "name_en": "Transport",
+     "desc_zh": "日常出行：公交地铁、打车、加油、停车、火车飞机。旅游期间的交通归旅游",
+     "desc_en": "Daily getting around. Transport during trips goes under Travel",
+     "children": [
+      {"code": "public_transit", "name_zh": "公交地铁", "name_en": "Public Transit", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "taxi", "name_zh": "打车", "name_en": "Taxi & Ride-hailing", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "fuel", "name_zh": "加油", "name_en": "Fuel", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "parking", "name_zh": "停车", "name_en": "Parking", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "train", "name_zh": "火车", "name_en": "Train", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "flight", "name_zh": "飞机", "name_en": "Flight", "desc_zh": null, "desc_en": null, "children": []}
+    ]},
+    {"code": "groceries", "name_zh": "生活购物", "name_en": "Groceries & Household",
+     "desc_zh": "消耗品和家里的日常运转：买菜、洗护清洁、厨房用品、纸巾垃圾袋等日用杂货。判据：用完就没了",
+     "desc_en": "Consumables that keep the household running: groceries, toiletries, kitchen and household supplies. Test: it gets used up",
+     "children": [
+      {"code": "fresh_food", "name_zh": "买菜", "name_en": "Fresh Food", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "toiletries", "name_zh": "洗护清洁", "name_en": "Toiletries & Cleaning", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "kitchenware", "name_zh": "厨房用品", "name_en": "Kitchenware", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "household", "name_zh": "日用杂货", "name_en": "Household Supplies", "desc_zh": null, "desc_en": null, "children": []}
+    ]},
+    {"code": "shopping", "name_zh": "消费购物", "name_en": "Shopping",
+     "desc_zh": "耐用品和一次性大件：数码、家电、家具、行李箱工具等。判据：买一次用几年",
+     "desc_en": "Durable and one-off purchases: electronics, appliances, furniture, luggage, tools. Test: bought once, used for years",
+     "children": [
+      {"code": "electronics", "name_zh": "数码", "name_en": "Electronics", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "appliances", "name_zh": "家电", "name_en": "Appliances", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "furniture", "name_zh": "家具", "name_en": "Furniture", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "other_goods", "name_zh": "其他物件", "name_en": "Other Goods", "desc_zh": null, "desc_en": null, "children": []}
     ]}
-    /* …其余 14 个一级支出分类，顺序与决策 §1.3 的表一致… */
+    /* …其余 12 个一级支出分类，顺序与决策 §1.3 的表一致；每个一级的 desc_zh / desc_en 逐字取自决策 §1.3 的说明文字表… */
   ],
   "income": [
-    {"code": "salary", "name_zh": "工资", "name_en": "Salary", "children": [
-      {"code": "base_salary", "name_zh": "基本工资", "name_en": "Base Salary", "children": []},
-      {"code": "bonus", "name_zh": "奖金", "name_en": "Bonus", "children": []},
-      {"code": "rsu", "name_zh": "RSU", "name_en": "RSU", "children": []}
+    {"code": "salary", "name_zh": "工资", "name_en": "Salary",
+     "desc_zh": "雇主发的钱：基本工资、奖金、RSU",
+     "desc_en": "From your employer: base salary, bonus, RSU",
+     "children": [
+      {"code": "base_salary", "name_zh": "基本工资", "name_en": "Base Salary", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "bonus", "name_zh": "奖金", "name_en": "Bonus", "desc_zh": null, "desc_en": null, "children": []},
+      {"code": "rsu", "name_zh": "RSU", "name_en": "RSU", "desc_zh": null, "desc_en": null, "children": []}
     ]},
-    {"code": "side_income", "name_zh": "兼职", "name_en": "Side Income", "children": []}
+    {"code": "side_income", "name_zh": "兼职", "name_en": "Side Income",
+     "desc_zh": "主业之外的劳务收入",
+     "desc_en": "Income from work outside your main job",
+     "children": []}
     /* …其余 4 个一级收入分类… */
   ]
 }
 ```
 
+字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `version` | string | 分类表内容的版本号（日期串）；同时是 `ETag` |
+| `code` | string | 分类 code，全表唯一；就是 `transactions.category_l1` / `category_l2` 存的值 |
+| `name_zh` / `name_en` | string | 中英显示名。分类名不进前端语言包，界面按当前语言取（04 §5.3） |
+| `desc_zh` / `desc_en` | string \| null | 这一级的归类判据与易混淆项的去向（决策 §14.21）。**只有一级有值，二级恒为 `null`**；逐字取自决策 §1.3 的说明文字表 |
+| `children` | array | 二级分类，结构与一级相同（`desc_*` 都是 `null`） |
+
 约定：
 
 - `children` 永远是数组（没有二级时为空数组），前端不需要判空。
 - 一级分类的 `children` 深度固定为 1，不做三级。
-- `version` 是常量表内容的版本号；改了分类表就必须改它，前端据此判断本地永久缓存是否失效（决策 §1.3）。
+- `desc_zh` / `desc_en` 在一级上**永远非空**，前端可以无条件显示；二级上永远是 `null`，不要在二级选项下面留空行（决策 §14.21）。
+- `version` 是常量表内容的版本号；改了分类表——包括增删分类、改显示名、改 `desc_zh` / `desc_en`——就必须改它，前端据此判断本地永久缓存是否失效（决策 §1.3、§14.21）。
 - 缓存头写 `immutable` 是安全的，因为 URL 不变而内容会变——前端的做法是启动时带 `If-None-Match: "<缓存里的 version>"` 请求一次，服务端 `version` 相同则回 304。
 
 错误：只有 500。副作用：不查库、不调外部服务，纯常量序列化（可在进程内缓存序列化结果）。
@@ -2937,7 +2983,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 | `GET/PATCH /me`、`/auth/me` | 两条路径返回同一份数据；改 `language`；改不支持的币种 → 400；显式 `null` → 422 |
 | `PUT /me/llm-settings` | 首次必须给 `api_key`；省略 `api_key` 时旧 key 不变（解密后比对）；库里存的不是明文；响应只有 `api_key_last4` |
 | `POST /me/llm-settings/test` | 假 LLM 返回 200 → `{ok: true, supports_vision: true}`；视觉调用 400 → `ok=true, supports_vision=false`；401 → `ok=false` 且 `error` 里不含完整 key；没配 → 409 |
-| `GET /categories` | 22 个一级；每个二级的 parent 正确；`version` 与常量一致；`If-None-Match` 命中 → 304 |
+| `GET /categories` | 22 个一级；每个二级的 parent 正确；**每个一级的 `desc_zh` / `desc_en` 都非空、每个二级的都是 `null`**（决策 §14.21）；`version` 与常量一致；`If-None-Match` 命中 → 304 |
 | `POST /ledgers` | 第 11 本 → 409 `ledger_limit_reached` |
 | `PATCH /ledgers/{id}` | member 调 → 403 `not_owner`；旧 `updated_at` → 409 `stale_update`；改基准币种后统计口径跟着变 |
 | `DELETE /ledgers/{id}` | `confirm_name` 不符 → 400；成功后账户 / 交易 / 批次全被级联删 |

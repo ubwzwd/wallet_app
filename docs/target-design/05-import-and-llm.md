@@ -999,15 +999,17 @@ def _schema_rejected(r: httpx.Response) -> bool:
 ```python
 # backend/app/core/categories.py （新增）
 def render_prompt_categories() -> str:
-    """渲染成一行一个一级分类的紧凑形式，供 LLM 提示词注入。"""
-    out = ["支出分类（kind = expense / refund 用这一组）："]
-    for c in EXPENSE_CATEGORIES:
-        subs = " | ".join(f"{s.code} {s.zh}" for s in c.children) or "（无二级）"
-        out.append(f"- {c.code} {c.zh}：{subs}")
-    out += ["", "收入分类（kind = income 用这一组）："]
-    for c in INCOME_CATEGORIES:
-        subs = " | ".join(f"{s.code} {s.zh}" for s in c.children) or "（无二级）"
-        out.append(f"- {c.code} {c.zh}：{subs}")
+    """渲染成一行一个一级分类的紧凑形式，供 LLM 提示词注入。
+    一级行的格式是「code 中文名（desc_zh）：二级列表」——括号里就是决策 §1.3
+    冻结的说明文字，模型拿它当归类判据（决策 §14.21）。二级没有说明文字。"""
+    def block(title, cats):
+        out = [title]
+        for c in cats:
+            subs = " | ".join(f"{s.code} {s.zh}" for s in c.children) or "（无二级）"
+            out.append(f"- {c.code} {c.zh}（{c.desc_zh}）：{subs}")
+        return out
+    out = block("支出分类（kind = expense / refund 用这一组）：", EXPENSE_CATEGORIES)
+    out += [""] + block("收入分类（kind = income 用这一组）：", INCOME_CATEGORIES)
     return "\n".join(out)
 ```
 
@@ -1015,30 +1017,30 @@ def render_prompt_categories() -> str:
 
 ```text
 支出分类（kind = expense / refund 用这一组）：
-- clothing 服饰：clothes 衣服 | shoes 鞋子 | bags 包 | accessories 配饰
-- food 餐饮：breakfast 早餐 | lunch 午餐 | dinner 晚餐 | late_snack 夜宵 | snacks_drinks 零食饮料
-- housing 居住：rent 房租 | mortgage 房贷
-- transport 交通：public_transit 公交地铁 | taxi 打车 | fuel 加油 | parking 停车 | train 火车 | flight 飞机
-- health 健康：medical 看病 | medicine 买药 | checkup 体检 | wellness 保健 | fitness 健身
-- entertainment 娱乐：movies 电影 | games 游戏 | ktv KTV | outing 出去玩
-- groceries 生活购物：fresh_food 买菜 | toiletries 洗护清洁 | kitchenware 厨房用品 | household 家居耗材
-- shopping 消费购物：electronics 数码 | appliances 家电 | furniture 家具 | misc_goods 日用杂货
-- pet 宠物：pet_food 宠物粮 | pet_medical 宠物医疗 | pet_supplies 宠物用品
-- childcare 育儿：formula_diapers 奶粉尿布 | toys 玩具 | education 教育 | kids_clothes 衣物 | kids_medical 医疗
-- parents 父母：filial 孝敬 | gifts 礼物 | parents_medical 医疗
-- bills 固定支出：water 水费 | electricity 电费 | gas 燃气 | property_fee 物业 | internet 宽带 | mobile 话费
-- culture 精神文化支出：books 书籍 | courses 课程 | stationery 文具 | paid_content 知识付费 | exhibitions 展览 | subscriptions 订阅
-- travel 旅游：flights 机票 | hotels 酒店 | tickets 门票 | local_transport 当地交通 | travel_food 旅游餐饮
-- social 人情往来：red_packet 红包礼金 | treat 请客 | lend 借出 | transfer_out 转给他人
-- other 其他：fines 罚款 | fees 手续费
+- clothing 服饰（穿在身上的：衣服、鞋、包、配饰。运动装备也算这里；童装归育儿）：clothes 衣服 | shoes 鞋子 | bags 包 | accessories 配饰
+- food 餐饮（日常吃喝：堂食、外卖、咖啡奶茶、零食。旅途中的吃喝归旅游）：breakfast 早餐 | lunch 午餐 | dinner 晚餐 | late_snack 夜宵 | snacks_drinks 零食饮料
+- housing 居住（住的固定大头：房租、房贷。水电物业归固定支出）：rent 房租 | mortgage 房贷
+- transport 交通（日常出行：公交地铁、打车、加油、停车、火车飞机。旅游期间的交通归旅游）：public_transit 公交地铁 | taxi 打车 | fuel 加油 | parking 停车 | train 火车 | flight 飞机
+- health 健康（自己的看病买药、体检、保健品、健身。宠物和孩子的医疗各归宠物、育儿）：medical 看病 | medicine 买药 | checkup 体检 | wellness 保健 | fitness 健身
+- entertainment 娱乐（玩乐：电影、游戏、KTV、酒吧、桌游密室。视频音乐订阅归精神文化）：movies 电影 | games 游戏 | ktv KTV | outing 出去玩
+- groceries 生活购物（消耗品和家里的日常运转：买菜、洗护清洁、厨房用品、纸巾垃圾袋等日用杂货。判据：用完就没了）：fresh_food 买菜 | toiletries 洗护清洁 | kitchenware 厨房用品 | household 日用杂货
+- shopping 消费购物（耐用品和一次性大件：数码、家电、家具、行李箱工具等。判据：买一次用几年）：electronics 数码 | appliances 家电 | furniture 家具 | other_goods 其他物件
+- pet 宠物（宠物的吃、用、看病）：pet_food 宠物粮 | pet_medical 宠物医疗 | pet_supplies 宠物用品
+- childcare 育儿（孩子的一切：奶粉尿布、玩具、教育、衣物、医疗）：formula_diapers 奶粉尿布 | toys 玩具 | education 教育 | kids_clothes 衣物 | kids_medical 医疗
+- parents 父母（给父母的：孝敬钱、礼物、医疗）：filial 孝敬 | gifts 礼物 | parents_medical 医疗
+- bills 固定支出（每月固定的账单：水、电、燃气、物业、宽带、话费。房租房贷归居住）：water 水费 | electricity 电费 | gas 燃气 | property_fee 物业 | internet 宽带 | mobile 话费
+- culture 精神文化支出（学习和精神消费：书、课程、文具、知识付费、展览、视频音乐订阅）：books 书籍 | courses 课程 | stationery 文具 | paid_content 知识付费 | exhibitions 展览 | subscriptions 订阅
+- travel 旅游（离开常住地的旅程中的一切：机票、酒店、门票、当地交通、旅途餐饮）：flights 机票 | hotels 酒店 | tickets 门票 | local_transport 当地交通 | travel_food 旅游餐饮
+- social 人情往来（花在别人身上的：红包礼金、请客、借出、转给他人。给父母的归父母）：red_packet 红包礼金 | treat 请客 | lend 借出 | transfer_out 转给他人
+- other 其他（归不进上面任何一类的：罚款、手续费、年费）：fines 罚款 | fees 手续费
 
 收入分类（kind = income 用这一组）：
-- salary 工资：base_salary 基本工资 | bonus 奖金 | rsu RSU
-- side_income 兼职：（无二级）
-- investment 理财：interest 利息 | dividend 分红 | fund 基金
-- reimbursement 报销：（无二级）
-- social_income 人情往来：red_packet_in 红包礼金 | borrow 借入 | transfer_in 他人转入
-- other_income 其他：（无二级）
+- salary 工资（雇主发的钱：基本工资、奖金、RSU）：base_salary 基本工资 | bonus 奖金 | rsu RSU
+- side_income 兼职（主业之外的劳务收入）：（无二级）
+- investment 理财（钱生的钱：利息、分红、基金赎回收益）：interest 利息 | dividend 分红 | fund 基金
+- reimbursement 报销（垫付后收回的钱）：（无二级）
+- social_income 人情往来（别人给的：红包礼金、借入、他人转入）：red_packet_in 红包礼金 | borrow 借入 | transfer_in 他人转入
+- other_income 其他（归不进上面任何一类的收入）：（无二级）
 ```
 
 ### 5.1 SYSTEM_TEXT（文本路径 system prompt 全文）
@@ -1128,9 +1130,11 @@ def render_prompt_categories() -> str:
   kind="transfer" 两个分类字段都必须是 null。
 - 只有一级有把握、二级没把握时，填一级、二级填 null。这是允许且常见的。
 - 一级也没把握时，两个都填 null，把 confidence 调低。留空比猜错好——用户会在界面上补。
-- groceries（生活购物）是必需品：买菜、纸巾、洗衣液、厨具、家居耗材。
-  shopping（消费购物）是非必需品：数码、家电、家具、日用杂货。
-  淘宝、京东、拼多多、Shopee、Amazon 这类综合平台看不出买了什么时，两个字段都填 null。
+- groceries（生活购物）= 消耗品与家里的日常运转（用完就没了）：买菜、纸巾、洗衣液、厨具、日用杂货。
+  shopping（消费购物）= 耐用品与一次性大件（买一次用几年）：数码、家电、家具、行李箱、工具。
+  分的是"用完就没了"还是"买一次用几年"，**不是**"该不该买"这种主观判断。
+  淘宝、京东、拼多多、Shopee、Amazon 这类综合平台看不出买了什么时，两个字段都填 null，
+  不要塞进任何一个兜底桶。
 - 退款不是收入。任何退款都用 kind="refund" + 支出分类。
 
 # 输出要求
@@ -2210,6 +2214,19 @@ def fake_llm(monkeypatch, request):
 | `fake_llm_extra_field`（多返回一个字段） | `jsonschema` 校验失败 → 走重试路径 |
 
 **至少一个测试断言提示词本身**：`test_system_prompt_contains_all_categories` 检查渲染出的 system prompt 含全部 22 个一级 code（16 支出 + 6 收入，逐个断言，含 `social_income`、`other_income`）、含填充后的实际账户币种、含"不要发明新的 code"这句话。分类表改了而提示词没跟上时这个测试会红。
+
+再加一条 `test_system_prompt_l1_lines_carry_desc`：每个一级分类行都必须带上常量里的 `desc_zh`（决策 §14.21）——说明文字是模型的归类判据，`render_prompt_categories()` 一旦回退成只有 code + 名字，边界判断就没了依据，而 22 个 code 的那条断言仍然是绿的。
+
+```python
+def test_system_prompt_l1_lines_carry_desc():
+    p = render_system_text(CTX)
+    for c in EXPENSE_CATEGORIES + INCOME_CATEGORIES:
+        assert c.desc_zh, f"{c.code} 缺 desc_zh"
+        assert f"- {c.code} {c.zh}（{c.desc_zh}）：" in p
+    # 消耗品 / 耐用品这条边界必须逐字在提示词里（决策 §14.20）
+    assert "判据：用完就没了" in p
+    assert "判据：买一次用几年" in p
+```
 
 另一个 `test_system_prompt_has_date_escape_rule` 断言**日期逃生规则**逐字在提示词正文里（§5.1）：
 
