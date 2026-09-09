@@ -155,7 +155,7 @@
 - **一份文件对应一个目标账户**，上传时由用户选；文件里不含账户信息。
 - **状态机**：`ready → committed`。校验通过即 `ready`（同步返回批次和全部草稿行，没有 parsing / 进度 / 轮询）；`ready` 下可编辑草稿和提交；`committed` 后可整批撤销 = 整批删除（§14.22）。校验不通过不产生批次。
 - **两张表**：`import_batches`（账本、目标账户、上传人、来源 `json` / `csv` / `paste`、原文件名与大小（只记名字，**不保存文件**，2026-09-10 用户决定）、`skill_version`、状态、行数、警告、时间戳）与 `import_rows`（批次、`row_no`、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、transfer_role、transfer_subtype、merchant、note、category_l1、category_l2、source_ref、`hint`、flags、matched_transaction_id、counterpart_source_id、counterparty、提交后的 transaction_id）。不再有 confidence、page_no、chunk_*、raw_response、error_* 列。
-- **自动标记**不变：`ready` 时打 `duplicate`（同账户同日同金额已存在）、`refund_candidate`（按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`repayment`（按 §1.2 规则找对手账户、去重）；外加上面的 `needs_review`。退款候选以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
+- **自动标记**不变：`ready` 时打 `duplicate`（同账户同日同金额已存在）、`refund_candidate`（按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`repayment`（按 §1.2 规则找对手账户、去重）；外加上面的 `needs_review`。 同一批内完全相同的行**不合并**：都保留、都打 `needs_review`，`hint` 写"本批内有相同的行（第 N 行）"，由用户在 review 里取舍；标记只有这四种，没有 `merged_duplicates`（2026-09-10 用户决定）。退款候选以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
 - **review 表格**不变：每行所有字段可改、可标跳过、可改 kind、可选分类、可关联退款原单、可选对手账户；没一级分类的行显示"待归类"，提交前必须补齐；不再有页面缩略图（应用拿不到原始账单）。
 - **提交**：`POST .../imports/{batch_id}/commit`，一个数据库事务内建所有交易（两腿还款一起建），每条交易记 `import_batch_id`；成功后批次 `committed`。
 - **限制与限流**：导入每用户每小时 10 批；上传 ≤2 MB。
@@ -268,3 +268,4 @@
 28. **不保存上传的导入文件，也不存原始行值**（2026-09-10 用户决定，README U-7 作废）：批次只记文件名与大小；校验改动写进行的 `hint`；后端没有文件系统状态，`UPLOAD_DIR`、上传卷、目录清理全部取消（05 待决 8 随之作废）。
 29. **邀请码不要求全表唯一，用掉即删、过期即删**（2026-09-10 用户决定，README U-8 改、02 待决 D-6 一并定）：`ledger_invites.code` 不建唯一索引；生成时只保证与当前有效的码不重复，撞上就重新生成；`POST /ledgers/join` 只在未过期的码中查找，加入成功即删除该行；过期的行在下次生成或校验时删除；不做定时清理，表里没有 `used_by` / `used_at`。
 30. **分类表版本号：日期串，导入时硬校验**（2026-09-10 用户决定，README U-9、04 待决 D-8 前半）：`CATEGORY_VERSION` 形如 `2026-09-10`，改分类表时手工递增并重新生成 skill；skill 输出带同一版本号；上传时与应用当前版本不一致或缺失 → 400 `skill_outdated`，不允许带警告继续。
+31. **批内重复行不合并**（2026-09-10 用户决定，README U-11 改）：完全相同的行全部保留并打 `needs_review` + `hint`，标记维持 `duplicate` / `refund_candidate` / `repayment` / `needs_review` 四种，删除 `merged_duplicates`。
