@@ -240,12 +240,12 @@
 
 1. **`exchange_rates` 缓存表**：现状已无此表（见 §8）。目标态新建 `exchange_rates(date DATE, base CHAR(3), symbol CHAR(3), rate NUMERIC(18,8), fetched_at TIMESTAMP NOT NULL, PRIMARY KEY (date, base, symbol))`。换算时缺哪一天就向 Frankfurter 取哪一天并落库；"最新汇率" = 最近一个已公布日的行，同一 (base, symbol) 一小时内不重复请求。 写入按主键 upsert、保留全部历史行、不做整表刷新——历史汇率一经公布不再变，缓存的意义正是让发生日汇率不必反复外网请求（2026-09-10 用户追认并确认）。目标币种列名统一为 `symbol`（与现有 `/rates` 接口的 `symbols` 参数同源），不用 `quote`。
 2. **账户余额的币种**：余额以账户 `default_currency` 计价：`余额 = opening_balance + Σ convert(amount, tx.currency → account.default_currency, on = occurred_at)`，同币种交易不换算。`balance_base = convert(余额, account.default_currency → ledger.base_currency, 最新汇率)`。不按币种分桶，接口只返回这两个标量（外加 `balance_rate` / `balance_rate_date`）。（2026-09-10 用户追认：账户余额按账户币种显示，合计按基准币种。）
-3. **kind 互改**：`expense` / `income` / `refund` 之间可通过 PATCH 改 `kind`（服务端重新校验分类与金额符号）；`transfer` 与非 `transfer` 之间**禁止互改**，返回 400 `kind_change_not_allowed`，只能删掉重记。（2026-09-10 用户追认。）
-4. **错误 code 注册表**：以 `03-backend-api.md` §4.2 的清单为唯一注册表。01 / 04 / 05 章引用的每个 code 都必须出现在注册表里；缺的加进注册表，不允许各章自造同义名。（2026-09-10 用户追认。）
-5. **`import_rows` 行号列**：名字统一为 `row_no`。
-6. **users 表两处**：删除现状的 `users.default_source_id`（多账本下语义失效，改为前端本地记住上次使用的账户）；新增 `users.language VARCHAR(8) NULL`（`PATCH /me` 可改，NULL 表示跟随系统）。`user_llm_settings`、`ledger_invites` 各加 `created_at`。
-7. **导入提交时写 `refund_of` 的条件**：行 `kind = 'refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选），提交时写入 `refund_of`；不引入"用户已确认"这类额外状态。
-8. **篇幅**：各章的行数目标只是参考，不作为验收项。不得为压行数删除被点名要求的内容，也不要把提示词、schema 拆到附录文件。
+3. **kind 互改**：`expense` / `income` / `refund` 之间可通过 PATCH 改 `kind`（服务端重新校验分类与金额符号）；`transfer` 与非 `transfer` 之间**禁止互改**，返回 400 `kind_change_not_allowed`，只能删掉重记。
+4. **错误 code 注册表**：以 `03-backend-api.md` §4.2 的清单为唯一注册表。01 / 04 / 05 章引用的每个 code 都必须出现在注册表里；缺的加进注册表，不允许各章自造同义名。
+5. **`import_rows` 行号列**：名字统一为 `row_no`。（2026-09-10 用户追认。）
+6. **users 表两处**：删除现状的 `users.default_source_id`（多账本下语义失效，改为前端本地记住上次使用的账户）；新增 `users.language VARCHAR(8) NULL`（`PATCH /me` 可改，NULL 表示跟随系统）。`user_llm_settings`、`ledger_invites` 各加 `created_at`。（2026-09-10 用户追认；`user_llm_settings` 已随 §14.25 取消，`ledger_invites` 的 `created_at` 仍加。）
+7. **导入提交时写 `refund_of` 的条件**：行 `kind = 'refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选），提交时写入 `refund_of`；不引入"用户已确认"这类额外状态。（2026-09-10 用户追认。）
+8. **篇幅**：各章的行数目标只是参考，不作为验收项。不得为压行数删除被点名要求的内容，也不要把提示词、schema 拆到附录文件。（2026-09-10 用户追认。）
 9. **导入分块超长时的图片切分**：图片块被模型截断（`finish_reason = length`）时无条件对半切一次（重叠 6%），子块标记为已切分；已切分的子块再次被截断则整批 `failed`，不再递归。
 10. **导入草稿行的对手文本**：`import_rows` 增加 `counterparty VARCHAR(100) NULL`，`PATCH .../rows/{rid}` 可改；提交单腿转账时写入 `transactions.counterparty`。
 11. **退款候选列表**：不单独建接口。review 界面和记账表单的「关联原单」选择器都复用 `GET /ledgers/{id}/transactions`（expense 行自带 `refunded_total` / `refundable`）。
