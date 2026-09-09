@@ -239,7 +239,7 @@
 第一轮各章评审暴露出决策记录没覆盖或前提写错的地方，这里统一裁定，效力与前面各节相同；各章与本节冲突时以本节为准。
 
 1. **`exchange_rates` 缓存表**：现状已无此表（见 §8）。目标态新建 `exchange_rates(date DATE, base CHAR(3), symbol CHAR(3), rate NUMERIC(18,8), fetched_at TIMESTAMP NOT NULL, PRIMARY KEY (date, base, symbol))`。换算时缺哪一天就向 Frankfurter 取哪一天并落库；"最新汇率" = 最近一个已公布日的行，同一 (base, symbol) 一小时内不重复请求。 写入按主键 upsert、保留全部历史行、不做整表刷新——历史汇率一经公布不再变，缓存的意义正是让发生日汇率不必反复外网请求（2026-09-10 用户追认并确认）。目标币种列名统一为 `symbol`（与现有 `/rates` 接口的 `symbols` 参数同源），不用 `quote`。
-2. **账户余额的币种**：余额以账户 `default_currency` 计价：`余额 = opening_balance + Σ convert(amount, tx.currency → account.default_currency, on = occurred_at)`，同币种交易不换算。`balance_base = convert(余额, account.default_currency → ledger.base_currency, 最新汇率)`。不按币种分桶，接口只返回这两个标量（外加 `balance_rate` / `balance_rate_date`）。
+2. **账户余额的币种**：余额以账户 `default_currency` 计价：`余额 = opening_balance + Σ convert(amount, tx.currency → account.default_currency, on = occurred_at)`，同币种交易不换算。`balance_base = convert(余额, account.default_currency → ledger.base_currency, 最新汇率)`。不按币种分桶，接口只返回这两个标量（外加 `balance_rate` / `balance_rate_date`）。（2026-09-10 用户追认：账户余额按账户币种显示，合计按基准币种。）
 3. **kind 互改**：`expense` / `income` / `refund` 之间可通过 PATCH 改 `kind`（服务端重新校验分类与金额符号）；`transfer` 与非 `transfer` 之间**禁止互改**，返回 400 `kind_change_not_allowed`，只能删掉重记。
 4. **错误 code 注册表**：以 `03-backend-api.md` §4.2 的清单为唯一注册表。01 / 04 / 05 章引用的每个 code 都必须出现在注册表里；缺的加进注册表，不允许各章自造同义名。
 5. **`import_rows` 行号列**：名字统一为 `row_no`。
