@@ -151,7 +151,7 @@
   - JSON（首选）：`{"version": "2026-09-10", "rows": [{"date": "2026-08-03", "amount": -45.00, "currency": "CNY", "kind": "expense", "transfer_role": null, "transfer_subtype": null, "merchant": "瑞幸咖啡", "note": "美团外卖-订单尾号8821", "category_l1": "food", "category_l2": "snacks_drinks", "source_ref": "L17"}]}`。字段语义与 §1 完全一致：支出为负、收入与退款为正、转账按 `transfer_role` 定号；`transfer_role` / `transfer_subtype` 只在 `kind='transfer'` 时有值；分类 code 取 §1.3 的表，拿不准留 `null`；`source_ref` 可选，指回账单原文位置。
   - CSV：固定表头 `date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref`，UTF-8（可带 BOM），首行可以是 `# version: 2026-09-10`。
   - 粘贴：应用内也提供一个文本框，直接粘贴 JSON 或 CSV 文本。
-- **校验**（服务端同步完成，秒级）：结构错误（JSON 不可解析、CSV 表头不符、`rows` 不是数组）→ 400，按行号返回错误，不建批次。行级问题不丢行、只打标记：`date` 必须是 `YYYY-MM-DD`，否则 `needs_review`；`amount` 非数字或为 0 → `needs_review`；`currency` 不是三位字母 → 用目标账户币种并 `needs_review`；`kind` 不在四种之内 → 按金额符号推断并 `needs_review`；分类 code 不在表内、二级不属于一级、收支方向与 kind 不符 → 对应字段置空（待归类）；每一处校验改动都写进该行的 `hint`（如"币种 XX 无效，已改为账户币种"），不另存原始值；`version` 缺失或与应用分类表版本不一致 → 批次级警告"skill 可能过期"，不阻断。上限：文件 ≤2 MB、单批 ≤2000 行。
+- **校验**（服务端同步完成，秒级）：结构错误（JSON 不可解析、CSV 表头不符、`rows` 不是数组）→ 400，按行号返回错误，不建批次。行级问题不丢行、只打标记：`date` 必须是 `YYYY-MM-DD`，否则 `needs_review`；`amount` 非数字或为 0 → `needs_review`；`currency` 不是三位字母 → 用目标账户币种并 `needs_review`；`kind` 不在四种之内 → 按金额符号推断并 `needs_review`；分类 code 不在表内、二级不属于一级、收支方向与 kind 不符 → 对应字段置空（待归类）；每一处校验改动都写进该行的 `hint`（如"币种 XX 无效，已改为账户币种"），不另存原始值；`version` 缺失或与应用当前分类表版本不一致 → 整批 400 `skill_outdated`，错误里带应用当前版本与"导入指南"链接，用户更新 skill 后重传（2026-09-10 用户决定，不再是警告）。上限：文件 ≤2 MB、单批 ≤2000 行。
 - **一份文件对应一个目标账户**，上传时由用户选；文件里不含账户信息。
 - **状态机**：`ready → committed`。校验通过即 `ready`（同步返回批次和全部草稿行，没有 parsing / 进度 / 轮询）；`ready` 下可编辑草稿和提交；`committed` 后可整批撤销 = 整批删除（§14.22）。校验不通过不产生批次。
 - **两张表**：`import_batches`（账本、目标账户、上传人、来源 `json` / `csv` / `paste`、原文件名与大小（只记名字，**不保存文件**，2026-09-10 用户决定）、`skill_version`、状态、行数、警告、时间戳）与 `import_rows`（批次、`row_no`、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、transfer_role、transfer_subtype、merchant、note、category_l1、category_l2、source_ref、`hint`、flags、matched_transaction_id、counterpart_source_id、counterparty、提交后的 transaction_id）。不再有 confidence、page_no、chunk_*、raw_response、error_* 列。
@@ -164,7 +164,7 @@
 
 - 应用**不存任何模型设置**：没有 `user_llm_settings` 表，没有 `/me/llm-settings` 接口，没有 API key，没有"测试连接"。
 - **skill 是仓库里的交付物** `skills/wallet-import/`：一份主文本（角色、输入任意账单、输出上面的标准 JSON 文件并提供下载、也可直接输出代码块），两种包装——Claude 的 `SKILL.md`（Claude.ai 项目 / Claude Code 皆可安装）和 ChatGPT 的 Custom GPT / Project 指令文本。规则沿用原提示词：支出为负、收入为正、退款标 `refund` 并尽量注明来源、信用卡还款标 `transfer` + `repayment`、本人账户间划转标 `transfer` + `plain`、外币原值写进 `note`、清理商户名噪音、日期一律 `YYYY-MM-DD`、分不清的分类**留空不猜**、不得自创 code、不输出卡号全号。
-- **分类表与版本同源**：skill 文本里的分类清单（code + 中文名 + 一级判据 §1.3）由脚本从 `backend/app/core/categories.py` 生成，`version` 就是 `CATEGORY_VERSION`；改分类表必须重新生成并发布 skill。应用校验 `version` 不一致时提示用户更新 skill。
+- **分类表与版本同源**：skill 文本里的分类清单（code + 中文名 + 一级判据 §1.3）由脚本从 `backend/app/core/categories.py` 生成，`version` 就是 `CATEGORY_VERSION`；改分类表必须重新生成并发布 skill。应用校验 `version` 不一致时拒绝导入并提示用户更新 skill（§5）。
 - **应用内"导入指南"页**：三步说明（安装 skill → 在你的 ChatGPT / Claude 里上传账单让它整理 → 把生成的文件上传到这里），附 skill 文本的复制 / 下载按钮，以及标准格式的示例文件。
 - 将来若要做"应用内一键导入"，标准格式已是契约，只需加一条可选的服务端调用路径，不改现有设计。
 
@@ -267,3 +267,4 @@
 27. **导入代码放在 `backend/app/services/importing/` 包**（2026-09-10 用户确认，README U-6）：按读文件 / 校验 / 标记 / 提交撤销分文件；没有抽取器目录。
 28. **不保存上传的导入文件，也不存原始行值**（2026-09-10 用户决定，README U-7 作废）：批次只记文件名与大小；校验改动写进行的 `hint`；后端没有文件系统状态，`UPLOAD_DIR`、上传卷、目录清理全部取消（05 待决 8 随之作废）。
 29. **邀请码不要求全表唯一，用掉即删、过期即删**（2026-09-10 用户决定，README U-8 改、02 待决 D-6 一并定）：`ledger_invites.code` 不建唯一索引；生成时只保证与当前有效的码不重复，撞上就重新生成；`POST /ledgers/join` 只在未过期的码中查找，加入成功即删除该行；过期的行在下次生成或校验时删除；不做定时清理，表里没有 `used_by` / `used_at`。
+30. **分类表版本号：日期串，导入时硬校验**（2026-09-10 用户决定，README U-9、04 待决 D-8 前半）：`CATEGORY_VERSION` 形如 `2026-09-10`，改分类表时手工递增并重新生成 skill；skill 输出带同一版本号；上传时与应用当前版本不一致或缺失 → 400 `skill_outdated`，不允许带警告继续。
