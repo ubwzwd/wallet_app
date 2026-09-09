@@ -146,7 +146,7 @@
 
 ## 5. 账单导入
 
-- 支持：文本型 PDF、CSV、XLSX、图片（JPG/PNG）、扫描版 PDF。能抽出文本就送文本（pdfplumber / openpyxl / csv），抽不到才把页面渲染成图片送视觉模型；视觉路径解析出的行默认打 `needs_review` 标记，review 界面旁边显示该页缩略图。密表格页可裁成上下两半分别送。
+- 支持：PDF（文本型或扫描版都一样对待）、图片（JPG/PNG）、CSV、XLSX。**只有一条流水线，全部送同一个支持视觉的模型**（2026-09-09 用户决定，见 §14.24）：PDF 每页渲染成图片、图片原样送；CSV / XLSX 读成纯文本分块送（没有页面可渲染，画成图片没有意义）；不做本地文字抽取（不用 pdfplumber）。同一份提示词、同一个输出 schema、同一个 review 流程。PDF / 图片批次的 review 界面旁边显示该页缩略图；密表格页可裁成上下两半分别送。`needs_review` 只按置信度和解析异常打，不再按"走了哪条路"默认打。
 - 一份账单对应一个目标账户，上传时由用户选，不让 LLM 猜。
 - 状态机：`uploaded → parsing → ready → committed`，`parsing → failed`（可重试）。`ready` 状态下才能编辑草稿和提交；`committed` 后可整批撤销（删除这批建的所有交易，不限时限，撤销前确认并显示条数）。撤销 = **整批删除**：删交易 → 删批次与草稿行 → 删原文件；不保留 `reverted` 之类的历史状态，批次状态只有这五个值（2026-09-09 用户确认，对应 README U-1）。
 - 后台任务：FastAPI 后台任务 + 数据库状态轮询（`GET /ledgers/{id}/imports/{batch_id}`），不引入队列。服务重启把仍为 `parsing` 的批次标 `failed`（启动时执行）。同一账本同时只允许一个批次在 `parsing`。
@@ -158,8 +158,8 @@
 
 ## 6. LLM 设置与接口
 
-- 每用户一份 `user_llm_settings`：user_id、base_url（默认 `https://openrouter.ai/api/v1`）、api_key（服务端 Fernet 加密存，接口只回显尾 4 位）、model、vision_model（可空，导图片时用，不填用 model）、updated_at。任何 OpenAI 兼容端点都可用（`/chat/completions`）。
-- 设置页"测试连接"：发一个最小请求，返回模型是否可用、是否接受图片输入。
+- 每用户一份 `user_llm_settings`：user_id、base_url（默认 `https://openrouter.ai/api/v1`）、api_key（服务端 Fernet 加密存，接口只回显尾 4 位）、model、updated_at。**`model` 必须支持图片输入**，没有单独的 `vision_model`（2026-09-09 用户决定，见 §14.24）。任何 OpenAI 兼容端点都可用（`/chat/completions`）。
+- 设置页"测试连接"：发一个带小图片的最小请求，模型不接受图片输入即判定不可用，不能保存为导入用模型。
 - 没配 key 的用户进入导入时直接引导去配置；**没有**服务端共享 key。
 - LLM 调用在服务端，用操作者自己的 key。
 - 输入：system prompt = 分类表（code + zh/en 名）+ 账户币种/类型 + 输出 JSON schema + 规则（支出为负、收入为正、还款标 transfer/repayment、分不清的分类留空、退款标 refund）；user 内容 = 文本块或页面图片。
@@ -259,3 +259,4 @@
 21. **一级分类带说明文字**（2026-09-09 用户提出）：`desc_zh` / `desc_en` 进常量、随 `GET /categories` 下发、前端选分类处显示、LLM 提示词作判据。全文见 §1.3。
 22. **撤销导入整批删除**（2026-09-09 用户决定，README U-1）：不引入 `reverted` 状态，不为追溯保留已撤销批次，避免数据库里留垃圾。
 23. **解析进度用小数**（2026-09-09 用户决定，README U-2，推翻校对时的整数对）：`GET /ledgers/{id}/imports/{bid}` 返回 `progress: number | null`，取值 0–1、保留两位（`chunk_done / chunk_total`），切块完成前（总数未知）为 `null`；数据库仍存 `chunk_done` / `chunk_total` 两列，接口不暴露。前端显示百分比，`null` 时显示"正在读取账单…"。**各章待同步**：03 §5.40 响应、04 `ImportBatch` 类型与进度页、05 §10.3 进度计算。
+24. **导入只有一条视觉流水线**（2026-09-09 用户决定，取代 U-3 与 §5 原"文字优先、视觉兜底"）：用户必须配置支持图片输入的模型（`vision_model` 字段删除，测试连接验证图片能力）；PDF 每页渲染成图片、图片原样、CSV / XLSX 读成纯文本，都送同一个模型、同一份提示词、同一个 schema；不做本地 PDF 文字抽取。批次表删除 `used_vision`，PDF / 图片批次一律有 `pages` 缩略图；`needs_review` 只按置信度与解析异常打标。**各章待同步**：01 实体字段、02 `import_batches` / `user_llm_settings` 列、03 §5.9–5.10 与 §5.40/§5.46、04 设置页与 `ImportBatch` 类型、05 §2–§3 抽取与分块整章、README。
