@@ -191,7 +191,7 @@ frontend/src/
 | U-4 | 时间戳存 naive UTC 还是 `timestamptz`（03 §4.5 原本写 `timestamptz`，02 §7.2 写 naive） | **已确认（2026-09-10，决策 §14.26）** naive UTC 存储 + API 输出一律带 `Z`** | 将来真要按用户时区展示时刻，得单独出一版迁移改三张表 |
 | U-5 | `user_llm_settings` 的密钥列（03 原本写 `api_key_encrypted` + `api_key_last4` 两列，02 写单列 `api_key`） | **作废（2026-09-10，决策 §14.25）：应用不再接入 LLM，没有密钥列。**  每次回显要解密一次（一次 Fernet 解密，可忽略）。02 待决 D-4 仍建议把列名改成 `api_key_encrypted` |
 | U-6 | 导入包的模块划分（03 §1.1 原本写 `import_pipeline.py` + `extractors/`，05 §0.2 写 `importing/` 包） | **已确认（2026-09-10，决策 §14.27）** `services/importing/` 包，文件划分以 05 §0.2 为准 | 无 |
-| U-7 | `UPLOAD_DIR` 的默认值（03 写 `/data/uploads`，05 写 `./uploads`，05 待决 8 又写 `/var/lib/wallet/uploads`） | 字段默认 **`./uploads`**（开发可用），`.env` 模板与生产卷都用 **`/data/uploads`** | 无 |
+| U-7 | `UPLOAD_DIR` 的默认值（03 写 `/data/uploads`，05 写 `./uploads`，05 待决 8 又写 `/var/lib/wallet/uploads`） | **作废（2026-09-10，决策 §14.28）：不保存上传文件，没有 `UPLOAD_DIR`。**  无 |
 | U-8 | 邀请码唯一索引的范围（03 §5.22 原本说"只对未使用未过期的行唯一"，02 §1.5 是全表唯一） | **全表唯一** + 定期清理（`now()` 不可变，做不了部分索引谓词） | 码空间 100 万，必须按 02 §6.3 清理，否则生成时冲突率上升 |
 | U-9 | `GET /categories` 的 `version` 形态（04 D-8 原本建议内容哈希，03 §5.11 用日期串） | **日期串**（如 `"2026-09-09"`），改分类表时手工递增 | 无 |
 | U-10 | 前端轮询导入进度的间隔（03 原写 1.5 s，04/05 写 2 s 起退避） | **作废（2026-09-10，决策 §14.25）：应用不再接入 LLM，没有解析进度轮询。**  无 |
