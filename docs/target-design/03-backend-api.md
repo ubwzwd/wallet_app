@@ -221,12 +221,12 @@ def validate_category(kind: str, l1: str | None, l2: str | None) -> None:
 def category_table() -> dict:
     """GET /categories 的响应体（§5.11），也是 LLM system prompt 的分类清单来源。"""
 
-def prompt_lines(lang: str = "zh") -> str:
+def render_prompt_categories(lang: str = "zh") -> str:
     """给 services/llm_client 用：把分类表压成提示词里的一段列表文本。
     一级行带 desc_zh 作判据（05 §5）。"""
 ```
 
-`desc_zh` / `desc_en` 写的是这一级的归类判据和易混淆项的去向（逐字见决策 §1.3 的说明文字表），三个用途共用同一份常量：`GET /categories` 下发给前端选分类时显示（§5.11、04 §4.6/§4.11）、`prompt_lines()` 注入 LLM 提示词作判据（05 §5）。它们**与分类表一起冻结**——改名字、改二级、改说明文字，任何一种都必须同时递增 `CATEGORY_VERSION`，否则前端的永久缓存不会失效（决策 §1.3、§14.21）。
+`desc_zh` / `desc_en` 写的是这一级的归类判据和易混淆项的去向（逐字见决策 §1.3 的说明文字表），三个用途共用同一份常量：`GET /categories` 下发给前端选分类时显示（§5.11、04 §4.6/§4.11）、统计页一级分类名的 tooltip（04 §4.4，前端从分类缓存按 code 取，统计接口不下发）、`render_prompt_categories()` 注入 LLM 提示词作判据（05 §5）。它们**与分类表一起冻结**——改名字、改二级、改说明文字，任何一种都必须同时递增 `CATEGORY_VERSION`，否则前端的永久缓存不会失效（决策 §1.3、§14.21）。
 
 #### `core/crypto.py`
 

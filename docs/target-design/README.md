@@ -397,7 +397,7 @@ frontend/src/
 
 ### 9.3 第五轮（分类边界与说明文字）改动
 
-2026-09-09：分类边界改为消耗品 / 耐用品；`groceries` 的 `household` 改名「日用杂货」并吞并原来同级的家用消耗品二级，`shopping` 原本那个杂项二级删除、换成 `other_goods` 其他物件；一级分类增加 `desc_zh` / `desc_en`（决策 §14.20–21）。
+2026-09-09：分类边界改为消耗品 / 耐用品；`groceries` 下的 `household` 从「家居耗材」改名为「日用杂货」，并吞并原本挂在 `shopping` 下的「日用杂货」二级；`shopping` 那个二级删除、换成 `other_goods` 其他物件（二级英文名 Toiletries & Cleaning / Kitchenware / Household Supplies / Electronics / Appliances / Furniture / Other Goods 为本轮拟定，00 §1.3 尚未冻结二级英文名）；一级分类增加 `desc_zh` / `desc_en`（决策 §14.20–21）。
 
 本轮只把决策 §1.3 的新表与 §14.20–21 两条同步进 03 / 04 / 05 与本文（01、02 不出现具体的分类 code，无需改动），没有重写任何章节；同样**没有改 `00-decisions.md`，也没有改 `../current-design/`、`backend/`、`frontend/`、`infra/`、`.planning/`**。
 
