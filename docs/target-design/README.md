@@ -188,7 +188,7 @@ frontend/src/
 | U-1 | 撤销一批已提交的导入之后，批次是保留成 `reverted` 还是整批删除（05 §9.5 原本保留，03 §5.45 与 02 §6.6 是删除） | **已确认（2026-09-09，决策 §14.22）** 整批删除：删交易 → 删批次 → 草稿行级联消失 → 删原文件。`status` 仍是决策 §5 的五个值 | 失去"这批当初导了什么、为什么撤销"的追溯能力。想要追溯就得加第六个状态 `reverted` + `reverted_at` 列并放宽 `ck_import_batches_committed_at` |
 | U-2 | 解析进度的形态（05 原本是 0–1 的 `progress` 小数，03/04 是 `{done, total}`） | **作废（2026-09-10，决策 §14.25）：导入改为同步校验标准文件，不再有解析进度 / 解析路径。**  无。前端本来就要显示"第 3/12 块" |
 | U-3 | 走没走视觉路径怎么记（05 原本提议 `parse_mode`，02/03/04 用 `used_vision`） | **作废（2026-09-10，决策 §14.25）：导入改为同步校验标准文件，不再有解析进度 / 解析路径。**  无 |
-| U-4 | 时间戳存 naive UTC 还是 `timestamptz`（03 §4.5 原本写 `timestamptz`，02 §7.2 写 naive） | **naive UTC 存储 + API 输出一律带 `Z`** | 将来真要按用户时区展示时刻，得单独出一版迁移改三张表 |
+| U-4 | 时间戳存 naive UTC 还是 `timestamptz`（03 §4.5 原本写 `timestamptz`，02 §7.2 写 naive） | **已确认（2026-09-10，决策 §14.26）** naive UTC 存储 + API 输出一律带 `Z`** | 将来真要按用户时区展示时刻，得单独出一版迁移改三张表 |
 | U-5 | `user_llm_settings` 的密钥列（03 原本写 `api_key_encrypted` + `api_key_last4` 两列，02 写单列 `api_key`） | **单列 `api_key` 存密文**（列名沿用决策 §6），`api_key_last4` 是响应字段，解密后现取 | 每次回显要解密一次（一次 Fernet 解密，可忽略）。02 待决 D-4 仍建议把列名改成 `api_key_encrypted` |
 | U-6 | 导入包的模块划分（03 §1.1 原本写 `import_pipeline.py` + `extractors/`，05 §0.2 写 `importing/` 包） | **`services/importing/` 包**，文件划分以 05 §0.2 为准 | 无 |
 | U-7 | `UPLOAD_DIR` 的默认值（03 写 `/data/uploads`，05 写 `./uploads`，05 待决 8 又写 `/var/lib/wallet/uploads`） | 字段默认 **`./uploads`**（开发可用），`.env` 模板与生产卷都用 **`/data/uploads`** | 无 |
