@@ -54,7 +54,7 @@
 | §1 | 交易新增 `kind` 列（`expense` / `income` / `refund` / `transfer`），方向由 kind 决定，金额符号只是它的推论；四种之外不再加 | DB · API · 前端 · 导入 | [01 §2 交易的四种 kind](./01-domain-and-flows.md#2-交易的四种-kind) · [02 §1.7 transactions](./02-database.md#17-transactions) · [03 §5.29 POST transactions](./03-backend-api.md#529-post-apiv1ledgersidtransactions) · [04 §4.6 记一笔](./04-frontend.md#46-记一笔-lledgeridtransactionsnewkind) |
 | §1.1 | 退款：自引用外键 `refund_of` 指向同账本的一条 `expense`，支持部分 / 超额退款，原单删除时置空 | DB · API · 前端 · 导入 | [01 §1.9 退款关联](./01-domain-and-flows.md#19-退款关联决策-11) · [01 §3.11 记退款](./01-domain-and-flows.md#311-记退款并关联原单决策-11) · [05 §8.2 refund_candidate](./05-import-and-llm.md#82-refund_candidate) |
 | §1.2 | 转账：`transfer_role`（out/in）、`transfer_subtype`（plain/repayment）、可空的 `transfer_pair_id`、单腿的 `counterparty` 文本；两腿走独立端点、支持跨币种 | DB · API · 前端 · 导入 | [01 §1.10 转账腿](./01-domain-and-flows.md#110-转账腿决策-12) · [01 §3.12 两腿转账](./01-domain-and-flows.md#312-两腿转账的创建--编辑--删除决策-12) · [03 §5.33 POST transfer](./03-backend-api.md#533-post-apiv1ledgersidtransactionstransfer) · [05 §9.3 两腿转账的建法](./05-import-and-llm.md#93-两腿转账的建法还款是其中最常见的一种) |
-| §1.3 | 两级分类冻结成后端常量（`category_l1` / `category_l2` 存 code），公开只读接口 + 前端永久缓存；**删除 `transaction_tags` 表与全部标签功能** | DB · API · 前端 · 导入 | [02 §1.7 transactions](./02-database.md#17-transactions) · [02 §5.5 删除 transaction_tags](./02-database.md#55-第-5-步删除-transaction_tags) · [03 §5.11 GET /categories](./03-backend-api.md#511-get-apiv1categories) · [04 §2.3 分类表缓存](./04-frontend.md#23-分类表启动拉取按-version-永久缓存决策-13) · [05 §5 提示词](./05-import-and-llm.md#5-提示词) |
+| §1.3 | 两级分类冻结成后端常量（`category_l1` / `category_l2` 存 code），公开只读接口 + 前端永久缓存；一级分类带说明文字（`desc_zh` / `desc_en`，随 `GET /categories` 下发、选分类处显示、LLM 提示词作判据，决策 §14.21）；生活购物 / 消费购物按消耗品 / 耐用品分（§14.20）；**删除 `transaction_tags` 表与全部标签功能** | DB · API · 前端 · 导入 | [02 §1.7 transactions](./02-database.md#17-transactions) · [02 §5.5 删除 transaction_tags](./02-database.md#55-第-5-步删除-transaction_tags) · [03 §5.11 GET /categories](./03-backend-api.md#511-get-apiv1categories) · [04 §2.3 分类表缓存](./04-frontend.md#23-分类表启动拉取按-version-永久缓存决策-13) · [05 §5 提示词](./05-import-and-llm.md#5-提示词) |
 | §1.4 | `transactions.description` 改名 `note`（≤500）；`merchant`（≤200）保留为独立字段，搜索 / 退款匹配 / 去重都靠它 | DB · API · 前端 | [02 §0.1 列级差异](./02-database.md#01-列级差异) · [02 §5.4 第 4 步](./02-database.md#54-第-4-步交易的-kind分类退款导入列) · [03 §5.29](./03-backend-api.md#529-post-apiv1ledgersidtransactions) |
 | §2 | 新增 `ledgers` / `ledger_members` / `ledger_invites` 三张表；owner / member 两种角色；6 位一次性邀请码 10 分钟过期 | DB · API · 前端 | [01 §1.4–§1.6](./01-domain-and-flows.md#14-账本-ledgers决策-2) · [02 §1.3–§1.5](./02-database.md#13-ledgers) · [03 §5.12–§5.22](./03-backend-api.md#512-get-apiv1ledgers) · [04 §4.3 账本列表](./04-frontend.md#43-账本列表-ledgers新建-ledgersnew加入-ledgersjoin) |
 | §2 | 账户 / 交易 / 导入全部改挂账本；所有业务接口前缀变成 `/api/v1/ledgers/{ledger_id}/...`，鉴权 = 当前用户是该账本成员 | DB · API · 前端 | [02 §5.3 第 3 步](./02-database.md#53-第-3-步账户与交易归属账本) · [03 §3.2 授权](./03-backend-api.md#32-授权账本成员) · [03 §4.6 账本 id 在路径里](./03-backend-api.md#46-账本-id-在路径里) · [04 §1.2 路由表](./04-frontend.md#12-路由表) |
@@ -87,6 +87,7 @@
 | 子类型 | subtype（`transfer_subtype`） | 转账的两种：`plain`（普通划转）与 `repayment`（信用卡还款）。转账必填，非转账必须为空 |
 | 导入批次 | import batch（`import_batches`） | 一次账单上传 = 一批。记目标账户、文件信息、状态、进度、所用模型、LLM 原始响应 |
 | 草稿行 | draft row（`import_rows`） | LLM 解析出的一行，尚未成为正式交易。与 `transactions` 完全隔离，逐行可改、可跳过 |
+| 分类说明 | category desc（`desc_zh` / `desc_en`） | 一级分类的一句话归类判据（如"生活购物 = 用完就没了"）。只有一级有，二级恒为 `null`；与分类表一起冻结在后端常量里，三处共用：`GET /categories` → 前端选分类处的两行选项 → LLM 提示词的一级行（决策 §14.21） |
 | 待归类 | uncategorized | 草稿行 `category_l1` 为空且不是转账。review 表格标出来，**提交前必须补齐** |
 | 基准币种 | base currency（`ledgers.base_currency`） | 这本账的统计口径。所有合计、趋势、净资产都折算到它 |
 | 发生日汇率 | on-date rate | 用交易 `occurred_at` 当天（或往前最近一个已公布行情日）的汇率。交易与统计用它，一经公布不再变 |
@@ -250,7 +251,7 @@ frontend/src/
 | 04-D-5 | 前端怎么提前知道 `REGISTRATION_OPEN` | 加匿名可读的 `GET /api/v1/config` 回 `{registration_open}`；在此之前只按提交后的 403 处理 |
 | 04-D-6 | 交易详情要显示"这笔支出被退了多少" | 详情响应里带 `refunds: RefundSummary[]`，或复用 D-4 |
 | 04-D-7 | 交易列表能否按 `import_batch_id` 筛选 | 加 `?import_batch_id=` 参数 |
-| 04-D-8 | `GET /categories` 的 `version` 是什么形态（**结构那一半已由 03 §5.11 回答：嵌套 `children[]`，04 章已按它写，只需追认**） | `version` 用日期串（与 03 §5.11 一致）；见 U-9 |
+| 04-D-8 | `GET /categories` 的 `version` 是什么形态（**结构那一半已由 03 §5.11 回答：嵌套 `children[]`，04 章已按它写，只需追认**） | `version` 用日期串（与 03 §5.11 一致）；见 U-9。结构上还需追认：一级对象含 `desc_zh` / `desc_en`（二级为 `null`），改说明文字同样要递增 `version`（决策 §14.21） |
 | 04-D-11 | 要不要"按人筛选"（只看某成员记的账） | 本版本不做 |
 | 04-D-13 | 视觉方向最终选 A / B / C 哪个 | 推荐 A「账本纸张」；以四张 mockup 确认为准 |
 
@@ -393,6 +394,28 @@ frontend/src/
 | 16 | 本文 §9.1 | 错误注册表条数从 45 改成 **46**（`rows_all_skipped` + `import_interrupted`），端点分桶句同步 | §14.14 |
 
 **第三轮已落实、本轮只核对未改的**：03 §5.13 / §5.15 的账本名已是 `1..100`（§14.13）；03 §4.2 与 04 §3.7 都已登记 `import_interrupted`（§14.14），04 里没有残留"03 尚未登记"之类的跨章待办注记；03 §5.39 / §5.40 的批次 `error` 已是 `{code, message}` 对象、04 `ImportBatch.error` 类型与之一致、05 §10.3 只显示 `error.message`（§14.15）。
+
+### 9.3 第五轮（分类边界与说明文字）改动
+
+2026-09-09：分类边界改为消耗品 / 耐用品；`groceries` 的 `household` 改名「日用杂货」并吞并原来同级的家用消耗品二级，`shopping` 原本那个杂项二级删除、换成 `other_goods` 其他物件；一级分类增加 `desc_zh` / `desc_en`（决策 §14.20–21）。
+
+本轮只把决策 §1.3 的新表与 §14.20–21 两条同步进 03 / 04 / 05 与本文（01、02 不出现具体的分类 code，无需改动），没有重写任何章节；同样**没有改 `00-decisions.md`，也没有改 `../current-design/`、`backend/`、`frontend/`、`infra/`、`.planning/`**。
+
+| # | 位置 | 改动 | 依据 |
+|---|---|---|---|
+| 1 | [03 §1](./03-backend-api.md) `core/categories.py` | `Category` 增加 `desc_zh` / `desc_en`（二级为 `None`）；写明说明文字与分类表一起冻结、改它必须递增 `CATEGORY_VERSION` | §14.21 |
+| 2 | [03 §5.11](./03-backend-api.md#511-get-apiv1categories) | 响应示例的一级对象补 `desc_zh` / `desc_en`（逐字取自 §1.3 的说明文字表）、二级补 `null`；补一张字段表；示例里补出 `groceries` / `shopping` 两个一级，二级列表按新表（`household` 日用杂货、`other_goods` 其他物件，被删的那个二级 code 全文已无残留） | §1.3、§14.20–21 |
+| 3 | [03 §12](./03-backend-api.md) 接口测试表 | `GET /categories` 那行补"每个一级 `desc_*` 非空、每个二级为 `null`" | §14.21 |
+| 4 | [04 §3.3](./04-frontend.md) `Category` 类型 · §2.3 缓存 | 类型补 `desc_zh: string \| null` / `desc_en: string \| null`；说明文字同样不进语言包 | §14.21 |
+| 5 | [04 §5.3](./04-frontend.md#53-分类名不进语言包决策-13) | `categoryName()` 旁新增 `categoryDesc()`，同样按当前语言取 | §14.21 |
+| 6 | [04 §4.6.1](./04-frontend.md) 记一笔 · §4.11.2 review 分类列 · §4.11.5 批量设分类 · §6.4 组件清单 | 三处选分类的地方都写明一级选项是"名称 + 说明文字"的两行（12.5px、次要色、单行截断，长按 / hover 看全文），二级保持单行；组件清单补 `CategoryPicker` | §14.21 |
+| 7 | [04 §4.4](./04-frontend.md#44-首页-lledgeridmonthyyyy-mm) 首页本月汇总 | 一级分类名带 tooltip 显示说明文字，值从 §2.3 的分类缓存按 code 取（统计接口不下发） | §14.21 |
+| 8 | [05 §5](./05-import-and-llm.md#5-提示词) | `render_prompt_categories()` 的一级行改成「code 中文名（desc_zh）：二级列表」，渲染结果全文同步；二级列表按新表改（`household` 日用杂货、`other_goods` 其他物件） | §1.3、§14.20–21 |
+| 9 | [05 §5.1](./05-import-and-llm.md) 分类的补充规则 | 边界说明改成"生活购物 = 消耗品与家里的日常运转（用完就没了）、消费购物 = 耐用品与一次性大件（买一次用几年）"，明确不按"该不该买"这种主观判断分；分不清的电商订单留空、不进任何兜底桶 | §14.20 |
+| 10 | [05 §12.3](./05-import-and-llm.md) | 新增 `test_system_prompt_l1_lines_carry_desc`：断言每个一级行都带 `desc_zh`，两条"判据"逐字在提示词里 | §14.20–21 |
+| 11 | 本文 §2 改动总览 · §3 术语表 · §6.3 | §1.3 那行补说明文字与新边界；术语表新增"分类说明（desc）"；`04-D-8` 的建议默认值补"一级对象含 `desc_zh` / `desc_en`" | §14.20–21 |
+
+一级 code 集合本轮**不变**，仍是 16 个支出 + 6 个收入；变的只有 `groceries` / `shopping` 两个一级下面的二级，以及每个一级新增的两段说明文字。
 
 ---
 
