@@ -148,7 +148,7 @@
 
 - 支持：文本型 PDF、CSV、XLSX、图片（JPG/PNG）、扫描版 PDF。能抽出文本就送文本（pdfplumber / openpyxl / csv），抽不到才把页面渲染成图片送视觉模型；视觉路径解析出的行默认打 `needs_review` 标记，review 界面旁边显示该页缩略图。密表格页可裁成上下两半分别送。
 - 一份账单对应一个目标账户，上传时由用户选，不让 LLM 猜。
-- 状态机：`uploaded → parsing → ready → committed`，`parsing → failed`（可重试）。`ready` 状态下才能编辑草稿和提交；`committed` 后可整批撤销（删除这批建的所有交易，不限时限，撤销前确认并显示条数）。
+- 状态机：`uploaded → parsing → ready → committed`，`parsing → failed`（可重试）。`ready` 状态下才能编辑草稿和提交；`committed` 后可整批撤销（删除这批建的所有交易，不限时限，撤销前确认并显示条数）。撤销 = **整批删除**：删交易 → 删批次与草稿行 → 删原文件；不保留 `reverted` 之类的历史状态，批次状态只有这五个值（2026-09-09 用户确认，对应 README U-1）。
 - 后台任务：FastAPI 后台任务 + 数据库状态轮询（`GET /ledgers/{id}/imports/{batch_id}`），不引入队列。服务重启把仍为 `parsing` 的批次标 `failed`（启动时执行）。同一账本同时只允许一个批次在 `parsing`。
 - 限制：文件 ≤10 MB，单批 ≤2000 行，文本按约 150 行分块调用 LLM。
 - 两张表：`import_batches`（一次上传：账本、目标账户、上传人、文件名、MIME、大小、状态、错误、所用模型、LLM 原始响应、行数、时间戳）和 `import_rows`（草稿行：批次、行号、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、merchant、note、category_l1、category_l2、confidence、source_ref、flags、matched_transaction_id、counterpart_source_id、transfer_subtype、提交后的 transaction_id）。原因：草稿不能污染正式交易表；JSON 单列在多人 review 时会互相覆盖且没法建外键。
@@ -257,4 +257,4 @@
 19. **草稿行提示字段名**：统一叫 `hint`（对应 `import_rows.hint`），不再使用 `note_hint`。
 20. **生活购物 / 消费购物的边界**（2026-09-09 用户决定）：按消耗品 / 耐用品区分，不按必需 / 非必需；「日用杂货」归生活购物并吞并「家居耗材」（code `household`，名「日用杂货」）；消费购物增加 `other_goods` 其他物件；删除 `misc_goods`。§1.3 的表已按此更新。
 21. **一级分类带说明文字**（2026-09-09 用户提出）：`desc_zh` / `desc_en` 进常量、随 `GET /categories` 下发、前端选分类处显示、LLM 提示词作判据。全文见 §1.3。
-
+22. **撤销导入整批删除**（2026-09-09 用户决定，README U-1）：不引入 `reverted` 状态，不为追溯保留已撤销批次，避免数据库里留垃圾。
