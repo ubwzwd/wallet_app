@@ -12,7 +12,7 @@
 > - **导入端点改为同步、只收 CSV**（决策 §5、§14.30、§14.47）：`POST /ledgers/{id}/imports` 同步校验，成功 201 直接返回批次和全部草稿行；结构错误 400 按行号列出（缺 `# version:` 行也算结构错误）；版本行存在但与当前分类表版本不符 400 `skill_outdated`（决策 §14.53d）。批次状态只有 `ready → committed`。
 > - **新增端点**：`GET /config`（§14.46）、`GET /import-format`（§6）、`POST .../transactions/{tid}/pair` 与 `POST .../transactions/transfer/{pair_id}/unpair`（§14.34）、`DELETE /ledgers/{id}/invites/{code}`（§14.52 A2）、`PATCH .../imports/{bid}/rows` 批量端点（§14.52 A4）。
 > - **屏幕稿审阅后的裁定**（§14.47–§14.52）：账户类型四种且币种创建后不可改、加 `archived_at`、账户列表给资产 / 负债 / 净资产三个合计并排除归档账户；金额区间筛选按基准币种折算比较、列表返回 `summary`；交易详情返回 `events[]`、`refunds[]`、展开的 `refund_of`、所用汇率；新表 `transaction_events` 与请求头 `X-Client`；撤销导入的 `dry_run` 返回两个计数；趋势只回支出。
-> - `§4.2` 的 code 清单仍是全仓库**唯一的错误 code 注册表**（决策 §14.4）：01 / 04 / 05 章引用的每个 code 都必须能在这里找到。本版删除了六个 code（三个 `llm_` 开头的、重启中断的那个 500、`batch_not_failed`、`import_in_progress`、`invite_used`，以及只收 CSV 之后不再需要的那个文件类型 code；逐条见 §4.2 末尾），把 `rows_exceed_limit` 从 422 改成 400，新增了 `skill_outdated`、`import_format_invalid`、`pair_invalid`、`unpair_invalid`、`currency_locked`、`repayment_target_not_credit`。
+> - `§4.2` 的 code 清单仍是全仓库**唯一的错误 code 注册表**（决策 §14.4）：01 / 04 / 05 章引用的每个 code 都必须能在这里找到。本版删除了八个 code（分六类：三个 `llm_` 开头的、重启中断的那个 500、`batch_not_failed`、`import_in_progress`、`invite_used`，以及只收 CSV 之后不再需要的那个文件类型 code；逐条见 §4.2 末尾），把 `rows_exceed_limit` 从 422 改成 400，新增了 `skill_outdated`、`import_format_invalid`、`pair_invalid`、`unpair_invalid`、`currency_locked`、`repayment_target_not_credit`。
 > - auth 路由下的 `me` 别名（GET / PATCH 两条）与 `default_source_id` 按决策 §14.42「不做向后兼容」直接删除，`/me` 是唯一入口，并新增 `display_name`（§14.40）。
 
 ---
@@ -1660,8 +1660,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions?kind=expense&kind=refund&from=2026
       "transfer_subtype": null,
       "transfer_pair_id": null,
       "refund_of": null,
-      "refunded_total": "10.0000",
-      "refundable": "35.5000",
+      "refunded_total": "15.0000",
+      "refundable": "30.5000",
       "import_batch_id": null,
       "amount_base": "-377.5700",
       "rate_used": "8.29824176",
@@ -1882,11 +1882,13 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/f59f243d-3246-49ab-adb5-60761e0615
   "id": "f59f243d-...", "kind": "expense", "amount": "-45.5000", "currency": "EUR",
   "occurred_at": "2026-09-01", "merchant": "Carrefour",
   "amount_base": "-377.5700", "rate_used": "8.29824176", "rate_date": "2026-09-01",
-  "refunded_total": "10.0000",
-  "refundable": "35.5000",
+  "refunded_total": "15.0000",
+  "refundable": "30.5000",
   "refunds": [
     {"id": "aa11bb22-...", "occurred_at": "2026-09-04", "amount": "10.0000",
-     "currency": "EUR", "note": "退了一盒草莓", "source_id": "1022fd24-..."}
+     "currency": "EUR", "note": "退了一盒草莓", "source_id": "1022fd24-..."},
+    {"id": "bb22cc33-...", "occurred_at": "2026-09-12", "amount": "5.0000",
+     "currency": "EUR", "note": "又退了一份", "source_id": "1022fd24-..."}
   ],
   "refund_of": null,
   "pair": null,
@@ -1915,8 +1917,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/aa11bb22-cc33-4d44-8e55-ff66778899
     "source_id": "1022fd24-...",
     "category_l1": "groceries",
     "category_l2": "fresh_food",
-    "refunded_total": "10.0000",
-    "refundable": "35.5000",
+    "refunded_total": "15.0000",
+    "refundable": "30.5000",
     "other_refunds": [
       {"id": "bb22cc33-...", "occurred_at": "2026-09-12", "amount": "5.0000",
        "currency": "EUR", "note": "又退了一份"}
@@ -2124,19 +2126,23 @@ X-Client: web
   "out": {
     "id": "1111aaaa-2222-4bbb-8ccc-3333dddd4444",
     "source_id": "34fa63d8-5776-4775-982b-4d58deb0ace9",
-    "kind": "transfer", "transfer_role": "out", "transfer_subtype": "plain",
-    "amount": "-100.0000", "currency": "USD",
+    "kind": "transfer", "occurred_at": "2026-09-06",
+    "transfer_role": "out", "transfer_subtype": "plain",
+    "amount": "-100.0000", "currency": "USD", "counterparty": null,
     "amount_base": "-724.5000", "rate_used": "7.24500000", "rate_date": "2026-09-05",
     "transfer_pair_id": "77777777-8888-4999-aaaa-bbbbccccdddd",
+    "note": "换汇到人民币账户",
     "created_at": "2026-09-06T12:00:00.000000Z", "updated_at": "2026-09-06T12:00:00.000000Z"
   },
   "in": {
     "id": "2222bbbb-3333-4ccc-8ddd-4444eeee5555",
     "source_id": "1022fd24-78a1-4c09-9de9-1cd7fbb0877f",
-    "kind": "transfer", "transfer_role": "in", "transfer_subtype": "plain",
-    "amount": "720.0000", "currency": "CNY",
+    "kind": "transfer", "occurred_at": "2026-09-06",
+    "transfer_role": "in", "transfer_subtype": "plain",
+    "amount": "720.0000", "currency": "CNY", "counterparty": null,
     "amount_base": "720.0000", "rate_used": "1.00000000", "rate_date": "2026-09-06",
     "transfer_pair_id": "77777777-8888-4999-aaaa-bbbbccccdddd",
+    "note": "换汇到人民币账户",
     "created_at": "2026-09-06T12:00:00.000000Z", "updated_at": "2026-09-06T12:00:00.000000Z"
   }
 }
@@ -2273,29 +2279,33 @@ X-Client: web
   "subtype": "repayment",
   "note": "还信用卡",
   "out": {
-    "id": "5c4d3e2f-...", "source_id": "34fa63d8-...", "kind": "transfer",
-    "occurred_at": "2026-09-05",
+    "id": "5c4d3e2f-...",
+    "source_id": "34fa63d8-...",
+    "kind": "transfer", "occurred_at": "2026-09-05",
     "transfer_role": "out", "transfer_subtype": "repayment",
     "amount": "-3000.0000", "currency": "CNY", "counterparty": null,
+    "amount_base": "-3000.0000", "rate_used": "1.00000000", "rate_date": "2026-09-05",
     "transfer_pair_id": "88888888-9999-4aaa-bbbb-ccccddddeeee",
     "note": "还信用卡",
-    "updated_at": "2026-09-10T08:31:00.000000Z"
+    "created_at": "2026-09-05T21:04:00.000000Z", "updated_at": "2026-09-10T08:31:00.000000Z"
   },
   "in": {
-    "id": "9a8b7c6d-...", "source_id": "5b6c7d8e-...", "kind": "transfer",
-    "occurred_at": "2026-09-06",
+    "id": "9a8b7c6d-...",
+    "source_id": "5b6c7d8e-...",
+    "kind": "transfer", "occurred_at": "2026-09-06",
     "transfer_role": "in", "transfer_subtype": "repayment",
     "amount": "3000.0000", "currency": "CNY", "counterparty": null,
+    "amount_base": "3000.0000", "rate_used": "1.00000000", "rate_date": "2026-09-06",
     "transfer_pair_id": "88888888-9999-4aaa-bbbb-ccccddddeeee",
     "note": "AUTOPAY",
-    "updated_at": "2026-09-10T08:31:00.000000Z"
+    "created_at": "2026-09-06T07:15:00.000000Z", "updated_at": "2026-09-10T08:31:00.000000Z"
   }
 }
 ```
 
 这个例子正好演示了上面两条规则：转出腿来自储蓄卡账单、原本是 `plain`，转入腿来自信用卡账单、原本是 `repayment`，而转入腿的账户 `5b6c7d8e`（招商 信用卡）是 `credit` 类型，所以整对统一成 `repayment`，转出腿那条另外多一条 `updated` 事件记下 `plain → repayment`。两腿日期一个 9-5 一个 9-6，配对后**各自保留**（决策 §14.53a）。
 
-响应形状与 §5.30 的两腿转账对象一致（`pair_id` + `out` + `in`），只是**每一腿对象里额外带上自己的 `occurred_at` 与 `note`**——§5.30 建出来的两腿这两个值必然相同，而本端点配对出来的两腿可能各不相同（决策 §14.53a），不给出来界面就没法显示哪一腿是 9-5、哪一腿是 9-6。顶层的 `occurred_at` / `subtype` / `note` **取转出腿的值**（决策 §14.53a；不是取 `{tid}` 这一条——`{tid}` 可能是任意一腿，取转出腿才能保证同一对转账在任何入口下顶层摘要都一样）。`subtype` 经过上面的统一之后两腿必然相同；`occurred_at` 与 `note` 两腿仍可能各不相同，各腿的真值在各自的对象里，顶层这两个只是给界面显示用的摘要。
+响应形状与 §5.30 的两腿转账对象**逐字段一致**：顶层 `pair_id` + `occurred_at` + `subtype` + `note` + `out` + `in`，每一腿都是同一套 16 个字段（`id`、`source_id`、`kind`、`occurred_at`、`transfer_role`、`transfer_subtype`、`amount`、`currency`、`counterparty`、`amount_base`、`rate_used`、`rate_date`、`transfer_pair_id`、`note`、`created_at`、`updated_at`），04 的 `TransferPair` 类型按这一份定义、两个端点共用（决策 §14.53f）。差别只在**取值**：§5.30 建出来的两腿 `occurred_at` 与 `note` 必然相同，而本端点配对出来的两腿可能各不相同（决策 §14.53a），所以界面得按腿显示哪一腿是 9-5、哪一腿是 9-6。顶层的 `occurred_at` / `subtype` / `note` **取转出腿的值**（决策 §14.53a；不是取 `{tid}` 这一条——`{tid}` 可能是任意一腿，取转出腿才能保证同一对转账在任何入口下顶层摘要都一样）。`subtype` 经过上面的统一之后两腿必然相同；`occurred_at` 与 `note` 两腿仍可能各不相同，各腿的真值在各自的对象里，顶层这两个只是给界面显示用的摘要。
 
 错误：
 
@@ -2804,7 +2814,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 
 **不存在的字段**（随决策 §14.25 删除）：`confidence`（没有模型给分了）、`page_no`（应用拿不到原始账单，也就没有页面缩略图）、`raw_*`（不另存原始值，改动写进 `hint`，决策 §14.28）。**转账配对这件事上，草稿行只有 `matched_transaction_id` 一个载体**（决策 §14.53b）：勾没勾"关联为一笔转账"就看它——非空 = 勾上了，`PATCH {"matched_transaction_id": null}` = 取消勾选。没有第二个"是否已确认"的布尔列，也没有装候选列表的数组列；候选列表既不落库也不单独建接口。
 
-**转账候选不止一条时**（决策 §14.53b）：服务端**不预填** `matched_transaction_id`（留 `null`），只打 `needs_review`，`hint` 写"找到 N 条可以配对的转账，请选一条"。用户要选的时候，前端复用交易列表接口筛（`GET /ledgers/{id}/transactions?kind=transfer&…`：单腿、方向相反、其他账户、±3 天、同币种同金额），选中之后 `PATCH .../rows/{rid} {"matched_transaction_id": …}`——与退款候选选择器同一套做法（决策 §14.11，见 §5.25 末尾）。
+**转账候选不止一条时**（决策 §14.53b）：服务端**不预填** `matched_transaction_id`（留 `null`），仍然**同时打 `transfer_candidate` 与 `needs_review`**（与本节 flags 表、05 §3.3 的 `flag_transfer_candidates` 一致），`hint` 写"找到 N 条可以配对的转账，请选一条"。用户要选的时候，前端复用交易列表接口筛（`GET /ledgers/{id}/transactions?kind=transfer&…`：单腿、方向相反、其他账户、±3 天、同币种同金额），选中之后 `PATCH .../rows/{rid} {"matched_transaction_id": …}`——与退款候选选择器同一套做法（决策 §14.11，见 §5.25 末尾）。
 
 **没找到对腿时不猜对手账户**（决策 §14.53c）：`counterpart_source_id` 留 `null`，由用户在 review 里显式选一个账户（提交时按两腿建，§5.43），或者只填 `counterparty` 文本 / 什么都不填（提交时按单腿建）。服务端不做"看着像是转给某某账户"这种推断。
 
@@ -2812,7 +2822,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 
 | 字段 | 何时有值 | 说明 |
 |---|---|---|
-| `matched_transaction_id` | 打了 `refund_candidate` 或 `transfer_candidate` 的行上预填 | 退款行上它是**原支出**的 id（提交时写进 `transactions.refund_of`，决策 §14.7）；转账行上它是**可配对的那条单腿转账**的 id（提交时两条共用一个新的 `transfer_pair_id`，决策 §14.34）。两种用途共用一列，靠行的 `kind` 区分 |
+| `matched_transaction_id` | 打了 `refund_candidate` 的行上预填；打了 `transfer_candidate` 的行**只在候选唯一时**预填，多候选时留 `null`（决策 §14.53b） | 退款行上它是**原支出**的 id（提交时写进 `transactions.refund_of`，决策 §14.7）；转账行上它是**可配对的那条单腿转账**的 id（提交时两条共用一个新的 `transfer_pair_id`，决策 §14.34）。两种用途共用一列，靠行的 `kind` 区分 |
 | `counterpart_source_id` | 转账行上可能有值 | "对手账户也在本应用里"。它与 `matched_transaction_id` 的区别：前者是"对方账户"（提交时**新建**一条对腿），后者是"对方那条已经存在的交易"（提交时**关联**它）。两者同时有值时以 `matched_transaction_id` 为准——已经有现成的对腿就不该再造一条 |
 | `counterparty` | 单腿转账行上可能有值，其余行一般为 `null` | 对手方的自由文本（例如 `"老婆"`、`"工资卡"`），决策 §14.10。校验阶段恒为 `null`（决策 §14.16：skill 不猜对手账户，标准 CSV 的 11 列里根本没有这一列），只有用户在 review 里 `PATCH .../rows/{rid}` 填写才会有值（§5.41，≤100 字）；提交时原样写进 `transactions.counterparty` |
 
@@ -3001,7 +3011,9 @@ X-Client: web
    c. 符号 / 分类 / refund / 配对 / 对手账户，同 §5.26、§5.33   -> 400 对应 code
       （`repayment` 只在转入腿上要求账户是 credit，见 §5.26：
         储蓄卡账单里的 transfer/out/repayment 行照建，不会卡在这里；
-        配对也不要求两腿子类型相同，服务端统一，见 §14.53a）
+        配对也不要求两腿子类型相同，服务端统一，见 §14.53a；
+        但 counterpart_source_id 这一路是新建两腿、不是配对，
+        转入腿账户不是 credit 而行的子类型是 repayment 时照样 400）
       对手账户不是本账本的未归档账户                            -> 404 not_found（§14.53c）
 5. 全部通过后开事务
 ```
@@ -3011,7 +3023,7 @@ X-Client: web
 - `kind` 为 `expense` / `income` / `refund` 的行 → 一条 `transactions`，`source_id` = 批次的目标账户，`import_batch_id` = 批次 id，`created_by` / `updated_by` = 当前用户，`refund_of` = 行的 `matched_transaction_id`（行 `kind='refund'` 且它非空就写，不看是服务端预填还是用户改选，决策 §14.7）。
 - `kind='transfer'` 且 `matched_transaction_id` 非空 → **与已有的那条单腿转账配对**（决策 §14.34）：新建本行这一腿，生成一个新的 `transfer_pair_id`，把它同时写到新行和那条已有交易上，并把**已有那条的 `counterparty` 清空**；给已有那条也写一条 `transaction_events(event='paired')`。计入响应的 `paired_existing_transfers`。
   配对时**按 §5.33 的规则把两腿统一成同一个 `transfer_subtype`**（决策 §14.53a：任一腿是 `repayment` 且转入腿账户是 `credit` → 整对 `repayment`，否则整对 `plain`）——走的就是 §5.33 那一段代码，配对不要求两腿原本的子类型相同（储蓄卡账单写 `plain`、信用卡账单写 `repayment` 的同一笔还款是常态）。子类型真的变了的腿再各写一条 `transaction_events(event='updated')`，`changes` 记 `transfer_subtype` 的前后值。两腿的 `occurred_at` **不对齐**，各留各的日期（决策 §14.53a）。
-- `kind='transfer'`、`matched_transaction_id` 为空且 `counterpart_source_id` 非空 → **两腿一起建**：生成一个 `pair_id`，目标账户那一腿按行的金额符号定 role，对手账户那一腿金额取反、币种相同、日期相同，两腿写**同一个** `transfer_subtype`（同样按 §14.53a 的规则算：行的子类型是 `repayment` 且转入腿账户是 `credit` 才留 `repayment`，否则整对 `plain`）和同一个 `import_batch_id`（决策 §5"两腿还款一起建"）。`counterpart_source_id` 必须是本账本的未归档账户（决策 §14.53c，§5.41 已经拦过一道）。计入 `created_transfer_pairs`。
+- `kind='transfer'`、`matched_transaction_id` 为空且 `counterpart_source_id` 非空 → **两腿一起建**：生成一个 `pair_id`，目标账户那一腿按行的金额符号定 role，对手账户那一腿金额取反、币种相同、日期相同，两腿写**行自带的**那个 `transfer_subtype` 和同一个 `import_batch_id`（决策 §5"两腿还款一起建"）。这一路**不走 §14.53a 的统一规则**——§14.53a 只管**配对**两条已经存在的交易；这里两腿都是新建的，等同于 §5.30 的建对，所以行的子类型是 `repayment` 而转入腿（对手账户那一腿或本行这一腿，看金额符号）的账户不是 `credit` 时，按 §5.26 / §5.30 返回 400 `repayment_target_not_credit`，不做静默降级。`counterpart_source_id` 必须是本账本的未归档账户（决策 §14.53c，§5.41 已经拦过一道）。计入 `created_transfer_pairs`。
 - `kind='transfer'` 且两个都为空 → 一条单腿转账（`transfer_pair_id` 为 NULL），行的 `counterparty` 文本原样写进 `transactions.counterparty`（决策 §14.10）。
 - 每建一条交易就写一条 `transaction_events(event='imported', import_batch_id=<批次>, client=<X-Client>)`（决策 §14.51）。
 - 每写一条就把 `import_rows.transaction_id` 回填（两腿的行回填目标账户那一腿的 id）。
@@ -3499,12 +3511,12 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 | `DELETE /transactions/{tid}` | 单条删除只删一行；**它的 `transaction_events` 一起没了**；删被 refund 引用的 expense 后退款行还在且 `refund_of` 为 null；对两腿中的一腿 → 409 `use_transfer_endpoint` |
 | `POST /transactions/transfer` | 建出两行、同 `pair_id`、符号相反、跨币种金额不等也 OK；同币种省略 `amount_in` 时两腿金额相同（决策 §14.52 A11）；`repayment` 转入非信用卡 → 400；同一账户 → 400 `same_source`；归档账户 → 409；第二腿插入失败时第一腿也不存在（用 `mock` 让第二次 flush 抛异常，验证回滚） |
 | `PATCH/DELETE /transactions/transfer/{pair_id}` | 两腿一起改 / 一起删；不存在的 `pair_id` → 404；只剩一腿时 PATCH → 409 `transfer_pair_incomplete`、DELETE → 204 |
-| `POST .../{tid}/pair` | 两条方向相反的单腿 → 共用新 `pair_id`、两边 `counterparty` 都被清空、各多一条 `paired` 事件；跨币种、金额不等也允许；对已成对的一条 → 400 `pair_invalid`；同方向 → 400；同账户 → 400；和自己 → 400；非 transfer → 400；跨账本 → 404 |
+| `POST .../{tid}/pair` | 两条方向相反的单腿 → 共用新 `pair_id`、两边 `counterparty` 都被清空、各多一条 `paired` 事件；跨币种、金额不等也允许；对已成对的一条 → 400 `pair_invalid`；同方向 → 400；同账户 → 400；和自己 → 400；非 transfer → 400；跨账本 → 404；**一腿 `plain` 一腿 `repayment` 且转入腿账户是 `credit` → 两腿都变 `repayment`、变了的那腿多一条 `updated` 事件（`changes.transfer_subtype`）；转入腿账户不是 `credit` 时两腿都变 `plain` 且不返回 `repayment_target_not_credit`；两腿 `occurred_at` 不同 → 各自保留、顶层取转出腿**（决策 §14.53a） |
 | `POST .../transfer/{pair_id}/unpair` | 两腿都变回 `transfer_pair_id = null` 且都还在；各多一条 `unpaired` 事件；拆开后两条各自可 PATCH / DELETE（不再 409）；只剩一腿的 pair → 409 `unpair_invalid` |
 | `stats/summary` | 转账不计入；退款按退款日期冲减对应分类（跨月的用例：8 月支出、9 月退款，验证 8 月不变、9 月减）；某分类被冲成负数照实返回（决策 §14.44 的 03-10）；多币种按发生日汇率折算；`share` 之和约等于 1 |
 | `stats/trend` | **只有 `expense` 字段，没有 `income` / `net`**（决策 §14.52 B20）；空月份补 `"0.0000"`；`months=12` 返回 12 个元素且时间连续 |
 | `POST /imports`（成功路径） | 上传合法 CSV → **201**（不是 202）且响应里同时有 `batch` 与全部 `rows`；粘贴 `text` 走同一套校验、结果与上传逐字相同（只有 `source` 与 `filename` 不同）；`status` 直接是 `ready`；`flags_summary` 四种标记计数正确；`net_amount` 与手算一致 |
-| `POST /imports`（拒绝路径） | 缺 `# version:` 行 → 400 `skill_outdated` 且 `file_version` 为 null；版本写成 `2026-08-20` → 400 `skill_outdated` 且带 `current_version` 与 `guide_url`（决策 §14.30）；表头少一列 → 400 `import_format_invalid` 且 `errors[0].line == 2`；某行 10 列 → 400 且 `errors` 指出那一行的行号；2001 行 → 400 `rows_exceed_limit`；3 MB → 413；上传一个 PDF → 400 `import_format_invalid`（解码失败）；归档账户 → 409；第 11 批 → 429。**每一种拒绝之后库里都没有新批次** |
+| `POST /imports`（拒绝路径） | 缺 `# version:` 行 → 400 `import_format_invalid` 且 `errors` 恰好一条、`errors[0].line == 1`（决策 §14.53d）；版本写成 `2026-08-20` → 400 `skill_outdated` 且带 `current_version` 与 `guide_url`（决策 §14.30）；表头少一列 → 400 `import_format_invalid` 且 `errors[0].line == 2`；某行 10 列 → 400 且 `errors` 指出那一行的行号；2001 行 → 400 `rows_exceed_limit`；3 MB → 413；上传一个 PDF → 400 `import_format_invalid`（解码失败）；归档账户 → 409；第 11 批 → 429。**每一种拒绝之后库里都没有新批次** |
 | 导入的行级校验 | 日期写成 `08/03/2026` → 行仍在、`needs_review`、`hint` 说明；`amount` 写成 `abc` → 行仍在并 `needs_review`；`currency` 写成 `XX` → 改成账户币种并写 `hint`；`kind` 写成 `spend` → 按符号推断并 `needs_review`；分类 code 瞎编 → 该字段置空、行进"待归类"；**一条都没丢**（决策 §5、§14.52 B2） |
 | 导入的自动标记 | 同账户同日同额已有交易 → `duplicate`；唯一候选原单 → `refund_candidate` + 预填 `matched_transaction_id`；对方账户上 ±3 天同额反向单腿 → `transfer_candidate` + 预填；对方已是两腿的一半 → `duplicate`（决策 §14.34）；**批内两行完全相同 → 两行都保留、都 `needs_review`、`hint` 互相指出行号**（决策 §14.31，断言**没有**合并、`flags` 里也没有第五种取值） |
 | `PATCH .../rows/{rid}` | 改分类 → `status` 自动变 `edited`；`skipped` 往返；把 `matched_transaction_id` 置 null 取消配对；给非 transfer 行设 `counterpart_source_id` → 400；批次已 committed → 409 `batch_not_ready` |
@@ -3538,7 +3550,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 | `ok_bom.csv` | 带 UTF-8 BOM，201（BOM 必须被吃掉，不能让第一行变成 `﻿# version:`） |
 | `ok_crlf.csv` | Windows 换行，201 |
 | `ok_quoted_comma.csv` | 商户名里有逗号且被引号包住，201 且商户名完整 |
-| `bad_no_version.csv` | 400 `skill_outdated`，`file_version == null` |
+| `bad_no_version.csv` | 400 `import_format_invalid`，`errors` 恰好一条且 `errors[0].line == 1`（决策 §14.53d） |
 | `bad_old_version.csv` | 400 `skill_outdated`，`file_version == "2026-08-20"` |
 | `bad_header_order.csv` | 表头列序被换过 → 400 `import_format_invalid`，`errors[0].line == 2` |
 | `bad_header_extra.csv` | 多一列 `counterparty`（决策 §14.52 B3 点名的那种旧格式）→ 400 `import_format_invalid` |
