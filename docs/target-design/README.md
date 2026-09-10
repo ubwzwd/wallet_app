@@ -216,7 +216,7 @@ frontend/src/
 | # | 问题 | 建议默认值 |
 |---|---|---|
 | 02-D-3 | `import_rows` 的日期列叫 `date` 还是 `occurred_at`（决策 §5 的字段清单写 `date`，交易表用 `occurred_at`） | DB 列改叫 `occurred_at`，LLM 输出与 API 字段保持 `date`。**注意本轮各章正文一律按 `date` 写**，改名要一起改 02/03/04/05 |
-| 02-D-4 | 密钥列名 `api_key` 还是 `api_key_encrypted`（见 U-5） | 改叫 `api_key_encrypted` 更不容易被误读为明文 |
+| 02-D-4 | 密钥列名 `api_key` 还是 `api_key_encrypted`（见 U-5） | **作废（2026-09-10，决策 §14.25）：没有密钥列。** |
 | 02-D-5 | 同一账本内账户是否允许重名（与 01-6 是同一件事） | 允许，不加唯一约束，仅前端软提示（创建时同名就在响应里带 warning） |
 | 02-D-6 | 已用 / 已过期邀请码何时删 | 生成新码前惰性清理本账本的 + 每日一次全表清理 |
 | 02-D-7 | "每人 ≤10 本、每本 ≤10 人"要不要数据库约束 | 只做应用层 `COUNT(*)`；数据库侧要触发器，代价不值 |
@@ -239,7 +239,7 @@ frontend/src/
 | 03-13 | `occurred_at` 允许的最大未来日期 | 今天 + 1 天（容忍时区差），更远直接 422 |
 | 03-14 | `limit` 上限（交易列表 200、导入草稿行 500） | 采纳 |
 | 03-15 | uvicorn 要不要加 `--proxy-headers`（限流按真实 IP 计数需要） | 要加；属 infra 改动，本套文档不改 |
-| 03-16 | `CATEGORY_VERSION` 的格式 | 日期串（见 U-9） |
+| 03-16 | `CATEGORY_VERSION` 的格式 | **已定（2026-09-10，决策 §14.30）：日期串。** |
 
 **来自 [04](./04-frontend.md#待决)（前端）**
 
@@ -247,7 +247,7 @@ frontend/src/
 |---|---|---|
 | 04-D-1 | 路由库选 Expo Router v6 还是 `@react-navigation/native` + 手写 linking | Expo Router v6（Web 上是真实 URL，将来做 App 深链接零成本） |
 | 04-D-2 | `/auth/me` 还是 `/me`（与 03-1 是同一件事） | 迁到 `/me`，`/auth` 下只留 register / login |
-| 04-D-4 | 退款关联选择器要的"已退/可退"金额怎么给（**"要不要单开接口"已由 §14.11 裁定为不单开**，只剩这一半） | **默认返回**：03 §5.28 已把 `refunded_total` / `refundable` 写成 expense 行上无条件出现的可选字段，04 §3.4 也已按此实现（`TransactionListParams` 里没有开关参数）；若反过来要一个省 JOIN 的开关，需在 03 §5.28 的查询参数表里补 `with_refund_totals`（bool，默认 false） |
+| 04-D-4 | 退款关联选择器要的"已退/可退"金额怎么给（**"要不要单开接口"已由 §14.11 裁定为不单开**，只剩这一半） | **已定（2026-09-10，决策 §14.11）：默认随交易列表返回，无开关参数。** |
 | 04-D-5 | 前端怎么提前知道 `REGISTRATION_OPEN` | 加匿名可读的 `GET /api/v1/config` 回 `{registration_open}`；在此之前只按提交后的 403 处理 |
 | 04-D-6 | 交易详情要显示"这笔支出被退了多少" | 详情响应里带 `refunds: RefundSummary[]`，或复用 D-4 |
 | 04-D-7 | 交易列表能否按 `import_batch_id` 筛选 | 加 `?import_batch_id=` 参数 |
