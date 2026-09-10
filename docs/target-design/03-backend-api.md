@@ -430,7 +430,7 @@ def remove_member(db: Session, ledger: Ledger, user_id: UUID) -> None: ...
 
 ## 2. 配置
 
-加载规则沿用现状（`backend/app/core/config.py:33-38`：`env_file=".env"`、`case_sensitive=True`、`extra="allow"`；优先级为真实环境变量 > `.env` > 字段默认值）。下表把现有 10 个字段和新增 9 个字段列全，新增项都标 `[新]`。
+加载规则沿用现状（`backend/app/core/config.py:33-38`：`env_file=".env"`、`case_sensitive=True`、`extra="allow"`；优先级为真实环境变量 > `.env` > 字段默认值）。下表把现有 10 个字段和新增 10 个字段列全，新增项都标 `[新]`。
 
 ### 2.1 字段表
 
@@ -586,7 +586,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 | `source_has_transactions` | 409 | 删除有交易的账户 |
 | `currency_locked` | 400 | `PATCH /sources/{sid}` 想改 `default_currency`——账户币种创建后不可改（决策 §14.50） |
 | `same_source` | 400 | 两腿转账的转出账户与转入账户是同一个账户 |
-| `repayment_target_not_credit` | 400 | `subtype='repayment'` 的转账，转入账户不是 `credit` 类型（决策 §14.52 A11） |
+| `repayment_target_not_credit` | 400 | `subtype='repayment'` 的转账，**转入腿**的账户不是 `credit` 类型（单腿的 `transfer_role='out'` 不判定，§5.26）（决策 §14.52 A11） |
 | `category_invalid` | 400 | 分类 code 不在表内，或二级不属于该一级 |
 | `category_kind_mismatch` | 400 | 分类的收支侧与 `kind` 不匹配 |
 | `kind_change_not_allowed` | 400 | PATCH 想让 `kind` 跨越 `transfer` / 非 `transfer` 的边界（决策 §14.3） |
@@ -688,7 +688,7 @@ X-Client: web
 
 ### 5.0 本章的写法
 
-每个端点固定给六项：方法与路径、鉴权与角色、请求（体或参数 + 校验规则）、成功响应、错误清单（状态码 + code + 触发条件）、副作用（写哪些表 / 起哪些后台任务 / 调哪些外部服务）。
+每个端点固定给六项：方法与路径、鉴权与角色、请求（体或参数 + 校验规则）、成功响应、错误清单（状态码 + code + 触发条件）、副作用（写哪些表 / 调哪些外部服务；本版没有任何后台任务，决策 §14.25）。
 
 所有端点都可能返回下面这三种错误，后面的错误表里不再重复：
 
@@ -1390,6 +1390,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../sources?include_archived=true
       "balance_base": "12480.3300",
       "balance_rate": "1.00000000",
       "balance_rate_date": "2026-09-08",
+      "rate_missing_count": 0,
       "created_by": "4ee1c8fa-...",
       "updated_by": "4ee1c8fa-...",
       "created_at": "2026-09-03T05:51:45.934119Z",
@@ -1408,6 +1409,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../sources?include_archived=true
       "balance_base": "-1840.0000",
       "balance_rate": "1.00000000",
       "balance_rate_date": "2026-09-08",
+      "rate_missing_count": 0,
       "created_by": "4ee1c8fa-...",
       "updated_by": "4ee1c8fa-...",
       "created_at": "2026-09-03T05:52:10.000000Z",
@@ -1426,6 +1428,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../sources?include_archived=true
       "balance_base": "452.3500",
       "balance_rate": "8.30000000",
       "balance_rate_date": "2026-09-08",
+      "rate_missing_count": 0,
       "created_by": "4ee1c8fa-...",
       "updated_by": "77aa1122-...",
       "created_at": "2026-09-03T05:51:45.953116Z",
@@ -1470,7 +1473,9 @@ balance(a) = a.opening_balance
 
 **归档账户一律不计入这三个数**，即使 `include_archived=true` 把它们返回了也不算（决策 §14.50）。这就是归档账户时前端要提示"该账户余额将从净资产中移除"的原因（§5.23）。首页的资产 / 负债 / 净资产三个数用的就是这三个字段（[`./04-frontend.md`](./04-frontend.md) §4.4）。
 
-汇率上游不可用且缓存里也没有可用值时：折不动的**异币种交易按原值计入 `balance`** 会算错，所以这种情况下 `balance` 仍然返回（只把折不动的那部分按 0 计），并把 `balance_base` / `balance_rate` / `balance_rate_date` 三个字段置 `null`，顶层的 `assets` / `liabilities` / `net_worth` 也一并置 `null`，其余字段照常返回 200（列表接口不因为汇率而失败，沿用现状的容错取向）。账户上全部交易都是账户币种时（最常见）这条分支根本不会触发。
+- `rate_missing_count`：这个账户上**因为取不到汇率而没有计入 `balance` 的交易条数**，正常恒为 `0`（与 §5.25 `summary`、§5.35 统计里的同名字段是同一个口径的信号）。
+
+汇率上游不可用且缓存里也没有可用值时：折不动的**异币种交易按原值计入 `balance`** 会算错，所以这种情况下 `balance` 仍然返回（只把折不动的那部分按 0 计，并把这些交易的条数写进该账户的 `rate_missing_count`），并把 `balance_base` / `balance_rate` / `balance_rate_date` 三个字段置 `null`，顶层的 `assets` / `liabilities` / `net_worth` 也一并置 `null`，其余字段照常返回 200（列表接口不因为汇率而失败，沿用现状的容错取向）。**`rate_missing_count > 0` 时前端必须把这个账户的 `balance` 标成"不完整"**（[`./04-frontend.md`](./04-frontend.md) §4.4）——没有这个信号，用户看到的就是一个静默少算的数。账户上全部交易都是账户币种时（最常见）这条分支根本不会触发，三个数与所有 `rate_missing_count` 都是正常值。
 
 `transactions.amount` 的符号约定由数据库 CHECK 保证（决策 §10），所以求和就是余额，不需要按 kind 分支。
 
@@ -1768,7 +1773,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions?kind=expense&kind=refund&from=2026
 | `note` | str \| null | 否 | ≤ 500（决策 §1.4，由现状的 `description` 改名） |
 | `refund_of` | UUID \| null | 否 | 只允许 `kind == 'refund'`；见下 |
 | `transfer_role` | str | transfer 必填 | `out` \| `in`；必须与 `amount` 符号一致 |
-| `transfer_subtype` | str | transfer 必填 | `plain` \| `repayment`；`repayment` 时账户必须是 `credit` 且 `transfer_role='in'`（决策 §14.52 A11） |
+| `transfer_subtype` | str | transfer 必填 | `plain` \| `repayment`；**只在这一腿是转入腿时**校验账户类型：`repayment` + `transfer_role='in'` 时账户必须是 `credit`（决策 §14.52 A11）。`transfer_role='out'` 的单腿 `repayment` 放行 |
 | `counterparty` | str \| null | 否 | ≤ 100；只允许单腿转账填（决策 §1.2） |
 
 符号规则（与数据库 CHECK 一致，决策 §10）：
@@ -1844,6 +1849,8 @@ POST /api/v1/ledgers/8f0f7b2e-.../transactions
 
 单腿转账计入账户余额，但**不计入**收入/支出统计（决策 §1.2）。表单默认建议把外部转入记成 `income`，这是前端的默认值选择（[`./04-frontend.md`](./04-frontend.md)），服务端不干预。单腿的币种必须等于账户币种（决策 §14.52 A11）——单腿没有对腿可以承担另一个币种，写成别的币种只会让余额口径变复杂。
 
+A11 的"还款转入账户限定信用卡"只约束**转入腿**：从储蓄卡账单导入的还款是一条 `transfer` / `out` / `repayment` 的单腿（决策 §6 的 skill 规则就是这样输出的），它的账户本来就不是信用卡，对腿（信用卡那边）不在这次请求里，服务端无从校验，所以 `transfer_role='out'` 的 `repayment` 一律放行。只有 `transfer_role='in'` 的那一腿才要求账户是 `credit`。
+
 错误：
 
 | 状态码 | code | 条件 |
@@ -1853,7 +1860,7 @@ POST /api/v1/ledgers/8f0f7b2e-.../transactions
 | 400 | `category_invalid` | 分类 code 不存在、二级不属于一级；或 transfer 却带了分类 |
 | 400 | `category_kind_mismatch` | 收支侧与 kind 不匹配（如 income 用了支出分类） |
 | 400 | `refund_target_invalid` | `refund_of` 不在本账本 / 不是 expense / 非 refund 却给了它 |
-| 400 | `repayment_target_not_credit` | `transfer_subtype='repayment'` 但账户不是 `credit` 或 `transfer_role != 'in'`（决策 §14.52 A11） |
+| 400 | `repayment_target_not_credit` | `transfer_subtype='repayment'` 且 `transfer_role='in'`，但账户不是 `credit`（决策 §14.52 A11） |
 | 400 | `validation_error` | 金额符号与 kind 或 transfer_role 冲突；金额为 0；transfer 缺 `transfer_role` / `transfer_subtype`；非 transfer 却给了它们；`counterparty` 用在非转账上；转账带了 `merchant`；单腿转账币种 ≠ 账户币种；币种不支持；`occurred_at` 晚于今天 + 1 天 |
 
 副作用（一个事务）：`INSERT transactions`（`ledger_id` 来自路径，`created_by` / `updated_by` = 当前用户，`transfer_pair_id` 恒为 NULL）+ `INSERT transaction_events`（`event='created'`，`client` 取自 `X-Client`，决策 §14.51）。给了 `refund_of` 时不额外写 `refund_linked` 事件——创建时的关联已经在 `created` 的 `changes` 里。折算字段是响应时算出来的，**不落库**（决策 §8）。可能触发 0 或 1 次 Frankfurter 调用（缓存未命中时）。
@@ -1954,7 +1961,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/aa11bb22-cc33-4d44-8e55-ff66778899
      "changes": {"transfer_pair_id": {"before": null, "after": "77777777-..."},
                  "counterparty": {"before": "工资卡", "after": null}},
      "import_batch_id": null},
-    {"id": "e8e8...", "event": "updated", "at": "2026-09-09T06:00:00.000000Z",
+    {"id": "e8e8...", "event": "updated", "at": "2026-09-09T08:00:00.000000Z",
      "actor_id": "4ee1c8fa-...", "client": "web",
      "changes": {"amount": {"before": "-45.5000", "after": "-42.0000"}},
      "import_batch_id": null},
@@ -2036,7 +2043,7 @@ X-Client: web
 | 409 | `use_transfer_endpoint` | 该行 `transfer_pair_id` 非空 |
 | 409 | `source_archived` | 改到一个已归档账户 |
 | 400 | `kind_change_not_allowed` | 请求会让 `kind` 跨越 `transfer` / 非 `transfer` 的边界（决策 §14.3） |
-| 400 | `repayment_target_not_credit` | 改成 `repayment` 但账户不是信用卡（决策 §14.52 A11） |
+| 400 | `repayment_target_not_credit` | 改完之后是 `repayment` **且这条是转入腿**（`transfer_role='in'`），但账户不是信用卡（决策 §14.52 A11）；`transfer_role='out'` 的单腿 `repayment` 不判定 |
 | 400 | `category_invalid` / `category_kind_mismatch` / `refund_target_invalid` | 同 §5.26，按"改完之后的整行"判定 |
 | 400 | `validation_error` | 符号与 kind 冲突等 |
 
@@ -2218,7 +2225,7 @@ DELETE /api/v1/ledgers/8f0f7b2e-.../transactions/transfer/77777777-8888-4999-aaa
 
 | 字段 | 类型 | 必填 | 校验 |
 |---|---|---|---|
-| `other_transaction_id` | UUID | 是 | 要配对的另一条交易，见下面五条 |
+| `other_transaction_id` | UUID | 是 | 要配对的另一条交易，见下面六条 |
 
 校验（任何一条不过都是 400 `pair_invalid`，`detail` 说明是哪一条）：
 
@@ -2571,7 +2578,7 @@ Content-Type: application/json
 | 413 | `file_too_large` | 超过 `MAX_UPLOAD_MB`（2 MB） |
 | 429 | `import_rate_limited` | 每用户每小时超过 `RATE_LIMIT_IMPORTS_PER_HOUR`（10）批 |
 
-副作用（一个事务）：`INSERT import_batches`（`status='ready'`）+ N 条 `INSERT import_rows`。**不写任何文件**（决策 §14.28：后端没有文件系统状态）、不调 LLM、不调汇率（`net_amount` 用批内已有币种做一次批量折算，命中缓存时零次上游）。
+副作用（一个事务）：`INSERT import_batches`（`status='ready'`）+ N 条 `INSERT import_rows`。**不写任何文件**（决策 §14.28：后端没有文件系统状态）、不调 LLM；汇率只为算 `net_amount` 走一次 `fx.convert_many`（§6.3）——命中 `exchange_rates` 缓存时零次上游请求，未命中时每个币种最多一次。
 
 状态机（决策 §5，全文只有这两个状态）：
 
@@ -2927,6 +2934,8 @@ X-Client: web
    b. kind != 'transfer' 时 category_l1 非空                  -> 409 rows_uncategorized
       （决策 §1.3："提交前必须补一级分类"；detail 里给出还差几行）
    c. 符号 / 分类 / refund 目标 / 配对对象 / 对手账户，规则同 §5.26、§5.33 -> 400 对应 code
+      （`repayment` 只在转入腿上要求账户是 credit，见 §5.26：
+        储蓄卡账单里的 transfer/out/repayment 行照建，不会卡在这里）
 5. 全部通过后开事务
 ```
 
@@ -3415,7 +3424,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 | `POST /sources` | `type=savings` → 422（四选一，决策 §14.48）；`opening_balance` 负数存得下（信用卡欠款，§14.52 A13） |
 | `PATCH /sources/{sid}` | 带 `default_currency`（哪怕值不变）→ 400 `currency_locked`（决策 §14.50）；`archived: true` 之后 `archived_at` 非空、取消归档后回到 `null`；归档账户上的历史交易仍可 PATCH（决策 §14.40 的 01-12），但新建交易 → 409 `source_archived` |
 | `DELETE /sources/{sid}` | 无交易 → 204；有交易 → 409 `source_has_transactions` |
-| `POST /transactions` | 四种 kind 各建一条；符号与 kind 不匹配 → 400；transfer 带分类 → 400；transfer 带 `merchant` → 400（决策 §14.52 B16）；单腿转账币种 ≠ 账户币种 → 400（A11）；`repayment` 落在非信用卡账户 → 400 `repayment_target_not_credit`；expense 用收入分类 → 400 `category_kind_mismatch`；`refund_of` 指向 income → 400；不给分类的 refund 沿用原单分类；归档账户 → 409；`occurred_at` = 今天+2 天 → 422；**每建一条就多一条 `transaction_events(created)`，`client` 取自 `X-Client`** |
+| `POST /transactions` | 四种 kind 各建一条；符号与 kind 不匹配 → 400；transfer 带分类 → 400；transfer 带 `merchant` → 400（决策 §14.52 B16）；单腿转账币种 ≠ 账户币种 → 400（A11）；`repayment` + `transfer_role='in'` 落在非信用卡账户 → 400 `repayment_target_not_credit`，同一条改成 `transfer_role='out'`（储蓄卡那一腿）→ 201；expense 用收入分类 → 400 `category_kind_mismatch`；`refund_of` 指向 income → 400；不给分类的 refund 沿用原单分类；归档账户 → 409；`occurred_at` = 今天+2 天 → 422；**每建一条就多一条 `transaction_events(created)`，`client` 取自 `X-Client`** |
 | `GET /transactions` | 决策 §4 的每个参数**逐个**有用例 + 一个组合用例；`import_batch_id` 筛选只返回那一批（决策 §14.46）；`currency` 筛原币；**`min_amount` / `max_amount` 按基准币种折算后比较**——一笔 1000 JPY（≈50 CNY）在 `min_amount=100` 下**不**出现，而一笔 20 EUR（≈166 CNY）出现（决策 §14.49）；`summary` 的三个数与全量结果一致且**翻页不变**、转账不计入 `net`（§14.52 A14）；`{items,total}` 的 total 是过滤后的；排序稳定；`refunded_total` / `refundable` 只出现在 expense 行且数值正确；跨账本的 `source_id` → 404 |
 | `GET /transactions/{tid}` | expense 详情带 `refunds[]`（两笔部分退款都在、按日期升序）；refund 详情的 `refund_of_detail` 有原单摘要与已退 / 可退，`other_refunds` 列出同原单的另一笔且**不含自己**（决策 §14.52 A25）；原单删除后 `refund_of_detail` 为 null；两腿的 `pair` 有对腿、单腿为 null；`events[]` 按时间倒序且包含 created / updated；`rate_used` / `rate_date` 非空（决策 §14.52 A24） |
 | `PATCH /transactions/{tid}` | 旧 `updated_at` → 409；`expense` → `refund` 整行重校验通过；`expense` → `transfer`（同时补齐 `transfer_role` / `transfer_subtype` 并清掉分类，即所有 CHECK 都能满足的那种请求）→ 400 `kind_change_not_allowed`；单腿 `transfer` → `expense` 同样 400；对两腿中的一腿 → 409 `use_transfer_endpoint`；**改 `refund_of` 会多出一条 `refund_linked` / `refund_unlinked` 事件；什么都没真变时不写事件** |
