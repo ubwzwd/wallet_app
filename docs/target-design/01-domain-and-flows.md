@@ -317,7 +317,7 @@
 | `PATCH /transactions/{tid}` 令 `refund_of` 由空变非空 | `refund_linked`（在 `updated` 之外额外一条） | `refund_of` 的前后值 |
 | `PATCH /transactions/{tid}` 令 `refund_of` 由非空变空 | `refund_unlinked`（额外一条） | `refund_of` 的前后值 |
 
-`GET /ledgers/{id}/transactions/{tid}` 在响应里带 `events[]`，**按 `at` 倒序**（决策 §14.51）。事件里不写"客户端 iOS"这类本版本不存在的东西——`client` 只记请求头里的实际值（决策 §14.52 C8/C9）。
+`GET /ledgers/{id}/transactions/{tid}` 在响应里带 `events[]`，**按 `at` 倒序**（决策 §14.51）。事件里不写"客户端 iOS"这类本版本不存在的东西——`client` 只记请求头里的实际值（屏幕稿审阅 [`mockups/REVIEW-2026-09-11.md`](./mockups/REVIEW-2026-09-11.md) C8 / C9，由决策 §14.52 一并采纳）。
 
 **不产生事件**的情况：原单被删除导致退款行 `refund_of` 被 `ON DELETE SET NULL` 置空——那是数据库级联，不经过任何应用路径；界面上退款详情直接显示"原单已删除"。
 
@@ -498,7 +498,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
   1. `POST /api/v1/auth/register`，体 `{"email", "password", "base_currency", "language", "display_name"}`（后两个可选）。
   2. 服务端在**一个事务**内：建 `users` 行 → 建 `ledgers` 行（`name="我的账本"`（语言为 en 时 `"My Ledger"`）、`base_currency` = 用户提交的默认币种、`created_by` = 新用户）→ 建 `ledger_members` 行（`role='owner'`）。
   3. 返回 JWT。
-- **服务端校验**：注册开关关闭 → 403 `registration_closed`；邮箱已存在 → 409 `email_exists`；密码 < 8 位 → 422；`base_currency` 不匹配 `^[A-Z]{3}$` → 422；`display_name` ≤ 40 字；同 IP 每小时注册 > 5 次 → 429 `rate_limited`（进程内令牌桶，与登录、加入账本共用同一组件，重启清零、单实例，决策 §14.43，03-8）。
+- **服务端校验**：注册开关关闭 → 403 `registration_closed`；邮箱已存在 → 409 `email_exists`；密码 < 8 位 → 422；`base_currency` 不匹配 `^[A-Z]{3}$` → 422；`display_name` ≤ 40 字；同 IP 每小时注册 > 5 次 → 429 `register_rate_limited`（进程内令牌桶，与登录、加入账本共用同一组件，重启清零、单实例，决策 §14.43，03-8）。
 - **状态变化**：0 个用户 → 1 个用户 + 1 本账本 + 1 条 owner 成员记录。
 - **失败分支**：任一步失败整个事务回滚，不会留下"有用户没账本"的状态。这一点和现状不同：现状注册只建 `users` 行 (backend/app/api/auth.py:42-51)。
 
@@ -843,7 +843,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 - **服务端校验**：
   1. `transfer_role` 与符号一致（`in` → `amount > 0`，`out` → `amount < 0`）→ 否则 400 `validation_error`；
-  2. `transfer_subtype` 必填；`repayment` 时该账户 `type` 必须是 `credit`（还的是自己的信用卡）→ 否则 400 `validation_error`；
+  2. `transfer_subtype` 必填；**`transfer_role='in'` 且 `transfer_subtype='repayment'` 时该账户 `type` 必须是 `credit`**（收到还款的那一端是自己的信用卡）→ 否则 400 `validation_error`；**`transfer_role='out'` 的 repayment 腿不限账户类型**——用应用里的储蓄卡去还一张没录进应用的信用卡，出账腿就落在 `checking` 上，这正是单腿转账要覆盖的场景（决策 §14.52 A11 只约束转入账户；§3.15 A 的自动配对、§3.15 C 拆开两腿后留下的 out 腿都依赖这一点，见 §5.7.3 的算例）；
   3. `category_l1` / `category_l2` / `merchant` 必须为空 → 否则 400 `validation_error`；
   4. `transfer_pair_id` 不接受客户端传入（服务端只在两腿接口和配对接口里生成）→ 传了就 400 `validation_error`；
   5. `counterparty` 可空、≤100 字。
@@ -1079,8 +1079,8 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    （要改只能删了重记）                                 |                 |
                                                         |                 |
         |                                               |                 |
-        | DELETE /transactions/{tid}                    | DELETE          | DELETE .../transfer/{pair_id}
-        v                                               v /transactions/  v
+        | DELETE /transactions/{tid}                    | DELETE（同左）  | DELETE .../transfer/{pair_id}
+        v                                               v                 v
    +---------------------------------------------------------------------------+
    |                                 DELETED                                   |
    |  指向它的 refund 行 refund_of -> NULL（ON DELETE SET NULL）               |
@@ -1306,6 +1306,8 @@ summary.income  = Σ conv(t)          对结果里 kind='income' 的行
 summary.refund  = Σ conv(t)          对结果里 kind='refund' 的行
 summary.net     = summary.income + summary.refund − summary.expense
 ```
+
+**口径提醒**：`summary.expense` 是**原始支出合计、不冲减退款**（退款单列在 `summary.refund` 里），与 §5.1 的「月度总支出（已冲减退款）」**不是同一个口径**；同一份筛选结果里，统计页的支出数和列表汇总的支出数会不相等。界面上这两处标签必须区分开（例如列表汇总写「支出合计」、统计页写「总支出（已减退款）」），不要用同一个中文标签展示两个数（04 章据此取名）。
 
 **净额不含转账**（`kind='transfer'` 的行不进这四个数）。列表界面按日分组、每组给当日小计，同样只算非转账行（决策 §14.52 A14）。
 
@@ -1537,7 +1539,7 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 12 | **有对腿就不填对方文本**：`transfer_pair_id IS NULL OR counterparty IS NULL`——配对时必须清 `counterparty`，拆开后才能重新填 | CHECK（决策 §10、§14.34） |
 | 13 | `transfer_role IN ('out','in')`、`transfer_subtype IN ('plain','repayment')` | CHECK |
 | 14 | `finance_sources.type IN ('checking','credit','cash','other')`——**四种，没有 `savings`** | CHECK（决策 §14.48） |
-| 15 | `finance_sources.archived_at IS NULL OR archived = true` | CHECK（决策 §14.50） |
+| 15 | **`(finance_sources.archived_at IS NOT NULL) = (finance_sources.archived = true)`**——归档必写 `archived_at`、取消归档必置 NULL，一一对应 | CHECK（决策 §14.50；两侧写入由 §3.10 的应用层保证，02 章落 DDL 时不要只实现「未归档不许有 `archived_at`」这半条） |
 | 16 | `ledger_members.role IN ('owner','member')` | CHECK |
 | 17 | **`import_batches.status IN ('ready','committed')`——只有两态** | CHECK（决策 §5、§14.22） |
 | 18 | `import_batches.source IN ('csv','paste')`——没有 `json` | CHECK（决策 §14.47） |
