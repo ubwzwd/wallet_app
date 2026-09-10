@@ -2859,7 +2859,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows?limit=2
 | `category_l1` | str \| null | 合法一级 code，收支侧与 kind 匹配 |
 | `category_l2` | str \| null | 属于 `category_l1` |
 | `matched_transaction_id` | UUID \| null | `kind='refund'` 时是退款原单（校验同 §5.26 的 `refund_of`）；`kind='transfer'` 时是要配对的那条**单腿**转账（校验同 §5.33 的六条，不满足就是 400 `pair_invalid`）；其余 kind 上只能是 `null`（决策 §14.10、§14.34） |
-| `counterpart_source_id` | UUID \| null | 只在 `kind='transfer'` 时允许非 null。**必须是本账本的未归档账户，否则 404 `not_found`**（决策 §14.53c——一个当前用户不能拿来记账的账户 id 与"不存在"没有区别，§3.3）；还必须不等于批次的 `source_id`（自己转给自己），否则 400 `validation_error`。服务端**不会**自动填这一列（决策 §14.53c） |
+| `counterpart_source_id` | UUID \| null | 只在 `kind='transfer'` 时允许非 null。**必须是本账本的未归档账户，否则 404 `not_found`**（决策 §14.53c——一个当前用户不能拿来记账的账户 id 与"不存在"没有区别，§3.3）；还必须不等于批次的 `source_id`（自己转给自己），否则 400 `same_source`（两腿必须落在不同账户上，用注册表里这个专属 code，不落在通用的 `validation_error` 上）。服务端**不会**自动填这一列（决策 §14.53c） |
 | `counterparty` | str \| null | ≤ 100 字，`strip()` 后空串按 `null` 存（决策 §14.10）。只在 `kind='transfer'` 时有意义；给了 `matched_transaction_id` 或 `counterpart_source_id` 时它会被忽略（提交时建的是两腿，§5.43） |
 | `transfer_role` | str \| null | `out` \| `in`；`kind='transfer'` 时必须非 null（决定这一腿的方向与金额符号） |
 | `transfer_subtype` | str \| null | `plain` \| `repayment`；`kind='transfer'` 时必须非 null |
@@ -2921,7 +2921,8 @@ PATCH .../rows/f6a7b8c9-...
 | 400 | `category_invalid` / `category_kind_mismatch` | 分类不合法 |
 | 400 | `refund_target_invalid` | refund 行的 `matched_transaction_id` 不合法 |
 | 400 | `pair_invalid` | transfer 行的 `matched_transaction_id` 不满足配对条件（§5.33 的六条；**其中不含"子类型必须相同"**，决策 §14.53a） |
-| 400 | `validation_error` | `counterpart_source_id` 等于批次的目标账户 / 用在非 transfer 行上；转账行带了 `merchant`；符号与 kind 冲突 |
+| 400 | `same_source` | `counterpart_source_id` 等于批次的目标账户（两腿会落在同一个账户上） |
+| 400 | `validation_error` | `counterpart_source_id` 用在非 transfer 行上；转账行带了 `merchant`；符号与 kind 冲突 |
 
 副作用：`UPDATE import_rows`。不碰 `transactions`，也不写 `transaction_events`（草稿还不是交易）。
 

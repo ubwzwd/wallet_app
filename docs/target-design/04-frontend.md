@@ -12,7 +12,7 @@
 > - **导入改为同步校验模型**（决策 §5、§14.47）：删除解析进度与轮询、页面缩略图侧栏与它的页号字段、视觉路径标志位、`retry` 端点、置信度列、「已合并」标记，以及后台解析才会有的那三个错误 code；新增**导入指南页**（`GET /import-format`）、粘贴 CSV 入口、结构错误与 `skill_outdated` 两种失败态、批量改行端点。标准格式只有 CSV。
 > - **转账配对**（决策 §14.34）：review 表格的 `transfer_candidate` 建议与「关联为一笔转账」勾选框、交易详情的「关联为转账对腿」与「拆开」、`txApi.pair` / `txApi.unpair`。
 > - **屏幕稿审阅后的裁定**（决策 §14.47–§14.52）：账户四种类型与资产 / 负债 / 净资产、`archived_at`、币种创建后不可改、交易列表合并转账行 + 按日小计 + `summary`、金额区间按基准币种、`transaction_events` 操作记录时间线、邀请码可作废、外观设置存本机、首页趋势只放支出。
-> - **按 §14.53 统一各章打架之处**（决策 §14.53 a–f）：§3.7 的文案表与 03 §4.2 注册表**双向**对齐（`pair_invalid` / `unpair_invalid` / `import_format_invalid` / `currency_locked` / `repayment_target_not_credit` 补齐，`rows_exceed_limit` 是 400，两个前端本地 key 移到表外）；`ImportFileError` 改成 `errors[{line, message}]` + `current_version` / `file_version` / `guide_url`；review 的转账配对**只用 `matched_transaction_id` 一列**（多候选不预填、打 `needs_review`、给「选一条」按钮复用交易列表接口）；没找到对腿时对手账户不预选；配对后两腿子类型由服务端统一；`RefundRef` / `RefundOrigin` / `ImportBatch` / `ImportRow` 与 03 的响应体逐字段对齐。
+> - **按 §14.53 统一各章打架之处**（决策 §14.53 a–f）：§3.7 的文案表与 03 §4.2 注册表**双向**对齐（`pair_invalid` / `unpair_invalid` / `import_format_invalid` / `currency_locked` / `repayment_target_not_credit` 补齐，`rows_exceed_limit` 是 400，两个前端本地 key 移到表外）；`ImportFileError` 改成 `errors[{line, message}]` + `current_version` / `file_version` / `guide_url`；review 的转账配对**只用 `matched_transaction_id` 一列**（多候选不预填、在 `transfer_candidate` 之外另打 `needs_review`、给「选一条」按钮复用交易列表接口）；没找到对腿时对手账户不预选；配对后两腿子类型由服务端统一；`RefundRef` / `RefundOrigin` / `ImportBatch` / `ImportRow` 与 03 的响应体逐字段对齐。
 > - **§6 整章重写**：A/B/C 三个候选方向与 mockup 清单作废（决策 §14.45），改为「已定稿：04 柔和圆润」，token 引用 [`./mockups/tokens.json`](./mockups/tokens.json)，并给出 16 张屏幕稿的索引与「按裁定需改之处」。
 > - **待决清空**：D-1 至 D-13 全部已被决策 §14.42、§14.45、§14.46 等裁定，文末只留结论。
 ---
@@ -386,7 +386,7 @@ export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 60_00
 
 三条贯穿全表的约定：**所有列表端点都返回 `{items, total}` 信封**（[`./03-backend-api.md`](./03-backend-api.md) §4.3），所以列表类函数的返回类型一律是 `Paged<T>`，没有裸数组（交易列表多一个 `summary`，决策 §14.52 A14）；**所有 PATCH 请求体都必须带 `updated_at`**（§4.4 的乐观并发）；**折算三件套统一叫 `amount_base` / `rate_used` / `rate_date`**，取不到汇率时三者同时为 `null`。
 
-**没有任何与大模型有关的类型**（决策 §5、§6、§14.25）：`LlmSettings` / `LlmSettingsPut` / `LlmTestResult` 全部删除，`User` 上的 `has_llm_settings` 也删除。导入的类型按同步校验模型重写：没有进度字段、没有整页图列表与页号、没有置信度、没有视觉路径标志位、没有分块错误列，状态只剩 `ready` / `committed`（决策 §5、§14.25）。
+**没有任何与大模型有关的类型**（决策 §5、§6、§14.25）：应用不接入大模型，模型设置在服务端就不存在，前端自然也没有承载它的类型，`User` 上也没有与之相关的标志位。导入的类型按同步校验模型重写：没有进度字段、没有整页图列表与页号、没有置信度、没有视觉路径标志位、没有分块错误列，状态只剩 `ready` / `committed`（决策 §5、§14.25）。
 
 ```ts
 // ---------- 通用 ----------
@@ -1539,7 +1539,8 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 │   招行储蓄卡 · 08-05 · −¥1,000.00                  │
 │   配对后两条会统一成同一个子类型                   │
 ├────────────────────────────────────────────────────┤
-│ ▸ 多候选：不预填，标 needs_review                  │
+│ ▸ 多候选：不预填，另打 needs_review                │
+│   （transfer_candidate 仍在）                      │
 │ ☐ 找到 3 条可以配对的转账，请选一条                │
 │   [ 选一条 ▾ ] → 打开交易选择器（复用列表接口）    │
 ├────────────────────────────────────────────────────┤
@@ -1553,7 +1554,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 - **勾选框绑的就是 `matched_transaction_id`**，没有第二个字段（决策 §14.53b）：非空 = 勾上「关联为一笔转账」，取消勾选就发 `PATCH .../rows/{rid}` `{"matched_transaction_id": null}`。`flags` 里的 `transfer_candidate` 保留——它记的是「当时找到过候选」这个事实，真正决定提交时怎么建的是这个值。勾选状态**只从这一列读、也只往这一列写**，候选列表既不落库也不单独建接口。
 - **唯一候选**：服务端按 §5 / §14.34 的规则找**对方账户上 ±3 天、同币种同金额、方向相反、仍是单腿**的转账，只在候选**唯一**时预填 `matched_transaction_id` 并打 `transfer_candidate`，勾选框因此默认是勾上的。文案就是「找到对方账户的另一半，关联为一笔转账？」。
-- **多候选**（决策 §14.53b）：服务端**不预填**，改打 `needs_review`，`hint` 写「找到 N 条可以配对的转账，请选一条」。这一格把 `hint` 显示出来，勾选框空着，旁边给一个 `[选一条]` 按钮：点开的选择器**复用交易列表接口**（`kind=transfer`、仍是单腿、方向相反、其他账户、±3 天、同币种同金额——与退款候选是同一套做法，决策 §14.11），选中一条即 `PATCH {"matched_transaction_id": "<id>"}`，勾选框随之勾上。
+- **多候选**（决策 §14.53b）：服务端**不预填**，在 `transfer_candidate` 之外**另打** `needs_review`（`transfer_candidate` 仍在，见 03 §5.40 / 05 §3.3），`hint` 写「找到 N 条可以配对的转账，请选一条」。这一格把 `hint` 显示出来，勾选框空着，旁边给一个 `[选一条]` 按钮：点开的选择器**复用交易列表接口**（`kind=transfer`、仍是单腿、方向相反、其他账户、±3 天、同币种同金额——与退款候选是同一套做法，决策 §14.11），选中一条即 `PATCH {"matched_transaction_id": "<id>"}`，勾选框随之勾上。
 - **配对后子类型由服务端统一**（决策 §14.53a）：两腿的 `transfer_subtype` **不要求相同**（储蓄卡账单写「普通转账」、信用卡账单写「还款」的同一笔还款很常见）。提交时任一腿是「还款」且**转入腿的账户是信用卡**，整对记成还款；否则整对记成普通转账。格里给一句小字「配对后两条会统一成同一个子类型」，免得用户以为自己这一行的选择被吞了。
 - **没找到对腿时不猜对手账户**（决策 §14.53c）：`counterpart_source_id` 留空、**不预选任何账户**。这一格给两个**互斥**的控件，由用户显式选一个：
   - **对手账户 Picker**——只列**本账本的未归档账户**（服务端同样校验，不满足就是 404 `not_found`），选了就表示「对方账户在应用里但没有现成的那条腿」，提交时按两腿建；
@@ -1573,7 +1574,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 |---|---|---|---|
 | ⚑ 可能重复 | `flags` 含 `duplicate` | `flag.duplicate` | 同账户同日同金额的交易已存在；或这一行要配对的那笔转账已经配过对了。默认**不自动跳过**，但在「有标记」筛选里排最前，提供「跳过这些重复行」的批量操作 |
 | ⚑ 疑似退款 | `flags` 含 `refund_candidate` | `status.info.*` | 已把 `kind` 置 `refund` 并预填了唯一候选原单（§4.11.3）。悬停显示原单摘要 |
-| ⚑ 可配对转账 | `flags` 含 `transfer_candidate` | `status.info.*` | 在对方账户上找到了**唯一**一条可配对的单腿转账，`matched_transaction_id` 已预填，「关联为一笔转账」因此默认勾上（决策 §14.34）。**找到多条时不打这个标记**，改打 `needs_review` 并在 `hint` 里请用户选一条（决策 §14.53b） |
+| ⚑ 可配对转账 | `flags` 含 `transfer_candidate` | `status.info.*` | 在对方账户上找到了可配对的单腿转账。候选**唯一**时服务端预填 `matched_transaction_id`，「关联为一笔转账」因此默认勾上（决策 §14.34）；**找到多条时这个标记仍然打**，只是不预填 `matched_transaction_id`，并**另打** `needs_review`，在 `hint` 里请用户选一条（决策 §14.53b，见 03 §5.40 / 05 §3.3） |
 | ⚑ 需核对 | `flags` 含 `needs_review` | `flag.needs_review` | 校验时改过或没认出这一行的某个字段（日期、金额、币种、kind），或本批内有完全相同的行（决策 §5、§14.31）。具体原因在该行的 `hint` 里 |
 | ⚠︎ 待归类 | 派生：`category_l1 == null && kind !== 'transfer' && status !== 'skipped'` | `flag.uncategorized` | **提交前必须补齐**（决策 §1.3、§5） |
 | 已跳过 | `status === 'skipped'` | `fg.muted` | 整行置灰删除线，不参与提交，不参与「待归类」计数 |
@@ -2076,7 +2077,7 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 3. **改 kind 联动**：把一行从 `expense` 改成 `transfer` → 分类被清空且禁用、「关联 / 对手」格变可用、金额符号跟着 kind 规则走。
 4. **行内编辑落库**：改商户 → 500ms 后恰好发一次 `PATCH`，body 只含 `merchant`；请求失败 → 值回滚且该格出现重试。
 5. **不被后台刷新打断**：正在编辑某格时触发窗口聚焦 → 不发生 `refetch`（`refetchOnWindowFocus: false` 生效）。
-6. **转账配对建议**（决策 §14.34、§14.53b/c）：`flags` 含 `transfer_candidate`（唯一候选）→ 勾选框**默认勾上**、显示对方账户与金额；取消勾选恰好发一次 `PATCH`，body **只有** `{matched_transaction_id: null}` 这一个键，勾选框随之空掉。多候选的行 → `flags` 里**没有** `transfer_candidate`、有 `needs_review`，`matched_transaction_id` 为 `null`，渲染 `hint`「找到 3 条可以配对的转账，请选一条」+ `[选一条]` 按钮；点开选择器发的是**交易列表**请求（带 `kind=transfer` 等筛选），选中一条后 `PATCH` 的 body 是 `{matched_transaction_id: '<id>'}`。没有 `matched_transaction_id` 的转账行 → 对手账户 Picker 与 `counterparty` 文本框都**不预选 / 不预填**，两者互斥（填了一个另一个禁用），Picker 里**不出现已归档账户**。
+6. **转账配对建议**（决策 §14.34、§14.53b/c）：`flags` 含 `transfer_candidate`（唯一候选）→ 勾选框**默认勾上**、显示对方账户与金额；取消勾选恰好发一次 `PATCH`，body **只有** `{matched_transaction_id: null}` 这一个键，勾选框随之空掉。多候选的行 → `flags` **同时含** `transfer_candidate` 与 `needs_review`（与 03 §5.40 / 05 §3.3 / 01 §3.15 一致），但 `matched_transaction_id` 为 `null`（勾选框空着），渲染 `hint`「找到 3 条可以配对的转账，请选一条」+ `[选一条]` 按钮；点开选择器发的是**交易列表**请求（带 `kind=transfer` 等筛选），选中一条后 `PATCH` 的 body 是 `{matched_transaction_id: '<id>'}`。没有 `matched_transaction_id` 的转账行 → 对手账户 Picker 与 `counterparty` 文本框都**不预选 / 不预填**，两者互斥（填了一个另一个禁用），Picker 里**不出现已归档账户**。
 7. **退款候选**：`refund_candidate` 行显示预填的原单摘要，改选后 `PATCH` 的 body 里是 `matched_transaction_id`，清空后该行提交时不写 `refund_of`。
 8. **批内重复行**（决策 §14.31）：两行完全相同 → **两行都在**、都带 `needs_review` 徽章、`hint` 显示「本批内有相同的行（第 N 行）」；**没有「已合并」徽章**。
 9. **批量操作**（决策 §14.52 A4）：选 5 行（kind 都能接受这个分类）→ 设支出分类 → 恰好发**一次** `PATCH .../rows`（不是 5 次），响应的 `rows` 回填进表格；选中集合里混进一行收入行时服务端回 400，断言**一行都没被改**（整表重取后 5 行都是原值）且出错行号被高亮；批量跳过后提交计数相应减少。
