@@ -1,10 +1,16 @@
-# 设计交付物存放处
+# 设计稿（来自 Claude Design）
 
-来自 Claude Design 项目「设计方案反馈」的交付物放在这里（见 `../design-brief.md` §3）：
+2026-09-10 从 Claude Design 项目「设计方案反馈」整体导出，未做修改。文件是 Claude Design 的画板格式（`.dc.html`，配套 `support.js` 供本地打开）。
 
-- `tokens.json` — 按 04 章 §6.3 的 token 名称，`light` / `dark` 两组
-- `components.md` — 每个组件的尺寸、内边距、边框、字号与各状态的 token 引用
-- `screens/NN-<name>-{m,d}.png` — 各屏 375 / 1440 两个宽度的导出图，编号对应 `design-brief.md` §2
-- `implementation-notes.md` — 在 React Native 上要换写法的效果
+**选定方向**：`04 柔和圆润 · 深化` → `Design Tokens v2 · 定稿`：Figtree（中文走系统字）+ IBM Plex Mono 数字，C2 密度（行高 56、圆角 18），N5 淡鼠尾草底，S4 交易色（砖红 / 深青 / 橄榄金 / 板岩蓝），X1 森林绿强调。取代了 04 章 §6 里的方向 A/B/C（决策 §14.45）。
 
-放好后告诉 Claude Code，它会据此生成 `frontend/src/theme/tokens.ts`、组件库，并把 04 章 §6 更新为最终稿。
+| 文件 | 内容 |
+|---|---|
+| `tokens.json` | 从「Design Tokens v2 · 定稿」提取的 token（浅色 / 深色 51 组颜色、字号阶、间距、圆角、阴影、控件尺寸、图标规格）。**这是前端 `frontend/src/theme/tokens.ts` 的来源。** |
+| `Design Tokens v2 · 定稿.dc.html` | token 定稿画板：颜色表、字体、间距、图标集、Button / TextField / Badge / Chip / CategoryPicker 各状态 |
+| `Ledger Design Tokens v1.dc.html` | token 第一版（已被 v2 取代，留作记录） |
+| `04 柔和圆润 · 深化.dc.html` | 方向深化稿：字体三选、密度三选、组件形态、配色四选 |
+| `风格样片 · 选项对照.dc.html`、`配色 · 三步走.dc.html` | 方向与配色的探索过程 |
+| `屏幕 01 · 首页` … `屏幕 16 · 深色模式三屏` | 16 张屏幕稿，对应 `design-brief.md` §2 的屏幕清单 |
+
+注意：画板里分类选项的"判据"文字是示意，正式文案以 `00-decisions.md` §1.3 的 `desc_zh` 为准。

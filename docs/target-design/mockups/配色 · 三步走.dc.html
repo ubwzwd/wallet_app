@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'DM Sans','PingFang SC','Noto Sans SC',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#3B342C}
+a:hover{color:#1C1815}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 110px;color:#241F1A">
+
+  <div style="max-width:980px;border-bottom:2px solid #241F1A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F5A50;text-transform:uppercase">04 · Figtree · C2 已确认 · 配色分三步</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'DM Sans','PingFang SC',sans-serif;letter-spacing:-.01em">先底色，再交易色，最后强调色</h1>
+    <div style="margin-top:8px;font:400 15px/23px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">你说得对，直接问强调色是问反了。下面按依赖顺序走，每步只看一个变量、其余保持中性。全部用 Figtree + C2 的圆角密度画。</div>
+  </div>
+
+  <!-- STEP 1 -->
+  <section style="margin-top:40px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">STEP 1</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">底色与墨色</span>
+    </div>
+    <div style="margin-top:6px;max-width:900px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">这一步决定 App 的"体温"，也决定后面所有颜色能有多鲜艳。八张跨了六个色相族（中性、黄、蓝、青绿、绿、紫），每张里<b>完全没有彩色元素</b>，只有底色、白块、墨色三层 —— 只看气质，不看交易色。注意每张下面的一句：有色底色会和某个交易色撞车。</div>
+
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:20px;align-items:flex-start">
+      <sc-for list="{{ bases }}" as="b" hint-placeholder-count="4">
+        <div style="width:300px">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+            <span style="font:600 12px/16px 'IBM Plex Mono',monospace">{{ b.id }}</span>
+            <span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">{{ b.name }}</span>
+            <span style="font:400 11px/16px 'IBM Plex Mono',monospace;color:#5F5A50">{{ b.tag }}</span>
+          </div>
+          <div style="border-radius:18px;padding:14px;background:{{ b.canvas }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px 10px">
+              <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif;color:{{ b.ink }}">家庭账本</span>
+              <span style="width:28px;height:28px;border-radius:999px;display:flex;align-items:center;justify-content:center;font:600 12px/16px 'Figtree',sans-serif;background:{{ b.tint }};color:{{ b.ink2 }}">W</span>
+            </div>
+            <div style="border-radius:18px;padding:16px 18px;background:{{ b.surface }};box-shadow:{{ b.shadow }}">
+              <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:{{ b.muted }}">净资产 · 折算人民币</div>
+              <div style="margin-top:2px;font:700 27px/34px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:{{ b.ink }}">¥33,842.10</div>
+              <div style="margin-top:12px;padding-top:12px;display:grid;gap:10px;border-top:1px solid {{ b.line }}">
+                <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:999px;flex:none;background:{{ b.tint }}"></span><span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif;color:{{ b.ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">招行储蓄卡</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:{{ b.muted }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">储蓄 · CNY</span></span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ b.ink }}">12,480.35</span></div>
+                <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:999px;flex:none;background:{{ b.tint }}"></span><span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif;color:{{ b.ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">建行信用卡</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:{{ b.muted }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">信用卡 · CNY</span></span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ b.ink }}">−3,215.00</span></div>
+                <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:999px;flex:none;background:{{ b.tint }}"></span><span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif;color:{{ b.ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">DBS Multiplier</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:{{ b.muted }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">SGD · ≈¥24,576.75</span></span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ b.ink }}">S$4,120.80</span></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:12px;padding:0 2px">
+              <span style="flex:1;height:26px;border-radius:6px;background:{{ b.canvas }};border:1px solid {{ b.line }}"></span>
+              <span style="flex:1;height:26px;border-radius:6px;background:{{ b.surface }};border:1px solid {{ b.line }}"></span>
+              <span style="flex:1;height:26px;border-radius:6px;background:{{ b.tint }}"></span>
+              <span style="flex:1;height:26px;border-radius:6px;background:{{ b.muted }}"></span>
+              <span style="flex:1;height:26px;border-radius:6px;background:{{ b.ink }}"></span>
+            </div>
+          </div>
+          <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">{{ b.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section style="margin-top:48px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">STEP 2</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">四种交易色</span>
+    </div>
+    <div style="margin-top:6px;max-width:900px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">支出 / 收入 / 退款 / 转账。四种策略。已经改成画在你选的 <b>N5 淡鼠尾草绿 #F1F6F1</b> 上—— 因为底色本身带绿，「收入绿」好不好用得在真实底色上看。这一步只看四色本身，强调色留到 STEP 3。</div>
+
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:20px;align-items:flex-start">
+      <sc-for list="{{ kindSets }}" as="s" hint-placeholder-count="3">
+        <div style="width:300px">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+            <span style="font:600 12px/16px 'IBM Plex Mono',monospace">{{ s.id }}</span>
+            <span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">{{ s.name }}</span>
+            <span style="font:400 11px/16px 'IBM Plex Mono',monospace;color:#5F5A50">{{ s.tag }}</span>
+          </div>
+          <div style="background:#F1F6F1;border-radius:18px;padding:14px">
+            <div style="background:#FFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(20,20,25,.07)">
+              <sc-for list="{{ s.rows }}" as="r" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;min-height:56px;box-sizing:border-box">
+                  <span style="width:34px;height:34px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ r.tint }};color:{{ r.fg }}">{{ r.icon }}</span>
+                  <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif;color:#241F1A">{{ r.name }}</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#5F5F5C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.meta }}</span></span>
+                  <span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ r.amountColor }}">{{ r.amount }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding:0 2px">
+              <sc-for list="{{ s.swatches }}" as="w" hint-placeholder-count="4">
+                <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:10px;height:10px;border-radius:999px;background:{{ w.c }}"></span>{{ w.n }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">{{ s.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section style="margin-top:48px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">STEP 3</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">强调色 · 按 S4 重算</span>
+    </div>
+    <div style="margin-top:12px;max-width:900px;background:#FFF;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(20,20,25,.07)">
+      <div style="font:700 16px/23px 'DM Sans','PingFang SC',sans-serif">S4 把「绿」腾出来了</div>
+      <div style="margin-top:8px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">你选了 S4，收入从绿改成了深青 —— 于是四种交易色占的是<b>砖红、深青、橄榄金、板岩蓝</b>，绿和紫两个色相真空出来了。而底色本身就是淡绿，所以「强调色 = 底色的深化版」这条路突然变得最顺。下面四张里的交易色已经全部是 S4。</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;background:#F3E7E2;color:#8A3529;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">砖红 已占 · 支出</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;background:#E0EEEC;color:#0B5450;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">深青 已占 · 收入</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;background:#F1EDDC;color:#6B540D;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">橄榄金 已占 · 退款</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;background:#E4EDEE;color:#2C4B5B;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">板岩蓝 已占 · 转账</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;background:#E4EDE5;color:#1F3527;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">绿 空着</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;background:#E9E5F2;color:#3F3163;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">紫 空着</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:22px;align-items:flex-start">
+      <sc-for list="{{ accents }}" as="a" hint-placeholder-count="4">
+        <div style="width:300px">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+            <span style="font:600 12px/16px 'IBM Plex Mono',monospace">{{ a.id }}</span>
+            <span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">{{ a.name }}</span>
+            <span style="font:400 11px/16px 'IBM Plex Mono',monospace;color:#5F5A50">{{ a.tag }}</span>
+          </div>
+          <div style="background:#F1F6F1;border-radius:18px;padding:14px">
+            <div style="background:#FFF;border-radius:18px;padding:14px 16px;box-shadow:0 2px 10px rgba(20,20,25,.07)">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#5F5F5C">净资产 · 折算人民币</span>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;font:600 11px/16px 'Figtree','PingFang SC',sans-serif;background:{{ a.subtle }};color:{{ a.onSubtle }}">9 月</span>
+              </div>
+              <div style="margin-top:2px;font:700 26px/33px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em">¥33,842.10</div>
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid #EDEDEE;display:grid;gap:9px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.expTint }};color:{{ a.expFg }}">{{ a.expIcon }}</span><span style="flex:1;min-width:0;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">瑞幸咖啡</span><span style="font:450 14px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:{{ a.expFg }}">−45.00</span></div>
+                <div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.incTint }};color:{{ a.incFg }}">{{ a.incIcon }}</span><span style="flex:1;min-width:0;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">9 月工资</span><span style="font:450 14px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:{{ a.incFg }}">+18,000.00</span></div>
+              </div>
+              <button style="margin-top:14px;width:100%;height:44px;border:none;border-radius:13px;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;background:{{ a.solid }};color:{{ a.onSolid }}">记一笔</button>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding:0 2px">
+              <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:10px;height:10px;border-radius:999px;background:{{ a.solid }}"></span>强调</span>
+              <sc-for list="{{ a.swatches }}" as="w" hint-placeholder-count="4">
+                <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:10px;height:10px;border-radius:999px;background:{{ w.c }}"></span>{{ w.n }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:{{ a.noteColor }}">{{ a.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="margin-top:44px;max-width:980px;border-top:2px solid #241F1A;padding-top:14px">
+    <div style="font:700 17px/24px 'DM Sans','PingFang SC',sans-serif">回一个编号就够</div>
+    <div style="margin-top:8px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">比如「X1」。底色 N5（已调淡）与交易色 S4 已定。<br>强调色定完我出完整 token 表（浅色 + 深色）和剩余组件清单，然后才是屏幕。<br><span style="color:#5F5A50">定完我出完整 token 表（浅色 + 深色）+ 剩余组件清单，再进屏幕。</span></div>
+  </section>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
+const svg = (children, w) => React.createElement('svg',{width:w||17,height:w||17,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const ICON = {
+  expense:  [P('M10 3.5v13'), P('M5.5 12l4.5 4.5L14.5 12')],
+  income:   [P('M10 16.5v-13'), P('M5.5 8l4.5-4.5L14.5 8')],
+  refund:   [P('M3.5 10a6.5 6.5 0 1 1 6.5 6.5'), P('M6.5 6.5H3.5V3.5')],
+  transfer: [P('M3 7.5h13l-3-3'), P('M17 12.5H4l3 3')],
+};
+
+class Component extends DCLogic {
+  renderVals() {
+    const bases = [
+      { id:'N1', name:'中性灰', tag:'零色偏',
+        canvas:'#F4F4F5', surface:'#FFFFFF', tint:'#EAEAEC', line:'#EDEDEF',
+        ink:'#1F1F21', ink2:'#54545A', muted:'#64646A', shadow:'0 2px 10px rgba(20,20,25,.07)',
+        note:'完全不带色相，什么都不主张。四种交易色在这上面最准，深色版最好推。代价：没有性格，04 的柔和只剩圆角在撑。' },
+      { id:'N2', name:'暖奶油', tag:'样片原色',
+        canvas:'#FBF6EF', surface:'#FFFFFF', tint:'#F0EAE1', line:'#F0EAE1',
+        ink:'#241F1A', ink2:'#5A5348', muted:'#6E675C', shadow:'0 2px 10px rgba(120,100,75,.08)',
+        note:'最有"家"的味道。代价：交易色必须整体压低饱和，否则在米黄上显脏；白块和底色差别小，层次靠阴影撑。' },
+      { id:'N3', name:'冷蓝白', tag:'最干净',
+        canvas:'#F1F4F8', surface:'#FFFFFF', tint:'#E4EAF2', line:'#E8EDF4',
+        ink:'#1B2028', ink2:'#4C5460', muted:'#5D6470', shadow:'0 2px 10px rgba(40,60,90,.08)',
+        note:'冷调、清爽，像银行 App 的默认气质。四色最亮最准。但蓝底和「转账」的灰蓝同族，转账那一行会被底色吸掉一点。' },
+      { id:'N4', name:'青绿白', tag:'最少见',
+        canvas:'#EFF5F3', surface:'#FFFFFF', tint:'#DFEAE7', line:'#E5EFEC',
+        ink:'#16211E', ink2:'#4A5754', muted:'#5A6663', shadow:'0 2px 10px rgba(30,70,60,.08)',
+        note:'极淡的青绿，冷但不像蓝那么公事公办 —— 财务类里几乎没人用，辨识度高。风险：和「收入绿」同族，收入行的绿色圆底会被底色削弱。' },
+      { id:'N5', name:'鼠尾草绿 · 已调淡', tag:'★ 已选',
+        canvas:'#F1F6F1', surface:'#FFFFFF', tint:'#E4EDE4', line:'#E9F0E9',
+        ink:'#1B231C', ink2:'#4E594F', muted:'#5C6659', shadow:'0 2px 10px rgba(40,70,45,.07)',
+        note:'比原来淡了两档：底色 #F1F6F1，白块回到纯白，层次差还够但不再压手。绿意还在，不会被误读成"绿色主题"。和「收入绿」的冲突已由 S4（收入改深青）解决。' },
+      { id:'N6', name:'雾蓝', tag:'色调最重',
+        canvas:'#E7ECF2', surface:'#FBFCFE', tint:'#D8E0EA', line:'#DEE5EE',
+        ink:'#1A2029', ink2:'#4B5460', muted:'#58606C', shadow:'0 2px 10px rgba(35,55,85,.09)',
+        note:'比 N3 重一档，层次最好，气质冷静克制。代价同样是转账的板岩蓝会被底色吃掉一点 —— 要用这个底色，转账就得换成中性灰。' },
+      { id:'N7', name:'淡紫灰', tag:'最中立',
+        canvas:'#F3F1F6', surface:'#FFFFFF', tint:'#E7E3EE', line:'#EAE7F0',
+        ink:'#201D26', ink2:'#565061', muted:'#625E6B', shadow:'0 2px 10px rgba(55,45,80,.08)',
+        note:'紫离四种交易色都远，是不冲突的有色底之一（S4 之后绿也不冲突了）。代价：紫要占掉「疑似重复」那个标记色；且偏冷偏"软件感"。' },
+      { id:'N8', name:'沙褐', tag:'最有性格',
+        canvas:'#EFE7DC', surface:'#FDFAF6', tint:'#E4DACC', line:'#E7DFD3',
+        ink:'#2B241C', ink2:'#5F5445', muted:'#6B6052', shadow:'0 2px 10px rgba(120,95,60,.10)',
+        note:'黄调里最重的一档，纸的实感最强。代价：整体偏土，久看容易闷；退款琥珀和支出红棕都会被底色拉近。' },
+    ];
+
+    const row = (name, meta, amount, k, set) => ({
+      name, meta, amount, icon: svg(ICON[k]),
+      tint: set[k].tint, fg: set[k].fg,
+      amountColor: k === 'transfer' ? '#241F1A' : set[k].fg,
+    });
+
+    // 全部基于底色 #F1F6F1（淡鼠尾草绿）重算：色相统一朝绿相偏 6–10°，淡底一律混入 8% 底色
+    const S1 = { expense:{fg:'#AC4335',tint:'#F3E7E2'}, income:{fg:'#2A6A47',tint:'#E2EFE5'}, refund:{fg:'#7E6412',tint:'#F1EDDC'}, transfer:{fg:'#3A5E70',tint:'#E4EDEE'} };
+    const S2 = { expense:{fg:'#95514A',tint:'#EFE8E5'}, income:{fg:'#3F6B4F',tint:'#E5EDE6'}, refund:{fg:'#75633B',tint:'#EFECE0'}, transfer:{fg:'#4E6670',tint:'#E6ECEC'} };
+    const S4 = { expense:{fg:'#AC4335',tint:'#F3E7E2'}, income:{fg:'#0D6A66',tint:'#E0EEEC'}, refund:{fg:'#7E6412',tint:'#F1EDDC'}, transfer:{fg:'#3A5E70',tint:'#E4EDEE'} };
+    const S3 = { expense:{fg:'#AC4335',tint:'#F3E7E2'}, income:{fg:'#2A6A47',tint:'#E2EFE5'}, refund:{fg:'#4C554D',tint:'#E8EDE8'}, transfer:{fg:'#4C554D',tint:'#E8EDE8'} };
+
+    const mk = (set) => ([
+      row('瑞幸咖啡',  '餐饮 · 零食饮料 · 09-10',        '−45.00',     'expense',  set),
+      row('9 月工资',  '工资 · 基本工资 · 09-10',        '+18,000.00', 'income',   set),
+      row('京东退款',  '退款 · 消费购物 · 09-09',        '+199.00',    'refund',   set),
+      row('还信用卡',  '招行储蓄卡 → 建行信用卡 · 09-08', '3,000.00',   'transfer', set),
+      row('Grab 打车', '交通 · 打车 · DBS · 09-08',      '−S$12.40',   'expense',  set),
+    ]);
+
+    const sw = (set) => [
+      { n:'支出', c:set.expense.fg }, { n:'收入', c:set.income.fg },
+      { n:'退款', c:set.refund.fg },  { n:'转账', c:set.transfer.fg },
+    ];
+
+    const kindSets = [
+      { id:'S1', name:'传统鲜明', tag:'一眼分清', rows:mk(S1), swatches:sw(S1),
+        note:'红绿黄蓝四个方向都明确，谁都不会认错。已按绿底重算：红去掉了粉气偏向砖红，黄压成橄榄金，蓝掺了青。代价：四色同屏时（导入 review 几十行）仍是四张里最吵的。' },
+      { id:'S2', name:'低饱和调', tag:'最安静', rows:mk(S2), swatches:sw(S2),
+        note:'四色全部降到和底色同一个饱和层级，绿底看上去像是同一块布上的四种线。长列表最安静。代价：红和黄的距离变近，退款和支出要靠图标形状分。' },
+      { id:'S4', name:'收入改深青', tag:'避开底色绿', rows:mk(S4), swatches:sw(S4),
+        note:'专为 N5 准备：把收入从绿改成深青，绿意就只属于底色，不再一屏两种绿。代价是深青和「转账」的灰蓝挨得近，12px 色点上要靠明度分。' },
+      { id:'S3', name:'只留两色', tag:'最克制', rows:mk(S3), swatches:sw(S3),
+        note:'只有支出红、收入绿；退款和转账退成绿灰（不是纯灰，取自底色），靠图标形状与"回转 / 双箭头"辨认。屏幕最干净，也给强调色腾出了空间 —— 但退款在长列表里会不显眼。' },
+    ];
+
+    const accent = (id, name, tag, solid, onSolid, subtle, onSubtle, note, noteColor, set) => ({
+      id, name, tag, solid, onSolid, subtle, onSubtle, note, noteColor,
+      expTint:set.expense.tint, expFg:set.expense.fg, expIcon:svg(ICON.expense, 15),
+      incTint:set.income.tint,  incFg:set.income.fg,  incIcon:svg(ICON.income, 15),
+      swatches: sw(set),
+    });
+
+    const accents = [
+      accent('X1','森林绿','底色的深化版 · 我推荐','#2F4A38','#FFFFFF','#E4EDE5','#1F3527',
+        '因为收入改成了深青，绿这个色相空出来了 —— 强调色可以就是底色的深化版：同一个色相，明度差 8 倍。品牌感和和谐度同时拿到，且不和任何交易色冲突（青和绿在 12px 上仍可分，一个偏蓝一个偏黄）。','#1F6A46', S4),
+      accent('X2','绿灰墨','完全不占色相','#2A312B','#FFFFFF','#E8EDE8','#3C453D',
+        '带一点绿的墨色，不参与色环。四种交易色永远不被抢，最稳最耐看。缺点：没有"品牌色"这回事，App 会显得很素。','#1F6A46', S4),
+      accent('X3','紫','唯一的空色相','#5C4B86','#FFFFFF','#E9E5F2','#3F3163',
+        '紫离红、青、金、蓝都远，是另一个真正空着的色相，柔和度也最高。代价：紫要从「疑似重复」那个标记色借走 —— 导入 review 的三个标记色得重排。','#7A5410', S4),
+      accent('X4','砖橙','有冲突，列出来对比','#A85A2A','#FFFFFF','#F3E8DF','#7E3F17',
+        '最暖最有活力，但橙夹在「支出红」和「退款金」中间，三个都在同一象限。列表里按钮、支出金额、退款金额会互相拉扯 —— 不建议，放这里是让你看到差别。','#A03A2C', S4),
+    ];
+
+    return { bases, kindSets, accents };
+  }
+}
+
+</script>
+</body>
+</html>

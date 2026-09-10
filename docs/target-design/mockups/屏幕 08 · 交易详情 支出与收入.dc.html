@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2F4A38}
+a:hover{color:#1F3527}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 100px;color:#16201A">
+  <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 08 · Detail · 支出 / 收入</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">交易详情 · 支出 / 收入 / 退款</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">三种同构，用下面的开关切。支出用跨币种那笔（Grab −S$12.40 ≈ −¥66.20），收入用 9 月工资，退款用京东退款 +199.00（关联 09-02 原单）。转账在屏幕 07，因为它有两条腿、结构不同。375 底部沿用固定「修改」条。</div>
+    <div style="margin-top:14px;display:flex;gap:6px">
+      <sc-for list="{{ variants }}" as="v" hint-placeholder-count="2">
+        <span onClick="{{ pickVariant }}" data-v="{{ v.id }}" style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:12px;cursor:pointer;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;background:{{ v.bg }};color:{{ v.color }};box-shadow:{{ v.ring }}">{{ v.icon }}{{ v.label }}</span>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:28px;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="交易详情 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);position:relative">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">{{ iconBack }}</span>
+          <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">交易详情</span>
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">{{ iconShare }}</span>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:18px 16px 16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:8px;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;background:{{ tint }};color:{{ on }}">{{ kindIcon }}{{ kindLabel }}</span>
+              <span style="display:inline-flex;align-items:center;height:26px;padding:0 9px;border-radius:8px;background:#F1F6F1;color:#3E4A42;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">{{ catFull }}</span>
+              <span style="display:{{ crossBadge }};align-items:center;height:26px;padding:0 9px;border-radius:8px;background:#E4EDEE;color:#2C4B5B;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">已折算</span>
+            </div>
+            <div style="margin-top:12px;font:450 36px/42px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:{{ fg }}">{{ amount }}</div>
+            <div style="margin-top:2px;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">{{ converted }}</div>
+            <div style="display:{{ originShow }};flex-direction:column;margin-top:12px;padding-top:12px;border-top:1px solid #EDF2ED">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">从原支出 598.00 里退回</span>
+                <span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">已全额退完</span>
+              </div>
+              <div style="margin-top:8px;height:8px;border-radius:999px;background:#EDF2ED;overflow:hidden;display:flex">
+                <span style="display:block;height:8px;width:66.7%;background:#C4A94E"></span>
+                <span style="display:block;height:8px;width:33.3%;background:#7E6412"></span>
+              </div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;font:400 11px/15px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62"><span>先前已退 399.00</span><span style="color:#6B540D">本笔 199.00</span></div>
+            </div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:11px;padding-top:12px;border-top:1px solid #EDF2ED">
+              <span style="width:34px;height:34px;border-radius:999px;background:{{ accTint }};color:{{ accFg }};flex:none;display:flex;align-items:center;justify-content:center">{{ accIcon }}</span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/21px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ merchant }}</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ accountLine }}</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <sc-for list="{{ metaRows }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;min-height:48px;box-sizing:border-box;border-bottom:1px solid {{ m.line }}">
+                <span style="font:400 14px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;flex:none">{{ m.k }}</span>
+                <span style="font:{{ m.font }};color:#16201A;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:{{ refundShow }};padding:0 16px 12px">
+          <div style="background:#F1EDDC;border-radius:18px;padding:14px 16px;width:100%;box-sizing:border-box">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">已关联的退款</span>
+              <span style="font:450 12px/17px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">0 笔</span>
+            </div>
+            <div style="margin-top:10px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这笔还没有退款记录。如果收到退款，用「修改 → 登记退款」把它关联进来。</div>
+          </div>
+        </div>
+
+        <div style="display:{{ originShow }};flex-direction:column;padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+            <div style="padding:14px 16px 12px;background:#F1EDDC">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">退的是这一笔</span>
+                <span style="font:600 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D;text-decoration:underline;cursor:pointer">改关联</span>
+              </div>
+              <div style="margin-top:10px;display:flex;align-items:center;gap:11px;cursor:pointer">
+                <span style="width:32px;height:32px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconExpenseSm }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">京东订单</span>
+                  <span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#6B540D">09-02 · 生活购物 / 家电数码 · 招行储蓄卡</span>
+                </span>
+                <span style="text-align:right;flex:none">
+                  <span style="display:block;font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#AC4335">−598.00</span>
+                  <span style="display:block;font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#6B540D">查看原支出</span>
+                </span>
+              </div>
+            </div>
+            <div style="padding:12px 16px 8px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                <span style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">这张原单的退款记录</span>
+                <span style="font:450 11px/15px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">2 笔 · 598.00</span>
+              </div>
+            </div>
+            <sc-for list="{{ siblingRefunds }}" as="r" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:11px;padding:9px 16px;min-height:52px;box-sizing:border-box;background:{{ r.bg }};cursor:pointer">
+                <span style="width:30px;height:30px;border-radius:999px;background:#F1EDDC;color:#6B540D;flex:none;display:flex;align-items:center;justify-content:center">{{ iconRefundSm }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/20px 'Figtree','PingFang SC',sans-serif">{{ r.title }}</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">{{ r.meta }}</span></span>
+                <span style="font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D;flex:none">{{ r.amount }}</span>
+              </div>
+            </sc-for>
+            <div style="padding:10px 16px 14px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">取消关联后，这 199.00 会重新挂回 9 月支出。</div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+            <div onClick="{{ toggleLog }}" style="display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;cursor:pointer" style-hover="background:#F7FAF7">
+              <span style="width:30px;height:30px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconClock }}</span>
+              <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">操作记录</span>
+              <span style="font:450 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62;flex:none">{{ logCount }}</span>
+              <span style="color:#B9C6BB;transform:{{ logRotate }}">{{ iconChevDown }}</span>
+            </div>
+            <div style="display:{{ logOpen }};padding:2px 16px 14px 16px">
+              <div style="height:1px;background:#EDF2ED;margin-bottom:12px"></div>
+              <div style="display:grid;gap:12px">
+                <sc-for list="{{ logRows }}" as="l" hint-placeholder-count="2">
+                  <div style="display:flex;gap:10px"><span style="width:8px;height:8px;border-radius:999px;background:{{ l.dot }};flex:none;margin-top:6px"></span><span style="min-width:0"><span style="display:block;font:500 13px/19px 'Figtree','PingFang SC',sans-serif">{{ l.title }}</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">{{ l.meta }}</span></span></div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;padding:12px 16px 16px;box-shadow:0 -2px 10px rgba(28,50,36,.06)">
+          <button onClick="{{ toggleActions }}" style="width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#E9F0E9">{{ iconEdit }}修改</button>
+        </div>
+
+        <div style="display:{{ actionsShow }};position:absolute;left:0;right:0;top:0;bottom:0;background:#16201A;opacity:.3" onClick="{{ toggleActions }}"></div>
+        <div style="display:{{ actionsShow }};position:absolute;left:0;right:0;bottom:0;background:#FFFFFF;border-radius:22px 22px 20px 20px;box-shadow:0 -10px 28px rgba(28,50,36,.22);padding-bottom:8px">
+          <div style="display:flex;justify-content:center;padding:10px 0 2px"><span style="width:38px;height:4px;border-radius:999px;background:#D2DED4"></span></div>
+          <div style="padding:6px 18px 8px;font:700 17px/24px 'Figtree','PingFang SC',sans-serif">{{ sheetTitle }}</div>
+          <div style="display:flex;align-items:center;gap:12px;padding:0 18px;height:56px;cursor:pointer" style-hover="background:#F7FAF7">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconEdit }}</span>
+            <span style="flex:1;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">编辑</span>{{ iconChevSm }}
+          </div>
+          <div style="display:{{ refundShow }};height:1px;background:#EDF2ED;margin:0 18px"></div>
+          <div style="display:{{ refundShow }};align-items:flex-start;gap:12px;padding:12px 18px;cursor:pointer" style-hover="background:#F7FAF7">
+            <span style="width:32px;height:32px;border-radius:999px;background:#F1EDDC;color:#6B540D;flex:none;display:flex;align-items:center;justify-content:center;margin-top:1px">{{ iconLink }}</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">登记退款</span><span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">新建一笔退款并关联到这笔支出</span></span>
+            <span style="margin-top:4px">{{ iconChevSm }}</span>
+          </div>
+          <div style="display:{{ originShow }};height:1px;background:#EDF2ED;margin:0 18px"></div>
+          <div style="display:{{ originShow }};align-items:flex-start;gap:12px;padding:12px 18px;cursor:pointer" style-hover="background:#F7FAF7">
+            <span style="width:32px;height:32px;border-radius:999px;background:#F1EDDC;color:#6B540D;flex:none;display:flex;align-items:center;justify-content:center;margin-top:1px">{{ iconLink }}</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">改关联原支出</span><span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">换一笔原支出，或取消关联</span></span>
+            <span style="margin-top:4px">{{ iconChevSm }}</span>
+          </div>
+          <div style="height:1px;background:#EDF2ED;margin:0 18px"></div>
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 18px;cursor:pointer" style-hover="background:#F7FAF7">
+            <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center;margin-top:1px">{{ iconCopy }}</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">复制一笔</span><span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">同商户同分类，日期改成今天</span></span>
+            <span style="margin-top:4px">{{ iconChevSm }}</span>
+          </div>
+          <div style="height:1px;background:#EDF2ED;margin:0 18px"></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:0 18px;height:56px;cursor:pointer" style-hover="background:#F3E7E2">
+            <span style="width:32px;height:32px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconTrash }}</span>
+            <span style="flex:1;font:500 16px/22px 'Figtree','PingFang SC',sans-serif;color:#8A3529">删除</span>
+          </div>
+          <div style="padding:10px 16px 8px"><button onClick="{{ toggleActions }}" style="width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">取消</button></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">顶部卡片把「这是什么、多少钱、哪个账户」三件事压在一屏内：种类 Badge + 分类 Badge、大数、折算行、商户与账户。跨币种时折算值用等宽小一号跟在大数下面，不另开一行标签。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="交易详情 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY · 我 + 老婆</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabList }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="width:40px;height:40px;border-radius:12px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">{{ iconBack }}</span>
+            <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">交易 · {{ merchant }}</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;margin-top:16px;align-items:start">
+            <div style="display:grid;gap:20px">
+              <div style="background:#FFFFFF;border-radius:18px;padding:22px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+                  <div style="min-width:0">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <span style="display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;background:{{ tint }};color:{{ on }}">{{ kindIcon }}{{ kindLabel }}</span>
+                      <span style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:8px;background:#F1F6F1;color:#3E4A42;font:600 13px/18px 'Figtree','PingFang SC',sans-serif">{{ catFull }}</span>
+                      <span style="display:{{ crossBadge }};align-items:center;height:28px;padding:0 10px;border-radius:8px;background:#E4EDEE;color:#2C4B5B;font:600 13px/18px 'Figtree','PingFang SC',sans-serif">已折算</span>
+                    </div>
+                    <div style="margin-top:12px;font:450 40px/46px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:{{ fg }}">{{ amount }}</div>
+                    <div style="margin-top:2px;font:450 16px/22px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">{{ converted }}</div>
+                  </div>
+                  <div style="display:flex;gap:10px;flex:none;flex-wrap:wrap;justify-content:flex-end">
+                    <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#E9F0E9">{{ iconEdit }}编辑</button>
+                    <button style="display:{{ refundShow }};height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1EDDC;color:#6B540D;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;align-items:center;gap:8px" style-hover="background:#EADFC2">{{ iconLink }}登记退款</button>
+                    <button style="display:{{ originShow }};height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1EDDC;color:#6B540D;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;align-items:center;gap:8px" style-hover="background:#EADFC2">{{ iconLink }}改关联原支出</button>
+                    <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#E9F0E9">{{ iconCopy }}复制一笔</button>
+                    <button style="height:44px;padding:0 16px;border:1.5px solid #AC4335;border-radius:12px;background:#FFF;color:#8A3529;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#F3E7E2">{{ iconTrash }}删除</button>
+                  </div>
+                </div>
+
+                <div style="margin-top:20px;padding:16px 18px;border-radius:16px;background:#F1F6F1;display:flex;align-items:center;gap:14px">
+                  <span style="width:36px;height:36px;border-radius:999px;background:{{ accTint }};color:{{ accFg }};flex:none;display:flex;align-items:center;justify-content:center">{{ accIcon }}</span>
+                  <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">{{ merchant }}</span><span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ accountLine }}</span></span>
+                </div>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+                <sc-for list="{{ metaRows }}" as="m" hint-placeholder-count="6">
+                  <div style="display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;padding:12px 20px;min-height:48px;box-sizing:border-box;border-bottom:1px solid {{ m.line }};align-items:center">
+                    <span style="font:400 14px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ m.k }}</span>
+                    <span style="font:{{ m.font }};color:#16201A;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:grid;gap:20px">
+              <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+                <div style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">对 9 月的影响</div>
+                <div style="margin-top:12px;display:grid;gap:0">
+                  <sc-for list="{{ impactRows }}" as="i" hint-placeholder-count="3">
+                    <div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid {{ i.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ i.k }}</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:{{ i.color }}">{{ i.v }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:{{ refundShow }};flex-direction:column;background:#F1EDDC;border-radius:18px;padding:18px">
+                <div style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">已关联的退款</div>
+                <div style="margin-top:8px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这笔还没有退款记录。收到退款时用「登记退款」建一笔并关联进来，届时 9 月支出会自动扣回。</div>
+                <div style="margin-top:12px;display:flex;justify-content:space-between;font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D"><span>已退</span><span>0.00 / 66.20</span></div>
+              </div>
+
+              <div style="display:{{ originShow }};flex-direction:column;background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+                <div style="padding:16px 18px 14px;background:#F1EDDC">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">退的是这一笔</span>
+                    <span style="font:600 13px/19px 'Figtree','PingFang SC',sans-serif;color:#6B540D;text-decoration:underline;cursor:pointer">改关联</span>
+                  </div>
+                  <div style="margin-top:12px;display:flex;align-items:center;gap:12px;cursor:pointer">
+                    <span style="width:32px;height:32px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconExpenseSm }}</span>
+                    <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">京东订单</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#6B540D">09-02 · 生活购物 / 家电数码</span></span>
+                    <span style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#AC4335;flex:none">−598.00</span>
+                  </div>
+                  <div style="margin-top:12px;height:8px;border-radius:999px;background:#EADFC2;overflow:hidden;display:flex">
+                    <span style="display:block;height:8px;width:66.7%;background:#C4A94E"></span>
+                    <span style="display:block;height:8px;width:33.3%;background:#7E6412"></span>
+                  </div>
+                  <div style="margin-top:6px;display:flex;justify-content:space-between;font:400 12px/17px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D"><span>先前 399.00 ＋ 本笔 199.00</span><span>598.00 已退完</span></div>
+                </div>
+                <div style="padding:12px 18px 6px;display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <span style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">这张原单的退款记录</span>
+                  <span style="font:450 11px/15px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">2 笔</span>
+                </div>
+                <sc-for list="{{ siblingRefunds }}" as="r" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:11px;padding:9px 18px;min-height:52px;box-sizing:border-box;background:{{ r.bg }};cursor:pointer">
+                    <span style="width:30px;height:30px;border-radius:999px;background:#F1EDDC;color:#6B540D;flex:none;display:flex;align-items:center;justify-content:center">{{ iconRefundSm }}</span>
+                    <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">{{ r.meta }}</span></span>
+                    <span style="font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D;flex:none">{{ r.amount }}</span>
+                  </div>
+                </sc-for>
+                <div style="padding:10px 18px 16px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">取消关联后，这 199.00 会重新挂回 9 月支出。</div>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+                <div style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">操作记录</div>
+                <div style="margin-top:12px;display:grid;gap:12px">
+                  <sc-for list="{{ logRows }}" as="l" hint-placeholder-count="2">
+                    <div style="display:flex;gap:10px"><span style="width:8px;height:8px;border-radius:999px;background:{{ l.dot }};flex:none;margin-top:6px"></span><span style="min-width:0"><span style="display:block;font:500 13px/19px 'Figtree','PingFang SC',sans-serif">{{ l.title }}</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">{{ l.meta }}</span></span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏把「修改」摊平成四个按钮（收入没有「登记退款」）。右栏「对 9 月的影响」用具体数字回答「删了这笔统计会变成多少」—— 这是详情页最常被用来核对的一件事。</div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+const KIND = {
+  expense: [P('M10 3.5v13'), P('M5.5 12l4.5 4.5L14.5 12')],
+  income:  [P('M10 16.5v-13'), P('M5.5 8l4.5-4.5L14.5 8')],
+  refund:  [P('M3.5 10a6.5 6.5 0 1 1 6.5 6.5'), P('M6.5 6.5H3.5V3.5')],
+};
+const T = {
+  expense:{fg:'#AC4335',tint:'#F3E7E2',on:'#8A3529',label:'支出'},
+  income:{fg:'#0D6A66',tint:'#E0EEEC',on:'#0B5450',label:'收入'},
+  refund:{fg:'#7E6412',tint:'#F1EDDC',on:'#6B540D',label:'退款'},
+};
+const MONO = "450 14px/20px 'IBM Plex Mono',monospace";
+const SANS = "500 14px/20px 'Figtree','PingFang SC',sans-serif";
+
+const DATA = {
+  expense: {
+    amount:'−S$12.40', converted:'≈ −¥66.20 · 汇率 5.3387', merchant:'Grab 打车',
+    accountLine:'DBS Multiplier · 储蓄 · SGD', catFull:'交通 / 打车', cross:true,
+    accTint:'#F3E7E2', accFg:'#8A3529',
+    meta:[
+      { k:'日期',   v:'2026-09-08 周二', font:MONO },
+      { k:'分类',   v:'交通 / 打车',      font:SANS },
+      { k:'账户',   v:'DBS Multiplier',  font:SANS },
+      { k:'原币金额', v:'S$12.40',       font:MONO },
+      { k:'折算 CNY', v:'¥66.20',        font:MONO },
+      { k:'备注',   v:'去机场',          font:SANS },
+      { k:'记录人', v:'我 · owner',      font:SANS },
+      { k:'编号',   v:'#0141',           font:MONO },
+    ],
+    log:[
+      { title:'手动录入 · 我', meta:'09-08 07:12 · 客户端 iOS', dot:'#2F4A38' },
+      { title:'补了备注「去机场」· 我', meta:'09-08 07:14', dot:'#C4D1C6' },
+    ],
+    logCount:'2 条',
+  },
+  income: {
+    amount:'+18,000.00', converted:'CNY · 基准币种，无需折算', merchant:'9 月工资',
+    accountLine:'招行储蓄卡 · 储蓄 · CNY', catFull:'工资 / 基本工资', cross:false,
+    accTint:'#E4EDE5', accFg:'#2F4A38',
+    meta:[
+      { k:'日期',   v:'2026-09-10 周四', font:MONO },
+      { k:'分类',   v:'工资 / 基本工资',  font:SANS },
+      { k:'账户',   v:'招行储蓄卡',       font:SANS },
+      { k:'金额',   v:'¥18,000.00',      font:MONO },
+      { k:'备注',   v:'—',               font:SANS },
+      { k:'记录人', v:'我 · owner',      font:SANS },
+      { k:'来源',   v:'导入 cmb-09.csv', font:SANS },
+      { k:'编号',   v:'#0143',           font:MONO },
+    ],
+    log:[
+      { title:'导入入账 · 我', meta:'09-10 21:14 · cmb-09.csv 第 2 行', dot:'#2F4A38' },
+    ],
+    logCount:'1 条',
+  },
+  refund: {
+    amount:'+199.00', converted:'CNY · 从原支出里扣回，不算收入', merchant:'京东退款',
+    accountLine:'招行储蓄卡 · 储蓄 · CNY', catFull:'消费购物 · 未细分', cross:false,
+    accTint:'#E4EDE5', accFg:'#2F4A38',
+    meta:[
+      { k:'日期',     v:'2026-09-09 周三', font:MONO },
+      { k:'分类',     v:'消费购物',        font:SANS },
+      { k:'账户',     v:'招行储蓄卡',      font:SANS },
+      { k:'金额',     v:'¥199.00',        font:MONO },
+      { k:'备注',     v:'尺码不合退货',    font:SANS },
+      { k:'记录人',   v:'我 · owner',      font:SANS },
+      { k:'来源',     v:'导入 cmb-09.csv', font:SANS },
+      { k:'编号',     v:'#0140',           font:MONO },
+    ],
+    log:[
+      { title:'导入入账 · 我', meta:'09-10 21:14 · cmb-09.csv 第 3 行', dot:'#2F4A38' },
+      { title:'确认关联原支出 · 我', meta:'09-10 21:15 · 系统标为退款候选，已确认', dot:'#C4D1C6' },
+    ],
+    logCount:'2 条',
+  },
+};
+
+class Component extends DCLogic {
+  state = { v:'expense', logOpen:true, actionsOpen:true };
+
+  renderVals() {
+    const k = this.state.v;
+    const d = DATA[k];
+
+    return {
+      variants: ['expense','income','refund'].map(id => ({
+        id, label: T[id].label,
+        icon: svg(KIND[id], 15, 2.1),
+        bg: id === k ? T[id].tint : '#F1F6F1',
+        color: id === k ? T[id].on : '#3E4A42',
+        ring: id === k ? ('inset 0 0 0 1.5px ' + T[id].fg) : 'none',
+      })),
+      kindLabel: T[k].label,
+      kindIcon: svg(KIND[k], 13, 2.2),
+      fg: T[k].fg, tint: T[k].tint, on: T[k].on,
+      amount: d.amount, converted: d.converted, merchant: d.merchant,
+      accountLine: d.accountLine, catFull: d.catFull,
+      accTint: d.accTint, accFg: d.accFg,
+      accIcon: svg([R(2.75,5.25,14.5,10.5,2.5), P('M13 10.5h2.5')], 18),
+      crossBadge: d.cross ? 'inline-flex' : 'none',
+      refundShow: k === 'expense' ? 'flex' : 'none',
+      originShow: k === 'refund' ? 'flex' : 'none',
+      iconExpenseSm: svg(KIND.expense, 16, 2.1),
+      iconRefundSm:  svg(KIND.refund, 15, 2.1),
+      siblingRefunds: [
+        { title:'京东退款 · 先前一笔', meta:'08-30 · 部分退', amount:'+399.00', bg:'transparent' },
+        { title:'京东退款 · 本笔',     meta:'09-09 · 退完剩余', amount:'+199.00', bg:'#F7FAF7' },
+      ],
+      sheetTitle: '修改这笔' + T[k].label,
+      metaRows: d.meta.map((r, i) => ({ ...r, line: i === d.meta.length - 1 ? 'transparent' : '#EDF2ED' })),
+      impactRows: (k === 'expense'
+        ? [
+            { k:'9 月支出', v:'6,842.50 · 含本笔 66.20', color:'#16201A' },
+            { k:'交通 分类', v:'860.00 · 含本笔 66.20',   color:'#16201A' },
+            { k:'删除后支出', v:'6,776.30',               color:'#0D6A66' },
+          ]
+        : k === 'income'
+        ? [
+            { k:'9 月收入', v:'18,000.00 · 全部来自本笔', color:'#16201A' },
+            { k:'工资 分类', v:'18,000.00',               color:'#16201A' },
+            { k:'删除后收入', v:'0.00',                   color:'#8A3529' },
+          ]
+        : [
+            { k:'9 月支出', v:'6,842.50 · 已扣回 199.00', color:'#16201A' },
+            { k:'生活购物 分类', v:'1,006.50 · 已扣回',    color:'#16201A' },
+            { k:'删除后支出', v:'7,041.50',                color:'#8A3529' },
+            { k:'计入收入',   v:'否',                      color:'#5F6A62' },
+          ]
+      ).map((r, i, arr) => ({ ...r, line: i === arr.length - 1 ? 'transparent' : '#EDF2ED' })),
+      logRows: d.log,
+      logCount: d.logCount,
+      logOpen: this.state.logOpen ? 'block' : 'none',
+      logRotate: this.state.logOpen ? 'rotate(180deg)' : 'none',
+      actionsShow: this.state.actionsOpen ? 'block' : 'none',
+      iconBack:   svg([P('M12 4.5 6.5 10l5.5 5.5')], 20, 2),
+      iconShare:  svg([P('M10 13.5V3.5M6.5 7 10 3.5 13.5 7'), P('M4 12v4.5h12V12')], 20),
+      iconChevSm: svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
+      iconChevDown: svg([P('M5.5 8 10 12.5 14.5 8')], 16, 2),
+      iconClock:  svg([C(10,10,7.25), P('M10 6v4.25l2.75 1.75')], 17),
+      iconEdit:   svg([P('M4 16h3l9-9-3-3-9 9z'), P('M13 4 16 7')], 18, 1.9),
+      iconCopy:   svg([R(3.5,3.5,9,9,2), R(7.5,7.5,9,9,2)], 17),
+      iconTrash:  svg([P('M4 6.5h12M8 6.5V4.5h4v2M6 6.5l.8 9.5h6.4l.8-9.5')], 17, 1.9),
+      iconLink:   svg([P('M8.5 11.5a3 3 0 0 1 0-4.25l2.25-2.25a3 3 0 0 1 4.25 4.25L13.5 10.5'), P('M11.5 8.5a3 3 0 0 1 0 4.25L9.25 15a3 3 0 0 1-4.25-4.25L6.5 9.5')], 17),
+      tabHome:    svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
+      tabList:    svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
+      tabImport:  svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+      pickVariant: (e) => this.setState({ v: e.currentTarget.getAttribute('data-v') }),
+      toggleLog: () => this.setState(s => ({ logOpen: !s.logOpen })),
+      toggleActions: () => this.setState(s => ({ actionsOpen: !s.actionsOpen })),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

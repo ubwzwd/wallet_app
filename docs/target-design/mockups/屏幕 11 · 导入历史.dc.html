@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2F4A38}
+a:hover{color:#1F3527}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 40px;color:#16201A">
+  <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 11 · Import history</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入历史</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">批次列表：待提交（ready）可继续确认，已提交（committed）可撤销。下面第二组是撤销确认对话框，写明条数和「会有 2 笔退款失去原单」。</div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:28px;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">A</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">批次列表</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="导入历史 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入</span>
+            <span style="width:40px;height:40px;border-radius:999px;background:#2F4A38;display:flex;align-items:center;justify-content:center;color:#FFF;cursor:pointer">{{ iconPlus }}</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px;padding:4px;border-radius:14px;background:#E4EAE5">
+            <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;height:38px;border-radius:11px;background:#FFFFFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;box-shadow:0 1px 4px rgba(28,50,36,.14)">历史</span>
+            <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;height:38px;border-radius:11px;color:#3E4A42;font:600 14px/20px 'Figtree','PingFang SC',sans-serif">上传新的</span>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px;display:grid;gap:10px">
+          <sc-for list="{{ batches }}" as="b" hint-placeholder-count="4">
+            <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+              <div style="padding:14px 16px 12px">
+                <div style="display:flex;align-items:flex-start;gap:11px">
+                  <span style="width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ b.tint }};color:{{ b.on }}">{{ b.icon }}</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:flex;align-items:baseline;gap:8px">
+                      <span style="font:500 15px/21px 'IBM Plex Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.file }}</span>
+                    </span>
+                    <span style="display:block;margin-top:2px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ b.meta }}</span>
+                  </span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:8px;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;flex:none;background:{{ b.tint }};color:{{ b.on }}">{{ b.statusLabel }}</span>
+                </div>
+
+                <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ b.stats }}" as="s" hint-placeholder-count="3">
+                    <span style="display:inline-flex;align-items:baseline;gap:5px;height:28px;padding:0 10px;border-radius:8px;background:#F1F6F1">
+                      <span style="font:400 11px/28px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ s.k }}</span>
+                      <span style="font:450 13px/28px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:{{ s.color }}">{{ s.v }}</span>
+                    </span>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:{{ b.readyBlock }};padding:0 16px 14px">
+                <div style="height:1px;background:#EDF2ED;margin-bottom:12px"></div>
+                <div style="display:flex;align-items:center;gap:8px;padding:0 2px 10px">
+                  <span style="color:#6B540D;display:flex;flex:none">{{ iconAlertSm }}</span>
+                  <span style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">还有 3 行待归类，补齐后才能提交</span>
+                </div>
+                <div style="display:flex;gap:10px">
+                  <button style="flex:1;height:44px;border:none;border-radius:12px;background:#F1F6F1;color:#8A3529;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#F3E7E2">丢弃批次</button>
+                  <button style="flex:1.6;height:44px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">继续确认</button>
+                </div>
+              </div>
+
+              <div style="display:{{ b.committedBlock }};padding:0 16px 14px">
+                <div style="height:1px;background:#EDF2ED;margin-bottom:12px"></div>
+                <div style="display:flex;gap:10px">
+                  <button onClick="{{ openDialog }}" style="flex:1;height:44px;border:none;border-radius:12px;background:#F1F6F1;color:#8A3529;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px" style-hover="background:#F3E7E2">{{ iconUndoSm }}撤销这批</button>
+                  <button style="flex:1;height:44px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">查看这批交易</button>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">每张卡片顶部是文件名（等宽）+ 状态 Badge，中间是三颗数据 pill（笔数、金额、标记），底部按状态给不同操作。待提交那张把阻断原因直接写在按钮上方。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="导入历史 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY · 我 + 老婆</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabImport }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <button style="height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconPlusSm }}上传新账单</button>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div>
+              <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入历史</span>
+              <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">4 批 · 1 批待提交 · 已入账 76 笔</span>
+            </div>
+            <div style="display:flex;gap:6px;padding:4px;border-radius:12px;background:#E4EAE5">
+              <span style="display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:9px;background:#FFFFFF;color:#16201A;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;box-shadow:0 1px 4px rgba(28,50,36,.14)">全部</span>
+              <span style="display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:9px;color:#3E4A42;font:600 13px/18px 'Figtree','PingFang SC',sans-serif">待提交</span>
+              <span style="display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:9px;color:#3E4A42;font:600 13px/18px 'Figtree','PingFang SC',sans-serif">已提交</span>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+            <div style="display:grid;grid-template-columns:minmax(0,1.1fr) 116px 100px 116px minmax(0,1fr) 240px;gap:14px;padding:11px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">文件 / 时间</div>
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">状态</div>
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase;text-align:right">交易数量统计</div>
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase;text-align:right">净额</div>
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">目标账户 / 备注</div>
+              <div></div>
+            </div>
+
+            <sc-for list="{{ batches }}" as="b" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:minmax(0,1.1fr) 116px 100px 116px minmax(0,1fr) 240px;gap:14px;padding:14px 20px;border-bottom:1px solid #EDF2ED;align-items:center;background:{{ b.rowBg }}" style-hover="background:#F7FAF7">
+                <div style="min-width:0;display:flex;align-items:center;gap:11px">
+                  <span style="width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ b.tint }};color:{{ b.on }}">{{ b.icon }}</span>
+                  <span style="min-width:0">
+                    <span style="display:block;font:500 15px/21px 'IBM Plex Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.file }}</span>
+                    <span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">{{ b.time }}</span>
+                  </span>
+                </div>
+                <div><span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:8px;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;background:{{ b.tint }};color:{{ b.on }}">{{ b.statusLabel }}</span></div>
+                <div style="text-align:right;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ b.count }}</div>
+                <div style="text-align:right;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:{{ b.netColor }}">{{ b.net }}</div>
+                <div style="min-width:0">
+                  <span style="display:block;font:400 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.account }}</span>
+                  <span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:{{ b.noteColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.note }}</span>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px">
+                  <span style="display:{{ b.readyShow }};align-items:center;height:38px;padding:0 13px;border-radius:11px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">继续确认</span>
+                  <span style="display:{{ b.readyShow }};align-items:center;height:38px;padding:0 13px;border-radius:11px;background:#F1F6F1;color:#8A3529;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#F3E7E2">丢弃</span>
+                  <span onClick="{{ openDialog }}" style="display:{{ b.committedShow }};align-items:center;gap:7px;height:38px;padding:0 13px;border-radius:11px;background:#F1F6F1;color:#8A3529;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#F3E7E2">{{ iconUndoSm }}撤销这批</span>
+                  <span style="display:{{ b.committedShow }};align-items:center;height:38px;padding:0 13px;border-radius:11px;background:#F1F6F1;color:#16201A;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">查看交易</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:16px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">撤销只对整批生效，且只撤这批带进来的交易；批次里被你手动改过的行也会一起撤掉。已撤销的批次保留在列表里，方便对照。</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏用表格，操作列按状态换按钮：ready 给「继续确认 / 丢弃」，committed 给「撤销这批 / 查看交易」。待提交那行整行淡琥珀底，一眼能看见还有事没做完。</div>
+    </div>
+  </div>
+</div>
+
+
+<div style="padding:20px 40px 100px;color:#16201A">
+  <div style="display:flex;align-items:baseline;gap:10px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">B</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">撤销确认</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">dbs-09.csv · 11 笔 · 其中 2 笔退款关联着原单</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · Sheet</div>
+      <div data-screen-label="撤销确认 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);position:relative">
+        <div style="position:relative">
+          <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+          <div style="padding:6px 16px 12px"><span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          <div style="height:120px"></div>
+          <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:#16201A;opacity:.3"></div>
+        </div>
+
+        <div style="background:#FFFFFF;border-radius:22px 22px 0 0;box-shadow:0 -10px 28px rgba(28,50,36,.2)">
+          <div style="display:flex;justify-content:center;padding:10px 0 2px"><span style="width:38px;height:4px;border-radius:999px;background:#D2DED4"></span></div>
+          <div style="padding:10px 18px 0;display:flex;align-items:flex-start;gap:12px">
+            <span style="width:40px;height:40px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconUndo }}</span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font:700 19px/26px 'Figtree','PingFang SC',sans-serif">撤销这批导入？</span>
+              <span style="display:block;margin-top:3px;font:400 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62">dbs-09.csv · 09-09 08:02</span>
+            </span>
+          </div>
+
+          <div style="padding:14px 18px 0;display:grid;gap:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:12px;background:#F1F6F1">
+              <span style="font:400 14px/20px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">会删掉的交易</span>
+              <span style="font:500 16px/22px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">11 笔</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:12px;background:#F1F6F1">
+              <span style="font:400 14px/20px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">DBS Multiplier 余额回到</span>
+              <span style="font:500 16px/22px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">S$5,325.40</span>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;background:#F1EDDC">
+              <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlertSm }}</span>
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">会有 2 笔退款失去原单</span>
+                <span style="display:block;margin-top:3px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这 2 笔退款是这批带进来的，删掉后它们关联的原支出会重新变成「未退款」，9 月支出会涨回去。</span>
+              </span>
+            </div>
+          </div>
+
+          <div style="padding:12px 18px 0">
+            <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase;padding-bottom:8px">受影响的退款</div>
+            <sc-for list="{{ affected }}" as="a" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid #EDF2ED">
+                <span style="width:30px;height:30px;border-radius:999px;background:#F1EDDC;color:#6B540D;flex:none;display:flex;align-items:center;justify-content:center">{{ iconRefundSm }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.origin }}</span></span>
+                <span style="font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D;flex:none">{{ a.amount }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:14px 18px 18px;margin-top:6px;display:flex;gap:10px;border-top:1px solid #E1EAE2">
+            <button onClick="{{ closeDialog }}" style="flex:1;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">不撤销</button>
+            <button style="flex:1.4;height:48px;border:none;border-radius:14px;background:#AC4335;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#8A3529">撤销 11 笔</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">确认前把三件事摊开：删几笔、余额回到多少、哪些退款会失去原单（并列出这 2 笔）。主按钮写「撤销 11 笔」而不是「确认」—— 数字在按钮上，手指落下前还有一次机会看清。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440 · Dialog</div>
+      <div data-screen-label="撤销确认 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;position:relative">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY · 我 + 老婆</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabImport }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px;opacity:.5">
+          <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入历史</span>
+          <div style="margin-top:18px;height:620px;border-radius:18px;background:#FFFFFF"></div>
+        </div>
+
+        <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:#16201A;opacity:.28"></div>
+        <div style="position:absolute;left:50%;top:56px;width:660px;margin-left:-204px;background:#FFFFFF;border-radius:18px;box-shadow:0 10px 28px rgba(28,50,36,.3);overflow:hidden">
+          <div style="padding:20px 24px 16px;display:flex;align-items:flex-start;gap:14px;border-bottom:1px solid #EDF2ED">
+            <span style="width:44px;height:44px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconUndo }}</span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font:700 21px/28px 'Figtree','PingFang SC',sans-serif">撤销这批导入？</span>
+              <span style="display:block;margin-top:3px;font:400 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62">dbs-09.csv · 导入于 09-09 08:02 · 目标账户 DBS Multiplier</span>
+            </span>
+            <span style="width:36px;height:36px;border-radius:11px;background:#F1F6F1;color:#3E4A42;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none" style-hover="background:#E9F0E9">{{ iconX }}</span>
+          </div>
+
+          <div style="padding:18px 24px 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+            <div style="padding:14px 16px;border-radius:14px;background:#F1F6F1">
+              <div style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">会删掉的交易</div>
+              <div style="margin-top:2px;font:500 24px/30px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">11 笔</div>
+            </div>
+            <div style="padding:14px 16px;border-radius:14px;background:#F1F6F1">
+              <div style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净额回滚</div>
+              <div style="margin-top:2px;font:500 24px/30px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#0D6A66">+1,204.60</div>
+            </div>
+            <div style="padding:14px 16px;border-radius:14px;background:#F1F6F1">
+              <div style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">DBS 余额回到</div>
+              <div style="margin-top:2px;font:500 24px/30px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">S$5,325.40</div>
+            </div>
+          </div>
+
+          <div style="padding:16px 24px 0">
+            <div style="padding:14px 18px;border-radius:14px;background:#F1EDDC;display:flex;align-items:flex-start;gap:12px">
+              <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">会有 2 笔退款失去原单</span>
+                <span style="display:block;margin-top:3px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这 2 笔退款是这批带进来的。删掉后，它们关联的原支出会重新变成「未退款」，9 月支出会涨回 6,842.50 + 199.00 + 320.00。原支出本身不会被删。</span>
+              </span>
+            </div>
+          </div>
+
+          <div style="padding:16px 24px 0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-bottom:8px">
+              <span style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">受影响的退款</span>
+              <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">2 笔 · 共 519.00</span>
+            </div>
+            <div style="border-radius:14px;background:#FAFCFA;box-shadow:inset 0 0 0 1px #E1EAE2;overflow:hidden">
+              <sc-for list="{{ affected }}" as="a" hint-placeholder-count="2">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) 110px;gap:14px;padding:11px 16px;border-bottom:1px solid #EDF2ED;align-items:center">
+                  <div style="min-width:0;display:flex;align-items:center;gap:10px">
+                    <span style="width:28px;height:28px;border-radius:999px;background:#F1EDDC;color:#6B540D;flex:none;display:flex;align-items:center;justify-content:center">{{ iconRefundSm }}</span>
+                    <span style="min-width:0;font:500 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span>
+                  </div>
+                  <div style="min-width:0;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.origin }}</div>
+                  <div style="text-align:right;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">{{ a.amount }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;padding:14px 24px;background:#F7FAF7;display:flex;align-items:center;justify-content:space-between;gap:14px">
+            <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">撤销后这批仍留在历史里，标为「已撤销」。</span>
+            <span style="display:flex;gap:10px;flex:none">
+              <button onClick="{{ closeDialog }}" style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">不撤销</button>
+              <button style="height:44px;padding:0 20px;border:none;border-radius:12px;background:#AC4335;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#8A3529">撤销 11 笔</button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏把三个数字做成并排的三块（笔数、净额回滚、余额回到多少），琥珀警告条独占一行并把「9 月支出会涨回多少」算出来。破坏性主按钮是唯一的实心红。</div>
+    </div>
+  </div>
+</div></x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+const ST = {
+  ready:     { label:'待提交', tint:'#F1EDDC', on:'#6B540D' },
+  committed: { label:'已提交', tint:'#E2EFE5', on:'#1F6A46' },
+  undone:    { label:'已撤销', tint:'#E8EDE8', on:'#454F48' },
+};
+
+class Component extends DCLogic {
+  state = { dialogOpen: true };
+
+  renderVals() {
+    const rows = [
+      { file:'cmb-09.csv', time:'09-10 21:14', s:'ready',     count:'10 笔', net:'+18,087.80', account:'招行储蓄卡', note:'3 行待归类', flags:'4 个' },
+      { file:'dbs-09.csv', time:'09-09 08:02', s:'committed', count:'11 笔', net:'−1,204.60',  account:'DBS Multiplier', note:'含 2 笔退款已关联原单', flags:'1 个' },
+      { file:'cmb-08.csv', time:'08-31 22:40', s:'committed', count:'32 笔', net:'+11,420.00', account:'招行储蓄卡', note:'—', flags:'无' },
+      { file:'ccb-08.csv', time:'08-30 19:11', s:'undone',    count:'9 笔',  net:'−3,215.00',  account:'建行信用卡', note:'撤销于 08-31 · 文件列错了', flags:'无' },
+    ];
+
+    return {
+      batches: rows.map(r => ({
+        file: r.file,
+        time: r.time,
+        meta: r.time + ' · ' + r.account,
+        statusLabel: ST[r.s].label,
+        tint: ST[r.s].tint,
+        on: ST[r.s].on,
+        icon: svg([R(3.5,3,13,14,2), P('M6.5 7.5h7M6.5 10.5h7M6.5 13.5h4')], 18),
+        count: r.count,
+        net: r.net,
+        netColor: r.net.indexOf('−') === 0 ? '#AC4335' : '#0D6A66',
+        account: r.account,
+        note: r.note,
+        noteColor: r.s === 'ready' ? '#6B540D' : '#5F6A62',
+        rowBg: r.s === 'ready' ? '#FBF9F1' : 'transparent',
+        flags: r.flags,
+        flagBg: r.flags === '无' ? '#F1F6F1' : '#F6E9DE',
+        flagColor: r.flags === '无' ? '#5F6A62' : '#8A4816',
+        readyShow: r.s === 'ready' ? 'flex' : 'none',
+        committedShow: r.s === 'committed' ? 'flex' : 'none',
+        readyBlock: r.s === 'ready' ? 'block' : 'none',
+        committedBlock: r.s === 'committed' ? 'block' : 'none',
+        stats: [
+          { k:'一共', v:r.count, color:'#16201A' },
+          { k:'净额', v:r.net,   color: r.net.indexOf('−') === 0 ? '#AC4335' : '#0D6A66' },
+        ],
+      })),
+      dialogShow: this.state.dialogOpen ? 'block' : 'none',
+      affected: [
+        { name:'Shopee 退款', origin:'原单 08-28 Shopee · S$36.00', amount:'+199.00' },
+        { name:'Grab 退款',   origin:'原单 09-01 Grab · S$58.00',   amount:'+320.00' },
+      ],
+      openDialog: () => this.setState({ dialogOpen: true }),
+      closeDialog: () => this.setState({ dialogOpen: false }),
+      iconPlus:     svg([P('M10 3.5v13M3.5 10h13')], 22, 2.2),
+      iconPlusSm:   svg([P('M10 3.5v13M3.5 10h13')], 18, 2.2),
+      iconChevSm:   svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
+      iconAlertSm:  svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 16),
+      iconUndoSm:   svg([P('M4 8.5h8.5a4 4 0 0 1 0 8H7'), P('M7 5 4 8.5 7 12')], 16),
+      iconUndo:     svg([P('M4 8.5h8.5a4 4 0 0 1 0 8H7'), P('M7 5 4 8.5 7 12')], 20),
+      iconAlert:    svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 20),
+      iconX:        svg([P('M5 5l10 10M15 5 5 15')], 18, 2.2),
+      iconRefundSm: svg([P('M3.5 10a6.5 6.5 0 1 1 6.5 6.5'), P('M6.5 6.5H3.5V3.5')], 15, 2.1),
+      tabHome:      svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
+      tabList:      svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
+      tabImport:    svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2F4A38}
+a:hover{color:#1F3527}
+input{font-family:inherit;box-sizing:border-box}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 40px;color:#16201A">
+  <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 13 · Ledgers</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">账本列表 / 加入账本</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">A 是账本列表（卡片 + 新建 + 用码加入），B 是加入流程的 6 位码输入。示例数据加了一本「旅行账本（SGD）」，用来看多本的样子。</div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:28px;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">A</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">账本列表</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="账本列表 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 14px">
+          <span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">我的账本</span>
+          <div style="margin-top:4px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">切换后所有页面都跟着这本走</div>
+        </div>
+
+        <div style="padding:0 16px 12px;display:grid;gap:10px">
+          <sc-for list="{{ ledgers }}" as="l" hint-placeholder-count="2">
+            <div onClick="{{ pickLedger }}" data-l="{{ l.name }}" style="border-radius:18px;padding:16px;cursor:pointer;background:{{ l.cardBg }};box-shadow:{{ l.cardShadow }}">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="width:44px;height:44px;border-radius:13px;flex:none;display:flex;align-items:center;justify-content:center;font:700 17px/24px 'Figtree','PingFang SC',sans-serif;background:{{ l.badgeBg }};color:{{ l.badgeFg }}">{{ l.initial }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:flex;align-items:center;gap:7px">
+                    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.name }}</span>
+                    <span style="display:{{ l.currentShow }};align-items:center;height:22px;padding:0 8px;border-radius:7px;background:#DDE9DF;color:#2F4A38;font:600 11px/16px 'Figtree','PingFang SC',sans-serif;flex:none">当前</span>
+                  </span>
+                  <span style="display:block;margin-top:2px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ l.roleLine }}</span>
+                </span>
+                <span style="display:{{ l.tickShow }};color:#2F4A38;flex:none">{{ iconCheck }}</span>
+              </div>
+
+              <div style="margin-top:14px;display:flex;gap:8px;align-items:stretch">
+                <span style="flex:1;display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
+                  <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">成员</span>
+                  <sc-for list="{{ l.memberLines }}" as="m" hint-placeholder-count="2">
+                    <span style="font:450 12px/17px 'Figtree','PingFang SC',sans-serif;color:#16201A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· {{ m.n }}</span>
+                  </sc-for>
+                </span>
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
+                  <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">基准币种</span>
+                  <span style="font:500 15px/21px 'IBM Plex Mono',monospace">{{ l.currency }}</span>
+                </span>
+                <span style="flex:1.2;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
+                  <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产</span>
+                  <span style="font:500 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.net }}</span>
+                </span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="padding:0 16px 16px;display:grid;gap:10px">
+          <button style="width:100%;height:52px;border:none;border-radius:16px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconPlus }}新建账本</button>
+          <button onClick="{{ openJoin }}" style="width:100%;height:52px;border:none;border-radius:16px;background:#FFFFFF;color:#16201A;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#F7FAF7">{{ iconKey }}用邀请码加入</button>
+          <div style="padding:0 4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">新建的账本你是 owner；用码加入的账本你是成员，改不了基准币种和成员。</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">卡片而不是列表行 —— 账本只有两三本，且每本要带三个数（成员、币种、净资产）。当前那本用淡绿底 + 「当前」Badge + 右侧勾，三重标识，因为选错账本记账是最难发现的错误。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="账本列表 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#DDE9DF;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">账</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif;color:#2F4A38">账本管理</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#3E4A42">2 本</span></span>
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px;min-height:720px;box-sizing:border-box">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div>
+              <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">我的账本</span>
+              <span style="margin-left:12px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">切换后所有页面都跟着这本走</span>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button onClick="{{ openJoin }}" style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#FFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;align-items:center;gap:8px" style-hover="background:#F7FAF7">{{ iconKeySm }}用邀请码加入</button>
+              <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconPlusSm }}新建账本</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:20px;align-items:start">
+            <sc-for list="{{ ledgers }}" as="l" hint-placeholder-count="2">
+              <div onClick="{{ pickLedger }}" data-l="{{ l.name }}" style="border-radius:18px;padding:20px;cursor:pointer;background:{{ l.cardBg }};box-shadow:{{ l.cardShadow }}">
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                  <span style="width:44px;height:44px;border-radius:13px;flex:none;display:flex;align-items:center;justify-content:center;font:700 17px/24px 'Figtree','PingFang SC',sans-serif;background:{{ l.badgeBg }};color:{{ l.badgeFg }}">{{ l.initial }}</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font:700 18px/25px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.name }}</span>
+                    <span style="display:block;margin-top:2px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ l.roleLine }}</span>
+                  </span>
+                  <span style="display:{{ l.tickShow }};color:#2F4A38;flex:none">{{ iconCheck }}</span>
+                </div>
+
+                <div style="margin-top:16px;display:grid;gap:0">
+                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid {{ l.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">成员</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.members }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid {{ l.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">基准币种</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace">{{ l.currency }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid {{ l.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.net }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">交易</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.count }}</span></div>
+                </div>
+
+                <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
+                  <sc-for list="{{ l.memberChips }}" as="m" hint-placeholder-count="2">
+                    <span style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 4px;border-radius:999px;background:{{ l.statBg }}">
+                      <span style="width:22px;height:22px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;font:600 10px/14px 'Figtree','PingFang SC',sans-serif;background:{{ m.avaBg }};color:{{ m.avaFg }}">{{ m.initial }}</span>
+                      <span style="font:500 12px/17px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;white-space:nowrap">{{ m.n }}</span>
+                    </span>
+                  </sc-for>
+                </div>
+
+                <button style="margin-top:14px;width:100%;height:44px;border:none;border-radius:12px;background:{{ l.btnBg }};color:{{ l.btnFg }};font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer">{{ l.btnLabel }}</button>
+              </div>
+            </sc-for>
+
+            <div style="border-radius:18px;padding:20px;background:#FAFCFA;box-shadow:inset 0 0 0 1.5px #C4D1C6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:280px;cursor:pointer" style-hover="background:#F1F6F1">
+              <span style="width:44px;height:44px;border-radius:999px;background:#E4EDE5;color:#2F4A38;display:flex;align-items:center;justify-content:center">{{ iconPlus }}</span>
+              <span style="font:600 16px/22px 'Figtree','PingFang SC',sans-serif">新建账本</span>
+              <span style="font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;text-align:center;max-width:200px">比如给旅行、给爸妈各开一本。账本之间完全独立。</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏三列卡片，第三格是虚线描边的「新建」卡 —— 空位本身就是入口。每张卡把四个数竖排成表，非当前那本的按钮写「切到这本」。</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">B</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">加入账本 · 6 位码</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">已输 4 位，第 5 格是光标位</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · 输入中</div>
+      <div data-screen-label="加入账本 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">{{ iconBack }}</span>
+          <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">加入账本</span>
+          <span style="width:40px"></span>
+        </div>
+
+        <div style="padding:8px 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:20px 16px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07);text-align:center">
+            <span style="width:48px;height:48px;border-radius:999px;background:#E4EDE5;color:#2F4A38;margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconKey }}</span>
+            <div style="margin-top:12px;font:700 19px/26px 'Figtree','PingFang SC',sans-serif">输入 6 位邀请码</div>
+            <div style="margin-top:4px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">让对方在他的账本设置里生成，码 10 分钟内有效</div>
+
+            <div style="margin-top:18px;display:flex;gap:6px;justify-content:center">
+              <sc-for list="{{ inputCells }}" as="c" hint-placeholder-count="6">
+                <span style="width:46px;height:58px;border-radius:12px;display:flex;align-items:center;justify-content:center;font:500 26px/32px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;background:{{ c.bg }};box-shadow:{{ c.ring }};color:{{ c.color }}">{{ c.ch }}</span>
+              </sc-for>
+            </div>
+
+            <div style="margin-top:14px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">粘贴时会自动填满 6 格</div>
+            <button style="margin-top:16px;width:100%;height:48px;border:none;border-radius:14px;background:#E1EAE2;color:#8A968C;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:not-allowed">加入</button>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:14px 16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">加入之后</div>
+            <div style="margin-top:8px;display:grid;gap:8px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">
+              <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#2F4A38;flex:none;margin-top:7px"></span><span>你能看到这本账的全部交易和账户。</span></div>
+              <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#C4D1C6;flex:none;margin-top:7px"></span><span>你可以记账、导入、改分类，但改不了基准币种和成员。</span></div>
+              <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#C4D1C6;flex:none;margin-top:7px"></span><span>你原来的账本不受影响，可以随时切回去。</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">6 个独立方格，已填的实底、光标格描边强调、未填的淡灰。码没填满前「加入」保持禁用。下面那块说明加入后有什么权限 —— 这是家人最会问的。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · 码有效 / 码失效</div>
+      <div style="display:grid;gap:16px">
+        <div data-screen-label="加入账本 已验证 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+          <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+          <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07)">{{ iconBack }}</span>
+            <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">加入账本</span>
+            <span style="width:40px"></span>
+          </div>
+          <div style="padding:8px 16px 16px">
+            <div style="background:#FFFFFF;border-radius:18px;padding:18px 16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+              <div style="display:flex;gap:6px;justify-content:center">
+                <sc-for list="{{ validCells }}" as="c" hint-placeholder-count="6">
+                  <span style="width:44px;height:54px;border-radius:12px;display:flex;align-items:center;justify-content:center;font:500 24px/30px 'IBM Plex Mono',monospace;background:#E2EFE5;color:#0F5533">{{ c.ch }}</span>
+                </sc-for>
+              </div>
+              <div style="margin-top:14px;padding:14px;border-radius:14px;background:#E2EFE5;display:flex;align-items:center;gap:12px">
+                <span style="width:40px;height:40px;border-radius:12px;background:#FFFFFF;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center;font:700 16px/22px 'Figtree','PingFang SC',sans-serif">旅</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 16px/22px 'Figtree','PingFang SC',sans-serif">旅行账本</span>
+                  <span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#1F6A46">邀请人：老婆 · 基准币种 SGD · 2 名成员</span>
+                </span>
+                <span style="color:#1F6A46;flex:none">{{ iconCheck }}</span>
+              </div>
+              <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">加入「旅行账本」</button>
+            </div>
+          </div>
+        </div>
+
+        <div data-screen-label="加入账本 失效 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+          <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+          <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07)">{{ iconBack }}</span>
+            <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">加入账本</span>
+            <span style="width:40px"></span>
+          </div>
+          <div style="padding:8px 16px 16px">
+            <div style="background:#FFFFFF;border-radius:18px;padding:18px 16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+              <div style="display:flex;gap:6px;justify-content:center">
+                <sc-for list="{{ invalidCells }}" as="c" hint-placeholder-count="6">
+                  <span style="width:44px;height:54px;border-radius:12px;display:flex;align-items:center;justify-content:center;font:500 24px/30px 'IBM Plex Mono',monospace;background:#F3E7E2;color:#8A3529">{{ c.ch }}</span>
+                </sc-for>
+              </div>
+              <div style="margin-top:14px;padding:14px;border-radius:14px;background:#F3E7E2;display:flex;align-items:flex-start;gap:10px">
+                <span style="color:#8A3529;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">这个码已失效</span>
+                  <span style="display:block;margin-top:3px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#8A3529">可能超过 10 分钟，或者已经被人用过了。让对方重新生成一个。</span>
+                </span>
+              </div>
+              <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">重新输入</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">码填满后就地校验：有效时六格转绿并展开账本信息卡（谁邀请的、基准币种、成员数），主按钮写清要加入哪本；失效时六格转红并说明两种可能的原因。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440 · Dialog</div>
+      <div data-screen-label="加入账本 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;position:relative">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#DDE9DF;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">账</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif;color:#2F4A38">账本管理</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#3E4A42">2 本</span></span>
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px;opacity:.5">
+          <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">我的账本</span>
+          <div style="margin-top:20px;height:520px;border-radius:18px;background:#FFFFFF"></div>
+        </div>
+
+        <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:#16201A;opacity:.28"></div>
+        <div style="position:absolute;left:50%;top:96px;width:520px;margin-left:-134px;background:#FFFFFF;border-radius:18px;box-shadow:0 10px 28px rgba(28,50,36,.3);overflow:hidden">
+          <div style="padding:22px 24px 18px;text-align:center;border-bottom:1px solid #EDF2ED">
+            <span style="width:48px;height:48px;border-radius:999px;background:#E4EDE5;color:#2F4A38;margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconKey }}</span>
+            <div style="margin-top:12px;font:700 21px/28px 'Figtree','PingFang SC',sans-serif">输入 6 位邀请码</div>
+            <div style="margin-top:4px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">让对方在他的账本设置里生成，码 10 分钟内有效</div>
+          </div>
+          <div style="padding:22px 24px 0">
+            <div style="display:flex;gap:8px;justify-content:center">
+              <sc-for list="{{ inputCells }}" as="c" hint-placeholder-count="6">
+                <span style="width:56px;height:68px;border-radius:14px;display:flex;align-items:center;justify-content:center;font:500 30px/38px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;background:{{ c.bg }};box-shadow:{{ c.ring }};color:{{ c.color }}">{{ c.ch }}</span>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px;text-align:center;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">粘贴时会自动填满 6 格 · 只接受数字</div>
+          </div>
+          <div style="padding:20px 24px 0">
+            <div style="padding:14px 16px;border-radius:14px;background:#F1F6F1;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">
+              加入后你能看到这本账的全部交易与账户，可以记账、导入、改分类；改不了基准币种和成员。你原来的账本不受影响。
+            </div>
+          </div>
+          <div style="margin-top:20px;padding:14px 24px;background:#F7FAF7;display:flex;align-items:center;justify-content:flex-end;gap:10px">
+            <button onClick="{{ closeJoin }}" style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">取消</button>
+            <button disabled style="height:44px;padding:0 20px;border:none;border-radius:12px;background:#E1EAE2;color:#8A968C;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:not-allowed">加入</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏是 520px 的窄 Dialog，六格放大到 56×68 —— 输码是这个对话框唯一的事，其余都让位。</div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+class Component extends DCLogic {
+  state = { current: '家庭账本', joinOpen: true };
+
+  renderVals() {
+    const data = [
+      { name:'家庭账本', initial:'家', members:'2 人', memberList:['我（owner）','老婆'], currency:'CNY', net:'¥33,842.10',  count:'328 笔', role:'owner' },
+      { name:'旅行账本', initial:'旅', members:'2 人', memberList:['老婆（owner）','我'],  currency:'SGD', net:'S$1,240.60', count:'47 笔',  role:'成员' },
+    ];
+
+    const cell = (ch, state) => ({
+      ch,
+      bg: state === 'filled' ? '#DDE9DF' : state === 'cursor' ? '#FFFFFF' : '#F1F6F1',
+      ring: state === 'cursor' ? 'inset 0 0 0 1.5px #2F4A38' : 'none',
+      color: state === 'filled' ? '#16201A' : state === 'cursor' ? '#2F4A38' : '#B9C6BB',
+    });
+
+    return {
+      ledgers: data.map(l => {
+        const cur = l.name === this.state.current;
+        return {
+          name: l.name, initial: l.initial, members: l.members,
+          memberLines: l.memberList.map(n => ({ n })),
+          memberChips: l.memberList.map(n => {
+            const owner = n.indexOf('owner') > -1;
+            const short = n.replace('（owner）', '');
+            return {
+              n: owner ? short + ' · owner' : short,
+              initial: short.slice(0, 1),
+              avaBg: owner ? '#2F4A38' : '#E0EEEC',
+              avaFg: owner ? '#FFFFFF' : '#0B5450',
+            };
+          }),
+          currency: l.currency, net: l.net, count: l.count,
+          roleLine: l.role === 'owner' ? '你是 owner · 可邀请与删除' : '你是成员 · 由老婆邀请',
+          cardBg: cur ? '#DDE9DF' : '#FFFFFF',
+          cardShadow: cur ? 'inset 0 0 0 1.5px #2F4A38' : '0 2px 10px rgba(28,50,36,.07)',
+          badgeBg: cur ? '#2F4A38' : '#E4EDEE',
+          badgeFg: cur ? '#FFFFFF' : '#2C4B5B',
+          statBg: cur ? '#FFFFFF' : '#F1F6F1',
+          line: cur ? '#C6DACB' : '#EDF2ED',
+          currentShow: cur ? 'inline-flex' : 'none',
+          tickShow: cur ? 'flex' : 'none',
+          btnBg: cur ? '#2F4A38' : '#F1F6F1',
+          btnFg: cur ? '#FFFFFF' : '#16201A',
+          btnLabel: cur ? '进入这本' : '切到这本',
+        };
+      }),
+      inputCells: [cell('4','filled'), cell('7','filled'), cell('2','filled'), cell('9','filled'), cell('|','cursor'), cell('—','empty')],
+      validCells: ['4','7','2','9','1','5'].map(ch => ({ ch })),
+      invalidCells: ['4','7','2','9','1','5'].map(ch => ({ ch })),
+      openJoin:  () => this.setState({ joinOpen: true }),
+      closeJoin: () => this.setState({ joinOpen: false }),
+      pickLedger: (e) => this.setState({ current: e.currentTarget.getAttribute('data-l') }),
+      iconBack:   svg([P('M12 4.5 6.5 10l5.5 5.5')], 20, 2),
+      iconCheck:  svg([P('M4.5 10.5 8 14l7.5-8')], 20, 2.3),
+      iconPlus:   svg([P('M10 3.5v13M3.5 10h13')], 22, 2.2),
+      iconPlusSm: svg([P('M10 3.5v13M3.5 10h13')], 18, 2.2),
+      iconKey:    svg([C(7,12.5,3.5), P('M9.5 10 16 3.5M13.5 6l2 2M15 4.5l2 2')], 22),
+      iconKeySm:  svg([C(7,12.5,3.5), P('M9.5 10 16 3.5M13.5 6l2 2M15 4.5l2 2')], 18),
+      iconAlert:  svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 20),
+      tabHome:    svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
+      tabList:    svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
+      tabImport:  svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2F4A38}
+a:hover{color:#1F3527}
+input{font-family:inherit;box-sizing:border-box}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 40px;color:#16201A">
+  <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 10 · Import · 指南与上传</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入 · 指南与上传</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">三步说明 + skill 文本复制 / 下载 + 上传区。下面的开关切三种状态：待上传 / 校验失败（按行号列错误）/ skill 版本过期。</div>
+    <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap">
+      <sc-for list="{{ states }}" as="s" hint-placeholder-count="3">
+        <span onClick="{{ pickState }}" data-s="{{ s.id }}" style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:12px;cursor:pointer;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;background:{{ s.bg }};color:{{ s.color }};box-shadow:{{ s.ring }}">{{ s.icon }}{{ s.label }}</span>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:28px;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="导入指南 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入</span>
+            <span style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:999px;background:#FFF;color:#3E4A42;font:450 12px/16px 'IBM Plex Mono',monospace;box-shadow:0 2px 10px rgba(28,50,36,.07)">skill {{ skillVersionShort }}</span>
+          </div>
+          <div style="margin-top:6px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">应用本身不调用大模型。账单在你自己的 ChatGPT / Claude 里整理成标准文件，再传进来。</div>
+        </div>
+
+        <div style="display:{{ staleShow }};padding:0 16px 12px">
+          <div style="background:#F1EDDC;border-radius:16px;padding:14px 16px">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">skill 版本过期</span>
+                <span style="display:block;margin-top:4px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#6B540D">你的 skill 版本是 <span style="font:450 13px/19px 'IBM Plex Mono',monospace">2026-08-01</span>，当前 <span style="font:450 13px/19px 'IBM Plex Mono',monospace">2026-09-10</span>，请更新后重传。</span>
+              </span>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px">
+              <button style="flex:1;height:44px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px" style-hover="background:#253A2C">{{ iconCopySm }}复制更新命令</button>
+              <button style="flex:1;height:44px;border:none;border-radius:12px;background:#FFFFFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px">{{ iconDownSm }}下载 skill 最新版</button>
+            </div>
+            <div style="margin-top:10px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这次更新加了「退款候选」标记，旧版整理出的文件缺这一列。</div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">三步</div>
+            <div style="margin-top:12px;display:grid;gap:14px">
+              <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex;gap:12px">
+                  <span style="width:26px;height:26px;border-radius:999px;flex:none;background:{{ s.numBg }};color:{{ s.numFg }};display:flex;align-items:center;justify-content:center;font:600 13px/18px 'IBM Plex Mono',monospace">{{ s.n }}</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font:600 15px/21px 'Figtree','PingFang SC',sans-serif">{{ s.title }}</span>
+                    <span style="display:block;margin-top:2px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ s.body }}</span>
+                  </span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid #EDF2ED">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">skill 文本</span>
+                <span style="font:450 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">v {{ skillVersion }} · 4.2 KB</span>
+              </div>
+              <div style="margin-top:8px;padding:12px 14px;border-radius:12px;background:#F1F6F1;font:400 12px/18px 'IBM Plex Mono',monospace;color:#3E4A42;max-height:76px;overflow:hidden">你是账单整理助手。把用户提供的银行账单转成 CSV，列固定为：date, amount, currency, kind, merchant, note, category_l1…</div>
+              <div style="margin-top:10px;display:flex;gap:8px">
+                <button style="flex:1;height:44px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px" style-hover="background:#253A2C">{{ iconCopySm }}复制</button>
+                <button style="flex:1;height:44px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px" style-hover="background:#E9F0E9">{{ iconDownSm }}下载 .md</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">目标账户</div>
+            <div style="height:56px;padding:0 14px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;gap:11px;cursor:pointer" style-hover="background:#E9F0E9">
+              <span style="width:32px;height:32px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄 · CNY</span></span>
+              {{ iconChevSm }}
+            </div>
+            <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">文件里所有行都会记到这个账户；转账的对手账户在 review 里逐行改。</div>
+
+            <div style="margin-top:14px;padding:20px 16px;border-radius:16px;background:#FAFCFA;box-shadow:inset 0 0 0 1.5px {{ dropRing }};text-align:center">
+              <div style="width:44px;height:44px;border-radius:999px;background:{{ dropIconBg }};color:{{ dropIconFg }};margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconUpload }}</div>
+              <div style="margin-top:10px;font:600 15px/21px 'Figtree','PingFang SC',sans-serif">{{ dropTitle }}</div>
+              <div style="margin-top:4px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ dropBody }}</div>
+              <button style="margin-top:12px;height:44px;padding:0 18px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">选择文件</button>
+            </div>
+
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+              <span style="flex:1;height:1px;background:#EDF2ED"></span>
+              <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">或者粘贴文本</span>
+              <span style="flex:1;height:1px;background:#EDF2ED"></span>
+            </div>
+            <div style="margin-top:10px;padding:12px 14px;border-radius:14px;background:#F1F6F1;min-height:80px;font:400 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62">把 CSV 内容直接粘在这里…</div>
+          </div>
+        </div>
+
+        <div style="display:{{ errorShow }};padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+            <div style="padding:14px 16px;background:#F3E7E2">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <span style="color:#8A3529;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">校验失败 · 未进入 review</span>
+                  <span style="display:block;margin-top:4px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#8A3529">cmb-09.csv · 共 10 行，3 行有问题。修好这 3 行再重传，其余 7 行不会重复导入。</span>
+                </span>
+              </div>
+            </div>
+            <sc-for list="{{ errors }}" as="e" hint-placeholder-count="3">
+              <div style="display:flex;gap:11px;padding:12px 16px;border-bottom:1px solid #EDF2ED">
+                <span style="width:38px;flex:none;font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">{{ e.line }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:500 14px/20px 'Figtree','PingFang SC',sans-serif;color:#8A3529">{{ e.msg }}</span>
+                  <span style="display:block;margin-top:2px;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.raw }}</span>
+                </span>
+              </div>
+            </sc-for>
+            <div style="padding:12px 16px;display:flex;gap:10px">
+              <button style="flex:1;height:44px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer">复制错误清单</button>
+              <button style="flex:1;height:44px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer">重新上传</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:8px"></div>
+        <div style="background:#FFFFFF;display:flex;justify-content:space-around;align-items:flex-end;padding:8px 0 14px;box-shadow:0 -2px 10px rgba(28,50,36,.06)">
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabHome }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">首页</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabList }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">交易</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:-20px"><span style="width:52px;height:52px;border-radius:999px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(47,74,56,.34)">{{ tabPlus }}</span><span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">记一笔</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#2F4A38;min-width:56px;min-height:44px;justify-content:center">{{ tabImport }}<span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif">导入</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabMe }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">我的</span></span>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">skill 版本号常驻在标题右边，因为「版本对不对」是这一屏最常出问题的地方。校验失败时不进 review，错误按行号列出并可整份复制 —— 用户要把它粘回 ChatGPT 里让模型自己改。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="导入指南 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY · 我 + 老婆</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabImport }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <div style="background:#F1F6F1;border-radius:14px;padding:12px 14px">
+            <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#5F6A62;text-transform:uppercase">最近导入</div>
+            <div style="margin-top:8px;display:grid;gap:8px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif">
+              <div style="display:flex;justify-content:space-between;gap:8px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">cmb-08.csv</span><span style="font:450 12px/19px 'IBM Plex Mono',monospace;color:#1F6A46;flex:none">32 笔</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">dbs-08.csv</span><span style="font:450 12px/19px 'IBM Plex Mono',monospace;color:#1F6A46;flex:none">11 笔</span></div>
+            </div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div>
+              <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入</span>
+              <span style="margin-left:12px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">应用本身不调用大模型 · 账单在你自己的 ChatGPT / Claude 里整理</span>
+            </div>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:999px;background:#FFF;color:#3E4A42;font:450 13px/19px 'IBM Plex Mono',monospace;box-shadow:0 2px 10px rgba(28,50,36,.07)">skill {{ skillVersionShort }}</span>
+          </div>
+
+          <div style="display:{{ staleShow }};margin-top:16px;background:#F1EDDC;border-radius:16px;padding:16px 20px;align-items:center;gap:14px">
+            <span style="color:#6B540D;display:flex;flex:none">{{ iconAlert }}</span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">skill 版本过期</span>
+              <span style="display:block;margin-top:2px;font:400 14px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">你的 skill 版本是 <span style="font:450 14px/20px 'IBM Plex Mono',monospace">2026-08-01</span>，当前 <span style="font:450 14px/20px 'IBM Plex Mono',monospace">2026-09-10</span>，请更新后重传。这次更新加了「退款候选」标记，旧版整理出的文件缺这一列。</span>
+            </span>
+            <span style="display:flex;gap:10px;flex:none">
+              <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconCopySm }}复制更新命令</button>
+              <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#FFFFFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px">{{ iconDownSm }}下载 skill 最新版</button>
+            </span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:24px;margin-top:20px;align-items:start">
+            <div style="background:#FFFFFF;border-radius:18px;padding:22px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+              <div style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">三步</div>
+              <div style="margin-top:16px;display:grid;gap:18px">
+                <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+                  <div style="display:flex;gap:14px">
+                    <span style="width:30px;height:30px;border-radius:999px;flex:none;background:{{ s.numBg }};color:{{ s.numFg }};display:flex;align-items:center;justify-content:center;font:600 14px/20px 'IBM Plex Mono',monospace">{{ s.n }}</span>
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font:600 16px/22px 'Figtree','PingFang SC',sans-serif">{{ s.title }}</span>
+                      <span style="display:block;margin-top:3px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ s.body }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="margin-top:20px;padding-top:18px;border-top:1px solid #EDF2ED">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">skill 文本</span>
+                  <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">v {{ skillVersion }} · 4.2 KB</span>
+                </div>
+                <div style="margin-top:10px;padding:14px 16px;border-radius:14px;background:#F1F6F1;font:400 13px/20px 'IBM Plex Mono',monospace;color:#3E4A42;max-height:118px;overflow:hidden">你是账单整理助手。把用户提供的银行账单转成 CSV，列固定为：date, amount, currency, kind, merchant, note, category_l1, category_l2, counterparty, flags。<br>kind 只能是 expense / income / refund / transfer。日期一律 YYYY-MM-DD…</div>
+                <div style="margin-top:12px;display:flex;gap:10px">
+                  <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconCopySm }}复制 skill 文本</button>
+                  <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#E9F0E9">{{ iconDownSm }}下载 .md</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;gap:20px">
+              <div style="background:#FFFFFF;border-radius:18px;padding:22px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px">
+                  <div>
+                    <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">目标账户</div>
+                    <div style="height:60px;padding:0 16px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;gap:12px;cursor:pointer" style-hover="background:#E9F0E9">
+                      <span style="width:34px;height:34px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
+                      <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄 · CNY · 12,480.35</span></span>
+                      {{ iconChevSm }}
+                    </div>
+                    <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">文件里所有行都会记到这个账户；转账的对手账户在 review 里逐行改。</div>
+                  </div>
+
+                  <div style="padding:28px 20px;border-radius:16px;background:#FAFCFA;box-shadow:inset 0 0 0 1.5px {{ dropRing }};text-align:center">
+                    <div style="width:52px;height:52px;border-radius:999px;background:{{ dropIconBg }};color:{{ dropIconFg }};margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconUpload }}</div>
+                    <div style="margin-top:12px;font:600 17px/24px 'Figtree','PingFang SC',sans-serif">{{ dropTitle }}</div>
+                    <div style="margin-top:4px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ dropBody }}</div>
+                    <button style="margin-top:14px;height:44px;padding:0 20px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">选择文件</button>
+                  </div>
+
+                  <div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="flex:1;height:1px;background:#EDF2ED"></span>
+                      <span style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">或者粘贴文本</span>
+                      <span style="flex:1;height:1px;background:#EDF2ED"></span>
+                    </div>
+                    <div style="margin-top:12px;padding:14px 16px;border-radius:14px;background:#F1F6F1;min-height:92px;font:400 13px/20px 'IBM Plex Mono',monospace;color:#5F6A62">把 CSV 内容直接粘在这里…</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:{{ errorShow }};flex-direction:column;background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+                <div style="padding:16px 20px;background:#F3E7E2;display:flex;align-items:flex-start;gap:12px">
+                  <span style="color:#8A3529;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">校验失败 · 未进入 review</span>
+                    <span style="display:block;margin-top:3px;font:400 14px/20px 'Figtree','PingFang SC',sans-serif;color:#8A3529">cmb-09.csv · 共 10 行，3 行有问题。修好这 3 行再重传，其余 7 行不会重复导入。</span>
+                  </span>
+                </div>
+                <div style="display:grid;grid-template-columns:70px minmax(0,1fr);gap:14px;padding:10px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
+                  <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">行号</div>
+                  <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">错误与原始行</div>
+                </div>
+                <sc-for list="{{ errors }}" as="e" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:70px minmax(0,1fr);gap:14px;padding:12px 20px;border-bottom:1px solid #EDF2ED;align-items:start">
+                    <div style="font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">{{ e.line }}</div>
+                    <div style="min-width:0">
+                      <div style="font:500 15px/21px 'Figtree','PingFang SC',sans-serif;color:#8A3529">{{ e.msg }}</div>
+                      <div style="margin-top:3px;font:400 12px/18px 'IBM Plex Mono',monospace;color:#5F6A62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.raw }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F7FAF7">
+                  <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">把错误清单粘回 ChatGPT，让它改完再导出一次</span>
+                  <span style="display:flex;gap:10px;flex:none">
+                    <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#E9F0E9">{{ iconCopySm }}复制错误清单</button>
+                    <button style="height:44px;padding:0 18px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">重新上传</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏左右分工：左边是「怎么做」（三步 + skill 文本，一次读完），右边是「现在做」（目标账户 + 拖入区 + 粘贴框）。校验失败的清单接在右栏下方，两列错误：行号、错误与原始行，原始行用等宽截断显示，方便和源文件对照。</div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+class Component extends DCLogic {
+  state = { s: 'ready' };
+
+  renderVals() {
+    const s = this.state.s;
+    const stale = s === 'stale';
+    const error = s === 'error';
+
+    const STATES = [
+      { id:'ready', label:'待上传',        icon: svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 15, 2.1), tint:'#DDE9DF', on:'#2F4A38', fg:'#2F4A38' },
+      { id:'error', label:'校验失败',      icon: svg([C(10,10,7.25), P('M10 6.5v5M10 14h.01')], 15, 2.1),                  tint:'#F3E7E2', on:'#8A3529', fg:'#AC4335' },
+      { id:'stale', label:'skill 版本过期', icon: svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 15, 2.1),      tint:'#F1EDDC', on:'#6B540D', fg:'#7E6412' },
+    ];
+
+    return {
+      states: STATES.map(x => ({
+        id: x.id, label: x.label, icon: x.icon,
+        bg: x.id === s ? x.tint : '#F1F6F1',
+        color: x.id === s ? x.on : '#3E4A42',
+        ring: x.id === s ? ('inset 0 0 0 1.5px ' + x.fg) : 'none',
+      })),
+      staleShow: stale ? 'block' : 'none',
+      errorShow: error ? 'block' : 'none',
+      skillVersion: stale ? '2026-08-01' : '2026-09-10',
+      skillVersionShort: stale ? '2026-08-01 · 旧' : '2026-09-10',
+      steps: [
+        { n:'1', title:'安装 skill',                 body:'把下面的 skill 文本复制或下载，添加到你自己的 ChatGPT / Claude 里。',
+          numBg:'#2F4A38', numFg:'#FFFFFF' },
+        { n:'2', title:'在你的 ChatGPT / Claude 里整理账单', body:'把银行导出的账单丢给它，让 skill 输出标准 CSV。整理过程发生在你那边，账单不会经过这个应用。',
+          numBg:'#DDE9DF', numFg:'#2F4A38' },
+        { n:'3', title:'上传生成的文件',              body:'选好目标账户，把 CSV 拖进来（或粘贴文本）。校验通过后进入逐行确认。',
+          numBg:'#DDE9DF', numFg:'#2F4A38' },
+      ],
+      errors: [
+        { line:'第 3 行', msg:'kind 值无法识别：「退货」',        raw:'2026-09-09,199.00,CNY,退货,京东退款,,消费购物' },
+        { line:'第 6 行', msg:'缺少 category_l1，且 kind 不是 transfer', raw:'2026-09-07,128.00,CNY,expense,美团外卖,,' },
+        { line:'第 9 行', msg:'日期格式不是 YYYY-MM-DD：「9/4/2026」',  raw:'9/4/2026,69.00,CNY,expense,ALIPAY-***2481,,' },
+      ],
+      dropRing:   error ? '#AC4335' : '#C4D1C6',
+      dropIconBg: error ? '#F3E7E2' : '#E4EDE5',
+      dropIconFg: error ? '#8A3529' : '#2F4A38',
+      dropTitle:  error ? '这份文件没通过校验' : '把 CSV 拖到这里',
+      dropBody:   error ? 'cmb-09.csv · 10 行 · 3 行有问题' : '支持 skill 输出的 .csv，单份最多 2000 行',
+      iconAlert:   svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 20),
+      iconUpload:  svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+      iconCopySm:  svg([R(3.5,3.5,9,9,2), R(7.5,7.5,9,9,2)], 16),
+      iconDownSm:  svg([P('M10 3.5v11M6 10.5 10 14.5l4-4'), P('M3.5 16.5h13')], 16),
+      iconWallet:  svg([R(2.75,5.25,14.5,10.5,2.5), P('M13 10.5h2.5')], 18),
+      iconChevSm:  svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
+      tabHome:     svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
+      tabList:     svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
+      tabPlus:     svg([P('M10 3.5v13M3.5 10h13')], 24, 2.2),
+      tabImport:   svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+      tabMe:       svg([C(10,7,3.25), P('M3.75 17c.9-3.1 3.3-4.75 6.25-4.75S15.35 13.9 16.25 17')], 22),
+      pickState: (e) => this.setState({ s: e.currentTarget.getAttribute('data-s') }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

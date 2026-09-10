@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2F4A38}
+a:hover{color:#1F3527}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 40px;color:#16201A">
+  <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 15 · Empty states</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">空状态 × 3</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">新账本首页、没有交易的列表（区分「真的没有」和「筛没了」）、没有导入记录。三张都不用插画 —— 用条纹占位块标出「这里以后会长出什么」，比一个空盒子图标更说明问题。</div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:28px;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">A</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">新账本首页</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">一笔都还没有，连账户都没建</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="空首页 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 12px 0 14px;border-radius:999px;background:#FFFFFF;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">旅行账本</span>{{ iconChevDown }}
+          </span>
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07)">W</span>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:20px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产 · 折算 SGD</div>
+            <div style="margin-top:2px;font:450 34px/40px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#B9C6BB">S$0.00</div>
+            <div style="margin-top:10px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">先建一个账户，余额才有地方待着。</div>
+            <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconWallet }}建第一个账户</button>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 6px 8px">
+            <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">本月支出</span>
+            <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#B9C6BB">—</span>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="display:grid;gap:10px">
+              <sc-for list="{{ ghostBars }}" as="g" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="width:10px;height:10px;border-radius:3px;flex:none;background:#E1EAE2"></span>
+                  <span style="width:58px;height:10px;border-radius:999px;flex:none;background:#EDF2ED"></span>
+                  <span style="flex:1;height:8px;border-radius:999px;background:#F1F6F1;overflow:hidden"><span style="display:block;height:8px;border-radius:999px;background:#E9F0E9;width:{{ g.w }}"></span></span>
+                  <span style="width:46px;height:10px;border-radius:999px;flex:none;background:#EDF2ED"></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid #EDF2ED;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">记满一个月，这里会按分类排出来 —— 谁花得多一眼看到。</div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:22px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07);text-align:center">
+            <span style="width:52px;height:52px;border-radius:16px;background:#E4EDE5;color:#2F4A38;margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconPlusBig }}</span>
+            <div style="margin-top:12px;font:700 18px/25px 'Figtree','PingFang SC',sans-serif">还没有交易</div>
+            <div style="margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">两条路：手动记一笔，或者把银行账单整理好导进来。</div>
+            <div style="margin-top:16px;display:grid;gap:8px">
+              <button style="width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">记一笔</button>
+              <button style="width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">导入账单</button>
+              <button style="width:100%;height:44px;border:none;border-radius:12px;background:transparent;color:#2F4A38;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E4EDE5">邀请老婆一起记</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;display:flex;justify-content:space-around;align-items:flex-end;padding:8px 0 14px;box-shadow:0 -2px 10px rgba(28,50,36,.06)">
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#2F4A38;min-width:56px;min-height:44px;justify-content:center">{{ tabHome }}<span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif">首页</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabList }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">交易</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:-20px"><span style="width:52px;height:52px;border-radius:999px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(47,74,56,.34)">{{ tabPlus }}</span><span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">记一笔</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabImport }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">导入</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabMe }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">我的</span></span>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产照常显示 S$0.00（浅灰），不换成插画 —— 用户需要确认这本账是空的、不是加载失败。分类那块用条纹占位说明「以后长什么」，并且明确说要记满一个月。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="空首页 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">旅</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">旅行账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">SGD · 新建</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabHome }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <button style="height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconPlusSm }}记一笔</button>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px;min-height:700px;box-sizing:border-box">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div>
+              <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产 · 折算 SGD</div>
+              <div style="margin-top:2px;font:450 40px/46px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#B9C6BB;letter-spacing:-.02em">S$0.00</div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#FFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;align-items:center;gap:8px" style-hover="background:#F7FAF7">{{ iconInvite }}邀请老婆</button>
+              <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconWalletSm }}建第一个账户</button>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:32px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="display:flex;gap:32px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:300px">
+                <div style="font:700 22px/30px 'Figtree','PingFang SC',sans-serif">这本账还是空的</div>
+                <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;max-width:460px">三步就能跑起来：建一个账户 → 记一笔或导入账单 → 邀请老婆一起记。分类和判据已经带了一套默认的，不用先去配置。</div>
+                <div style="margin-top:18px;display:grid;gap:10px;max-width:460px">
+                  <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#F1F6F1">
+                      <span style="width:28px;height:28px;border-radius:999px;flex:none;background:{{ s.numBg }};color:{{ s.numFg }};display:flex;align-items:center;justify-content:center;font:600 13px/18px 'IBM Plex Mono',monospace">{{ s.n }}</span>
+                      <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ s.title }}</span><span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ s.body }}</span></span>
+                      <span style="font:600 13px/19px 'Figtree','PingFang SC',sans-serif;color:#2F4A38;flex:none;cursor:pointer">{{ s.cta }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="width:360px;flex:none">
+                <div style="border-radius:16px;background:#FAFCFA;box-shadow:inset 0 0 0 1.5px #E1EAE2;padding:18px">
+                  <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">记满一个月之后</div>
+                  <div style="margin-top:14px;display:grid;gap:10px">
+                    <sc-for list="{{ ghostBars }}" as="g" hint-placeholder-count="4">
+                      <div style="display:flex;align-items:center;gap:12px">
+                        <span style="width:10px;height:10px;border-radius:3px;flex:none;background:#E1EAE2"></span>
+                        <span style="width:58px;height:10px;border-radius:999px;flex:none;background:#EDF2ED"></span>
+                        <span style="flex:1;height:8px;border-radius:999px;background:#F1F6F1;overflow:hidden"><span style="display:block;height:8px;border-radius:999px;background:#E9F0E9;width:{{ g.w }}"></span></span>
+                        <span style="width:46px;height:10px;border-radius:999px;flex:none;background:#EDF2ED"></span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top:16px;display:flex;align-items:flex-end;gap:6px;height:64px">
+                    <sc-for list="{{ ghostMonths }}" as="m" hint-placeholder-count="12">
+                      <span style="flex:1;border-radius:5px;background:#EDF2ED;height:{{ m.h }}"></span>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top:12px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">分类排行和 12 个月趋势会长在这里。数据够了自动出现，不用设置。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏把空状态做成「三步清单 + 未来预览」：左边是能立刻点的三步，右边用条纹块预告图表长什么样。不用插画，也不留一大片白。</div>
+    </div>
+  </div>
+</div>
+
+
+<div style="padding:20px 40px 100px;color:#16201A">
+  <div style="display:flex;align-items:baseline;gap:10px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">B</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">没有交易的列表</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">左：这本账真的没有；右：被筛没了（有条件可点掉）</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · 真的没有</div>
+      <div data-screen-label="空交易列表 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">交易</span>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <div style="flex:1;min-width:0;height:44px;padding:0 14px;border-radius:12px;background:#FFF;display:flex;align-items:center;gap:8px;color:#B9C6BB">{{ iconSearch }}<span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif">搜索商户或备注</span></div>
+            <span style="width:44px;height:44px;border-radius:12px;background:#FFFFFF;color:#B9C6BB;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 2px 10px rgba(28,50,36,.07)">{{ iconFilter }}</span>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:24px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="display:grid;gap:12px">
+              <sc-for list="{{ ghostRows }}" as="r" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:12px;opacity:{{ r.op }}">
+                  <span style="width:34px;height:34px;border-radius:999px;flex:none;background:#F1F6F1"></span>
+                  <span style="flex:1;min-width:0;display:grid;gap:5px">
+                    <span style="height:11px;border-radius:999px;background:#EDF2ED;width:{{ r.w1 }}"></span>
+                    <span style="height:9px;border-radius:999px;background:#F1F6F1;width:{{ r.w2 }}"></span>
+                  </span>
+                  <span style="width:56px;height:12px;border-radius:999px;flex:none;background:#EDF2ED"></span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="margin-top:20px;padding-top:18px;border-top:1px solid #EDF2ED;text-align:center">
+              <div style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">还没有任何交易</div>
+              <div style="margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">记第一笔之后，这里会按日期分段，每天给一条小计。</div>
+              <div style="margin-top:16px;display:grid;gap:8px">
+                <button style="width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">记一笔</button>
+                <button style="width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">导入账单</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;display:flex;justify-content:space-around;align-items:flex-end;padding:8px 0 14px;box-shadow:0 -2px 10px rgba(28,50,36,.06)">
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabHome }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">首页</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#2F4A38;min-width:56px;min-height:44px;justify-content:center">{{ tabList }}<span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif">交易</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:-20px"><span style="width:52px;height:52px;border-radius:999px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(47,74,56,.34)">{{ tabPlus }}</span><span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">记一笔</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabImport }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">导入</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabMe }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">我的</span></span>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">三行条纹占位放在文案<b>上面</b>，先让人看出「这里本该是一列交易」，再解释为什么空。搜索框和筛选按钮压灰但保留 —— 空列表时它们没有意义，但突然消失更让人困惑。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · 被筛没了</div>
+      <div data-screen-label="筛选无结果 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px">
+          <span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">交易</span>
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <div style="flex:1;min-width:0;height:44px;padding:0 14px;border-radius:12px;background:#FFF;display:flex;align-items:center;gap:8px;color:#16201A">{{ iconSearch }}<span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif">咖啡</span></div>
+            <span style="width:44px;height:44px;border-radius:12px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;flex:none;position:relative">{{ iconFilter }}<span style="position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:999px;background:#AC4335;color:#FFF;font:600 11px/18px 'IBM Plex Mono',monospace;text-align:center;padding:0 4px;box-sizing:border-box">3</span></span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">仅退款{{ iconX }}</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">DBS Multiplier{{ iconX }}</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">金额 ≥ 500{{ iconX }}</span>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:24px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07);text-align:center">
+            <span style="width:52px;height:52px;border-radius:16px;background:#F1EDDC;color:#6B540D;margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconSearchBig }}</span>
+            <div style="margin-top:12px;font:700 18px/25px 'Figtree','PingFang SC',sans-serif">这些条件下没有交易</div>
+            <div style="margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">这本账有 328 笔，但同时满足这 3 个条件加关键词「咖啡」的一笔都没有。</div>
+
+            <div style="margin-top:16px;display:grid;gap:8px;text-align:left">
+              <div style="padding:12px 14px;border-radius:12px;background:#F1F6F1;display:flex;align-items:center;gap:10px;cursor:pointer" style-hover="background:#E9F0E9">
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/20px 'Figtree','PingFang SC',sans-serif">去掉「仅退款」</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">会有 4 笔</span></span>
+                {{ iconChevSm }}
+              </div>
+              <div style="padding:12px 14px;border-radius:12px;background:#F1F6F1;display:flex;align-items:center;gap:10px;cursor:pointer" style-hover="background:#E9F0E9">
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/20px 'Figtree','PingFang SC',sans-serif">去掉「金额 ≥ 500」</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">会有 2 笔</span></span>
+                {{ iconChevSm }}
+              </div>
+            </div>
+
+            <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">清空全部条件</button>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;display:flex;justify-content:space-around;align-items:flex-end;padding:8px 0 14px;box-shadow:0 -2px 10px rgba(28,50,36,.06)">
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabHome }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">首页</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#2F4A38;min-width:56px;min-height:44px;justify-content:center">{{ tabList }}<span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif">交易</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:-20px"><span style="width:52px;height:52px;border-radius:999px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(47,74,56,.34)">{{ tabPlus }}</span><span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">记一笔</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabImport }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">导入</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabMe }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">我的</span></span>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">这是和上一张完全不同的问题，所以给不同的解法：不劝你去记账，而是告诉你「这本账有 328 笔」，并算出去掉哪个条件会有几笔 —— 直接给出路，不让用户逐个试。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440 · 两种并排</div>
+      <div data-screen-label="空交易列表 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY · 2</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabList }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px;min-height:660px;box-sizing:border-box">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div>
+              <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">交易</span>
+              <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;color:#5F6A62">0 笔命中 · 共 328 笔</span>
+            </div>
+            <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconPlusSm }}记一笔</button>
+          </div>
+
+          <div style="margin-top:18px;background:#FFFFFF;border-radius:18px;padding:16px 20px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">已选条件</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">关键词「咖啡」{{ iconX }}</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">仅退款{{ iconX }}</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">DBS Multiplier{{ iconX }}</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;background:#2F4A38;color:#FFF;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer">金额 ≥ 500{{ iconX }}</span>
+            <span style="flex:1"></span>
+            <button style="height:38px;padding:0 14px;border:none;border-radius:11px;background:#F1F6F1;color:#16201A;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">清空全部</button>
+          </div>
+
+          <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
+            <div style="display:grid;grid-template-columns:104px 92px minmax(0,1.25fr) minmax(0,1fr) 150px minmax(0,1.1fr) 168px;gap:14px;padding:12px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
+              <sc-for list="{{ headers }}" as="h" hint-placeholder-count="7">
+                <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#B9C6BB;text-transform:uppercase;text-align:{{ h.align }}">{{ h.name }}</div>
+              </sc-for>
+            </div>
+
+            <div style="padding:14px 20px">
+              <sc-for list="{{ ghostRows }}" as="r" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:104px 92px minmax(0,1.25fr) minmax(0,1fr) 150px minmax(0,1.1fr) 168px;gap:14px;padding:11px 0;align-items:center;opacity:{{ r.op }}">
+                  <span style="height:11px;border-radius:999px;background:#EDF2ED"></span>
+                  <span style="height:22px;border-radius:7px;background:#F1F6F1"></span>
+                  <span style="height:11px;border-radius:999px;background:#EDF2ED;width:{{ r.w1 }}"></span>
+                  <span style="height:11px;border-radius:999px;background:#F1F6F1;width:{{ r.w2 }}"></span>
+                  <span style="height:11px;border-radius:999px;background:#F1F6F1"></span>
+                  <span style="height:11px;border-radius:999px;background:#F1F6F1;width:60%"></span>
+                  <span style="height:11px;border-radius:999px;background:#EDF2ED"></span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="padding:8px 20px 32px;text-align:center;border-top:1px solid #EDF2ED">
+              <span style="width:52px;height:52px;border-radius:16px;background:#F1EDDC;color:#6B540D;margin:22px auto 0;display:flex;align-items:center;justify-content:center">{{ iconSearchBig }}</span>
+              <div style="margin-top:12px;font:700 20px/28px 'Figtree','PingFang SC',sans-serif">这些条件下没有交易</div>
+              <div style="margin-top:4px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">这本账有 328 笔，但同时满足这 4 个条件的一笔都没有。</div>
+              <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#E9F0E9">去掉「仅退款」<span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">4 笔</span></button>
+                <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#E9F0E9">去掉「金额 ≥ 500」<span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">2 笔</span></button>
+                <button style="height:44px;padding:0 18px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">清空全部条件</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏保留表头和三行条纹占位再接空状态 —— 表头还在，用户就知道自己没走错页面，只是这次筛没了。每个「去掉某条件」的按钮上直接标出会剩几笔。</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">C</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">没有导入记录</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">第一次进导入页，连 skill 都还没装</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="空导入历史 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px">
+          <span style="font:700 26px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入</span>
+          <div style="display:flex;gap:6px;margin-top:12px;padding:4px;border-radius:14px;background:#E4EAE5">
+            <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;height:38px;border-radius:11px;background:#FFFFFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;box-shadow:0 1px 4px rgba(28,50,36,.14)">历史</span>
+            <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;height:38px;border-radius:11px;color:#3E4A42;font:600 14px/20px 'Figtree','PingFang SC',sans-serif">上传新的</span>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:24px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="display:grid;gap:10px">
+              <sc-for list="{{ ghostBatches }}" as="b" hint-placeholder-count="2">
+                <div style="padding:12px;border-radius:14px;background:#FAFCFA;box-shadow:inset 0 0 0 1px #EDF2ED;opacity:{{ b.op }}">
+                  <div style="display:flex;align-items:center;gap:11px">
+                    <span style="width:32px;height:32px;border-radius:10px;flex:none;background:#F1F6F1"></span>
+                    <span style="flex:1;min-width:0;display:grid;gap:5px">
+                      <span style="height:11px;border-radius:999px;background:#EDF2ED;width:62%"></span>
+                      <span style="height:9px;border-radius:999px;background:#F1F6F1;width:44%"></span>
+                    </span>
+                    <span style="width:52px;height:22px;border-radius:7px;flex:none;background:#F1F6F1"></span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="margin-top:20px;padding-top:18px;border-top:1px solid #EDF2ED;text-align:center">
+              <span style="width:52px;height:52px;border-radius:16px;background:#E4EDE5;color:#2F4A38;margin:0 auto;display:flex;align-items:center;justify-content:center">{{ iconUpload }}</span>
+              <div style="margin-top:12px;font:700 18px/25px 'Figtree','PingFang SC',sans-serif">还没导入过账单</div>
+              <div style="margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">流程是：把 skill 装到你自己的 ChatGPT / Claude 里 → 让它把账单整理成标准文件 → 传进来逐行确认。应用本身不调用大模型。</div>
+              <div style="margin-top:16px;display:grid;gap:8px">
+                <button style="width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconCopySm }}复制 skill 文本</button>
+                <button style="width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">看完整教程</button>
+              </div>
+              <div style="margin-top:12px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">也可以先不导入，手动记也一样用。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">这一屏的主行动不是「上传」而是「复制 skill 文本」—— 用户手上还没有可传的文件，让他上传只会卡住。最后一句给退路：不导入也能用。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="空导入历史 1440" style="width:1440px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex">
+        <div style="width:252px;flex:none;background:#FFFFFF;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F1F6F1;min-height:56px;box-sizing:border-box">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY · 2</span></span>
+            {{ iconChevSm }}
+          </div>
+          <div style="display:grid;gap:2px">
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabImport }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+          </div>
+          <div style="background:#F1F6F1;border-radius:14px;padding:12px 14px">
+            <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#5F6A62;text-transform:uppercase">最近导入</div>
+            <div style="margin-top:8px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#B9C6BB">还没有</div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
+            <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:24px 28px 28px;min-height:640px;box-sizing:border-box">
+          <div>
+            <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入</span>
+            <span style="margin-left:12px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">应用本身不调用大模型 · 账单在你自己的 ChatGPT / Claude 里整理</span>
+          </div>
+
+          <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:32px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <div style="display:flex;gap:32px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:320px">
+                <span style="width:52px;height:52px;border-radius:16px;background:#E4EDE5;color:#2F4A38;display:flex;align-items:center;justify-content:center">{{ iconUpload }}</span>
+                <div style="margin-top:14px;font:700 22px/30px 'Figtree','PingFang SC',sans-serif">还没导入过账单</div>
+                <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;max-width:480px">导入不是上传原始账单，而是先让你自己的 ChatGPT / Claude 用我们的 skill 把它整理成标准文件。这样账单不经过这个应用，整理质量也由你把关。</div>
+                <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+                  <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconCopySm }}复制 skill 文本</button>
+                  <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">看完整教程</button>
+                </div>
+                <div style="margin-top:12px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">也可以先不导入，手动记一样用。</div>
+              </div>
+
+              <div style="width:400px;flex:none">
+                <div style="border-radius:16px;background:#FAFCFA;box-shadow:inset 0 0 0 1.5px #E1EAE2;padding:18px">
+                  <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">导入之后这里会长成</div>
+                  <div style="margin-top:14px;display:grid;gap:10px">
+                    <sc-for list="{{ ghostBatches }}" as="b" hint-placeholder-count="2">
+                      <div style="padding:12px 14px;border-radius:14px;background:#FFFFFF;box-shadow:inset 0 0 0 1px #EDF2ED;opacity:{{ b.op }}">
+                        <div style="display:flex;align-items:center;gap:11px">
+                          <span style="width:32px;height:32px;border-radius:10px;flex:none;background:#F1F6F1"></span>
+                          <span style="flex:1;min-width:0;display:grid;gap:5px">
+                            <span style="height:11px;border-radius:999px;background:#EDF2ED;width:58%"></span>
+                            <span style="height:9px;border-radius:999px;background:#F1F6F1;width:38%"></span>
+                          </span>
+                          <span style="width:56px;height:22px;border-radius:7px;flex:none;background:#F1F6F1"></span>
+                          <span style="width:64px;height:11px;border-radius:999px;flex:none;background:#EDF2ED"></span>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top:14px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">每批记着文件名、时间、笔数和状态，提交过的可以整批撤销。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">左边解释为什么导入要绕一圈（账单不经过应用），右边用条纹批次卡预告历史列表长什么样并说明「可整批撤销」—— 这是用户决定要不要试的关键信息。</div>
+    </div>
+  </div>
+</div></x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+const WALLET = [R(2.75,5.25,14.5,10.5,2.5), P('M13 10.5h2.5')];
+
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      ghostBars: [{ w:'82%' }, { w:'64%' }, { w:'44%' }, { w:'26%' }],
+      ghostMonths: [38,52,30,60,44,48,64,50,34,56,42,58].map(h => ({ h: h + '%' })),
+      steps: [
+        { n:'1', title:'建一个账户',   body:'招行储蓄卡、现金、信用卡都算', cta:'去建', numBg:'#2F4A38', numFg:'#FFFFFF' },
+        { n:'2', title:'记一笔或导入', body:'手动记，或用 skill 整理账单再上传', cta:'去记', numBg:'#DDE9DF', numFg:'#2F4A38' },
+        { n:'3', title:'邀请老婆',     body:'生成 6 位邀请码，10 分钟内有效', cta:'去邀请', numBg:'#DDE9DF', numFg:'#2F4A38' },
+      ],
+      iconChevSm:   svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
+      iconChevDown: svg([P('M5.5 8 10 12.5 14.5 8')], 16, 2),
+      iconWallet:   svg(WALLET, 18),
+      iconWalletSm: svg(WALLET, 17),
+      iconPlusBig:  svg([P('M10 3.5v13M3.5 10h13')], 24, 2.2),
+      iconPlusSm:   svg([P('M10 3.5v13M3.5 10h13')], 18, 2.2),
+      iconInvite:   svg([C(8,7.5,3), P('M2.5 16.5c.8-2.8 2.9-4.25 5.5-4.25S12.7 13.7 13.5 16.5'), P('M15 6.5v5M12.5 9h5')], 17),
+      tabHome:      svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
+      tabList:      svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
+      tabPlus:      svg([P('M10 3.5v13M3.5 10h13')], 24, 2.2),
+      tabImport:    svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+      tabMe:        svg([C(10,7,3.25), P('M3.75 17c.9-3.1 3.3-4.75 6.25-4.75S15.35 13.9 16.25 17')], 22),
+      iconSearch:   svg([C(9,9,5.75), P('M13.2 13.2 17 17')], 22),
+      iconFilter:   svg([P('M3 5.5h14M5.5 10h9M8.5 14.5h3')], 20, 2),
+      iconX:        svg([P('M5 5l10 10M15 5 5 15')], 13, 2.4),
+      iconUpload:   svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 24),
+      iconCopySm:   svg([R(3.5,3.5,9,9,2), R(7.5,7.5,9,9,2)], 16),
+      iconSearchBig:svg([C(9,9,5.75), P('M13.2 13.2 17 17')], 24),
+      ghostRows: [
+        { w1:'64%', w2:'42%', op:'1' },
+        { w1:'52%', w2:'34%', op:'.62' },
+        { w1:'58%', w2:'38%', op:'.34' },
+      ],
+      ghostBatches: [{ op:'1' }, { op:'.5' }],
+      headers: [
+        { name:'日期', align:'left' }, { name:'种类', align:'left' }, { name:'交易内容', align:'left' },
+        { name:'分类', align:'left' }, { name:'账户', align:'left' }, { name:'备注', align:'left' },
+        { name:'金额', align:'right' },
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>

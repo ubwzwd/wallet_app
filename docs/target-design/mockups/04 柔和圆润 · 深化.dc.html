@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Figtree:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F2EFE9}
+body{font-family:'DM Sans','PingFang SC','Noto Sans SC',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#8A4A2A}
+a:hover{color:#5F3119}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 110px;color:#241F1A">
+
+  <div style="max-width:960px;border-bottom:2px solid #241F1A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F5A50;text-transform:uppercase">Direction 04 · 柔和圆润 · 深化 v1</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'DM Sans','PingFang SC',sans-serif;letter-spacing:-.01em">04 定了，还有三件事要定</h1>
+    <div style="margin-top:8px;font:400 15px/23px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">颜色你说待定，所以这一版全部用<b>同一套中性色</b>画，先把不涉及颜色的决定敲掉：<b>字体</b>、<b>圆角与密度</b>、<b>组件形态</b>。最后一节我把四套配色并排放着，你挑一个我再往回填。</div>
+  </div>
+
+  <!-- A 规则 -->
+  <section style="margin-top:40px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F5A50;text-transform:uppercase">A · 04 到底由什么构成</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:16px;max-width:1160px">
+      <div style="background:#FFFFFF;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+        <div style="font:700 16px/23px 'DM Sans','PingFang SC',sans-serif">圆角分组，不是散落卡片</div>
+        <div style="margin-top:6px;font:400 14px/21px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">同一类的若干行装进<b>一个</b>大圆角容器里，行之间不加线也不加阴影。这样既有 04 的柔和，又不违反你「不要什么都做成卡片」—— 三个账户仍然共享一条右对齐的金额基线。</div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+        <div style="font:700 16px/23px 'DM Sans','PingFang SC',sans-serif">圆形色底承载图标</div>
+        <div style="margin-top:6px;font:400 14px/21px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">每行左边一个 34px 圆形淡底 + 线性图标。<b>形状</b>说明交易种类（下箭头＝支出、上箭头＝收入、回转＝退款、双箭头＝转账），颜色只是加强，色盲也读得出。</div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+        <div style="font:700 16px/23px 'DM Sans','PingFang SC',sans-serif">柔和归柔和，数字不许软</div>
+        <div style="margin-top:6px;font:400 14px/21px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">这是 04 最大的风险：圆润会稀释「账」的可信度。对策是所有金额、日期、行号一律等宽 + 千分位 + 真减号，字重比正文重一档 —— 界面是软的，数字是硬的。</div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+        <div style="font:700 16px/23px 'DM Sans','PingFang SC',sans-serif">阴影只有两级，且极轻</div>
+        <div style="margin-top:6px;font:400 14px/21px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">容器一级（几乎看不见，只为托住白块），浮层一级。RN 上分别对应 elevation 1 / 8，不依赖任何 Web 专属效果。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- B 字体 -->
+  <section style="margin-top:48px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">B</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">字体：三个候选</span>
+    </div>
+    <div style="margin-top:6px;max-width:860px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">中文没有"圆体"能放在 Google Fonts 上，所以中文一律走系统字（iOS 的苹方本身就偏圆，Android 用 Noto Sans SC）。差别只在西文和数字。同一块内容，三种字体：</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:20px;align-items:flex-start">
+
+      <div style="width:290px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">B1</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">Nunito</span><span style="font:400 12px/16px 'IBM Plex Mono',monospace;color:#5F5A50">最圆</span></div>
+        <div style="background:#FFFFFF;border-radius:18px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+          <div style="font:600 13px/18px 'Nunito','PingFang SC',sans-serif;color:#7A7264">净资产 · 折算人民币</div>
+          <div style="margin-top:4px;font:700 30px/36px 'Nunito',sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em">¥33,842.10</div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid #F0EAE1;display:grid;gap:9px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 15px/20px 'Nunito','PingFang SC',sans-serif">招行储蓄卡</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">12,480.35</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 15px/20px 'Nunito','PingFang SC',sans-serif">建行信用卡</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">−3,215.00</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 15px/20px 'Nunito','PingFang SC',sans-serif">DBS Multiplier</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">S$4,120.80</span></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">字面圆、亲和度最高，和苹方并排时字形气质接近。缺点：700 字重偏胖，长中文标题里西文会显吵。</div>
+      </div>
+
+      <div style="width:290px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">B2</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">Figtree</span><span style="font:400 12px/16px 'IBM Plex Mono',monospace;color:#5F5A50">我推荐</span></div>
+        <div style="background:#FFFFFF;border-radius:18px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+          <div style="font:500 13px/18px 'Figtree','PingFang SC',sans-serif;color:#7A7264">净资产 · 折算人民币</div>
+          <div style="margin-top:4px;font:700 30px/36px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em">¥33,842.10</div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid #F0EAE1;display:grid;gap:9px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">12,480.35</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">建行信用卡</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">−3,215.00</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">DBS Multiplier</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">S$4,120.80</span></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">柔中带骨：末端圆润但字身端正，密集界面（导入 review 表格）里不会散。跟苹方混排最稳，字重档位也全。</div>
+      </div>
+
+      <div style="width:290px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">B3</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">Baloo 2</span><span style="font:400 12px/16px 'IBM Plex Mono',monospace;color:#5F5A50">最有性格</span></div>
+        <div style="background:#FFFFFF;border-radius:18px;padding:18px 20px;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+          <div style="font:500 13px/18px 'Baloo 2','PingFang SC',sans-serif;color:#7A7264">净资产 · 折算人民币</div>
+          <div style="margin-top:4px;font:700 30px/36px 'Baloo 2',sans-serif;font-variant-numeric:tabular-nums">¥33,842.10</div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid #F0EAE1;display:grid;gap:9px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 16px/20px 'Baloo 2','PingFang SC',sans-serif">招行储蓄卡</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">12,480.35</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 16px/20px 'Baloo 2','PingFang SC',sans-serif">建行信用卡</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">−3,215.00</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 16px/20px 'Baloo 2','PingFang SC',sans-serif">DBS Multiplier</span><span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">S$4,120.80</span></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">辨识度最高，像个消费品牌。缺点：x 高度大、字腔圆，14px 以下发糊，长列表读久了累。</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;max-width:860px;font:400 13px/21px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">数字三档都用了 <b>IBM Plex Mono</b>（0 有斜杠、1 有底衬，对账不误读）。如果你觉得等宽太"技术"，还有一条路：数字也用正文字体的 tabular 数字，代价是 04 的柔和会盖过账本的严谨 —— 想看这个对比就说一声。</div>
+  </section>
+
+  <!-- C 圆角与密度 -->
+  <section style="margin-top:48px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">C</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">圆角与密度：三个候选</span>
+    </div>
+    <div style="margin-top:6px;max-width:860px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">同样五笔交易。「一屏能看几笔」和「有多柔和」是一对矛盾，你选个平衡点。</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:20px;align-items:flex-start">
+
+      <div style="width:300px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">C1</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">紧凑</span><span style="font:400 12px/16px 'IBM Plex Mono',monospace;color:#5F5A50">radius 12 · 行高 48</span></div>
+        <div style="background:#FBF6EF;border-radius:14px;padding:12px">
+          <div style="background:#FFF;border-radius:12px;padding:2px 0;box-shadow:0 1px 6px rgba(120,100,75,.07)">
+            <sc-for list="{{ tx }}" as="t" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:10px;padding:6px 12px;min-height:48px;box-sizing:border-box">
+                <span style="width:28px;height:28px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:#F0EAE1;color:#5A5348">{{ t.icon }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">{{ t.name }}</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#7A7264;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.meta }}</span></span>
+                <span style="font:450 14px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.amount }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">一屏约 12 笔。柔和感最弱，但翻账最快。</div>
+      </div>
+
+      <div style="width:300px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">C2</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">中等</span><span style="font:400 12px/16px 'IBM Plex Mono',monospace;color:#5F5A50">radius 18 · 行高 56 · 推荐</span></div>
+        <div style="background:#FBF6EF;border-radius:18px;padding:14px">
+          <div style="background:#FFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+            <sc-for list="{{ tx }}" as="t" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;min-height:56px;box-sizing:border-box">
+                <span style="width:34px;height:34px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:#F0EAE1;color:#5A5348">{{ t.icon }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">{{ t.name }}</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#7A7264;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.meta }}</span></span>
+                <span style="font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.amount }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">一屏约 10 笔。触控目标 56 &gt; 44，柔和与效率都够。</div>
+      </div>
+
+      <div style="width:300px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">C3</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">宽松</span><span style="font:400 12px/16px 'IBM Plex Mono',monospace;color:#5F5A50">radius 24 · 行高 68</span></div>
+        <div style="background:#FBF6EF;border-radius:24px;padding:16px">
+          <div style="background:#FFF;border-radius:24px;padding:6px 0;box-shadow:0 3px 14px rgba(120,100,75,.10)">
+            <sc-for list="{{ tx }}" as="t" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:14px;padding:10px 16px;min-height:68px;box-sizing:border-box">
+                <span style="width:42px;height:42px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:#F0EAE1;color:#5A5348">{{ t.iconLg }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">{{ t.name }}</span><span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#7A7264;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.meta }}</span></span>
+                <span style="font:450 16px/22px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.amount }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">一屏约 8 笔。最舒展，但账一多就要不停滑；导入 review 那种几十行的场景会难受。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- D 组件形态 -->
+  <section style="margin-top:48px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">D</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">组件形态（中性色版）</span>
+    </div>
+    <div style="margin-top:6px;max-width:860px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">先看形状对不对：高度、圆角、内距、状态怎么变。颜色全用中性灰，等你定了配色我一次性换掉。</div>
+
+    <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(120,100,75,.08);max-width:1160px">
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F5A50;text-transform:uppercase">Button · 高 48 / 圆角 14 / 主操作满宽</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;align-items:center">
+        <button style="height:48px;padding:0 22px;border:none;border-radius:14px;background:#3B342C;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#2A251F" style-active="background:#1C1815">提交 32 笔入账</button>
+        <button style="height:48px;padding:0 22px;border:none;border-radius:14px;background:#EFE9E0;color:#3B342C;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E5DED3" style-active="background:#D9D1C4">保存草稿</button>
+        <button style="height:48px;padding:0 18px;border:none;border-radius:14px;background:transparent;color:#3B342C;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#F3EEE7">全部交易</button>
+        <button style="height:48px;padding:0 22px;border:1.5px solid #B4483C;border-radius:14px;background:#FFF;color:#8E3227;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#FDF0EE">删除这笔</button>
+        <button disabled style="height:48px;padding:0 22px;border:none;border-radius:14px;background:#F1EDE7;color:#A9A198;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:not-allowed">提交入账</button>
+      </div>
+      <div style="margin-top:10px;font:400 12px/18px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">另有 40 / 32 两档给桌面用。按下不做缩放动画（RN 上不稳），只换底色。</div>
+
+      <div style="height:1px;background:#F0EAE1;margin:22px 0"></div>
+
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F5A50;text-transform:uppercase">TextField / AmountField · 高 52 / 圆角 14 / 淡底无描边</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:14px">
+        <div>
+          <div style="font:600 13px/18px 'Figtree','PingFang SC',sans-serif;color:#5A5348;margin-bottom:6px">备注</div>
+          <input type="text" placeholder="选填，如「和老婆吃饭」" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F5F1EA;color:#241F1A;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;outline:none" style-hover="background:#F0EAE1" style-focus="background:#FFF;border-color:#3B342C">
+          <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6E675C">点进去底色变白、描边出现</div>
+        </div>
+        <div>
+          <div style="font:600 13px/18px 'Figtree','PingFang SC',sans-serif;color:#5A5348;margin-bottom:6px">金额</div>
+          <div style="width:100%;height:52px;padding:0 16px;border:1.5px solid #3B342C;border-radius:14px;background:#FFF;display:flex;align-items:center;justify-content:space-between;gap:10px;box-sizing:border-box">
+            <span style="font:450 22px/28px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">6,842.50</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 10px;border-radius:999px;background:#F0EAE1;font:600 13px/18px 'IBM Plex Mono',monospace;color:#4A443A">CNY<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8 10 12.5 14.5 8"/></svg></span>
+          </div>
+          <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6E675C">币种做成内嵌 pill，可点开换</div>
+        </div>
+        <div>
+          <div style="font:600 13px/18px 'Figtree','PingFang SC',sans-serif;color:#8E3227;margin-bottom:6px">金额 · 错误</div>
+          <div style="width:100%;height:52px;padding:0 16px;border:1.5px solid #B4483C;border-radius:14px;background:#FDF0EE;display:flex;align-items:center;box-sizing:border-box">
+            <span style="font:450 22px/28px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#241F1A">0.00</span>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:6px;align-items:center;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#8E3227"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="flex:none"><circle cx="10" cy="10" r="7.25"/><path d="M10 6.5v5M10 14h.01"/></svg>金额必须大于 0</div>
+        </div>
+        <div>
+          <div style="font:600 13px/18px 'Figtree','PingFang SC',sans-serif;color:#A9A198;margin-bottom:6px">备注 · 禁用</div>
+          <div style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1EDE7;color:#A9A198;font:400 16px/52px 'Figtree','PingFang SC',sans-serif;box-sizing:border-box;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">已入账，不可修改</div>
+          <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6E675C">禁用只压灰，不加斜杠</div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#F0EAE1;margin:22px 0"></div>
+
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F5A50;text-transform:uppercase">Badge（方 pill · 高 26）与 Chip（圆 pill · 高 34 · 可点掉）</div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;align-items:center">
+        <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5v13M5.5 12l4.5 4.5L14.5 12"/></svg>支出</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 16.5v-13M5.5 8l4.5-4.5L14.5 8"/></svg>收入</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 1 6.5 6.5"/><path d="M6.5 6.5H3.5V3.5"/></svg>退款</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5h13l-3-3"/><path d="M17 12.5H4l3 3"/></svg>转账</span>
+        <span style="width:1px;height:26px;background:#EBE5DC"></span>
+        <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">疑似重复</span>
+        <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">待复核</span>
+        <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:8px;background:#EFE9E0;color:#3B342C;font:600 12px/16px 'Figtree','PingFang SC',sans-serif">未分类</span>
+      </div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:12px;align-items:center">
+        <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:999px;background:#3B342C;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif">9 月<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l10 10M15 5 5 15"/></svg></span>
+        <span style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:999px;background:#3B342C;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif">餐饮<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l10 10M15 5 5 15"/></svg></span>
+        <span style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:999px;background:#F5F1EA;color:#4A443A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span>
+        <span style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:999px;background:#F5F1EA;color:#4A443A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif">＋ 更多筛选</span>
+      </div>
+      <div style="margin-top:10px;font:400 12px/18px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50">Badge 是方 pill（只读状态），Chip 是圆 pill（可点掉的筛选）。形状不同，一眼能分清哪个能点。</div>
+
+      <div style="height:1px;background:#F0EAE1;margin:22px 0"></div>
+
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F5A50;text-transform:uppercase">CategoryPicker · 窄屏 Sheet · 一级两行（名称 + 判据）</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px;align-items:flex-start">
+        <div style="width:300px;background:#FBF6EF;border-radius:22px 22px 14px 14px;overflow:hidden;box-shadow:0 -2px 16px rgba(120,100,75,.14)">
+          <div style="display:flex;justify-content:center;padding:10px 0 4px"><span style="width:38px;height:4px;border-radius:999px;background:#DDD5C8"></span></div>
+          <div style="padding:4px 18px 12px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">选择分类</span>
+            <span style="font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#6E675C">取消</span>
+          </div>
+          <div style="padding:0 14px 14px">
+            <div style="background:#FFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(120,100,75,.08)">
+              <sc-for list="{{ cats }}" as="c" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;min-height:60px;box-sizing:border-box;cursor:pointer;border-radius:16px;background:{{ c.bg }}" onClick="{{ pick }}" data-cat="{{ c.name }}" style-hover="background:#F7F2EB">
+                  <span style="width:34px;height:34px;border-radius:999px;flex:none;background:#F0EAE1"></span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">{{ c.name }}</span>
+                    <span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#6E675C">{{ c.rule }}</span>
+                  </span>
+                  <span style="flex:none;color:#3B342C;display:{{ c.tick }}"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5 8 14l7.5-8"/></svg></span>
+                  <span style="flex:none;color:#C4BCAF;display:{{ c.arrow }}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5 12.5 10 8 14.5"/></svg></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:0 14px 16px"><button style="width:100%;height:48px;border:none;border-radius:14px;background:#3B342C;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#2A251F">下一步 · 选二级（可跳过）</button></div>
+        </div>
+        <div style="flex:1;min-width:250px;max-width:420px;font:400 13px/21px 'DM Sans','PingFang SC',sans-serif;color:#4A443A">
+          判据常驻在选项第二行，不藏在问号里 —— 家里两个人记账，「零食饮料算餐饮还是生活购物」必须当场看得见。<br><br>点一行试试：选中的行整块变淡底 + 右侧打勾，未选中的显示箭头表示还有下一级。<br><br><span style="color:#5F5A50">桌面上同一份数据变成左右两栏级联，一级在左、二级在右，不用推屏。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- E 颜色候选 -->
+  <section style="margin-top:48px">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:#241F1A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">E</span>
+      <span style="font:700 20px/28px 'DM Sans','PingFang SC',sans-serif">颜色：四套候选，等你挑</span>
+    </div>
+    <div style="margin-top:6px;max-width:880px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">难点在于：强调色（按钮、选中、FAB）必须和<b>四种交易色</b>都不撞。四套的区别就是强调色怎么让位。每套都给了同一块内容 + 四个交易色点。</div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:20px;align-items:flex-start">
+
+      <div style="width:274px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">E1</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">暖橘</span></div>
+        <div style="background:#FBF6EF;border-radius:18px;padding:14px">
+          <div style="background:#FFF;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(140,110,70,.09)">
+            <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#7A7264">净资产 · 折算人民币</div>
+            <div style="margin-top:2px;font:700 25px/32px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;color:#332C24">¥33,842.10</div>
+            <button style="margin-top:12px;width:100%;height:42px;border:none;border-radius:12px;background:#A8501F;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer">记一笔</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#A84E27"></span>支出</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#3F6135"></span>收入</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#9A6B10"></span>退款</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#3D5E7A"></span>转账</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#8E3227"><b>有冲突：</b>橘强调色和「支出」红橘、「退款」琥珀是同一个色域，按钮和金额会互相抢。而且橘要压到这么深（已调）白字才过得了对比度，就离「支出红」更近了。</div>
+      </div>
+
+      <div style="width:274px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">E2</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">鼠尾草绿</span></div>
+        <div style="background:#F7F5EF;border-radius:18px;padding:14px">
+          <div style="background:#FFF;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(90,110,85,.09)">
+            <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#6F7767">净资产 · 折算人民币</div>
+            <div style="margin-top:2px;font:700 25px/32px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;color:#2A2E27">¥33,842.10</div>
+            <button style="margin-top:12px;width:100%;height:42px;border:none;border-radius:12px;background:#4F7A5C;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer">记一笔</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#3F443C"><span style="width:9px;height:9px;border-radius:999px;background:#B4483C"></span>支出</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#3F443C"><span style="width:9px;height:9px;border-radius:999px;background:#2E6B45"></span>收入</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#3F443C"><span style="width:9px;height:9px;border-radius:999px;background:#9A6B10"></span>退款</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#3F443C"><span style="width:9px;height:9px;border-radius:999px;background:#3D5E7A"></span>转账</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#8E3227"><b>轻微冲突：</b>绿强调色和「收入」绿同族，靠明暗差能分开，但收入金额旁边有绿按钮时还是会晃一下。</div>
+      </div>
+
+      <div style="width:274px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">E3</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">墨黑 + 奶油</span><span style="font:400 11px/16px 'IBM Plex Mono',monospace;color:#5F5A50">我推荐</span></div>
+        <div style="background:#FBF6EF;border-radius:18px;padding:14px">
+          <div style="background:#FFF;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(120,100,75,.09)">
+            <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#7A7264">净资产 · 折算人民币</div>
+            <div style="margin-top:2px;font:700 25px/32px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;color:#241F1A">¥33,842.10</div>
+            <button style="margin-top:12px;width:100%;height:42px;border:none;border-radius:12px;background:#3B342C;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer">记一笔</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#B4483C"></span>支出</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#2E6B45"></span>收入</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#9A6B10"></span>退款</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#4A443A"><span style="width:9px;height:9px;border-radius:999px;background:#3D5E7A"></span>转账</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#2E6B45"><b>无冲突：</b>强调色是无彩的，四种交易色永远不会被抢。奶油底提供全部温度，柔和感来自形状而不是颜色。</div>
+      </div>
+
+      <div style="width:274px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 12px/16px 'IBM Plex Mono',monospace">E4</span><span style="font:700 15px/22px 'DM Sans','PingFang SC',sans-serif">雾紫</span></div>
+        <div style="background:#F8F5F6;border-radius:18px;padding:14px">
+          <div style="background:#FFF;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(100,85,105,.09)">
+            <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#756B77">净资产 · 折算人民币</div>
+            <div style="margin-top:2px;font:700 25px/32px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;color:#2A252B">¥33,842.10</div>
+            <button style="margin-top:12px;width:100%;height:42px;border:none;border-radius:12px;background:#6A4E78;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer">记一笔</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#453F48"><span style="width:9px;height:9px;border-radius:999px;background:#B4483C"></span>支出</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#453F48"><span style="width:9px;height:9px;border-radius:999px;background:#2E6B45"></span>收入</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#453F48"><span style="width:9px;height:9px;border-radius:999px;background:#9A6B10"></span>退款</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font:500 11px/16px 'Figtree','PingFang SC',sans-serif;color:#453F48"><span style="width:9px;height:9px;border-radius:999px;background:#3D5E7A"></span>转账</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;font:400 12px/19px 'DM Sans','PingFang SC',sans-serif;color:#5F5A50"><b>无冲突</b>，但紫色要占用「疑似重复」那个标记色，导入 review 的标记得重排。柔和度最高。</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-top:44px;max-width:960px;border-top:2px solid #241F1A;padding-top:14px">
+    <div style="font:700 17px/24px 'DM Sans','PingFang SC',sans-serif">回我三个字母 + 两个编号就行</div>
+    <div style="margin-top:8px;font:400 14px/22px 'DM Sans','PingFang SC',sans-serif;color:#3D382F">比如「B2 / C2 / E3」。颜色那题也可以继续待定，我先按 <b>E3</b> 铺下去，随时换成本 —— 强调色是无彩的，换成有彩只需要改三个 token。<br><span style="color:#5F5A50">定完我出完整 token 表（浅色 + 深色）、剩下的组件清单，然后才是屏幕。</span></div>
+  </section>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
+const svg = (children, w) => React.createElement('svg',{width:w||18,height:w||18,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block'}},children);
+const P = (d,k) => React.createElement('path',{key:k||d,d});
+
+class Component extends DCLogic {
+  state = { cat: '餐饮' };
+
+  renderVals() {
+    const kinds = {
+      expense:  [P('M10 3.5v13'), P('M5.5 12l4.5 4.5L14.5 12')],
+      income:   [P('M10 16.5v-13'), P('M5.5 8l4.5-4.5L14.5 8')],
+      refund:   [P('M3.5 10a6.5 6.5 0 1 1 6.5 6.5'), P('M6.5 6.5H3.5V3.5')],
+      transfer: [P('M3 7.5h13l-3-3'), P('M17 12.5H4l3 3')],
+    };
+    const rows = [
+      { name: '瑞幸咖啡',  meta: '餐饮 · 零食饮料 · 09-10',        amount: '−45.00',      k: 'expense'  },
+      { name: '9 月工资',  meta: '工资 · 基本工资 · 09-10',        amount: '+18,000.00',  k: 'income'   },
+      { name: '京东退款',  meta: '退款 · 消费购物 · 09-09',        amount: '+199.00',     k: 'refund'   },
+      { name: '还信用卡',  meta: '招行储蓄卡 → 建行信用卡 · 09-08', amount: '3,000.00',    k: 'transfer' },
+      { name: 'Grab 打车', meta: '交通 · 打车 · DBS · 09-08',      amount: '−S$12.40',    k: 'expense'  },
+    ];
+
+    const cats = [
+      { name: '餐饮',     rule: '外食、外卖、买菜、零食饮料' },
+      { name: '居住',     rule: '房租房贷、水电燃气、维修' },
+      { name: '生活购物', rule: '日用品、衣物、家电数码' },
+      { name: '交通',     rule: '公共交通、打车、加油停车' },
+      { name: '娱乐',     rule: '订阅、旅行、门票、爱好' },
+    ];
+
+    return {
+      tx: rows.map(r => ({
+        ...r,
+        icon:   svg(kinds[r.k], 17),
+        iconLg: svg(kinds[r.k], 20),
+      })),
+      cats: cats.map(c => ({
+        ...c,
+        bg:    c.name === this.state.cat ? '#F3EDE4' : 'transparent',
+        tick:  c.name === this.state.cat ? 'block' : 'none',
+        arrow: c.name === this.state.cat ? 'none' : 'block',
+      })),
+      pick: (e) => this.setState({ cat: e.currentTarget.getAttribute('data-cat') }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

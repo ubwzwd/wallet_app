@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#0C0F0D}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#8FCFA6}
+a:hover{color:#A9DCBB}
+input{font-family:inherit;box-sizing:border-box}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 100px;color:#E9EFE9">
+  <div style="max-width:1020px;border-bottom:2px solid #3E4A41;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#8A968C;text-transform:uppercase">Screen 16 · Dark mode</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">深色模式 · 三屏</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3">首页（375）、导入 review 表格（1440）、记一笔支出（375）。全部用 token 定稿里的深色值：底 #111614 / 面 #171D19 / 浮起 #1E2620，强调色翻成亮绿 #6FB98A，四种交易色整体提亮降饱和。</div>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:28px;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A968C;text-transform:uppercase;margin-bottom:12px">首页 · 375</div>
+      <div data-screen-label="深色首页 375" style="width:375px;background:#111614;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.5)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif;color:#E9EFE9"><span>9:41</span><span style="letter-spacing:1px;color:#8A968C">▮▮▮</span></div>
+        <div style="padding:6px 16px 0;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 12px 0 14px;border-radius:999px;background:#1E2620">
+            <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="color:#8A968C;display:flex">{{ iconChevDown }}</span>
+          </span>
+          <span style="width:40px;height:40px;border-radius:999px;background:#1E2620;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#B0BCB3">W</span>
+        </div>
+
+        <div style="padding:14px 16px 12px">
+          <div style="background:#1E2620;border-radius:18px;padding:18px 18px 16px">
+            <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#8A968C">净资产 · 折算 CNY</div>
+            <div style="margin-top:2px;font:700 34px/40px 'Figtree',sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.025em;color:#E9EFE9">¥33,842.10</div>
+            <div style="margin-top:14px;display:flex;gap:10px">
+              <div style="flex:1;background:#33211E;border-radius:14px;padding:9px 12px">
+                <div style="display:flex;align-items:center;gap:5px;font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#F08C82">{{ iconExpSm }}9 月支出</div>
+                <div style="margin-top:1px;font:500 17px/24px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#F08C82">6,842.50</div>
+              </div>
+              <div style="flex:1;background:#12302E;border-radius:14px;padding:9px 12px">
+                <div style="display:flex;align-items:center;gap:5px;font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#45BEB8">{{ iconIncSm }}9 月收入</div>
+                <div style="margin-top:1px;font:500 17px/24px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#45BEB8">18,000.00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px">
+            <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">账户</span>
+            <span style="font:600 13px/18px 'Figtree','PingFang SC',sans-serif;color:#8FCFA6">管理</span>
+          </div>
+          <div style="background:#1E2620;border-radius:18px;padding:4px 0">
+            <sc-for list="{{ accounts }}" as="a" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;min-height:56px;box-sizing:border-box">
+                <span style="width:34px;height:34px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.tint }};color:{{ a.fg }}">{{ a.icon }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#8A968C">{{ a.meta }}</span></span>
+                <span style="text-align:right;flex:none">
+                  <span style="display:block;font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ a.amountColor }}">{{ a.amount }}</span>
+                  <span style="display:{{ a.convShow }};font:400 11px/15px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#8A968C;white-space:nowrap">{{ a.converted }}</span>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px">
+            <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">9 月支出 · 按分类</span>
+            <span style="font:450 12px/17px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#8A968C">共 6,842.50</span>
+          </div>
+          <div style="background:#1E2620;border-radius:18px;padding:10px 0">
+            <sc-for list="{{ cats }}" as="c" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:12px;padding:7px 14px;min-height:44px;box-sizing:border-box">
+                <span style="width:10px;height:10px;border-radius:3px;flex:none;background:{{ c.color }}"></span>
+                <span style="width:70px;flex:none;font:500 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+                <span style="flex:1;min-width:0;height:8px;border-radius:999px;background:#2A342D;overflow:hidden"><span style="display:block;height:8px;border-radius:999px;background:{{ c.color }};width:{{ c.pct }}"></span></span>
+                <span style="font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;flex:none">{{ c.amount }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px">
+            <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">近 12 个月支出</span>
+            <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#8A968C">月均 6,220</span>
+          </div>
+          <div style="background:#1E2620;border-radius:18px;padding:16px 14px 12px">
+            <div style="display:flex;align-items:flex-end;gap:5px;height:72px">
+              <sc-for list="{{ months }}" as="m" hint-placeholder-count="12">
+                <span style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:72px"><span style="border-radius:5px;background:{{ m.color }};height:{{ m.h }}"></span></span>
+              </sc-for>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px;font:400 11px/15px 'IBM Plex Mono',monospace;color:#8A968C">
+              <span>10 月</span><span>1 月</span><span>4 月</span><span>7 月</span><span style="color:#8FCFA6;font-weight:500">9 月</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 16px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px">
+            <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">最近</span>
+            <span style="font:600 13px/18px 'Figtree','PingFang SC',sans-serif;color:#8FCFA6">全部交易</span>
+          </div>
+          <div style="background:#1E2620;border-radius:18px;padding:4px 0">
+            <sc-for list="{{ recent }}" as="t" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;min-height:56px;box-sizing:border-box">
+                <span style="width:34px;height:34px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ t.tint }};color:{{ t.fg }}">{{ t.icon }}</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.name }}</span><span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#8A968C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.meta }}</span></span>
+                <span style="text-align:right;flex:none">
+                  <span style="display:block;font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ t.amountColor }}">{{ t.amount }}</span>
+                  <span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#8A968C;white-space:nowrap">{{ t.sub }}</span>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#171D19;display:flex;justify-content:space-around;align-items:flex-end;padding:8px 0 14px;box-shadow:0 -1px 0 #2A342D">
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#8FCFA6;min-width:56px;min-height:44px;justify-content:center">{{ tabHome }}<span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif">首页</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#8A968C;min-width:56px;min-height:44px;justify-content:center">{{ tabList }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">交易</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:-20px"><span style="width:52px;height:52px;border-radius:999px;background:#6FB98A;color:#0E2116;display:flex;align-items:center;justify-content:center">{{ tabPlus }}</span><span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif;color:#8A968C">记一笔</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#8A968C;min-width:56px;min-height:44px;justify-content:center">{{ tabImport }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">导入</span></span>
+          <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#8A968C;min-width:56px;min-height:44px;justify-content:center">{{ tabMe }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">我的</span></span>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#8A968C">深色下没有阴影可用，分层全靠明度：底 #111614 → 卡片 #1E2620。FAB 从深绿翻成亮绿填墨字。趋势图非当月柱子用 #3A463C（比浅色版的对比更弱一点，否则暗底上一排灰柱会显得很吵）。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A968C;text-transform:uppercase;margin-bottom:12px">记一笔 · 支出 · 375</div>
+      <div data-screen-label="深色记一笔 375" style="width:375px;background:#111614;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.5)">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif;color:#E9EFE9"><span>9:41</span><span style="letter-spacing:1px;color:#8A968C">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="font:600 15px/21px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3">取消</span>
+          <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">记一笔</span>
+          <span style="font:600 15px/21px 'Figtree','PingFang SC',sans-serif;color:#5A6459">保存</span>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="display:flex;gap:4px;padding:4px;border-radius:14px;background:#232C26">
+            <sc-for list="{{ segments }}" as="s" hint-placeholder-count="4">
+              <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:40px;border-radius:11px;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;background:{{ s.bg }};color:{{ s.color }}">{{ s.icon }}{{ s.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#1E2620;border-radius:18px;padding:16px 16px 14px">
+            <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3">金额</div>
+            <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="display:flex;align-items:baseline;gap:4px;min-width:0">
+                <span style="font:450 26px/34px 'IBM Plex Mono',monospace;color:#F08C82">−</span>
+                <span style="font:450 34px/40px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:#F08C82">45.00</span>
+                <span style="width:2px;height:30px;background:#F08C82;display:inline-block;margin-left:2px"></span>
+              </span>
+              <span style="display:inline-flex;align-items:center;gap:4px;height:36px;padding:0 12px;border-radius:999px;background:#2A342D;font:600 14px/20px 'IBM Plex Mono',monospace;color:#B0BCB3;flex:none">CNY{{ iconChevSmD }}</span>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+              <span style="display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;background:#2A342D;color:#B0BCB3;font:450 13px/18px 'IBM Plex Mono',monospace">+10</span>
+              <span style="display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;background:#2A342D;color:#B0BCB3;font:450 13px/18px 'IBM Plex Mono',monospace">+50</span>
+              <span style="display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;background:#2A342D;color:#B0BCB3;font:450 13px/18px 'IBM Plex Mono',monospace">+100</span>
+              <span style="display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;background:#2A342D;color:#B0BCB3;font:600 13px/18px 'Figtree','PingFang SC',sans-serif">算一下</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#1E2620;border-radius:18px;padding:4px 0">
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:56px;box-sizing:border-box">
+              <span style="width:34px;height:34px;border-radius:999px;background:#1D2A22;color:#8FCFA6;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3">账户</span><span style="display:block;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span></span>
+              <span style="text-align:right;flex:none"><span style="display:block;font:450 13px/18px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#B0BCB3">12,480.35</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#8A968C">储蓄 · CNY</span></span>
+              {{ iconChevSmD }}
+            </div>
+            <div style="height:1px;background:#2A342D;margin:0 14px"></div>
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:56px;box-sizing:border-box">
+              <span style="width:34px;height:34px;border-radius:999px;background:#2A342D;color:#B0BCB3;flex:none;display:flex;align-items:center;justify-content:center">{{ iconCal }}</span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3">日期</span><span style="display:block;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">2026-09-10</span></span>
+              <span style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:999px;background:#1D2A22;color:#8FCFA6;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;flex:none">今天</span>
+              {{ iconChevSmD }}
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px">
+            <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">分类</span>
+            <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#8FCFA6">餐饮 / 零食饮料</span>
+          </div>
+          <div style="background:#1E2620;border-radius:18px;padding:6px 0">
+            <sc-for list="{{ pickerCats }}" as="c" hint-placeholder-count="5">
+              <div>
+                <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;min-height:58px;box-sizing:border-box;background:{{ c.bg }}">
+                  <span style="width:10px;height:10px;border-radius:3px;flex:none;background:{{ c.color }}"></span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font:600 15px/21px 'Figtree','PingFang SC',sans-serif">{{ c.name }}</span>
+                    <span style="display:block;font:400 12px/16px 'Figtree','PingFang SC',sans-serif;color:#8A968C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.rule }}</span>
+                  </span>
+                  <span style="flex:none;color:#8FCFA6;display:{{ c.tick }}">{{ iconCheck }}</span>
+                  <span style="flex:none;color:#5A6459;display:{{ c.arrow }}">{{ iconChevRight }}</span>
+                </div>
+                <div style="display:{{ c.open }};padding:2px 14px 12px 36px">
+                  <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#8A968C;text-transform:uppercase;padding-bottom:8px">二级 · 选填</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <sc-for list="{{ subs }}" as="s" hint-placeholder-count="5">
+                      <span style="display:inline-flex;align-items:center;height:36px;padding:0 12px;border-radius:999px;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;background:{{ s.bg }};color:{{ s.color }};box-shadow:{{ s.ring }}">{{ s.name }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 12px">
+          <div style="background:#1E2620;border-radius:18px;padding:14px 16px;display:grid;gap:12px">
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3;margin-bottom:6px">交易内容</div>
+              <div style="height:48px;padding:0 14px;border-radius:13px;background:#232C26;display:flex;align-items:center;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#E9EFE9">瑞幸咖啡</div>
+            </div>
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3;margin-bottom:6px">备注 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#8A968C">选填</span></div>
+              <div style="height:48px;padding:0 14px;border-radius:13px;background:#232C26;display:flex;align-items:center;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#6A756D">如「和老婆下午茶」</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#171D19;padding:12px 16px 16px;box-shadow:0 -1px 0 #2A342D;display:flex;gap:10px">
+          <button style="flex:1;height:48px;border:none;border-radius:14px;background:#232C26;color:#E9EFE9;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#29332C">再记一笔</button>
+          <button style="flex:1.6;height:48px;border:none;border-radius:14px;background:#6FB98A;color:#0E2116;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#84C89C">保存</button>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#8A968C">输入框在深色下是<b>比卡片更暗</b>的 #232C26（浅色下是比卡片更浅的灰绿）—— 深色里「凹进去」才读作可输入，用更亮的底会被当成已填内容。主按钮亮绿填墨字，是全屏唯一的亮块。</div>
+    </div>
+  </div>
+
+  <div style="margin-top:36px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A968C;text-transform:uppercase;margin-bottom:12px">导入 review 表格 · 1440</div>
+    <div data-screen-label="深色导入 review 1440" style="width:1440px;background:#111614;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.5);display:flex">
+      <div style="width:252px;flex:none;background:#171D19;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#1E2620;min-height:56px;box-sizing:border-box">
+          <span style="width:32px;height:32px;border-radius:10px;background:#6FB98A;color:#0E2116;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif;flex:none">家</span>
+          <span style="flex:1;min-width:0"><span style="display:block;font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭账本</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#8A968C">CNY · 我 + 老婆</span></span>
+          {{ iconChevSmD }}
+        </div>
+        <div style="display:grid;gap:2px">
+          <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#B0BCB3">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
+          <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#B0BCB3">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
+          <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#23342A;color:#8FCFA6">{{ tabImport }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
+        </div>
+        <div style="background:#1E2620;border-radius:14px;padding:12px 14px">
+          <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#8A968C;text-transform:uppercase">本次导入</div>
+          <div style="margin-top:8px;display:grid;gap:6px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif">
+            <div style="display:flex;justify-content:space-between"><span style="color:#B0BCB3">文件</span><span style="font:450 12px/19px 'IBM Plex Mono',monospace">cmb-09.csv</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#B0BCB3">校验</span><span style="color:#6FC993;font-weight:600">通过</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#B0BCB3">共</span><span style="font:450 12px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">10 行</span></div>
+          </div>
+        </div>
+        <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
+          <span style="width:32px;height:32px;border-radius:999px;background:#232C26;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#B0BCB3;flex:none">W</span>
+          <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#8A968C">owner</span></span>
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:0;padding:24px 24px 0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+          <div>
+            <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">逐行确认</span>
+            <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#8A968C">10 行 · 7 行就绪 · 3 行待归类</span>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#1E2620;color:#E9EFE9;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#29332C">换个文件</button>
+            <button style="height:44px;padding:0 16px;border:1.5px solid #EE9186;border-radius:12px;background:transparent;color:#EE9186;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#33211E">放弃本次导入</button>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;background:#302711;border-radius:14px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+          <span style="color:#D6AF57;display:flex;flex:none">{{ iconAlert }}</span>
+          <span style="flex:1;min-width:0;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#D6AF57">还有 3 行待归类，补齐后才能提交</span>
+          <span style="font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#D6AF57;text-decoration:underline;cursor:pointer;flex:none">定位第一行</span>
+        </div>
+
+        <div style="margin-top:14px;background:#171D19;border-radius:18px 18px 0 0;overflow:hidden;flex:1;min-height:0">
+          <div style="max-height:470px;overflow:auto">
+            <div style="display:grid;grid-template-columns:40px 44px 78px 108px 68px 88px minmax(0,1.05fr) minmax(0,1fr) 106px 106px minmax(0,1fr) 156px;gap:10px;padding:11px 18px;background:#1E2620;border-bottom:1px solid #2A342D;position:sticky;top:0;z-index:2">
+              <div style="display:flex;align-items:center"><span style="width:20px;height:20px;border-radius:6px;background:#6FB98A;color:#0E2116;display:flex;align-items:center;justify-content:center">{{ iconMinus }}</span></div>
+              <sc-for list="{{ headers }}" as="h" hint-placeholder-count="11">
+                <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#8A968C;text-transform:uppercase;text-align:{{ h.align }}">{{ h.name }}</div>
+              </sc-for>
+            </div>
+
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+              <div style="display:grid;grid-template-columns:40px 44px 78px 108px 68px 88px minmax(0,1.05fr) minmax(0,1fr) 106px 106px minmax(0,1fr) 156px;gap:10px;padding:10px 18px;border-bottom:1px solid #232C26;align-items:center;background:{{ r.rowBg }}">
+                <div style="display:flex;align-items:center"><span style="width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#0E2116;background:{{ r.boxBg }};box-shadow:{{ r.boxRing }}">{{ r.tick }}</span></div>
+                <div style="font:450 12px/17px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#8A968C">{{ r.no }}</div>
+                <div style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#B0BCB3">{{ r.date }}</div>
+                <div style="text-align:right"><span style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ r.amountColor }}">{{ r.amount }}</span><span style="display:{{ r.convShow }};font:400 11px/15px 'IBM Plex Mono',monospace;color:#8A968C;white-space:nowrap">{{ r.converted }}</span></div>
+                <div><span style="display:inline-flex;align-items:center;gap:3px;height:30px;padding:0 7px;border-radius:9px;background:#232C26;color:#E9EFE9;font:500 12px/17px 'IBM Plex Mono',monospace">{{ r.currency }}{{ iconChevXs }}</span></div>
+                <div><span style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:8px;font:600 11px/16px 'Figtree','PingFang SC',sans-serif;background:{{ r.kindTint }};color:{{ r.kindFg }}">{{ r.kindIcon }}{{ r.kindLabel }}</span></div>
+                <div style="min-width:0;font:500 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.merchant }}</div>
+                <div style="min-width:0;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#8A968C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.note }}</div>
+                <div style="min-width:0"><span style="display:inline-flex;align-items:center;gap:4px;max-width:100%;height:30px;padding:0 8px;border-radius:9px;font:500 13px/19px 'Figtree','PingFang SC',sans-serif;background:{{ r.l1Bg }};color:{{ r.l1Color }};box-shadow:{{ r.l1Ring }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.l1 }}</span>{{ iconChevXs }}</span></div>
+                <div style="min-width:0"><span style="display:inline-flex;align-items:center;gap:4px;max-width:100%;height:30px;padding:0 8px;border-radius:9px;font:500 13px/19px 'Figtree','PingFang SC',sans-serif;background:#232C26;color:{{ r.l2Color }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.l2 }}</span>{{ iconChevXs }}</span></div>
+                <div style="min-width:0;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#B0BCB3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.counterparty }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                  <sc-for list="{{ r.flags }}" as="f" hint-placeholder-count="1">
+                    <span style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:8px;font:600 11px/16px 'Figtree','PingFang SC',sans-serif;white-space:nowrap;background:{{ f.bg }};color:{{ f.color }}">{{ f.icon }}{{ f.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#171D19;border-radius:0 0 18px 18px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 -1px 0 #2A342D;margin-bottom:24px">
+          <span style="font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#B0BCB3">已选 <span style="color:#E9EFE9;font-weight:500">5</span> / 10 行</span>
+          <span style="width:1px;height:24px;background:#2A342D"></span>
+          <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#1E2620;color:#E9EFE9;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#29332C">{{ iconTag }}批量设分类</button>
+          <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#1E2620;color:#E9EFE9;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#29332C">{{ iconSkip }}批量跳过</button>
+          <span style="flex:1"></span>
+          <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#D6AF57">3 行待归类，无法提交</span>
+          <button disabled style="height:48px;padding:0 22px;border:none;border-radius:14px;background:#232C26;color:#6A756D;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:not-allowed">提交入账</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#8A968C">表格在深色下最容易糊成一片，所以：表头用 bg.raised 比表体亮一档并保持粘性；行分隔线 #232C26 只比行底亮一点点；待归类行整行铺 #241F14（琥珀的极暗版）而不是加边框。可编辑单元格（币种、分类）用比行底更暗的 #232C26，和只读文字区分开。</div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1600}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+const KIND = {
+  expense:  [P('M10 3.5v13'), P('M5.5 12l4.5 4.5L14.5 12')],
+  income:   [P('M10 16.5v-13'), P('M5.5 8l4.5-4.5L14.5 8')],
+  refund:   [P('M3.5 10a6.5 6.5 0 1 1 6.5 6.5'), P('M6.5 6.5H3.5V3.5')],
+  transfer: [P('M3 7.5h13l-3-3'), P('M17 12.5H4l3 3')],
+};
+const D = {
+  expense:{fg:'#F08C82',tint:'#33211E',label:'支出'},
+  income:{fg:'#45BEB8',tint:'#12302E',label:'收入'},
+  refund:{fg:'#D6AF57',tint:'#302711',label:'退款'},
+  transfer:{fg:'#8CB3CC',tint:'#1B2831',label:'转账'},
+};
+const FLAG = {
+  duplicate: { label:'重复',      bg:'#241E33', color:'#A995DB', icon:[R(3.5,3.5,9,9,1.5), R(7.5,7.5,9,9,1.5)] },
+  refundCand:{ label:'退款候选',  bg:'#302711', color:'#D6AF57', icon:[P('M8.5 11.5a3 3 0 0 1 0-4.25l2.25-2.25a3 3 0 0 1 4.25 4.25L13.5 10.5'), P('M11.5 8.5a3 3 0 0 1 0 4.25L9.25 15a3 3 0 0 1-4.25-4.25L6.5 9.5')] },
+  pairable:  { label:'可配对转账',bg:'#1B2831', color:'#8CB3CC', icon:[P('M3 7.5h13l-3-3'), P('M17 12.5H4l3 3')] },
+  review:    { label:'需核对',    bg:'#33240F', color:'#E0904D', icon:[P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')] },
+};
+const SERIES_D = ['#79B992','#5CBDB6','#CBAA55','#87AFC4','#A08FCB'];
+const WALLET = [R(2.75,5.25,14.5,10.5,2.5), P('M13 10.5h2.5')];
+const CARD = [R(2.75,4.75,14.5,10.5,2.5), P('M2.75 8.75h14.5M5.5 12h3')];
+
+class Component extends DCLogic {
+  renderVals() {
+    const accData = [
+      { name:'招行储蓄卡',   meta:'储蓄 · CNY',  amount:'12,480.35',  conv:'',            icon:WALLET, tint:'#1D2A22', fg:'#8FCFA6', neg:false },
+      { name:'建行信用卡',   meta:'信用卡 · CNY', amount:'−3,215.00',  conv:'',            icon:CARD,   tint:'#33211E', fg:'#F08C82', neg:true },
+      { name:'DBS Multiplier', meta:'储蓄 · SGD', amount:'S$4,120.80', conv:'≈ ¥24,576.75', icon:WALLET, tint:'#1D2A22', fg:'#8FCFA6', neg:false },
+    ];
+
+    const catData = [
+      { name:'餐饮', amount:'2,140.00', pct:'100%' },
+      { name:'居住', amount:'2,000.00', pct:'93%' },
+      { name:'生活购物', amount:'1,205.50', pct:'56%' },
+      { name:'交通', amount:'860.00', pct:'40%' },
+      { name:'娱乐', amount:'420.00', pct:'20%' },
+    ];
+
+    const recentData = [
+      { name:'瑞幸咖啡',  meta:'餐饮 / 零食饮料 · 招行储蓄卡', amount:'−45.00',     sub:'09-10', k:'expense' },
+      { name:'9 月工资',  meta:'工资 / 基本工资 · 招行储蓄卡', amount:'+18,000.00', sub:'09-10', k:'income' },
+      { name:'京东退款',  meta:'消费购物 · 关联 09-02 原单',   amount:'+199.00',    sub:'09-09', k:'refund' },
+      { name:'还信用卡',  meta:'招行储蓄卡 → 建行信用卡',      amount:'3,000.00',   sub:'09-08', k:'transfer' },
+      { name:'Grab 打车', meta:'交通 / 打车 · DBS',            amount:'−S$12.40',   sub:'≈ −¥66.20', k:'expense' },
+    ];
+
+    const reviewData = [
+      { no:1,  date:'09-10', amount:'−45.00',     currency:'CNY', k:'expense',  merchant:'瑞幸咖啡',       note:'和老婆下午茶', l1:'餐饮', l2:'零食饮料', counterparty:'招行储蓄卡', flags:[], sel:true },
+      { no:2,  date:'09-10', amount:'+18,000.00', currency:'CNY', k:'income',   merchant:'9 月工资',       note:'—',           l1:'工资', l2:'基本工资', counterparty:'招行储蓄卡', flags:[], sel:true },
+      { no:3,  date:'09-09', amount:'+199.00',    currency:'CNY', k:'refund',   merchant:'京东退款',       note:'关联 09-02',  l1:'消费购物', l2:'', counterparty:'招行储蓄卡', flags:['refundCand'], sel:true },
+      { no:4,  date:'09-08', amount:'3,000.00',   currency:'CNY', k:'transfer', merchant:'还信用卡',       note:'9 月账单全额', l1:'', l2:'', counterparty:'招行 → 建行', flags:['pairable'], sel:true },
+      { no:5,  date:'09-08', amount:'−S$12.40',   currency:'SGD', k:'expense',  merchant:'Grab 打车',      note:'去机场',      l1:'交通', l2:'打车', counterparty:'DBS Multiplier', converted:'≈ −¥66.20', flags:['review'], sel:true },
+      { no:6,  date:'09-07', amount:'−128.00',    currency:'CNY', k:'expense',  merchant:'美团外卖',       note:'—',           l1:'', l2:'', counterparty:'招行储蓄卡', flags:[], sel:false },
+      { no:7,  date:'09-06', amount:'−45.00',     currency:'CNY', k:'expense',  merchant:'瑞幸咖啡',       note:'—',           l1:'餐饮', l2:'零食饮料', counterparty:'招行储蓄卡', flags:['duplicate'], sel:false },
+      { no:8,  date:'09-05', amount:'5,000.00',   currency:'CNY', k:'transfer', merchant:'对方：工资卡',   note:'单腿转入',    l1:'', l2:'', counterparty:'招行储蓄卡', flags:[], sel:false },
+      { no:9,  date:'09-04', amount:'−69.00',     currency:'CNY', k:'expense',  merchant:'ALIPAY-***2481', note:'无商户名',    l1:'', l2:'', counterparty:'招行储蓄卡', flags:['review'], sel:false },
+      { no:10, date:'09-03', amount:'−1,800.00',  currency:'CNY', k:'expense',  merchant:'房东王',         note:'9 月房租',    l1:'', l2:'', counterparty:'招行储蓄卡', flags:[], sel:false },
+    ];
+
+    const needsL1 = (r) => r.k !== 'transfer' && !r.l1;
+
+    return {
+      accounts: accData.map(a => ({
+        ...a,
+        icon: svg(a.icon, 18),
+        amountColor: a.neg ? '#F08C82' : '#E9EFE9',
+        converted: a.conv,
+        convShow: a.conv ? 'block' : 'none',
+      })),
+      cats: catData.map((c, i) => ({ ...c, color: SERIES_D[i] })),
+      months: [5200,6100,4800,7300,5600,5900,8100,6400,5100,7000,5800,6842.5].map((v, i, arr) => ({
+        h: Math.max(6, Math.round(v / 8100 * 72)) + 'px',
+        color: i === arr.length - 1 ? '#6FB98A' : '#3A463C',
+      })),
+      recent: recentData.map(r => ({
+        ...r,
+        icon: svg(KIND[r.k], 17),
+        tint: D[r.k].tint, fg: D[r.k].fg,
+        amountColor: r.k === 'transfer' ? '#E9EFE9' : D[r.k].fg,
+      })),
+      segments: ['expense','income','refund','transfer'].map(id => ({
+        label: D[id].label,
+        icon: svg(KIND[id], 15, 2.1),
+        bg: id === 'expense' ? '#33211E' : 'transparent',
+        color: id === 'expense' ? '#F08C82' : '#B0BCB3',
+      })),
+      pickerCats: [
+        { name:'餐饮',     rule:'外食、外卖、买菜做饭、零食饮料',   on:true },
+        { name:'居住',     rule:'房租房贷、物业水电燃气、家庭维修', on:false },
+        { name:'生活购物', rule:'日用品、衣物、家电数码；退货记退款', on:false },
+        { name:'交通',     rule:'公共交通、打车、加油停车、机票火车', on:false },
+        { name:'娱乐',     rule:'订阅、旅行、门票、爱好花销',       on:false },
+      ].map((c, i) => ({
+        name: c.name, rule: c.rule, color: SERIES_D[i],
+        bg: c.on ? '#23342A' : 'transparent',
+        tick: c.on ? 'flex' : 'none',
+        arrow: c.on ? 'none' : 'flex',
+        open: c.on ? 'block' : 'none',
+      })),
+      subs: ['不细分','正餐','外卖','零食饮料','买菜'].map(n => {
+        const on = n === '零食饮料';
+        return {
+          name: n,
+          bg: on ? '#23342A' : '#232C26',
+          color: on ? '#8FCFA6' : (n === '不细分' ? '#8A968C' : '#E9EFE9'),
+          ring: on ? 'inset 0 0 0 1.5px #6FB98A' : 'none',
+        };
+      }),
+      headers: [
+        { name:'#', align:'left' }, { name:'日期', align:'left' }, { name:'金额', align:'right' },
+        { name:'币种', align:'left' }, { name:'种类', align:'left' }, { name:'交易内容', align:'left' },
+        { name:'备注', align:'left' }, { name:'一级分类', align:'left' }, { name:'二级分类', align:'left' },
+        { name:'账户 / 对手', align:'left' }, { name:'状态与标记', align:'left' },
+      ],
+      rows: reviewData.map(r => {
+        const un = needsL1(r);
+        return {
+          ...r,
+          rowBg: un ? '#241F14' : 'transparent',
+          tick: r.sel ? svg([P('M4.5 10.5 8 14l7.5-8')], 14, 2.6) : null,
+          boxBg: r.sel ? '#6FB98A' : 'transparent',
+          boxRing: r.sel ? 'none' : 'inset 0 0 0 1.5px #4A5A4E',
+          kindIcon: svg(KIND[r.k], 12, 2.2),
+          kindLabel: D[r.k].label,
+          kindTint: D[r.k].tint,
+          kindFg: D[r.k].fg,
+          amountColor: r.k === 'transfer' ? '#E9EFE9' : D[r.k].fg,
+          converted: r.converted || '',
+          convShow: r.converted ? 'block' : 'none',
+          l1: un ? '待归类' : (r.l1 || '—'),
+          l1Bg: un ? '#2B3129' : '#232C26',
+          l1Color: un ? '#B0BCB3' : '#E9EFE9',
+          l1Ring: un ? 'inset 0 0 0 1.5px #5A6459' : 'none',
+          l2: r.l2 || (r.k === 'transfer' ? '—' : '选填'),
+          l2Color: r.l2 ? '#E9EFE9' : '#8A968C',
+          flags: r.flags.map(id => ({
+            label: FLAG[id].label, bg: FLAG[id].bg, color: FLAG[id].color,
+            icon: svg(FLAG[id].icon, 12, 2),
+          })),
+        };
+      }),
+      iconChevDown: svg([P('M5.5 8 10 12.5 14.5 8')], 16, 2),
+      iconChevSmD:  svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
+      iconChevRight:svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
+      iconChevXs:   svg([P('M5.5 8 10 12.5 14.5 8')], 13, 2.2),
+      iconCheck:    svg([P('M4.5 10.5 8 14l7.5-8')], 18, 2.3),
+      iconExpSm:    svg(KIND.expense, 13, 2.2),
+      iconIncSm:    svg(KIND.income, 13, 2.2),
+      iconWallet:   svg(WALLET, 18),
+      iconCal:      svg([R(3.25,4.75,13.5,12,2.5), P('M3.25 8.5h13.5M7 3.5v2.5M13 3.5v2.5')], 18),
+      iconAlert:    svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 20),
+      iconMinus:    svg([P('M5.5 10h9')], 14, 2.6),
+      iconTag:      svg([P('M3.5 5.5h6l7 7-4 4-7-7z'), P('M6.5 8.5h.01')], 17),
+      iconSkip:     svg([P('M4 5.5 11 10l-7 4.5z'), P('M15.5 5.5v9')], 17),
+      tabHome:      svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
+      tabList:      svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
+      tabPlus:      svg([P('M10 3.5v13M3.5 10h13')], 24, 2.2),
+      tabImport:    svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
+      tabMe:        svg([C(10,7,3.25), P('M3.75 17c.9-3.1 3.3-4.75 6.25-4.75S15.35 13.9 16.25 17')], 22),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
