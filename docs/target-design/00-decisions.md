@@ -142,7 +142,7 @@
 
 ## 4. 搜索与筛选
 
-`GET /api/v1/ledgers/{id}/transactions` 参数：`q`（ILIKE 匹配 merchant / note）、`kind`（可多个）、`category_l1`、`category_l2`、`source_id`（可多个）、`from` / `to`（日期）、`currency`、`min_amount` / `max_amount`（绝对值）、`limit` / `offset`；返回 `{items, total}`。ILIKE 足够，不做全文索引。筛选状态放在前端 URL 里。
+`GET /api/v1/ledgers/{id}/transactions` 参数：`q`（ILIKE 匹配 merchant / note）、`kind`（可多个）、`category_l1`、`category_l2`、`source_id`（可多个）、`from` / `to`（日期）、`currency`、`min_amount` / `max_amount`（按账本基准币种折算后的绝对值比较，§14.49）、`limit` / `offset`；返回 `{items, total}`，每行带原币金额与折算金额。ILIKE 足够，不做全文索引。筛选状态放在前端 URL 里。
 
 ## 5. 账单导入（2026-09-10 改版：应用不接入 LLM）
 
@@ -285,3 +285,4 @@
 46. **04 章待决最后 5 条**（2026-09-11 用户决定）：04-D-1 路由用 Expo Router；04-D-5 加匿名可读的 `GET /config` 返回 `{registration_open}`，注册关闭时注册页直接显示提示；04-D-6 支出详情带 `refunds[]`（每笔退款的日期、金额、备注），退款详情把 `refund_of` 展开成原单摘要（日期、商户、金额、已退 / 可退）；04-D-7 交易列表加 `?import_batch_id=` 筛选；04-D-11 不做按成员筛选。至此 README §6 的全部待决项处理完毕。
 47. **导入文件只做 CSV**（2026-09-11 用户决定，屏幕稿审阅 B4）：标准导入格式只有 CSV（固定 11 列表头 + `# version:` 首行），不再接受 JSON；粘贴入口粘的也是 CSV 文本。skill 输出 CSV。§5、§6、§11 已同步。
 48. **账户类型四种**（2026-09-11 用户决定，屏幕稿审阅 B6）：`checking`（储蓄卡 / Checking）、`credit`（信用卡）、`cash`（现金）、`other`（其他）；不设 `savings`（新加坡没有这个区分，"储蓄"就是 checking）。迁移把现有 `savings` 改为 `checking`。
+49. **金额区间筛选按基准币种比较**（2026-09-11 用户决定，屏幕稿审阅 B14）：`min_amount` / `max_amount` 与每笔交易按发生日汇率折算成基准币种后的绝对值比较；服务端先按其他条件过滤，再在结果上做折算与范围过滤（读取时计算，不落库）。列表行显示原币金额 + 折算金额；`currency` 筛选项保留，屏幕 02 的筛选栏补上币种。
