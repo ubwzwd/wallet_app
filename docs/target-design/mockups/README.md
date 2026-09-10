@@ -6,7 +6,7 @@
 
 | 文件 | 内容 |
 |---|---|
-| `tokens.json` | 从「Design Tokens v2 · 定稿」提取的 token（浅色 / 深色 51 组颜色、字号阶、间距、圆角、阴影、控件尺寸、图标规格）。**这是前端 `frontend/src/theme/tokens.ts` 的来源。** |
+| `tokens.json` | 从「Design Tokens v2 · 定稿」提取的 token（浅色 / 深色各 43 个颜色、字号阶、间距、圆角、阴影、控件尺寸、图标规格）。**这是前端 `frontend/src/theme/tokens.ts` 的来源。** |
 | `Design Tokens v2 · 定稿.dc.html` | token 定稿画板：颜色表、字体、间距、图标集、Button / TextField / Badge / Chip / CategoryPicker 各状态 |
 | `Ledger Design Tokens v1.dc.html` | token 第一版（已被 v2 取代，留作记录） |
 | `04 柔和圆润 · 深化.dc.html` | 方向深化稿：字体三选、密度三选、组件形态、配色四选 |
