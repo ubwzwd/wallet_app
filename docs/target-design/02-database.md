@@ -465,7 +465,7 @@ CREATE INDEX ix_import_batches_ledger_created
 - `filename` 只在 `source='csv'` 时有值（`paste` 没有文件名），由 `ck_import_batches_filename` 绑死。**只记名字，不保存文件**（决策 §14.28）：库里没有任何指向磁盘的路径，服务端也没有上传目录——原始 CSV 在校验完成后即被丢弃，用户要重来就重新上传。
   `ck_import_batches_filename` 是**本章为 `paste` 定的约定，决策没有直接规定**（决策 §5 只说"只记文件名与大小"）。它反向约束两处，**已经过 [`README.md`](./README.md) §9 的跨章比对确认**：[`03-backend-api.md`](./03-backend-api.md) 的 `POST /ledgers/{id}/imports` 粘贴分支必须写 `filename = NULL`（请求体里不接受文件名），[`04-frontend.md`](./04-frontend.md) 的导入历史列表对 `source='paste'` 的行显示固定占位文案（决策 §14.52 A17 要求这个列表显示目标账户 / 上传人等信息，粘贴批次没有文件名可显示）。两处都已按此写定（03 §5.37 的粘贴分支响应 `"filename": null`；04 §4.10 的历史列表显示「粘贴的 CSV 文本」占位）。
 - `size_bytes` 是上传文件或粘贴文本的 UTF-8 字节数，上限 2 MB 直接写进 CHECK（决策 §5、§9）。`row_count` 是校验后落库的草稿行数，上限 2000（决策 §5）。
-- `skill_version` 是文件首行 `# version: 2026-09-10` 里的那个版本串，也就是生成这份 CSV 的 skill 所用的分类表版本（决策 §14.30）。它与应用当前的 `CATEGORY_VERSION` 不一致或缺失时**根本不会建批次**——那是 400 `skill_outdated`（决策 §5），所以能进这张表的 `skill_version` 一定等于当时的应用版本；留下这一列是为了事后能看出"这批是哪版分类表导进来的"。形如 `2026-09-10`，`VARCHAR(16)` 足够。
+- `skill_version` 是文件首行 `# version: 2026-09-10` 里的那个版本串，也就是生成这份 CSV 的 skill 所用的分类表版本（决策 §14.30）。它与应用当前的 `CATEGORY_VERSION` 不一致时**根本不会建批次**——那是 400 `skill_outdated`；`# version:` 行整行缺失属**结构错误**，是 400 `import_format_invalid`（决策 §14.30、§14.53d），所以能进这张表的 `skill_version` 一定等于当时的应用版本；留下这一列是为了事后能看出"这批是哪版分类表导进来的"。形如 `2026-09-10`，`VARCHAR(16)` 足够。
 - `status` **只有两个值**：`ready`（校验通过、草稿已落库、等着 review）和 `committed`（已提交建账）。决策 §5 的状态机就是 `ready → committed` 两态：校验是同步完成的（秒级），不通过就返回 400 且**不产生批次**，因此没有 `uploaded` / `parsing` / `failed`，也没有进度、轮询、重试、僵尸批次。相应地，上一版为"同一账本同时只有一个批次在解析"准备的那个部分唯一索引一并删除。
 - `warnings` 是整批级别的警告数组（JSON，列类型见 §1.11），例如"第 1 行是表头之外的注释行，已忽略"这类不针对某一行的提示。**行级**的校验说明不进这里，写在各行的 `hint` 上（决策 §5"每一处校验改动都写进该行的 `hint`"）。
 - `committed_at` 与 `status` 由 `ck_import_batches_committed_at` 绑死。`created_at` 是上传时刻，`updated_at` 随草稿行编辑刷新（用于导入历史排序与调试），批次本身不参与 409 乐观并发（决策 §2 只对交易、账户、账本要求）。
@@ -591,7 +591,7 @@ CREATE INDEX ix_transaction_events_transaction_at
 | `created` | `POST /ledgers/{id}/transactions` 手工记一笔；`POST .../transactions/transfer` 建两腿转账（每腿一条） | `null`（新建时"变化"就是整行，详情页本来就显示当前值） |
 | `imported` | `POST .../imports/{bid}/commit` 建出的每条交易 | `null`；批次记在 `import_batch_id` 上 |
 | `updated` | `PATCH` 改了交易的任何字段（含 `PATCH .../transfer/{pair_id}` 改两腿，每腿一条）；配对统一 `transfer_subtype` 时，值真的变了的那一腿也写一条（决策 §14.53a，§1.6.3） | 只含真正变了的字段：`{"amount": {"before": "-88.00", "after": "-99.00"}, "merchant": {...}}` |
-| `paired` | 两条单腿转账配成一笔（`POST .../{tid}/pair`，或导入提交时按 `transfer_candidate` 配对），**两腿各写一条** | `{"transfer_pair_id": {"before": null, "after": "<pair_id>"}}`，`counterparty` 被清空时一并记 |
+| `paired` | 两条单腿转账配成一笔：`POST .../{tid}/pair` **两腿各写一条**；导入提交时按 `transfer_candidate` 配对只有库里那条已有单腿写一条（新建的那腿由 `imported` 覆盖，见 [`./05-import-and-llm.md`](./05-import-and-llm.md) §4.6） | `{"transfer_pair_id": {"before": null, "after": "<pair_id>"}}`，`counterparty` 被清空时一并记 |
 | `unpaired` | `POST .../transfer/{pair_id}/unpair` 拆开，**两腿各写一条**；撤销导入把批外转账腿打回单腿时也各写一条（§6.6） | `{"transfer_pair_id": {"before": "<pair_id>", "after": null}}` |
 | `refund_linked` | 退款行关联到原单（手工选、`PATCH` 改 `refund_of`、导入提交时按 `refund_candidate` 写入） | `{"refund_of": {"before": null, "after": "<tid>"}}`；写在**退款行**上 |
 | `refund_unlinked` | 解除退款关联（`PATCH` 把 `refund_of` 置空）；撤销导入使批外退款行因 `ON DELETE SET NULL` 失去原单时也各写一条（§6.6） | `{"refund_of": {"before": "<tid>", "after": null}}` |
