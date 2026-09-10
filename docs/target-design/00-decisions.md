@@ -127,7 +127,7 @@
 - `ledger_members`：(ledger_id, user_id) 主键、role（`owner` / `member`）、joined_at。创建者自动 owner；每本账恰有一个 owner（应用层保证）。
 - `ledger_invites`：id、ledger_id、code（6 位数字）、created_by、created_at、expires_at（生成后 10 分钟）。一次性使用：加入成功时**直接删除**这行；过期的行在下次生成或校验时删除。表里永远只有有效的码，没有 `used_by` / `used_at`（2026-09-10 用户决定）。
 - 注册时自动建一本"默认账本"（名字"我的账本"，基准币种 = 用户默认币种）。
-- 加入流程：owner 在账本设置里生成邀请码 → 线下告诉对方 → 对方在"加入账本"输入 → 服务端校验（存在、未过期、非本人已在成员）→ 同一事务内写入成员、删除邀请码。`POST /ledgers/join` 整个端点全局限 1 QPS（令牌桶，突发 3，超出 429 + `Retry-After`，code `invite_rate_limited`），不按用户计数（2026-09-10 用户决定，P-12）。
+- 加入流程：owner 在账本设置里生成邀请码 → 线下告诉对方 → 对方在"加入账本"输入 → 服务端校验（存在、未过期、非本人已在成员）→ 同一事务内写入成员、删除邀请码。`POST /ledgers/join` 整个端点全局限 1 QPS（令牌桶，突发 3，超出 429 + `Retry-After`，code `invite_rate_limited`），不按用户计数（2026-09-10 用户决定，P-12）；被限流的请求不触碰邀请码，码只在加入成功时删除或到期后失效。
 - 权限：owner 可生成邀请码、移除成员、改账本名/基准币种、转让 owner、删除账本（级联删除账户、交易、导入）；member 可做其余一切（记账、改账、导入、管理账户）。member 可自行退出；owner 必须先转让再退出。
 - 归属：`finance_sources`、`transactions`、`import_batches` 都属于账本（`ledger_id`），每行记录 `created_by`，交易和账户另记 `updated_by`。账本内账户完全共享。
 - 软限制：每人最多 10 本账，每本最多 10 人。
