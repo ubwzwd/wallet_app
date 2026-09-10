@@ -1574,7 +1574,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 |---|---|---|---|
 | ⚑ 可能重复 | `flags` 含 `duplicate` | `flag.duplicate` | 同账户同日同金额的交易已存在；或这一行要配对的那笔转账已经配过对了。默认**不自动跳过**，但在「有标记」筛选里排最前，提供「跳过这些重复行」的批量操作 |
 | ⚑ 疑似退款 | `flags` 含 `refund_candidate` | `status.info.*` | 已把 `kind` 置 `refund` 并预填了唯一候选原单（§4.11.3）。悬停显示原单摘要 |
-| ⚑ 可配对转账 | `flags` 含 `transfer_candidate` | `status.info.*` | 在对方账户上找到了**唯一**一条可配对的单腿转账，`matched_transaction_id` 已预填，「关联为一笔转账」因此默认勾上（决策 §14.34）。**找到多条时不打这个标记**，改打 `needs_review` 并在 `hint` 里请用户选一条（决策 §14.53b） |
+| ⚑ 可配对转账 | `flags` 含 `transfer_candidate` | `status.info.*` | 在对方账户上找到了可配对的单腿转账。候选**唯一**时服务端预填 `matched_transaction_id`，「关联为一笔转账」因此默认勾上（决策 §14.34）；**找到多条时这个标记仍然打**，只是不预填 `matched_transaction_id`，并**另打** `needs_review`，在 `hint` 里请用户选一条（决策 §14.53b，见 03 §5.40 / 05 §3.3） |
 | ⚑ 需核对 | `flags` 含 `needs_review` | `flag.needs_review` | 校验时改过或没认出这一行的某个字段（日期、金额、币种、kind），或本批内有完全相同的行（决策 §5、§14.31）。具体原因在该行的 `hint` 里 |
 | ⚠︎ 待归类 | 派生：`category_l1 == null && kind !== 'transfer' && status !== 'skipped'` | `flag.uncategorized` | **提交前必须补齐**（决策 §1.3、§5） |
 | 已跳过 | `status === 'skipped'` | `fg.muted` | 整行置灰删除线，不参与提交，不参与「待归类」计数 |
