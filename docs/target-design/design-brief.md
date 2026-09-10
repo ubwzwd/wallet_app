@@ -88,5 +88,8 @@ Button（primary / secondary / ghost / danger，三档尺寸）、TextField、Am
 
 ## 4. 交回 Claude Code 的方式
 
-- 如果 `/design sync` 可用：在 Claude Code 里运行 `/design sync <项目名>`，我直接读项目。
-- 否则：把 `tokens.json`、`components.md` 和 PNG 放到仓库 `docs/target-design/mockups/` 下（或把 Claude Design 的分享链接发给我），我会据此写 `frontend/src/theme/tokens.ts` 和组件，并把 04 章 §6 更新成最终稿。
+设计在 Claude Design 的普通项目「设计方案反馈」里进行（2026-09-10 决定；同步工具只能读"设计系统"类型的项目，所以不走同步）。做完后：
+
+1. 用 §3 让 Claude Design 整理出 `tokens.json`、`components.md`、各屏 PNG 和实现注意事项。
+2. 放到仓库 `docs/target-design/mockups/`（目录结构见那里的 README），或用项目里的"Send to Claude Code"发过来。
+3. 告诉 Claude Code 一声，它会据此写 `frontend/src/theme/tokens.ts` 和组件库，并把 04 章 §6 更新成最终稿，04-D-13（视觉方向）随之关闭。
