@@ -147,10 +147,8 @@
 ## 5. 账单导入（2026-09-10 改版：应用不接入 LLM）
 
 - **原则**：应用本身不调用任何大模型。用户在自己的 ChatGPT / Claude（网页或 App，用自己的订阅）里安装我们提供的 skill，把任意账单（PDF、图片、Excel、CSV……交给聊天工具去读）整理成**标准导入文件**，再上传到应用。应用只负责校验、review、入账。
-- **标准导入格式**（唯一契约，"只要结构符合都可以"）：
-  - JSON（首选）：`{"version": "2026-09-10", "rows": [{"date": "2026-08-03", "amount": -45.00, "currency": "CNY", "kind": "expense", "transfer_role": null, "transfer_subtype": null, "merchant": "瑞幸咖啡", "note": "美团外卖-订单尾号8821", "category_l1": "food", "category_l2": "snacks_drinks", "source_ref": "L17"}]}`。字段语义与 §1 完全一致：支出为负、收入与退款为正、转账按 `transfer_role` 定号；`transfer_role` / `transfer_subtype` 只在 `kind='transfer'` 时有值；分类 code 取 §1.3 的表，拿不准留 `null`；`source_ref` 可选，指回账单原文位置。
-  - CSV：固定表头 `date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref`，UTF-8（可带 BOM），首行可以是 `# version: 2026-09-10`。
-  - 粘贴：应用内也提供一个文本框，直接粘贴 JSON 或 CSV 文本。
+- **标准导入格式**（唯一契约）：**只有 CSV**（2026-09-11 用户决定，§14.47；JSON 不再接受）。固定表头 `date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref`，UTF-8（可带 BOM），首行是 `# version: 2026-09-10`（分类表版本）。字段语义与 §1 完全一致：支出为负、收入与退款为正、转账按 `transfer_role` 定号；`transfer_role` / `transfer_subtype` 只在 `kind='transfer'` 时有值；分类 code 取 §1.3 的表，拿不准留空；`source_ref` 可选，指回账单原文位置；`date` 为 `YYYY-MM-DD`。
+  - 上传文件或在应用内文本框直接粘贴 CSV 文本，两者走同一校验。
 - **校验**（服务端同步完成，秒级）：结构错误（JSON 不可解析、CSV 表头不符、`rows` 不是数组）→ 400，按行号返回错误，不建批次。行级问题不丢行、只打标记：`date` 必须是 `YYYY-MM-DD`，否则 `needs_review`；`amount` 非数字或为 0 → `needs_review`；`currency` 不是三位字母 → 用目标账户币种并 `needs_review`；`kind` 不在四种之内 → 按金额符号推断并 `needs_review`；分类 code 不在表内、二级不属于一级、收支方向与 kind 不符 → 对应字段置空（待归类）；每一处校验改动都写进该行的 `hint`（如"币种 XX 无效，已改为账户币种"），不另存原始值；`version` 缺失或与应用当前分类表版本不一致 → 整批 400 `skill_outdated`，错误里带应用当前版本与"导入指南"链接，用户更新 skill 后重传（2026-09-10 用户决定，不再是警告）。上限：文件 ≤2 MB、单批 ≤2000 行。
 - **一份文件对应一个目标账户**，上传时由用户选；文件里不含账户信息。
 - **状态机**：`ready → committed`。校验通过即 `ready`（同步返回批次和全部草稿行，没有 parsing / 进度 / 轮询）；`ready` 下可编辑草稿和提交；`committed` 后可整批撤销 = 整批删除（§14.22）。校验不通过不产生批次。
@@ -163,9 +161,9 @@
 ## 6. 导入 skill（取代原"LLM 设置与接口"）
 
 - 应用**不存任何模型设置**：没有 `user_llm_settings` 表，没有 `/me/llm-settings` 接口，没有 API key，没有"测试连接"。
-- **skill 是仓库里的交付物** `skills/wallet-import/`：一份主文本（角色、输入任意账单、输出上面的标准 JSON 文件并提供下载、也可直接输出代码块），两种包装——Claude 的 `SKILL.md`（Claude.ai 项目 / Claude Code 皆可安装）和 ChatGPT 的 Custom GPT / Project 指令文本。规则沿用原提示词：支出为负、收入为正、退款标 `refund` 并尽量注明来源、信用卡还款标 `transfer` + `repayment`、本人账户间划转标 `transfer` + `plain`、外币原值写进 `note`、清理商户名噪音、日期一律 `YYYY-MM-DD`、分不清的分类**留空不猜**、不得自创 code、不输出卡号全号。
+- **skill 是仓库里的交付物** `skills/wallet-import/`：一份主文本（角色、输入任意账单、输出上面的标准 CSV 文件并提供下载、也可直接输出代码块），两种包装——Claude 的 `SKILL.md`（Claude.ai 项目 / Claude Code 皆可安装）和 ChatGPT 的 Custom GPT / Project 指令文本。规则沿用原提示词：支出为负、收入为正、退款标 `refund` 并尽量注明来源、信用卡还款标 `transfer` + `repayment`、本人账户间划转标 `transfer` + `plain`、外币原值写进 `note`、清理商户名噪音、日期一律 `YYYY-MM-DD`、分不清的分类**留空不猜**、不得自创 code、不输出卡号全号。
 - **分类表与版本同源**：skill 文本里的分类清单（code + 中文名 + 一级判据 §1.3）由脚本从 `backend/app/core/categories.py` 生成，`version` 就是 `CATEGORY_VERSION`；改分类表必须重新生成并发布 skill。应用校验 `version` 不一致时拒绝导入并提示用户更新 skill（§5）。
-- **应用内"导入指南"页**：三步说明（安装 skill → 在你的 ChatGPT / Claude 里上传账单让它整理 → 把生成的文件上传到这里），附 skill 文本的复制 / 下载按钮，以及标准格式的示例文件。
+- **应用内"导入指南"页**：三步说明（安装 skill → 在你的 ChatGPT / Claude 里上传账单让它整理 → 把生成的 CSV 上传到这里），附 skill 文本的复制 / 下载按钮，以及标准 CSV 的示例文件。
 - 将来若要做"应用内一键导入"，标准格式已是契约，只需加一条可选的服务端调用路径，不改现有设计。
 
 ## 7. 统计与首页
@@ -212,7 +210,7 @@
 | 账户 | `GET/POST /ledgers/{id}/sources`（GET 含余额）、`GET/PATCH/DELETE /ledgers/{id}/sources/{sid}` |
 | 交易 | `GET/POST /ledgers/{id}/transactions`（列表支持 `?import_batch_id=` 筛选；详情：支出行带 `refunds[]`、退款行带 `refund_of` 展开的原单摘要，§14.46）、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}`、`POST /ledgers/{id}/transactions/{tid}/pair`（与另一条单腿转账配对，§14.34）、`POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair`（拆开） |
 | 统计 | `GET /ledgers/{id}/stats/summary?month=YYYY-MM`、`GET /ledgers/{id}/stats/trend?months=12` |
-| 导入 | `POST /ledgers/{id}/imports`（multipart 文件，或 JSON 体 `{source_id, text}` 粘贴；同步校验，直接返回批次与草稿行）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready = 丢弃；committed = 撤销）；`GET /import-format`（公开：标准格式说明、示例文件、skill 文本，带 version） |
+| 导入 | `POST /ledgers/{id}/imports`（multipart CSV 文件，或 JSON 体 `{source_id, text}` 粘贴 CSV 文本；同步校验，直接返回批次与草稿行）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready = 丢弃；committed = 撤销）；`GET /import-format`（公开：标准格式说明、示例文件、skill 文本，带 version） |
 | 汇率 | 现有 `rates` 接口保留 |
 
 ## 12. 前端
@@ -285,3 +283,4 @@
 44. **03 章待决最后 5 条**（2026-09-10 用户决定）：03-10 分类当月支出可为负，照实返回；03-12 汇率回退窗口 `FX_MAX_BACKFILL_DAYS = 10`，超过用最新汇率；03-13 `occurred_at` 最晚今天 + 1 天；03-14 `limit` 上限交易列表 200、草稿行 500；03-15 uvicorn 加 `--proxy-headers`（infra 改动）。
 45. **视觉方向定稿**（2026-09-10 用户在 Claude Design 里决定，04-D-13 关闭）：采用「04 柔和圆润」——Figtree + IBM Plex Mono、C2 密度（列表行高 56、圆角 sm 8 / md 14 / lg 18）、淡鼠尾草底、交易四色砖红 / 深青 / 橄榄金 / 板岩蓝、森林绿强调（深色下翻亮为 #6FB98A）。token 的唯一来源是 `docs/target-design/mockups/tokens.json`（从 Claude Design 导出的「Design Tokens v2 · 定稿」提取），16 张屏幕稿在同一目录。04 章 §6 的 A/B/C 三方向作废，改为引用该目录；实现前不再需要另出 mockup。
 46. **04 章待决最后 5 条**（2026-09-11 用户决定）：04-D-1 路由用 Expo Router；04-D-5 加匿名可读的 `GET /config` 返回 `{registration_open}`，注册关闭时注册页直接显示提示；04-D-6 支出详情带 `refunds[]`（每笔退款的日期、金额、备注），退款详情把 `refund_of` 展开成原单摘要（日期、商户、金额、已退 / 可退）；04-D-7 交易列表加 `?import_batch_id=` 筛选；04-D-11 不做按成员筛选。至此 README §6 的全部待决项处理完毕。
+47. **导入文件只做 CSV**（2026-09-11 用户决定，屏幕稿审阅 B4）：标准导入格式只有 CSV（固定 11 列表头 + `# version:` 首行），不再接受 JSON；粘贴入口粘的也是 CSV 文本。skill 输出 CSV。§5、§6、§11 已同步。
