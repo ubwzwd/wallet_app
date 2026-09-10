@@ -122,7 +122,7 @@
 |---|---|---|
 | `import_file_invalid` | 400 | §2.2 结构错误（编码不可读、缺版本行、表头不符、列数不对） |
 | `skill_outdated` | 400 | §2.3 `# version:` 缺失或与应用当前分类表版本不一致 |
-| `rows_exceed_limit` | 400 | §2.6 超过 2000 行 |
+| `rows_exceed_limit` | 400 † | §2.6 超过 2000 行 |
 | `file_too_large` | 413 | §2.6 超过 2 MB |
 | `import_rate_limited` | 429 | 每用户每小时 10 批（决策 §5） |
 | `source_archived` | 409 | 目标账户或对手账户已归档 |
@@ -136,6 +136,8 @@
 | `pair_target_invalid` | 400 | §4.3 配对目标不是同账本、方向相反的单腿转账 |
 | `already_paired` | 409 | §4.3 配对目标在提交前已被别人配走 |
 | `stale_update` | 409 | `PATCH .../rows` 的乐观锁（决策 §2） |
+
+† `rows_exceed_limit` 的 **HTTP 状态以 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表为准**（决策 §14.4：注册表是唯一来源）。写稿时 03 章那一行是 **422**，本章 §0.2 / §2.6 / §2.8 / §7.4 四处写的是 400（与其它结构类错误一致）。code 名两边一致，只有状态码待对齐：README 任务做最终集合比对时以 03 为准，若 03 保留 422 就把本章这四处改成 422，若 03 改成 400 则本章不动。
 
 ### 0.3 `services/importing/` 四个模块
 
@@ -522,7 +524,9 @@ def sanitize_category(kind, l1, l2) -> tuple[str | None, str | None, str | None]
         return None, None, None
     group = EXPENSE_INDEX if kind in ("expense", "refund") else INCOME_INDEX
     if not l1:
-        return None, None, None                       # 主动留空，不算错（待归类）
+        # 一级留空时二级必须也空（§1.2）；真丢掉了用户填的东西就得写 hint（§2.5）
+        return (None, None, None) if not l2 else (
+            None, None, f'一级分类为空，二级 "{l2}" 已清空')
     if l1 not in group:
         return None, None, f'分类 "{l1}" 不在{"支出" if group is EXPENSE_INDEX else "收入"}分类表里，已清空待归类'
     if l2 and l2 not in group[l1].children_codes:
@@ -532,7 +536,8 @@ def sanitize_category(kind, l1, l2) -> tuple[str | None, str | None, str | None]
 
 | 情况 | 结果 | flags |
 |---|---|---|
-| `category_l1` 留空 | 保持空（review 里显示"待归类"，提交时才拦） | 不打 |
+| `category_l1` 留空、`category_l2` 也空 | 保持空（review 里显示"待归类"，提交时才拦） | 不打 |
+| `category_l1` 留空但填了 `category_l2` | 清掉二级，`hint` 记一笔（§1.2：一级留空时二级必须也留空） | 不打 |
 | `category_l1` 不在表内（skill 编了 code，例如 `dining`） | 一级二级都置空 | 不打 |
 | 收支组不匹配（`kind='income'` 却给了 `food`） | 一级二级都置空 | 不打 |
 | `category_l2` 不属于该一级（`food` + `taxi`） | 只清二级 | 不打 |
@@ -608,6 +613,7 @@ def flag_intra_batch_duplicates(rows: list[RowDraft]) -> None:
 | 16 | 转账有合法 `subtype` | credit+in 补 `repayment`，否则补 `plain` | 补 `plain` 时是 |
 | 17 | 非转账无 `role` / `subtype` | 置空 | 否 |
 | 18 | `category_l1` 在对应收支组内 | 一二级都置空（待归类） | 否 |
+| 18b | 一级留空时二级也留空 | 清二级（`hint` 记一笔） | 否 |
 | 19 | `category_l2` 属于该一级 | 只清二级 | 否 |
 | 20 | 转账无分类 | 置空 | 否 |
 | 21 | 文本字段不超长 | 截断 | 否 |
@@ -686,7 +692,7 @@ def flag_duplicates(db, ctx, rows):
 | `abs(amount) >= 退款额` | 退款不能超过原单 |
 | **可退额度 > 0** | 原单金额 − 已关联退款合计 > 0（部分退款，决策 §1.1） |
 
-打分（只用于在候选里排序，不改变硬条件）：
+打分（只用于给 `candidate_ids` 排序，既不改变硬条件、也不决定是否预填）：
 
 ```text
 score = 0
@@ -717,11 +723,11 @@ ORDER BY (CASE WHEN ABS(t.amount) = :ramt THEN 0 ELSE 1 END), t.occurred_at DESC
 LIMIT 200;
 ```
 
-`LIMIT` 只是防极端情况把整个账户拉进内存，不是"取最近 200 笔"的业务规则；排序保证**金额完全相等的候选一定落在截断窗口内**（它在打分里权重最高），否则"唯一候选才预填"的判定会静默失准。
+`LIMIT` 只是防极端情况把整个账户拉进内存，不是"取最近 200 笔"的业务规则：候选一旦超过 1 笔就不会预填，截断到 200 笔不可能把"多候选"误判成"唯一候选"。排序不参与唯一性判定，它只决定 `candidate_ids` 交给界面的先后。
+
+候选**只在已提交的 `transactions` 里找**：同一批草稿里的支出不参与匹配。理由是草稿还没有 `transactions.id`，`refund_of` 无处可指（决策 §14.7）。一份账单里退款和它的原单同时出现时，正确做法是先提交这一批，退款行在 review 里保持"待关联"或标 `skipped`，提交后到交易详情页手工关联 —— 本章不为此支持批内匹配。
 
 ```python
-UNIQUE_MARGIN = 20
-
 def flag_refund_candidates(db, ctx, rows):
     for r in rows:
         if r.occurred_at is None or r.kind == "transfer":
@@ -739,9 +745,9 @@ def flag_refund_candidates(db, ctx, rows):
         scored = sorted(((score(c, r), c) for c in cands), key=lambda x: -x[0])
         r.flags.add("refund_candidate")
         r.candidate_ids = [c.id for _, c in scored[:10]]     # 给界面用，不落列
-        if len(scored) == 1 or scored[0][0] - scored[1][0] >= UNIQUE_MARGIN:
+        if len(scored) == 1:                                 # 唯一候选才预填（决策 §5）
             best = scored[0][1]
-            r.matched_transaction_id = best.id               # 唯一候选才预填（决策 §5）
+            r.matched_transaction_id = best.id
             if r.kind != "refund":
                 r.kind = "refund"
                 r.flags.add("needs_review")                  # 服务端改过 kind，请用户过目
@@ -751,10 +757,12 @@ def flag_refund_candidates(db, ctx, rows):
             if r.category_l1 is None:                        # 决策 §1.1：沿用原单分类
                 r.category_l1, r.category_l2 = best.category_l1, best.category_l2
             _add_hint(r, f"已关联 {best.occurred_at} 的原支出，可改选")
-        else:
+        else:                                                # 多候选：一律交给用户选
             r.flags.add("needs_review")
             _add_hint(r, f"找到 {len(scored)} 笔可能的原支出，请选一笔")
 ```
+
+商户相同、金额相等这类信号只进 `score()`，**不构成预填的理由**：决策 §5 的原话是"商户只作加分，仅在候选唯一时预填"，而按决策 §14.7 预填的 `matched_transaction_id` 在提交时**无条件**写进 `refund_of`，一次打分领先就会变成正式数据里的错关联。所以判据只有一条 `len(scored) == 1`，与 §3.3 转账配对的 `len(single) == 1` 是同一口径；打分保留，它决定 `candidate_ids` 的顺序（商户相同的排前面，用户在选择器里第一眼就能看到最可能的那笔）。
 
 把 `kind` 改成 `refund` 之后**必须**重跑 `sanitize_category`，不能只在 `category_l1 is None` 时才覆盖：skill 若原本把这行判成收入并给了收入分类，直接改 `kind` 会留下 `kind='refund'` + 收入分类的非法组合（决策 §1.3 规定退款只能用支出分类）。
 
@@ -858,7 +866,7 @@ def _guess_counterpart(db, ctx, r) -> UUID | None:
 | flag | 触发 | 硬条件 | 预填 | review 里的默认动作 |
 |---|---|---|---|---|
 | `duplicate` | 撞库 / 对腿已配对 | 同账户 + 同日 + 同额 + 同币种；或 §3.3 的对腿已有 pair | 唯一命中时 `matched_transaction_id` | 标 `skipped` |
-| `refund_candidate` | `kind=refund` 或 信用卡正数入账 | 同账户 + 同币种 + `kind=expense` + 90 天内 + 金额足够 + 有可退额度；商户只加分 | 唯一候选时 `matched_transaction_id` + 沿用原单分类 | 确认或改选原单 |
+| `refund_candidate` | `kind=refund` 或 信用卡正数入账 | 同账户 + 同币种 + 已提交的 `kind=expense` + 90 天内 + 金额足够 + 有可退额度；商户只加分、不影响唯一性 | **候选唯一时**预填 `matched_transaction_id` + 沿用原单分类；多候选只给 `candidate_ids` | 确认或改选原单 |
 | `transfer_candidate` | `kind=transfer` | 别的账户 + ±3 天 + 同币种 + 反向等额 + **仍是单腿** | 唯一候选时 `matched_transaction_id` + `counterpart_source_id` | 保持勾选（合并成一笔） |
 | `needs_review` | §3.4 的六处 | — | — | 看一眼，改或不改 |
 
@@ -878,12 +886,14 @@ def _guess_counterpart(db, ctx, r) -> UUID | None:
 | `transfer_role` / `transfer_subtype` | 仅 `kind='transfer'` 时可填，否则置空 |
 | `merchant` / `note` / `source_ref` | 文本，长度上限同 §2.4 ⑧ |
 | `category_l1` / `category_l2` | 必须在表内且收支组匹配，否则 400 `category_invalid` / `category_kind_mismatch` |
-| `matched_transaction_id` | 退款原单（`kind='refund'` 时）或配对目标（`kind='transfer'` 时）；置 `null` = 取消关联 |
+| `matched_transaction_id` | 退款原单（`kind='refund'` 时）或配对目标（`kind='transfer'` 时）；置 `null` = 取消关联。**同一次 PATCH 里改了 `kind` 会先把它清掉**（见下），要保留关联就别在同一次请求里改 `kind` |
 | `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿） |
 | `counterparty` | 单腿转账的对手文本，例如"老婆""工资卡"（决策 §14.10、§14.16：只有用户填，skill 不猜） |
 | `status` | `pending` / `edited` / `skipped`，三个值，没有第四个（决策 §5） |
 
 服务端在任何一次 PATCH 之后把 `status` 置为 `edited`（用户显式标跳过时置 `skipped`），并按 §2.4 重跑该行的校验；`hint` 由服务端重写（原来的校验提示如果已经被用户改掉就该消失）。批次不是 `ready` 时一律 409 `batch_not_ready`。请求体带客户端看到的 `updated_at`，不一致 409 `stale_update`（决策 §2）。
+
+**PATCH 改动 `kind` 时**，服务端在重跑校验之前**无条件**清空该行的 `matched_transaction_id` / `counterpart_source_id`，并去掉 `refund_candidate` / `transfer_candidate` 两个标记，再按新 `kind` 重跑 §3.2 / §3.3 的候选查找（`kind` 没变时不动这三样，用户手工选的原单不能被一次改分类冲掉）。理由与 §3.2 / §3.3 开头清空 `duplicate` 预填值完全相同：`duplicate` 的 `matched_transaction_id` 指的是"同日同额的已有交易"，一旦这行被改成 `refund`，§4.4 会把它当原单写进 `refund_of`，落成一条用户从没关联过的错关联（目标不是 `expense` 时更糟，整批 400 `refund_target_invalid`，而用户看不懂自己错在哪）。
 
 **批量**：`PATCH /ledgers/{lid}/imports/{bid}/rows`（决策 §14.52 A4），一次给一批行打同一份改动：
 
@@ -1250,13 +1260,23 @@ skills/wallet-import/
   README.md                 # 给用户看的安装步骤：Claude 怎么装、ChatGPT 怎么装
 scripts/
   gen_import_skill.py       # 从 core/categories.py 生成上面三份文件，§5.4
+  templates/
+    SKILL.md.tpl              # Claude 版包装（角色、输入、输出格式、frontmatter）
+    chatgpt-instructions.md.tpl  # ChatGPT 版包装（用法 + 指令正文）
+    example.csv.tpl           # 示例 CSV，只有版本行是占位符
+    _rules.md                 # 【规则清单】14 条，两份包装共用
+    _delivery.md              # 【交付时说什么】，两份包装共用
 ```
 
-`SKILL.md` 与 `chatgpt-instructions.md` 里的**分类清单**和 **`version`** 两段是生成的，其余是手写模板 —— 模板放 `scripts/templates/`，生成脚本只做占位符替换。**生成物一并提交进仓库**：用户是从仓库或应用内的导入指南页拿到文本的，不能要求他们自己跑脚本。
+`SKILL.md` 与 `chatgpt-instructions.md` 里的**分类清单**、**`version`**、**规则清单**、**交付说明**四段是生成的，其余是各自手写的包装 —— 模板放 `scripts/templates/`，生成脚本只做占位符替换。
+
+**规则清单与交付说明是两份包装共用的同一份片段**（`_rules.md` / `_delivery.md`，由 §5.4 的 `{{RULES}}` / `{{DELIVERY}}` 填进两个模板）—— 这就是 §5.3 那句"逐字相同"的实现方式：不靠人去对照两份文本，靠它们物理上只有一份来源。改规则只改 `_rules.md`，两份包装同时更新，CI 的 `--check` 兜住忘记重新生成的情况。
+
+**生成物一并提交进仓库**：用户是从仓库或应用内的导入指南页拿到文本的，不能要求他们自己跑脚本。
 
 ### 5.2 `SKILL.md` 全文
 
-下面是模板渲染后的完整文本。`{{CATEGORY_VERSION}}` 与两段分类清单由 §5.4 的脚本填入，这里展示的是填好之后的样子（分类表按决策 §1.3）。
+下面是模板渲染后的完整文本。四个占位符 —— `{{CATEGORY_VERSION}}`、两段分类清单、`{{RULES}}`（规则清单）、`{{DELIVERY}}`（交付说明）—— 由 §5.4 的脚本填入，这里展示的是填好之后的样子（分类表按决策 §1.3）。后两个与 ChatGPT 版读的是同一份片段文件（§5.1）。
 
 ````markdown
 ---
@@ -1451,14 +1471,18 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 优先用代码解释器生成一个 .csv 文件让用户下载；不方便时把完整内容放进一个代码块让用户复制。
 
 【规则】
-（与 SKILL.md「规则清单」的 14 条逐字相同，此处从略——生成脚本会把同一段文本填进来）
+{{RULES}}
 
 【分类清单】
-（与 SKILL.md 的两张表逐字相同，生成脚本填入）
+{{EXPENSE_TABLE}}
+
+{{INCOME_TABLE}}
 
 【交付时说什么】
-（与 SKILL.md 相同）
+{{DELIVERY}}
 ```
+
+上面是**模板**（`scripts/templates/chatgpt-instructions.md.tpl`）的样子，四个 `{{…}}` 由 §5.4 的脚本填掉；仓库里提交的 `chatgpt-instructions.md` 是填好之后的完整文本。`{{RULES}}` / `{{DELIVERY}}` 读的是 `_rules.md` / `_delivery.md`，`SKILL.md.tpl` 在「规则清单」「交付时说什么」两节读的是同样这两个文件 —— 所以"逐字相同"不是一句约定，是同一份文件被填了两次（§5.1）。
 
 两点差异是形态决定的，不是规则差异：
 
@@ -1501,7 +1525,10 @@ def render(template_name: str) -> str:
     return (text
             .replace("{{CATEGORY_VERSION}}", CATEGORY_VERSION)
             .replace("{{EXPENSE_TABLE}}", render_group(EXPENSE_CATEGORIES))
-            .replace("{{INCOME_TABLE}}", render_group(INCOME_CATEGORIES)))
+            .replace("{{INCOME_TABLE}}", render_group(INCOME_CATEGORIES))
+            # 规则与交付说明是两份包装共用的片段（§5.1），"逐字相同"靠这两行保证
+            .replace("{{RULES}}", (TPL / "_rules.md").read_text(encoding="utf-8"))
+            .replace("{{DELIVERY}}", (TPL / "_delivery.md").read_text(encoding="utf-8")))
 
 TARGETS = {
     "SKILL.md":                "SKILL.md.tpl",
@@ -1633,7 +1660,7 @@ def _luhn(d: str) -> bool:
 
 | 文件 | 覆盖的点 |
 |---|---|
-| `ok_credit_cny.csv` | §1.5 示例 A：支出、退款、还款转入腿；含中文商户与引号转义 |
+| `ok_credit_cny.csv` | §1.5 示例 A **去掉 2026-08-07 京东那条支出行**后的 6 行：支出、退款、还款转入腿；含中文商户与引号转义。去掉那一行是因为 §7.4 要把这笔原支出造成**已提交的交易**（§3.2 的候选池只查 `transactions`，同批草稿里的支出不参与匹配），留在文件里它自己会被打 `duplicate` |
 | `ok_checking_sgd.csv` | §1.5 示例 B：收入、外币原值、`repayment` / `plain` 两种转出腿；`repayment` 那条与 `ok_credit_cny.csv` 的转入腿**币种与金额都不同**（跨币种还款，不该自动配对） |
 | `ok_paste_alipay.txt` | §1.5 示例 C 的**粘贴文本**，前后带 ``` 围栏与空行，测 `read_paste()` 的剥离 |
 | `ok_bom.csv` | 带 UTF-8 BOM，测 BOM 剥离 |
@@ -1704,7 +1731,7 @@ fixture 由维护者手工写，姓名统一"张三" / "John Doe"，卡号统一
 | 库里有两笔同日同额 | `duplicate`，`matched_transaction_id` 为 `None` |
 | `kind=refund` 32，库里 30 天前有 32 同商户支出 | `refund_candidate`，预填该笔，分类沿用 |
 | 同上但库里有两笔 32、商户都不同 | `refund_candidate`，**不**预填，`needs_review` |
-| 同上但一笔商户相同、一笔不同 | 商户相同的高 20 分 → 预填它 |
+| 同上但一笔商户相同、一笔不同 | 两笔候选 → **不**预填（`matched_transaction_id is None`），`refund_candidate` + `needs_review`；`candidate_ids` 按分数排序，商户相同的那笔排第一 |
 | `kind=refund` 32，库里只有 100 天前的 32 支出 | 无候选 |
 | `kind=refund` 32，原单已被别的退款退完 | 无候选（可退额度 = 0） |
 | `kind=refund` 32，**同时**命中 `duplicate`，但退款候选为空 | `flags` 含 `duplicate`、不含 `refund_candidate`；`matched_transaction_id` 必须是 `None`（§3.2 查候选前已清空）；提交后该交易 `refund_of IS NULL` |
@@ -1737,6 +1764,12 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
                            amount="-3000.00", currency="CNY", kind="transfer",
                            transfer_role="out", transfer_subtype="repayment",
                            counterparty="招行信用卡")
+    # 前置：信用卡上已有一笔已提交的原支出（退款行要能找到它 —— §3.2 只在
+    # transactions 里找候选，同一批草稿里的支出不算，所以 fixture 里没有这一行）
+    orig = make_transaction(source=credit_source, occurred_at="2026-08-07",
+                            amount="-1299.00", currency="CNY", kind="expense",
+                            merchant="京东", category_l1="shopping",
+                            category_l2="electronics")
 
     # 1. 上传信用卡账单（同步返回批次 + 全部草稿行，没有 202、没有轮询）
     r = client.post(f"/api/v1/ledgers/{ledger.id}/imports",
@@ -1745,7 +1778,7 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
     assert r.status_code == 200
     b = r.json()
     bid = b["id"]
-    assert b["status"] == "ready" and b["row_count"] == 7
+    assert b["status"] == "ready" and b["row_count"] == 6
     assert "progress" not in b
 
     rows = b["rows"]
@@ -1753,9 +1786,11 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
     rep = next(x for x in rows if x["transfer_subtype"] == "repayment")
     assert "transfer_candidate" in rep["flags"]
     assert rep["matched_transaction_id"] == str(leg.id)
-    # 退款行预填了原单
+    # 退款行命中唯一候选（库里那笔 1299 的京东支出），预填了原单
     rf = next(x for x in rows if x["kind"] == "refund")
-    assert "refund_candidate" in rf["flags"] and rf["matched_transaction_id"]
+    assert "refund_candidate" in rf["flags"]
+    assert rf["matched_transaction_id"] == str(orig.id)
+    assert rf["category_l1"] == "shopping"        # 沿用原单分类（决策 §1.1）
 
     # 3. 待归类行拦住提交
     bad = client.post(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/commit", headers=auth)
@@ -1770,7 +1805,7 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
     # 5. commit
     c = client.post(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/commit", headers=auth)
     assert c.status_code == 200
-    assert c.json()["transaction_count"] == 7 and c.json()["paired_count"] == 1
+    assert c.json()["transaction_count"] == 6 and c.json()["paired_count"] == 1
 
     # 6. 配对生效：库里那条单腿被写上 pair_id、counterparty 被清空
     leg2 = client.get(f"/api/v1/ledgers/{ledger.id}/transactions/{leg.id}",
@@ -1780,7 +1815,7 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
     # 导入进来的交易各有一条 imported 事件
     tx = client.get(f"/api/v1/ledgers/{ledger.id}/transactions"
                     f"?import_batch_id={bid}", headers=auth).json()
-    assert len(tx["items"]) == 7
+    assert len(tx["items"]) == 6
     one = client.get(f"/api/v1/ledgers/{ledger.id}/transactions/{tx['items'][0]['id']}",
                      headers=auth).json()
     assert one["events"][0]["event"] == "imported"
@@ -1789,12 +1824,12 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
     # 7. 撤销：先 dry_run 看两个数
     dry = client.delete(f"/api/v1/ledgers/{ledger.id}/imports/{bid}?dry_run=true",
                         headers=auth).json()
-    assert dry["mode"] == "revert" and dry["transaction_count"] == 7
+    assert dry["mode"] == "revert" and dry["transaction_count"] == 6
     assert dry["orphaned_refunds"] == 0 and dry["refunds_in_batch"] == 1
     assert dry["deleted"] is False
 
     d = client.delete(f"/api/v1/ledgers/{ledger.id}/imports/{bid}", headers=auth)
-    assert d.status_code == 200 and d.json()["deleted_transactions"] == 7
+    assert d.status_code == 200 and d.json()["deleted_transactions"] == 6
     # 配对被拆开，库里那条单腿还在
     leg3 = client.get(f"/api/v1/ledgers/{ledger.id}/transactions/{leg.id}",
                       headers=auth).json()
@@ -1808,7 +1843,7 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
 
 | 用例 | 断言 |
 |---|---|
-| 粘贴 `ok_paste_alipay.txt`（带 ``` 围栏） | 200，`source_kind='paste'`，`original_filename is None`，行数与文件上传一致 |
+| 粘贴 `ok_paste_alipay.txt`（带 ``` 围栏） | 200，`source_kind='paste'`，`original_filename is None`，解析出的 6 行与把同一段内容存成 `.csv` 上传的结果逐字段相同 |
 | `stale_version.csv` | 400 `skill_outdated`，响应带 `current_version`、`file_version`、`guide_url`；`import_batches` 表为空 |
 | `bad_ragged.csv` | 400 `import_file_invalid`，`errors` 恰好两条、`line` 是 14 与 27 |
 | `bad_header_extra_col.csv` | 400 `import_file_invalid`，错误文案点名 `counterparty` |
@@ -1825,7 +1860,7 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
 | `GET .../rows?filter=uncategorized` | 只回没有一级分类的非转账、非 skipped 行；计数与 `uncategorized_count` 一致 |
 | 同一批次并发两次 commit | 一次 200、一次 409 `batch_already_committed`，交易只建一遍 |
 | 两个批次同时想配到同一条单腿上 | 一次成功、一次 409 `already_paired`，失败的那批仍是 `ready` |
-| 提交后**不撤销**、直接重传同一份文件 | 所有行 `duplicate`；退款行因原单可退额度已为 0 而无候选，`matched_transaction_id is None`；还款行因对腿已配对而是 `duplicate` 不是 `transfer_candidate` |
+| 提交后**不撤销**、直接重传同一份文件 | 所有行 `duplicate`；退款行**仍命中 `refund_candidate` 并预填同一张原单**（1299 退了 299，可退额度还有 1000 > 0，候选依旧唯一），要靠用户在 review 里把整批标 `skipped`，不是靠算法拦；还款行因对腿已配对而是 `duplicate` 不是 `transfer_candidate` |
 | 撤销后重传同一份文件 | 新批次独立，无 `duplicate` |
 | 批外退款指向本批支出，撤销 dry_run | `orphaned_refunds == 1`；真撤销后那条退款仍在、`refund_of is None` |
 | 批次列表 | 每行带 `net_amount`、`flag_counts`、`source`、`created_by`（决策 §14.52 A17） |
