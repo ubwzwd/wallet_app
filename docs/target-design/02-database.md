@@ -366,19 +366,21 @@ CHECK ((kind =  'transfer' AND transfer_role IS NOT NULL) OR
 
 `ledger_id` 冗余于 `source_id → finance_sources.ledger_id`，但所有列表查询都按账本过滤，直接带上它可以省掉一次 join，代价是应用层必须保证两者一致（§3）。`kind` 是唯一的方向来源，符号只是它的推论（决策 §1）。`note` 即原 `description`，≤500 字（决策 §1.4）；`merchant` ≤200 字，搜索、退款匹配、导入去重都靠它。`category_l1` / `category_l2` 存的是 `backend/app/core/categories.py` 常量表里的 code，取值合法性、二级归属一级、一级收支方向与 kind 匹配，全部由应用层校验（决策 §1.3）——**数据库不存分类表，也就没有外键**。`counterparty` 是单腿转账的对方文本（"老婆""工资卡"，决策 §1.2）。`import_batch_id` 非空表示这条交易由某批导入生成（决策 §5）。
 
-**配对与拆开怎么落到这两列上**（决策 §14.34）。两条各自独立的单腿转账（`transfer_pair_id IS NULL`，方向相反、`kind='transfer'`）可以事后配成一笔转账，配好的一对也可以再拆开；两个动作都只改 `transfer_pair_id` 与 `counterparty`，不动金额、日期、账户，也不新建或删除行：
+**配对与拆开怎么落到这两列上**（决策 §14.34）。两条各自独立的单腿转账（`transfer_pair_id IS NULL`，方向相反、`kind='transfer'`）可以事后配成一笔转账，配好的一对也可以再拆开；两个动作都不动金额、日期、账户，也不新建或删除行：配对改 `transfer_pair_id`、`counterparty` 与 `transfer_subtype`（决策 §14.53a：配对时统一子类型），拆开只改 `transfer_pair_id`：
 
 | 动作 | 触发 | 同一个事务里写什么 |
 |---|---|---|
-| **配对** | `POST /ledgers/{id}/transactions/{tid}/pair`（交易详情的"关联为转账对腿"），或导入 review 里勾选"关联为一笔转账"后提交（决策 §5） | 生成一个新的 `pair_id = uuid4()`，给两行都写 `transfer_pair_id = pair_id`、`counterparty = NULL`；两行的 `updated_by` / `updated_at` 各自刷新 |
+| **配对** | `POST /ledgers/{id}/transactions/{tid}/pair`（交易详情的"关联为转账对腿"），或导入 review 里勾选"关联为一笔转账"后提交（决策 §5） | 生成一个新的 `pair_id = uuid4()`，给两行都写 `transfer_pair_id = pair_id`、`counterparty = NULL`，并把两行的 `transfer_subtype` 改成同一个值（决策 §14.53a，取值规则见下）；两行的 `updated_by` / `updated_at` 各自刷新 |
 | **拆开** | `POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair` | 两行都写 `transfer_pair_id = NULL`；`counterparty` 保持 NULL（用户可事后各自填），两行的 `updated_by` / `updated_at` 各自刷新 |
 
 两条 SQL（配对时的 `tid_new` / `tid_old` 是要配的两行）：
 
 ```sql
 -- 配对：必须一条 UPDATE 同时命中两行，中间态不能被别的事务看见
+-- :subtype 是按下面规则算出的统一子类型（决策 §14.53a），两行写同一个值
 UPDATE transactions
    SET transfer_pair_id = :pair_id, counterparty = NULL,
+       transfer_subtype = :subtype,
        updated_by = :uid, updated_at = :now
  WHERE ledger_id = :lid AND id IN (:tid_new, :tid_old);   -- 影响行数必须 = 2
 
@@ -404,7 +406,14 @@ SELECT id, kind, ledger_id, source_id, transfer_role, transfer_pair_id
 
 行锁是必需的：没有它，两个并发请求可以各自读到"还是单腿"再各自配对，同样造出孤儿腿。断言通过后才执行上面那条 `UPDATE`。除此之外应用层还要校验数据库看不见的其余部分：两行同账本、`kind='transfer'`、账户不同、方向相反（决策 §1.2、§14.34）。
 
-配对与拆开各写一条 `transaction_events`（`paired` / `unpaired`，每腿一条，§1.9）。
+**两腿 `transfer_subtype` 在配对时统一**（决策 §14.53a）。配对**不**要求两腿原来的子类型相同，也不因为不同就拒绝；由服务端在同一事务内算出一个值再写给两腿：
+
+- 任一腿的 `transfer_subtype = 'repayment'`，**且**转入腿（`transfer_role = 'in'`）的账户 `finance_sources.type = 'credit'` → 整对写 `'repayment'`；
+- 其余一律写 `'plain'`。
+
+判定要读转入腿的账户类型，所以上面那条 `FOR UPDATE` 之后还要按两行的 `source_id` 取一次 `finance_sources.type`。算出的值与某一腿原值相同时那一腿就是没变，不必额外处理——`UPDATE` 一律给两行赋同一个值，是否真的变了由事件那一步判断。
+
+配对与拆开各写一条 `transaction_events`（`paired` / `unpaired`，每腿一条，§1.9）。此外，配对统一子类型的两腿再各写一条 `updated` 事件，`changes` 记 `{"transfer_subtype": {"before": …, "after": …}}`（决策 §14.53a、§14.51）；按 §1.9"只记真正变了的字段"的规矩，原值就已经等于统一值的那一腿没有变化，那一条 `updated` 不写。
 
 ### 1.7 `import_batches`
 
@@ -581,7 +590,7 @@ CREATE INDEX ix_transaction_events_transaction_at
 |---|---|---|
 | `created` | `POST /ledgers/{id}/transactions` 手工记一笔；`POST .../transactions/transfer` 建两腿转账（每腿一条） | `null`（新建时"变化"就是整行，详情页本来就显示当前值） |
 | `imported` | `POST .../imports/{bid}/commit` 建出的每条交易 | `null`；批次记在 `import_batch_id` 上 |
-| `updated` | `PATCH` 改了交易的任何字段（含 `PATCH .../transfer/{pair_id}` 改两腿，每腿一条） | 只含真正变了的字段：`{"amount": {"before": "-88.00", "after": "-99.00"}, "merchant": {...}}` |
+| `updated` | `PATCH` 改了交易的任何字段（含 `PATCH .../transfer/{pair_id}` 改两腿，每腿一条）；配对统一 `transfer_subtype` 时，值真的变了的那一腿也写一条（决策 §14.53a，§1.6.3） | 只含真正变了的字段：`{"amount": {"before": "-88.00", "after": "-99.00"}, "merchant": {...}}` |
 | `paired` | 两条单腿转账配成一笔（`POST .../{tid}/pair`，或导入提交时按 `transfer_candidate` 配对），**两腿各写一条** | `{"transfer_pair_id": {"before": null, "after": "<pair_id>"}}`，`counterparty` 被清空时一并记 |
 | `unpaired` | `POST .../transfer/{pair_id}/unpair` 拆开，**两腿各写一条**；撤销导入把批外转账腿打回单腿时也各写一条（§6.6） | `{"transfer_pair_id": {"before": "<pair_id>", "after": null}}` |
 | `refund_linked` | 退款行关联到原单（手工选、`PATCH` 改 `refund_of`、导入提交时按 `refund_candidate` 写入） | `{"refund_of": {"before": null, "after": "<tid>"}}`；写在**退款行**上 |
@@ -834,7 +843,8 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 账户 `default_currency` 创建后不可改 | `PATCH /sources/{sid}` 的请求体里没有这个字段 | 决策 §14.50 |
 | 归档 / 取消归档时同步维护 `archived_at` | 写入点只有 `PATCH {"archived": …}` 一处，`TRUE` 时写 `now()`、`FALSE` 时写 NULL（CHECK 兜底） | 决策 §14.50 |
 | 配对前两腿必须都是单腿（`transfer_pair_id IS NULL`） | 同一事务内 `SELECT ... WHERE id IN (两条) FOR UPDATE` 加行锁后逐条断言，任一条已有 pair 就 409；数据库对此**没有**任何约束，漏掉这一步会把旧对腿变成孤儿腿（§1.6.3） | 决策 §14.34 |
-| 配对 / 拆开只改 `transfer_pair_id` 与 `counterparty`，且两腿同事务 | 见 §1.6.3 的两条 `UPDATE`，影响行数必须为 2 | 决策 §14.34 |
+| 配对 / 拆开只改 `transfer_pair_id`、`counterparty` 与（配对时的）`transfer_subtype`，且两腿同事务 | 见 §1.6.3 的两条 `UPDATE`，影响行数必须为 2 | 决策 §14.34、§14.53a |
+| 配对后两腿 `transfer_subtype` 相同（配对时统一，数据库不校验跨行） | 配对不要求两腿原值相同；同一事务算出统一值（任一腿 `repayment` 且转入腿账户 `type='credit'` → `repayment`，否则 `plain`）写给两行，变了的腿各写一条 `updated` 事件（§1.6.3、§1.9） | 决策 §14.53a |
 | 每一次改交易都追加一条 `transaction_events` | 所有写交易的路径（CRUD、转账接口、配对 / 拆开、导入提交、退款关联变化）共用同一个 `record_event()` 辅助函数，与交易写入同一事务 | 决策 §14.51 |
 | `import_batches` 状态机的合法迁移（`ready → committed`，不可回头） | 每个写接口先断言当前状态；重复提交由 409 `batch_already_committed` 挡住（决策 §14.18） | 决策 §5 |
 | 提交导入时一个事务建完所有交易 | 单个 `db.commit()` | 决策 §5 |
@@ -1521,7 +1531,8 @@ BEGIN;
                                                                            -- 可退额度"，数进来会虚高
 
   -- 必须先把"与批外单腿转账配的对"拆开，再删交易（见下方说明）
-  UPDATE transactions SET transfer_pair_id = NULL, updated_at = :now
+  UPDATE transactions SET transfer_pair_id = NULL,
+         updated_by = :uid, updated_at = :now   -- :uid = 点撤销的人，与下面 unpaired 事件的 actor 一致
    WHERE ledger_id = :lid
      AND (import_batch_id IS NULL OR import_batch_id <> :bid)
      AND transfer_pair_id IN (SELECT transfer_pair_id FROM transactions
