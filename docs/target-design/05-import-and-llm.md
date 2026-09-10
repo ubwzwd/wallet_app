@@ -81,7 +81,8 @@
       ┌──────────────────────────────────────────────────────────────────────────┐
       │ committing.delete_batch()  整批删除（决策 §14.22）：                       │
       │   dry_run=true → {orphaned_refunds, refunds_in_batch}，不删                │
-      │   真删 → 删交易（事件级联）→ 删批次（草稿行级联）；批次行从此消失          │
+      │   真删 → 拆开配进去的 pair（存活对腿追加 unpaired 事件）                  │
+      │        → 删交易（其事件级联）→ 删批次（草稿行级联）；批次行从此消失        │
       └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -233,8 +234,9 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID,
     """§4.3–§4.7。单事务；client 来自请求头 X-Client，写进 transaction_events。"""
 
 def delete_batch(db: Session, batch_id: UUID, actor_id: UUID,
-                 dry_run: bool = False) -> DeleteResult:
-    """§4.8。committed = 撤销，ready = 丢弃；两者最终都让这一批整个消失。"""
+                 client: str | None = None, dry_run: bool = False) -> DeleteResult:
+    """§4.8。committed = 撤销，ready = 丢弃；两者最终都让这一批整个消失。
+    删交易前先拆开配进去的 pair，并给存活的对腿追加 unpaired 事件。"""
 ```
 
 `ImportContext` 是上传时装配一次的只读上下文：`ledger_id`、`source_id`、`source_currency`、`source_type`（`checking` / `credit` / `cash` / `other`，决策 §14.48）、`base_currency`、`actor_id`、`category_version`。它会被日志打印，所以里面不放任何账单内容。
@@ -317,7 +319,7 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 2026-08-20,3000.00,CNY,transfer,in,repayment,,"信用卡还款，账单原文 自动还款",,,p1:11
 ```
 
-看点：第 6 行 `淘宝` 分不清买的什么 → `category_l1` / `category_l2` **留空**，疑问写进 `note`（决策 §1.3）；最后一行是信用卡账单上的还款到账，`kind=transfer` + `role=in` + `subtype=repayment`，无商户、无分类；退款行金额为**正**且分类沿用原支出。
+看点：第 6 行 `淘宝` 分不清买的什么 → `category_l1` / `category_l2` **留空**，疑问写进 `note`（决策 §1.3）；最后一行是信用卡账单上的还款到账，`kind=transfer` + `role=in` + `subtype=repayment`，无商户、无分类（它的对腿在示例 B 里，是一笔 SGD 付款，跨币种 → 见示例 B 的看点）；退款行金额为**正**且分类沿用原支出。
 
 **示例 B — 新加坡储蓄卡账单（SGD，含收入、外币消费、两种转账的转出腿）**
 
@@ -329,12 +331,12 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 2026-08-06,-31.90,SGD,expense,,,"Grab","Grab 打车",transport,taxi,p1:5
 2026-08-09,-184.20,SGD,expense,,,"Apple Store","原值 138.00 USD",shopping,electronics,p1:6
 2026-08-15,6200.00,SGD,income,,,"ACME PTE LTD","八月工资",salary,base_salary,p1:7
-2026-08-20,-3000.00,SGD,transfer,out,repayment,,"还信用卡",,,p1:8
+2026-08-20,-560.00,SGD,transfer,out,repayment,,"还中国的信用卡，那边账单是 3000.00 CNY",,,p1:8
 2026-08-22,-500.00,SGD,transfer,out,plain,,"转到另一张卡",,,p1:9
 2026-08-25,-800.00,SGD,transfer,out,plain,,"转给老婆",,,p1:10
 ```
 
-看点：外币消费按**记账币种**（账户结算的 SGD）写 `amount` / `currency`，原值 `138.00 USD` 写进 `note`（决策 §5）；第 6 行是示例 A 最后一行的**对腿**，两份账单都导时由 §3.3 的 `transfer_candidate` 配对；最后两行都是 `plain`，一条是转到自己另一张卡（导入后可与那张卡上的入账配对），一条是转给别人（提交时留单腿 + `counterparty="老婆"`，对手文本由用户在 review 里填）。
+看点：外币消费按**记账币种**（账户结算的 SGD）写 `amount` / `currency`，原值 `138.00 USD` 写进 `note`（决策 §5）；第 6 行是**跨币种还款**（SGD 账户还 CNY 信用卡，与示例 A 最后一行是同一笔钱的两条腿）—— §3.3 只在**同币种同金额**时自动配对，跨币种两腿两边数字都对不上，导入后要在交易详情页用 `POST .../transactions/{tid}/pair` 手工配（决策 §1.2 允许两腿币种不同、金额不等）；最后两行都是 `plain`，一条是转到自己另一张卡（导入后可与那张卡上的入账配对），一条是转给别人（提交时留单腿 + `counterparty="老婆"`，对手文本由用户在 review 里填）。
 
 **示例 C — 粘贴的支付宝导出片段（含引号、逗号与跨币种退款）**
 
@@ -795,6 +797,11 @@ def flag_transfer_candidates(db, ctx, rows):
         if r.kind != "transfer" or r.occurred_at is None:
             continue
         opp = "out" if r.transfer_role == "in" else "in"
+        # 与 §3.2 对称：先清掉 §3.1 可能预填的 duplicate 目标。那是"同账户同日同额的
+        # 已有交易"，语义上不是"对腿"（对腿必须在别的账户上），留着会被 §4.4 / §4.5
+        # 当成配对目标，commit 时必然 400 pair_target_invalid 并整批被拒。下面四个分支
+        # 只有"唯一单腿候选"那支才重新写这个字段。
+        r.matched_transaction_id = None
         legs = db.execute(_PAIR_STMT, {..., "opp": opp, "sub": r.transfer_subtype}).all()
         single = [x for x in legs if x.transfer_pair_id is None]
         paired = [x for x in legs if x.transfer_pair_id is not None]
@@ -987,7 +994,7 @@ def _guess_counterpart(db, ctx, r) -> UUID | None:
 ```
 
 ```python
-def commit_transfer(db, row, batch, ctx, events) -> list[Transaction]:
+def commit_transfer(db, row, batch, ctx, events, actor_id, client) -> list[Transaction]:
     near = _build(row, batch, ctx)                       # 本账户这一腿，字段按 §4.4
 
     # ① 与库里已有的单腿配对
@@ -995,15 +1002,16 @@ def commit_transfer(db, row, batch, ctx, events) -> list[Transaction]:
         far = db.get(Transaction, row.matched_transaction_id, with_for_update=True)
         _assert_pairable(far, near)                      # §4.3 的 pair_target_invalid /
                                                          # already_paired 在这里再确认一次
+        old_cp = far.counterparty                        # 先存原值，事件要记 before
         pair_id = uuid4()
         near.transfer_pair_id = pair_id
         near.counterparty = None
         far.transfer_pair_id = pair_id
         far.counterparty = None                          # 决策 §14.34：清空对方的对手文本
-        far.updated_by, far.updated_at = batch.created_by, utcnow()
-        events.append(_event(far, "paired", batch,
+        far.updated_by, far.updated_at = actor_id, utcnow()
+        events.append(_event(far, "paired", batch, actor_id, client,
                              {"transfer_pair_id": {"before": None, "after": str(pair_id)},
-                              "counterparty": {"before": far.counterparty, "after": None}}))
+                              "counterparty": {"before": old_cp, "after": None}}))
         return [near]                                    # 只新增一条，另一条是改已有的
 
     # ② 对方账户在应用里，但对腿还没记过 → 两腿一起建
@@ -1019,7 +1027,7 @@ def commit_transfer(db, row, batch, ctx, events) -> list[Transaction]:
             transfer_pair_id=pair_id, counterparty=None,
             merchant=None, note=row.note, category_l1=None, category_l2=None,
             import_batch_id=batch.id,
-            created_by=batch.created_by, updated_by=batch.created_by)
+            created_by=actor_id, updated_by=actor_id)
         return [near, far]
 
     # ③ 单腿
@@ -1040,13 +1048,13 @@ def commit_transfer(db, row, batch, ctx, events) -> list[Transaction]:
 导入建的每一笔交易都要追加一条 `imported` 事件；配对时改动的**已有**交易另追加一条 `paired` 事件。表结构见 [`02-database.md`](./02-database.md)，字段：`id`、`ledger_id`、`transaction_id`、`actor_id`、`at`、`event`、`changes`、`import_batch_id`、`client`。
 
 ```python
-def _event(tx, event, batch, changes=None) -> TransactionEvent:
+def _event(tx, event, batch, actor_id, client, changes=None) -> TransactionEvent:
     return TransactionEvent(
         ledger_id=batch.ledger_id, transaction_id=tx.id,
-        actor_id=batch.created_by, at=utcnow(), event=event,
+        actor_id=actor_id, at=utcnow(), event=event,   # 本次操作者，不是批次的上传人
         changes=changes,                       # imported 事件为 NULL：整条都是新的
         import_batch_id=batch.id,
-        client=batch.client)                   # 请求头 X-Client，可为 NULL
+        client=client)                         # 本次请求头 X-Client，可为 NULL
 ```
 
 | 场景 | 事件 |
@@ -1054,7 +1062,9 @@ def _event(tx, event, batch, changes=None) -> TransactionEvent:
 | 导入新建一条交易（含 ② 里的对手腿） | 每条一个 `imported`，`changes = NULL`，`import_batch_id` = 本批 |
 | ① 配对时改的那条已有交易 | 一个 `paired`，`changes` 记 `transfer_pair_id` 与 `counterparty` 的前后值 |
 | 退款行写了 `refund_of` | 不额外发 `refund_linked`：`imported` 事件已经包含"这条是导入进来的、带着原单"这件事；`refund_linked` 留给导入之后在交易页做的关联变化 |
-| 撤销导入 | **不**发事件：交易被删，事件随外键级联删除（决策 §14.51） |
+| 撤销导入 | 被删的交易**不**发事件（事件随外键级联删除，决策 §14.51）；因撤销而被拆开的**存活对腿**追加一条 `unpaired` 事件（§4.8） |
+
+事件的 `actor_id` 是**本次操作的人**（`commit_batch` / `delete_batch` 收到的 `actor_id`），不一定是批次的 `created_by` —— member 提交别人上传的批次时，事件要记在提交人头上（决策 §14.51「actor_id = 做这件事的人」）。`client` 同理取本次请求的 `X-Client`；`import_batches` 表**不存** `client` 列。
 
 `GET /ledgers/{lid}/transactions/{tid}` 的 `events[]` 按时间倒序返回，交易详情页显示成时间线（决策 §14.51、§14.52 B23）。事件表**只追加不修改**。
 
@@ -1074,7 +1084,7 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID,
         created, events, paired = [], [], 0
         for i, r in enumerate(rows, start=1):
             if r.kind == "transfer":
-                txs = commit_transfer(db, r, batch, ctx, events)
+                txs = commit_transfer(db, r, batch, ctx, events, actor_id, client)
                 paired += 1 if r.matched_transaction_id else 0
             else:
                 txs = [_build(r, batch, ctx)]            # refund_of 按 §4.4 的两个条件写
@@ -1085,7 +1095,7 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID,
             created.extend(txs)
         db.flush()
         for tx in created:
-            events.append(_event(tx, "imported", batch))
+            events.append(_event(tx, "imported", batch, actor_id, client))
         db.add_all(events)
         batch.status = "committed"
         batch.committed_at = utcnow()
@@ -1103,7 +1113,7 @@ def commit_batch(db: Session, batch_id: UUID, actor_id: UUID,
 `DELETE /ledgers/{lid}/imports/{bid}`：批次是 `committed` 时语义是**撤销**，是 `ready` 时是**丢弃**；两者最终都让这一批整个消失（决策 §14.22：不引入 `reverted` 状态、不为追溯保留已撤销批次）。无时间限制，member 也能做（决策 §14.52 B9）。
 
 ```python
-def delete_batch(db, batch_id, actor_id, dry_run=False) -> DeleteResult:
+def delete_batch(db, batch_id, actor_id, client=None, dry_run=False) -> DeleteResult:
     with db.begin():
         batch = db.get(ImportBatch, batch_id, with_for_update=True)
         mode = "revert" if batch.status == "committed" else "discard"
@@ -1125,6 +1135,25 @@ def delete_batch(db, batch_id, actor_id, dry_run=False) -> DeleteResult:
         if dry_run:
             return DeleteResult(mode, len(tx_ids), orphaned, in_batch, deleted=False)
 
+        # ① 先拆 §4.5 ① 配进去的 pair：本批交易带的 pair_id，另一条腿不在本批里
+        pair_ids = db.scalars(select(Transaction.transfer_pair_id)
+                              .where(Transaction.import_batch_id == batch_id,
+                                     Transaction.transfer_pair_id.isnot(None))).all()
+        survivors = db.scalars(
+            select(Transaction).where(
+                Transaction.transfer_pair_id.in_(pair_ids),
+                Transaction.import_batch_id.is_distinct_from(batch_id))
+            .with_for_update()).all() if pair_ids else []
+        for far in survivors:
+            old_pair = far.transfer_pair_id       # 先存原值，事件要记 before
+            far.transfer_pair_id = None           # counterparty 保持 NULL，见下
+            far.updated_by, far.updated_at = actor_id, utcnow()
+            db.add(_event(far, "unpaired", batch, actor_id, client,
+                          {"transfer_pair_id": {"before": str(old_pair),
+                                                "after": None}}))
+        db.flush()                                # 先落拆对，再删交易
+
+        # ② 删本批交易与批次；本批交易自己的 events 随外键级联消失
         db.execute(delete(Transaction).where(Transaction.import_batch_id == batch_id))
         db.delete(batch)                          # import_rows 随 ON DELETE CASCADE 消失
     return DeleteResult(mode, len(tx_ids), orphaned, in_batch, deleted=True)
@@ -1160,7 +1189,7 @@ def delete_batch(db, batch_id, actor_id, dry_run=False) -> DeleteResult:
 | 撤销后再次调 `DELETE` | 404 `not_found`（批次行已经没了，删除是幂等终态） | |
 | 撤销后想重新导入 | 重新上传 = 新建批次 | |
 
-① 的回滚是唯一需要应用代码兜的：删交易之前先把配对进去的那些 pair 拆开（`UPDATE transactions SET transfer_pair_id = NULL WHERE transfer_pair_id IN (…) AND import_batch_id IS DISTINCT FROM :bid`），否则留下一个只有一条腿却带着 `transfer_pair_id` 的孤儿。对手文本找不回来是**已知的取舍**：`counterparty` 在配对时被清空，决策 §14.34 没有要求保留原值，本章也不为此加列。
+① 的回滚是唯一需要应用代码兜的（就是上面伪代码的 ① 那一段）：删交易之前先把配对进去的那些 pair 拆开（`UPDATE transactions SET transfer_pair_id = NULL, updated_by = :actor, updated_at = now() WHERE transfer_pair_id IN (…) AND import_batch_id IS DISTINCT FROM :bid`）并给每条被拆开的存活腿追加一条 `unpaired` 事件，否则留下一个只有一条腿却带着 `transfer_pair_id` 的孤儿、时间线上也解释不了这条腿为什么突然不配对了。对手文本在**正式交易上**找不回来是已知的取舍：`counterparty` 在配对时被清空，决策 §14.34 没有要求恢复，本章也不为此加列 —— 但 §4.5 ① 的 `paired` 事件在 `changes.counterparty.before` 里留着原值，用户在交易详情的时间线上还能看到。
 
 响应体：`{"batch_id": ..., "mode": "revert", "deleted_transactions": 13, "deleted": true}`。删除类端点统一 204，撤销导入是例外（要回条数，决策 §14.43 03-6）。
 
@@ -1371,10 +1400,14 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 2026-08-07,-1299.00,CNY,expense,,,京东,"iPad 保护套 + 键盘，一单两件",shopping,electronics,p1:7
 2026-08-11,299.00,CNY,refund,,,京东,"退了键盘，原单 2026-08-07",shopping,electronics,p1:9
 2026-08-12,-238.00,CNY,expense,,,淘宝,"看不出买的什么",,,p1:10
-2026-08-15,6200.00,SGD,income,,,ACME PTE LTD,"八月工资",salary,base_salary,p1:11
-2026-08-20,3000.00,CNY,transfer,in,repayment,,"信用卡还款",,,p1:12
-2026-08-22,-500.00,SGD,transfer,out,plain,,"转到另一张卡",,,p1:13
+2026-08-15,20000.00,CNY,income,,,某某科技,"八月工资",salary,base_salary,p1:11
+2026-08-20,-3000.00,CNY,transfer,out,repayment,,"还信用卡",,,p1:12
+2026-08-22,-500.00,CNY,transfer,out,plain,,"转到另一张卡",,,p1:13
 ```
+
+这是**一个账户**（一张 CNY 储蓄卡）的一份账单：整份文件只有这一个账户的流水，`currency` 全是
+这个账户的结算币种，两条转账都是从这个账户转出去的（`transfer_role=out`）。用户如果还给了别的
+账户的账单（比如那张被还的信用卡），另出一份 CSV，不要混在同一份文件里。
 
 ## 交付时说什么
 
@@ -1601,7 +1634,7 @@ def _luhn(d: str) -> bool:
 | 文件 | 覆盖的点 |
 |---|---|
 | `ok_credit_cny.csv` | §1.5 示例 A：支出、退款、还款转入腿；含中文商户与引号转义 |
-| `ok_checking_sgd.csv` | §1.5 示例 B：收入、外币原值、`repayment` / `plain` 两种转出腿 |
+| `ok_checking_sgd.csv` | §1.5 示例 B：收入、外币原值、`repayment` / `plain` 两种转出腿；`repayment` 那条与 `ok_credit_cny.csv` 的转入腿**币种与金额都不同**（跨币种还款，不该自动配对） |
 | `ok_paste_alipay.txt` | §1.5 示例 C 的**粘贴文本**，前后带 ``` 围栏与空行，测 `read_paste()` 的剥离 |
 | `ok_bom.csv` | 带 UTF-8 BOM，测 BOM 剥离 |
 | `ok_crlf.csv` | `\r\n` 行尾 |
@@ -1686,6 +1719,7 @@ fixture 由维护者手工写，姓名统一"张三" / "John Doe"，卡号统一
 | 同上但对腿在**同一个账户**上 | 不命中（`source_id <> :source_id`） |
 | 同上但对腿 `subtype` 是 `plain`、本行是 `repayment` | **仍然命中**（subtype 只参与排序） |
 | 同上但对腿已有 `transfer_pair_id` | `duplicate`，不是 `transfer_candidate` |
+| 转账行**同时**命中 `duplicate`（同账户同日同额）且对腿已配对 | `flags` 含 `duplicate`、不含 `transfer_candidate`；`matched_transaction_id` 必须是 `None`（§3.3 查候选前已清空），提交时不会走 §4.5 ① 的配对分支 |
 | 两条单腿对腿都符合 | `transfer_candidate` + `needs_review`，`candidate_ids` 两个，**不**预填 |
 | 一条已配对 + 一条单腿 | 预填那条单腿（`paired` 只在没有单腿时才触发 `duplicate`） |
 | `transfer/out` `repayment`，库里没对腿，账本只有 1 个未归档 checking | `counterpart_source_id` 预填该 checking |
