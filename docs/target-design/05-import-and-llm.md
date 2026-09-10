@@ -889,7 +889,7 @@ def flag_transfer_candidates(db, ctx, rows):
 | `merchant` / `note` / `source_ref` | 文本，长度上限同 §2.4 ⑧ |
 | `category_l1` / `category_l2` | 必须在表内且收支组匹配，否则 400 `category_invalid` / `category_kind_mismatch` |
 | `matched_transaction_id` | 退款原单（`kind='refund'` 时）或配对目标（`kind='transfer'` 时）；置 `null` = 取消关联。它是"选中了哪一条"的**唯一载体**（决策 §14.53b）：多候选时服务端不预填，用户在前端用交易列表选一条后就是一次这样的 PATCH，非空即"已勾选"，没有第二个状态字段。**同一次 PATCH 里改了 `kind` 会先把它清掉**（见下），要保留关联就别在同一次请求里改 `kind` |
-| `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿）。必须是**本账本的未归档账户**，否则 404 `not_found`（决策 §14.53c）；**不能等于批次自己的目标账户** `batch.source_id`，否则 400 `same_source`（[`03-backend-api.md`](./03-backend-api.md) §4.2 注册表；两腿转账的两条腿必须落在不同账户上，[`01-domain-model.md`](./01-domain-model.md) §6 不变量 9）。03 §5.41 的错误表眼下把"等于目标账户"归在通用的 `validation_error` 下，以注册表里更专属的 `same_source` 为准（§4.2 自己的规矩：有专属 code 就不用 `validation_error`），由 README 校对收口。服务端从不替用户猜这个值（§3.3） |
+| `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿）。必须是**本账本的未归档账户**，否则 404 `not_found`（决策 §14.53c）；**不能等于批次自己的目标账户** `batch.source_id`，否则 400 `same_source`（[`03-backend-api.md`](./03-backend-api.md) §4.2 注册表；两腿转账的两条腿必须落在不同账户上，[`01-domain-and-flows.md`](./01-domain-and-flows.md) §6 不变量 9）。**已与 03 §5.41 对齐**：这一条用注册表里更专属的 `same_source`，不落在通用的 `validation_error` 上（§4.2 自己的规矩：有专属 code 就不用 `validation_error`）。服务端从不替用户猜这个值（§3.3） |
 | `counterparty` | 单腿转账的对手文本，例如"老婆""工资卡"（决策 §14.10、§14.16：只有用户填，skill 不猜） |
 | `status` | `pending` / `edited` / `skipped`，三个值，没有第四个（决策 §5） |
 
@@ -1248,7 +1248,7 @@ def delete_batch(db, batch_id, actor_id, client=None, dry_run=False) -> DeleteRe
 | `filename`、`size_bytes` | 02 §1.7 同名列 | 只记名字与字节数，**文件不保存**（§4.11）；`source='paste'` 时 `filename` 为 NULL |
 | `skill_version` | 02 §1.7 同名列 | 文件里的 `# version:` 值 |
 | `row_count` | 02 §1.7 同名列 | 数据行数 |
-| `warnings` | 02 §1.7 同名列 | **整批级**警告数组（例如"第 1 行是表头之外的注释行，已忽略"这类不针对某一行的提示）；**行级**说明一律写在各行的 `hint` 上，不进这里（决策 §5）。[`03-backend-api.md`](./03-backend-api.md) §5.38 / §5.39 的响应目前没有这个字段，由 README 校对收口：要么补进响应，要么把这一列从 02 §1.7 删掉，不能一列谁也不写谁也不读 |
+| `warnings` | 02 §1.7 同名列 | **整批级**警告数组（例如"第 1 行是表头之外的注释行，已忽略"这类不针对某一行的提示）；**行级**说明一律写在各行的 `hint` 上，不进这里（决策 §5）。**已与 03 对齐**：[`03-backend-api.md`](./03-backend-api.md) §5.37 / §5.38 / §5.39 的批次对象都下发 `warnings`（没有警告时是空数组），这一列有人写也有人读 |
 | `source_id` + `source_name` | 02 §1.7 `source_id` 列 + join | 目标账户；前端要显示名字，接口直接带上（03 §5.38） |
 | `created_by` | 02 §1.7 同名列 | 上传人的用户 id，前端用成员列表映射成 `display_name`（决策 §14.43 03-4、§14.40 01-7） |
 | `net_amount` + `base_currency` | 现算 | 本批**净额**：非转账行按账本基准币种折算后求和（收入 + 退款 − 支出），转账不计入（决策 §14.52 A17、§7） |

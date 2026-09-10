@@ -386,7 +386,7 @@ export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 60_00
 
 三条贯穿全表的约定：**所有列表端点都返回 `{items, total}` 信封**（[`./03-backend-api.md`](./03-backend-api.md) §4.3），所以列表类函数的返回类型一律是 `Paged<T>`，没有裸数组（交易列表多一个 `summary`，决策 §14.52 A14）；**所有 PATCH 请求体都必须带 `updated_at`**（§4.4 的乐观并发）；**折算三件套统一叫 `amount_base` / `rate_used` / `rate_date`**，取不到汇率时三者同时为 `null`。
 
-**没有任何与大模型有关的类型**（决策 §5、§6、§14.25）：`LlmSettings` / `LlmSettingsPut` / `LlmTestResult` 全部删除，`User` 上的 `has_llm_settings` 也删除。导入的类型按同步校验模型重写：没有进度字段、没有整页图列表与页号、没有置信度、没有视觉路径标志位、没有分块错误列，状态只剩 `ready` / `committed`（决策 §5、§14.25）。
+**没有任何与大模型有关的类型**（决策 §5、§6、§14.25）：应用不接入大模型，模型设置在服务端就不存在，前端自然也没有承载它的类型，`User` 上也没有与之相关的标志位。导入的类型按同步校验模型重写：没有进度字段、没有整页图列表与页号、没有置信度、没有视觉路径标志位、没有分块错误列，状态只剩 `ready` / `committed`（决策 §5、§14.25）。
 
 ```ts
 // ---------- 通用 ----------

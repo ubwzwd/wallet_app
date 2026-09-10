@@ -382,7 +382,7 @@
 | `hint` | VARCHAR(200) | 服务端给 review 界面的一句提示（如"币种 XX 无效，已改为账户币种"），**只读、不进** `transactions.note`（决策 §14.19） | 否 |
 | `flags` | 字符串数组 | 服务端标记，**只有四种**：`duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review`（决策 §5、§14.31、§14.34） | 否 |
 | `matched_transaction_id` | UUID | `refund_candidate` 的原单、或 `transfer_candidate` 的对腿（唯一候选时预填） | 否 |
-| `counterpart_source_id` | UUID | 转账 / 还款行的对手账户：找到唯一对腿时预填成它所在的账户，**没找到就留空、不猜**（决策 §14.53c）；用户在 review 里填时必须是**本账本的未归档账户**——不存在或不属于本账本 → 404 `not_found`，已归档 → 409 `source_archived`（决策 §14.53c） | 否 |
+| `counterpart_source_id` | UUID | 转账 / 还款行的对手账户：找到唯一对腿时预填成它所在的账户，**没找到就留空、不猜**（决策 §14.53c）；用户在 review 里填时必须是**本账本的未归档账户**，否则 404 `not_found`——不存在、不属于本账本、已归档三种情形对外都是"这个账户你拿不来记账"，不作区分（决策 §14.53c） | 否 |
 | `counterparty` | VARCHAR(100) | 对方文本；**校验阶段恒为 NULL**（skill 不猜对手账户，CSV 里没有这一列），只有用户在 review 里填才有值，提交单腿转账时写入 `transactions.counterparty`（决策 §14.10、§14.16） | 否 |
 | `transaction_id` | UUID | 提交后建出来的交易 id | 否 |
 | `created_at` / `updated_at` | TIMESTAMP | | 是 |
@@ -1030,7 +1030,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 6. **Review**：只有 `ready` 才能读写草稿行。
    - `GET .../rows` 列出草稿行（`limit` 上限 500）。
-   - `PATCH .../rows/{rid}` 改单行，可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`matched_transaction_id`（退款原单 / 转账对腿，也可置 `null` 取消建议）、`counterpart_source_id`（转账对手账户，**必须是本账本的未归档账户**——不存在或不属于本账本 → 404 `not_found`，已归档 → 409 `source_archived`，决策 §14.53c），以及把 `status` 改成 `skipped`。**普通行不能改账户**——整批只有一个目标账户（决策 §14.52 A5）；只有转账行能改对手账户。
+   - `PATCH .../rows/{rid}` 改单行，可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`matched_transaction_id`（退款原单 / 转账对腿，也可置 `null` 取消建议）、`counterpart_source_id`（转账对手账户，**必须是本账本的未归档账户，否则 404 `not_found`**——不存在、不属于本账本、已归档不作区分，决策 §14.53c；等于批次的目标账户则是 400 `same_source`），以及把 `status` 改成 `skipped`。**普通行不能改账户**——整批只有一个目标账户（决策 §14.52 A5）；只有转账行能改对手账户。
    - `PATCH .../imports/{bid}/rows` **批量**改：体是行 id 数组 + 同一份改动，用于"批量设分类""批量跳过"（决策 §14.52 A4）。
    - review 表格内置筛选：**全部 / 待归类 / 有标记**（决策 §14.52 A4）。"待归类"= 非 transfer 行且 `category_l1` 为空；"有标记"= `flags` 非空。两者**互不排斥**，同一行可能同时出现在两个筛选里。
    - 任何一次 PATCH 把该行 `status` 从 `pending` 变成 `edited`（除非用户显式设成 `skipped`）。**没有"确认这行"动作，也没有"就绪"计数**（决策 §14.7、§14.52 B13）。
