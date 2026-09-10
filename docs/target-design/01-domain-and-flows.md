@@ -8,7 +8,7 @@
 >
 > **与其他章的分工**：本章写"是什么"和"什么规则"；建表 DDL、索引、迁移在 [`./02-database.md`](./02-database.md)；每个接口的参数、状态码、响应体在 [`./03-backend-api.md`](./03-backend-api.md)；界面在 [`./04-frontend.md`](./04-frontend.md)；标准导入 CSV 格式、skill 文本、校验与自动标记算法在 [`./05-import-and-llm.md`](./05-import-and-llm.md)。本章只写导入的**状态与业务规则**。
 >
-> **修订说明**：**本版按 2026-09-11 全部决策同步**。相对上一版的主要变化，全部来自 [`./00-decisions.md`](./00-decisions.md) §14.20–§14.52：
+> **修订说明**：**本版按 2026-09-11 全部决策同步**。相对上一版的主要变化，全部来自 [`./00-decisions.md`](./00-decisions.md) §14.20–§14.53：
 >
 > - **应用不接入任何大模型**（决策 §14.25、§5、§6）：删除"模型设置"实体、后台解析、解析进度、页面缩略图、视觉流水线、重试端点的全部内容。导入改成"用户在自己的 ChatGPT / Claude 里用我们的 skill 把账单整理成标准 CSV → 上传或粘贴到应用 → 服务端同步校验 → review → 提交"。
 > - **导入只做 CSV**（决策 §14.47）：标准格式只有固定 11 列表头 + `# version:` 首行的 CSV，不再接受 JSON。
@@ -20,6 +20,7 @@
 > - **分类说明文字**（决策 §14.20、§14.21）：一级分类带 `desc_zh` / `desc_en` 判据，随 `GET /categories` 下发。
 > - **金额区间筛选按账本基准币种折算后比较**（决策 §14.49）；交易列表在 `{items, total}` 之外多返回一个 `summary`（决策 §14.52 A14）。
 > - **用户资料**：加 `display_name`（决策 §14.6、§14.40）与 `language`，删除现状的默认账户列。
+> - **本轮按决策 §14.53（2026-09-11）统一各章打架之处**：配对**不要求**两腿 `transfer_subtype` 原本相同，改为**配对时统一子类型**（§1.9、§3.15、§4.2、§6.2），统一时**两腿各写一条 `updated` 事件**（§1.10 路径表同步）；多候选转账不新增字段，只打 `needs_review` + `hint`，由用户在 review 里自己挑一条（§3.15 A）；没找到对腿时 `counterpart_source_id` **留空、不猜**（§3.17）；错误 code 一律取 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的名字（`pair_invalid` / `import_format_invalid` / `currency_locked`）；导入校验的顺序是**解码 → 结构（含缺 `# version:` 行）→ 版本**（§3.17）。
 >
 > 本章篇幅不作为验收项（决策 §14.8）：被作废的内容是**删掉**，不是留旧文加一句"已作废"。
 
@@ -107,7 +108,7 @@
         +----------------+
 ```
 
-目标表共 **10 张**：`users`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`transactions`、`transaction_events`、`import_batches`、`import_rows`、`exchange_rates`。其中前九张是决策 §10 列的表（模型设置表已随决策 §14.25 的导入改版取消），`transaction_events` 是决策 §14.51 新增的第十张。`transaction_tags` 删除（决策 §10）。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM（决策 §10）。
+目标表共 **10 张**：`users`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`transactions`、`transaction_events`、`import_batches`、`import_rows`、`exchange_rates`。除 `transaction_events` 外都是决策 §10 列的表（模型设置表已随决策 §14.25 的导入改版取消）；`transaction_events` 是决策 §14.51 新增的一张。`transaction_tags` 删除（决策 §10）。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM（决策 §10）。
 
 时间戳一律是**不带时区的 UTC**（`created_at` / `updated_at` / `expires_at` / `at`），接口输出带 `Z`，前端按浏览器时区显示（决策 §14.26）。唯一的例外是日历日期字段 `occurred_at`，它是 Postgres `DATE`，不带时刻也不带时区（决策 §14.32）。
 
@@ -274,7 +275,11 @@
 规则：
 
 - `transfer_role`：转出腿 `out`（`amount` 负），转入腿 `in`（`amount` 正）。
-- `transfer_subtype`：`plain`（普通划转）或 `repayment`（信用卡还款）。**两腿必须一致**——`POST .../transfer` 一次建两行时天然一致，配对端点也把「两条 subtype 相同」作为硬校验（§3.15 B 第 5 步）。
+- `transfer_subtype`：`plain`（普通划转）或 `repayment`（信用卡还款）。**配对不要求两腿原本相同，而是在配对时统一**（决策 §14.53a）：
+  - `POST .../transfer` 一次建两行时两腿天然同值；
+  - 两条单腿**配对**时（导入提交或 `POST .../{tid}/pair`），服务端算出一个子类型写到两腿上——**任一腿是 `repayment` 且转入腿所在账户 `type = 'credit'` → 整对 `repayment`；否则整对 `plain`**；两腿在**同一个事务**里改成这个值，**两腿各追加一条 `updated` 事件**（`changes` 记 `transfer_subtype` 的前后值；值未变的那腿 before == after）（§1.10）。
+  - 之所以不硬卡「两腿必须相同」：储蓄卡账单常把同一笔还款写成 `plain`、信用卡账单写成 `repayment`，硬卡会让这类配对永远触发不了（决策 §14.53a）。
+  - **配对之后**两腿始终一致（§6.2 不变量 8）；此后 `PATCH .../transfer/{pair_id}` 改 `subtype` 也同写两腿。
 - `occurred_at`：`POST .../transfer` 建的两腿必然同日；**配对出来的一对允许两腿日期不同**（对账日期差，§3.15 B 不校验日期）。因此**两腿转账对象顶层的 `occurred_at` / `subtype` / `note` 一律取 `out` 腿的值**，`PATCH .../transfer/{pair_id}` 传这三个字段时**同时写到两腿**（§3.13）。
 - `UNIQUE (transfer_pair_id, transfer_role)`，NULL 不参与——保证同一个 pair 最多一条 out、一条 in（决策 §10）。
 - `transfer_pair_id IS NULL OR counterparty IS NULL`——有对腿就不填对方文本（决策 §10）。
@@ -313,7 +318,8 @@
 | `POST /transactions/transfer` | 两腿各一条 `created` | 空 |
 | `PATCH /transactions/transfer/{pair_id}` | 两腿各一条 `updated` | 各自变化的字段 |
 | `POST /imports/{bid}/commit` | 每条新交易一条 `imported` | 空，带 `import_batch_id` |
-| `POST /transactions/{tid}/pair` | 两条各一条 `paired` | `transfer_pair_id`、`counterparty` 的前后值 |
+| `POST /transactions/{tid}/pair` | 两条各一条 `paired`；配对时统一 `transfer_subtype`，两腿再各一条 `updated` | `paired`：`transfer_pair_id`、`counterparty` 的前后值；`updated`：`transfer_subtype` 的前后值（值未变的那腿 before == after，决策 §14.53a） |
+| `POST /imports/{bid}/commit` 里发生配对 | 新旧两条各一条 `paired` + 各一条 `updated` | 同上一行（决策 §14.53a、§14.51） |
 | `POST /transactions/transfer/{pair_id}/unpair` | 两条各一条 `unpaired` | `transfer_pair_id` 的前后值 |
 | `PATCH /transactions/{tid}` 令 `refund_of` 由空变非空 | `refund_linked`（在 `updated` 之外额外一条） | `refund_of` 的前后值 |
 | `PATCH /transactions/{tid}` 令 `refund_of` 由非空变空 | `refund_unlinked`（额外一条） | `refund_of` 的前后值 |
@@ -376,7 +382,7 @@
 | `hint` | VARCHAR(200) | 服务端给 review 界面的一句提示（如"币种 XX 无效，已改为账户币种"），**只读、不进** `transactions.note`（决策 §14.19） | 否 |
 | `flags` | 字符串数组 | 服务端标记，**只有四种**：`duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review`（决策 §5、§14.31、§14.34） | 否 |
 | `matched_transaction_id` | UUID | `refund_candidate` 的原单、或 `transfer_candidate` 的对腿（唯一候选时预填） | 否 |
-| `counterpart_source_id` | UUID | 转账 / 还款行的对手账户（找到时预填） | 否 |
+| `counterpart_source_id` | UUID | 转账 / 还款行的对手账户：找到唯一对腿时预填成它所在的账户，**没找到就留空、不猜**（决策 §14.53c）；用户在 review 里填时必须是**本账本的未归档账户**——不存在或不属于本账本 → 404 `not_found`，已归档 → 409 `source_archived`（决策 §14.53c） | 否 |
 | `counterparty` | VARCHAR(100) | 对方文本；**校验阶段恒为 NULL**（skill 不猜对手账户，CSV 里没有这一列），只有用户在 review 里填才有值，提交单腿转账时写入 `transactions.counterparty`（决策 §14.10、§14.16） | 否 |
 | `transaction_id` | UUID | 提交后建出来的交易 id | 否 |
 | `created_at` / `updated_at` | TIMESTAMP | | 是 |
@@ -617,7 +623,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 - **步骤**：`PATCH /ledgers/{id}/sources/{sid}`，体带要改的字段 + **必须带 `updated_at`**（乐观并发，见 §3.16）。
 - **可改字段**：`name`、`type`、`opening_balance`、`archived`。
-- **`default_currency` 创建后不可改**（决策 §14.50）：传了一个与现值不同的币种 → 400 `currency_immutable`，`detail` 提示"账户币种创建后不可更改，请新建账户"。传一个与现值相同的值视为无操作。理由是账户余额、历史折算都以它为计价基准，改它会让所有历史余额无声变脸。
+- **`default_currency` 创建后不可改**（决策 §14.50）：传了一个与现值不同的币种 → 400 `currency_locked`，`detail` 提示"账户币种创建后不可更改，请新建账户"。传一个与现值相同的值视为无操作。理由是账户余额、历史折算都以它为计价基准，改它会让所有历史余额无声变脸。
 - **注意**：改 `opening_balance` 会立刻改变余额与净资产（§5.4、§5.5）。
 - **状态变化**：`updated_by` / `updated_at` 刷新。
 
@@ -760,7 +766,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 - **触发者**：任何成员。
 - **前置**：账本内至少两个未归档账户。
 - **表单三条规则**（决策 §14.52 A11）：
-  1. `subtype='repayment'`（信用卡还款）时，**转入账户只能选 `type='credit'` 的账户**；
+  1. `subtype='repayment'`（信用卡还款）时，**转入账户只能选 `type='credit'` 的账户**（服务端把关：否则 400 `repayment_target_not_credit`）；
   2. 单腿转账的币种**固定等于该账户的 `default_currency`**，不给币种选择器；
   3. 两腿币种相同时**只填一个金额**，前端把它同时作为 `amount_out` 和 `amount_in`；币种不同时才出现两个金额框和一个只读汇率 chip（决策 §14.52 A10）。
 - **步骤**：`POST /ledgers/{id}/transactions/transfer`，**一个请求建两行，服务端在一个事务里生成 `transfer_pair_id`**（不再像现状那样由前端 `crypto.randomUUID()` 生成后发两次 POST，frontend/src/screens/TransactionFormScreen.tsx:164,167-201）。请求体是**扁平**的（形状以 [`./03-backend-api.md`](./03-backend-api.md) §5.33 为准；金额传正数、符号由服务端定；子类型字段叫 `subtype`）：
@@ -802,7 +808,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
   1. `from_source_id` / `to_source_id` 都存在、属于本账本、都未归档 → 否则 404 `not_found` / 409 `source_archived`；
   2. 两个账户**必须不同** → 否则 400 `same_source`；
   3. `amount_out` / `amount_in` 都 > 0（服务端把转出腿存成负数）→ 否则 400 `validation_error`；
-  4. `subtype ∈ {plain, repayment}`；`subtype='repayment'` 时转入账户 `type` 必须是 `credit` → 否则 400 `validation_error`（决策 §14.52 A11）；
+  4. `subtype ∈ {plain, repayment}`；`subtype='repayment'` 时转入账户 `type` 必须是 `credit` → 否则 400 `repayment_target_not_credit`（决策 §14.52 A11）；
   5. 请求体里不允许出现 `category_l1` / `category_l2` / `counterparty` / `merchant` → 400 `validation_error`；
   6. **不要求**两腿金额相等，也**不要求**币种相同（跨币种转账，决策 §1.2）。
 - **状态变化**：两行同时入库、共享 pair id，各追加一条 `created` 事件；两个账户余额同时变化；统计不变（转账不计入）。
@@ -812,7 +818,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 **编辑**
 
 - `PATCH /ledgers/{id}/transactions/transfer/{pair_id}`，体是创建体的部分更新（同样扁平）：`from_source_id`、`to_source_id`、`amount_out`、`currency_out`、`amount_in`、`currency_in`、`occurred_at`、`subtype`、`note` 都可选，外加必填的 `updated_at`（取两腿中较新的那个）。`pair_id` 本身、`kind`、`transfer_role` 都不可改（[`./03-backend-api.md`](./03-backend-api.md) §5.34）。
-- `occurred_at` / `subtype` / `note` 是**两腿共有**的字段：传了就**同时写到两腿**（写完两腿必然一致）；`from_source_id` / `amount_out` / `currency_out` 只落在 out 腿，`to_source_id` / `amount_in` / `currency_in` 只落在 in 腿。
+- `occurred_at` / `subtype` / `note` 是**两腿共有**的字段：传了就**同时写到两腿**（写完两腿必然一致，决策 §14.53a）；`from_source_id` / `amount_out` / `currency_out` 只落在 out 腿，`to_source_id` / `amount_in` / `currency_in` 只落在 in 腿。
 - **两腿的 `updated_at` 都要比对**（决策 §14.40，01-11）：服务端 `SELECT ... FOR UPDATE` 取两条腿，任一条的 `updated_at` 比请求里带的更新 → 409 `stale_update`。
 - 校验同创建；两腿在一个事务里一起改，两腿的 `updated_at` 一起刷新，各追加一条 `updated` 事件。
 - 对单条腿调 `PATCH /transactions/{tid}` → 409 `use_transfer_endpoint`。
@@ -845,7 +851,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 - **服务端校验**：
   1. `transfer_role` 与符号一致（`in` → `amount > 0`，`out` → `amount < 0`）→ 否则 400 `validation_error`；
-  2. `transfer_subtype` 必填；**`transfer_role='in'` 且 `transfer_subtype='repayment'` 时该账户 `type` 必须是 `credit`**（收到还款的那一端是自己的信用卡）→ 否则 400 `validation_error`；**`transfer_role='out'` 的 repayment 腿不限账户类型**——用应用里的储蓄卡去还一张没录进应用的信用卡，出账腿就落在 `checking` 上，这正是单腿转账要覆盖的场景（决策 §14.52 A11 只约束转入账户；§3.15 A 的自动配对、§3.15 C 拆开两腿后留下的 out 腿都依赖这一点，见 §5.7.3 的算例）；
+  2. `transfer_subtype` 必填；**`transfer_role='in'` 且 `transfer_subtype='repayment'` 时该账户 `type` 必须是 `credit`**（收到还款的那一端是自己的信用卡）→ 否则 400 `repayment_target_not_credit`；**`transfer_role='out'` 的 repayment 腿不限账户类型**——用应用里的储蓄卡去还一张没录进应用的信用卡，出账腿就落在 `checking` 上，这正是单腿转账要覆盖的场景（决策 §14.52 A11 只约束转入账户；§3.15 A 的自动配对、§3.15 C 拆开两腿后留下的 out 腿都依赖这一点，见 §5.7.3 的算例）；
   3. `category_l1` / `category_l2` / `merchant` 必须为空 → 否则 400 `validation_error`；
   4. `transfer_pair_id` 不接受客户端传入（服务端只在两腿接口和配对接口里生成）→ 传了就 400 `validation_error`；
   5. `counterparty` 可空、≤100 字。
@@ -869,41 +875,41 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 服务端在校验通过、写完草稿行之后，为每一条 `kind='transfer'` 的行（`plain` 和 `repayment` 都算）在**其他账户**上找符合下面全部条件的交易：
 
 1. 同账本、`kind='transfer'`；
-2. `transfer_subtype` **与该行相同**（`plain` 只配 `plain`，`repayment` 只配 `repayment`）——否则提交时会造出 `plain` + `repayment` 的混合 pair，违反 §1.9「两腿 subtype 必须一致」；
-3. `occurred_at` 在该行日期的 **±3 天**内；
-4. **同币种、同金额绝对值**；
-5. `transfer_role` **相反**；
-6. **仍是单腿**（`transfer_pair_id IS NULL`）；
-7. 所在账户未归档。
+2. `occurred_at` 在该行日期的 **±3 天**内；
+3. **同币种、同金额绝对值**；
+4. `transfer_role` **相反**；
+5. **仍是单腿**（`transfer_pair_id IS NULL`）；
+6. 所在账户未归档。
+
+**`transfer_subtype` 不是筛选条件**（决策 §14.53a）：同一笔还款在储蓄卡账单里常写成 `plain`、在信用卡账单里写成 `repayment`，按子类型筛会让这类配对永远触发不了。两腿的子类型在**配对时统一**（§1.9），不在这里卡。
 
 结果处理（决策 §14.34）：
 
 | 候选数 | 处理 |
 |---|---|
-| 恰好 1 条 | 该行打 `transfer_candidate`，`matched_transaction_id` 预填这条，`counterpart_source_id` 预填它的账户；review 表格里"关联为一笔转账"**默认勾选** |
-| 多条 | 同样打 `transfer_candidate`，但**不预填**，review 里给下拉让用户挑一条 |
+| 恰好 1 条 | 该行打 `transfer_candidate`，`matched_transaction_id` 预填这条，`counterpart_source_id` 预填它所在的账户；review 表格里"关联为一笔转账"**默认勾选** |
+| 多条 | 打 `transfer_candidate` + `needs_review`，**不预填**（`matched_transaction_id` / `counterpart_source_id` 都留空），`hint` 写"找到 N 条可以配对的转账，请选一条"；用户在 review 里点"选一条"，界面**复用交易列表接口**筛出候选（`kind=transfer`、单腿、方向相反、其他账户、±3 天、同币种同金额）挑一条写回 `matched_transaction_id`。**候选列表不落库、不单独建接口，也不新增任何字段**——`matched_transaction_id` 是唯一载体（决策 §14.53b） |
 | 0 条，且对方账户上已存在一条**已经是两腿一半**的同额反向转账 | 该行打 `duplicate`，提示"这笔可能已经从对方账户那边记过了"，默认建议跳过 |
-| 其它 0 条情形 | 不打标记，提交后就是一条单腿转账，用户可在 review 里填 `counterparty` |
+| 其它 0 条情形 | 不打标记；**不猜对手账户**——`counterpart_source_id` 留空（决策 §14.53c）。用户在 review 里有三条路：填 `counterparty` 文本或什么都不填（提交时按**单腿**建）、或显式选一个对手账户填进 `counterpart_source_id`（提交时按**两腿**建，对手账户必须是本账本的未归档账户） |
 
-提交批次时（§3.17 第 6 步），凡是勾选了配对的行：服务端生成一个**新的** `transfer_pair_id`，把**新建的这条**和 `matched_transaction_id` 指向的**已有那条**一起挂上去，并把已有那条的 `counterparty` **清空**（CHECK 要求有对腿就不能有对方文本）。两条各追加一条 `paired` 事件。
+提交批次时（§3.17 第 7 步），凡是勾选了配对的行：服务端生成一个**新的** `transfer_pair_id`，把**新建的这条**和 `matched_transaction_id` 指向的**已有那条**一起挂上去，把已有那条的 `counterparty` **清空**（CHECK 要求有对腿就不能有对方文本），并按 §1.9 **统一两腿的 `transfer_subtype`**（决策 §14.53a）。两条各追加一条 `paired` 事件，**两腿再各追加一条 `updated` 事件**（`changes` 记 `transfer_subtype` 的前后值；值未变的那腿 before == after，决策 §14.53a）。
 
 **B. 详情页手动配对**
 
 - **步骤**：`POST /ledgers/{id}/transactions/{tid}/pair`，体 `{"counterpart_transaction_id": "...", "updated_at": "..."}`（`updated_at` 是本行的，用于乐观并发）。
 - **服务端校验**（顺序）：
   1. 两条都存在、属于本账本 → 否则 404 `not_found`；
-  2. 两条 `kind` 都是 `transfer` → 否则 400 `pair_target_invalid`；
-  3. 两条都**仍是单腿**（`transfer_pair_id IS NULL`）→ 否则 409 `already_paired`；
-  4. 两条 `transfer_role` 相反 → 否则 400 `pair_target_invalid`；
-  5. 两条 `transfer_subtype` **必须相同**（`plain` 配 `plain`、`repayment` 配 `repayment`）→ 否则 400 `pair_target_invalid`——这条保证 §1.9 与 §6.2 不变量 8 要求的「两腿 subtype 一致」在配对路径上也成立；
-  6. 两条在**不同账户**上 → 否则 400 `same_source`；
-  7. 两个账户都未归档 → 否则 409 `source_archived`；
-  8. 本行 `updated_at` 匹配 → 否则 409 `stale_update`。
-- **不校验**的：金额是否相等、币种是否相同、**日期是否相同或接近**。跨币种、金额不等本来就是合法的两腿转账（决策 §1.2）；±3 天同额只是**自动建议**的筛选条件，不是配对的硬约束——用户手动挑的就按用户的来。
-- **两腿日期允许不同**（配对路径独有的情形）：两腿转账对象顶层的 `occurred_at` / `subtype` / `note` **取 `out` 腿的值**——`GET`、`PATCH`、列表合并显示都按这条渲染（§1.9、§3.13）；`PATCH .../transfer/{pair_id}` 传 `occurred_at` / `subtype` / `note` 时**同时写到两腿**，改完两腿就又一致了。`subtype` 因为有上面第 5 条硬校验，任何时刻两腿都相同。
-- **服务端动作**（一个事务）：生成新的 `transfer_pair_id` 写到两条上；两条的 `counterparty` 都置 NULL；两条 `updated_at` / `updated_by` 刷新；各追加一条 `paired` 事件，`changes` 记 `transfer_pair_id` 和 `counterparty` 的前后值。
-- **失败分支**：任一校验失败整个事务回滚，两条都不动。界面上把错误翻成人话："这笔已经和另一笔配对了""两笔方向相同，配不成一进一出""不能和同一个账户上的转账配对"。
-- **候选列表怎么来**：复用 `GET /ledgers/{id}/transactions`，筛 `kind=transfer`、排除本账户、由前端过滤掉已配对的行——不另建接口（同决策 §14.11 对退款候选的处理）。
+  2. 两条 `kind` 都是 `transfer` → 否则 400 `pair_invalid`；
+  3. 两条都**仍是单腿**（都没有 `transfer_pair_id`）→ 已有 `transfer_pair_id` 的那条要先拆开再配，否则 400 `pair_invalid`；
+  4. 两条 `transfer_role` 相反 → 否则 400 `pair_invalid`；
+  5. 两条在**不同账户**上 → 否则 400 `same_source`；
+  6. 两个账户都未归档 → 否则 409 `source_archived`；
+  7. 本行 `updated_at` 匹配 → 否则 409 `stale_update`。
+- **不校验**的：金额是否相等、币种是否相同、**日期是否相同或接近**、**两腿的 `transfer_subtype` 是否相同**。跨币种、金额不等本来就是合法的两腿转账（决策 §1.2）；±3 天同额只是**自动建议**的筛选条件，不是配对的硬约束——用户手动挑的就按用户的来；子类型不同不拦，配对时由服务端统一（决策 §14.53a）。
+- **两腿日期允许不同**（配对路径独有的情形）：两腿转账对象顶层的 `occurred_at` / `subtype` / `note` **取 `out` 腿的值**——`GET`、`PATCH`、列表合并显示都按这条渲染（§1.9、§3.13）；`PATCH .../transfer/{pair_id}` 传 `occurred_at` / `subtype` / `note` 时**同时写到两腿**。`subtype` 在配对的那个事务里已经被统一（决策 §14.53a），所以配对之后两腿任何时刻都相同。
+- **服务端动作**（一个事务）：生成新的 `transfer_pair_id` 写到两条上；**统一 `transfer_subtype`**——任一腿是 `repayment` 且 `transfer_role='in'` 的那条所在账户 `type = 'credit'` → 两腿都写 `repayment`，否则两腿都写 `plain`（决策 §14.53a）；两条的 `counterparty` 都置 NULL；两条 `updated_at` / `updated_by` 刷新；各追加一条 `paired` 事件，`changes` 记 `transfer_pair_id` 和 `counterparty` 的前后值；**两腿再各追加一条 `updated` 事件**，`changes` 记 `transfer_subtype` 的前后值（值未变的那腿 before == after，决策 §14.53a）。
+- **失败分支**：任一校验失败整个事务回滚，两条都不动。`pair_invalid` 的 `detail` 说明是哪一条没过，界面把它翻成人话："这笔已经和另一笔配对了""两笔方向相同，配不成一进一出""不能和同一个账户上的转账配对"。
+- **候选列表怎么来**：复用 `GET /ledgers/{id}/transactions`，筛 `kind=transfer`、排除本账户、由前端过滤掉已配对的行——**不另建接口、候选列表不落库**（决策 §14.53b，与 §14.11 对退款候选的处理同一做法）。导入 review 里"多候选"让用户挑一条走的是同一套筛选（§3.15 A）。
 
 **C. 拆开**
 
@@ -958,33 +964,44 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    - multipart：`file`（CSV 文件） + `source_id`；
    - JSON 体：`{"source_id": "...", "text": "date,amount,..."}`（在应用内的文本框里粘贴 CSV 文本）。
 
-   请求级校验：文本 ≤ 2 MB → 否则 413 `file_too_large`；上传的必须是 CSV → 否则 415 `unsupported_file`（**不再接受 JSON 导入文件**，决策 §14.47）；`source_id` 存在且未归档 → 404 `not_found` / 409 `source_archived`；超过每小时 10 批 → 429 `import_rate_limited`。
+   请求级校验：文本 ≤ 2 MB → 否则 413 `file_too_large`；上传的必须是**纯文本 CSV**——判定不看扩展名也不看 `Content-Type`，而是按 UTF-8（可带 BOM）解码，解不开（PDF、图片、xlsx 这类二进制）一律 400 `import_format_invalid`（**只接受 CSV**，决策 §14.47、§14.53d）；`source_id` 存在且未归档 → 404 `not_found` / 409 `source_archived`；超过每小时 10 批 → 429 `import_rate_limited`。
 
-3. **同步校验**（服务端当场做完，秒级，决策 §5）。分三层：
+3. **同步校验**（服务端当场做完，秒级，决策 §5）。分三层，**顺序是解码 → 结构 → 版本 → 行级**，前一层不过就不进下一层（决策 §14.53d）：
 
-   **第一层：版本**。首行必须是 `# version: YYYY-MM-DD`。缺失，或与应用当前 `CATEGORY_VERSION` **不一致** → 整批 **400 `skill_outdated`**，错误体里带应用当前版本和"导入指南"链接，提示用户更新 skill 后重传（决策 §14.30；这是硬校验，不允许带警告继续）。**不建批次。**
+   **第一层：解码与结构**。先按 **UTF-8（可带 BOM）解码**：解不开就是 400 `import_format_invalid`，**到此为止、不再做版本检查**——连字符串都拿不到，无从判断有没有版本行（决策 §14.53d）。解得开再看结构，下面三种都是**结构错误** → **400 `import_format_invalid`**，按**文件物理行号**返回全部错误，**不建批次**（决策 §5、§14.52 B2、§14.53d）：
+
+   - **缺 `# version:` 行**（首行不是 `# version: ` 开头）——这是结构错，不是版本错；
+   - 表头（第 2 行）与 11 列固定表头不符；
+   - 某一行列数不对。
+
+   数据行超过 2000 → 400 `rows_exceed_limit`（决策 §5、§14.53d）。界面在失败态提供"复制错误清单"按钮（决策 §14.52 A18）。
+
+   ```json
+   {
+     "detail": "文件结构有问题，共 2 处",
+     "code": "import_format_invalid",
+     "errors": [
+       {"line": 2, "message": "表头应为 date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref，实际缺少 source_ref"},
+       {"line": 38, "message": "这一行有 10 列，应为 11 列"}
+     ]
+   }
+   ```
+
+   `line` 是文件里的物理行号（1 起：`# version:` 行是第 1 行、表头是第 2 行），响应体形状以 [`./03-backend-api.md`](./03-backend-api.md) §5.37 为准（决策 §14.53f）。
+
+   **第二层：版本**。走到这一层，`# version: YYYY-MM-DD` 行一定**存在**（缺行已在第一层被判成结构错）。它与应用当前 `CATEGORY_VERSION` **不一致** → 整批 **400 `skill_outdated`**，错误体里带应用当前版本和"导入指南"链接，提示用户更新 skill 后重传（决策 §14.30、§14.53d；这是硬校验，不允许带警告继续）。**不建批次。**
 
    ```json
    {
      "detail": "你的导入 skill 是 2026-08-01 版，应用当前分类表是 2026-09-10 版，请更新 skill 后重新生成文件",
      "code": "skill_outdated",
      "current_version": "2026-09-10",
-     "file_version": "2026-08-01"
+     "file_version": "2026-08-01",
+     "guide_url": "/import/guide"
    }
    ```
 
-   **第二层：结构**。不是文本 / 编码不可读、表头与 11 列固定表头不符、某一行列数不对 → **400**，按行号返回全部错误，**不建批次**（决策 §5、§14.52 B2）。界面在失败态提供"复制错误清单"按钮（决策 §14.52 A18）。
-
-   ```json
-   {
-     "detail": "文件结构有问题，共 2 处",
-     "code": "import_file_invalid",
-     "errors": [
-       {"row_no": 0, "message": "表头应为 date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref，实际缺少 source_ref"},
-       {"row_no": 37, "message": "这一行有 10 列，应为 11 列"}
-     ]
-   }
-   ```
+   两者的修法完全不同，所以必须分开：结构错（含缺版本行）是"让你的 ChatGPT / Claude 按格式重新导出一份"，`skill_outdated` 是"去导入指南页把 skill 重装一次"（决策 §14.53d）。
 
    **第三层：行级**。**不丢行、只打标记**（决策 §5、§14.52 B2）——kind 认不出、分类不对、日期格式错都属于这一层，绝不整份退回：
 
@@ -1006,14 +1023,14 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    |---|---|
    | `duplicate` | 同账户、同日、同金额的交易已存在；或转账行的对腿已经是别的两腿转账的一半（§3.15 A） |
    | `refund_candidate` | 按 §1.8 规则（金额 + 时间窗 + 同账户为主，商户只作加分）找到**唯一**候选原单，预填 `matched_transaction_id` |
-   | `transfer_candidate` | 按 §3.15 A 找到可配对的单腿转账 |
+   | `transfer_candidate` | 按 §3.15 A 找到可配对的单腿转账：唯一候选预填 `matched_transaction_id` + `counterpart_source_id`；多候选**不预填**，另打 `needs_review` 并把"找到 N 条可以配对的转账，请选一条"写进 `hint`（决策 §14.53b）；没找到对腿不猜对手账户（决策 §14.53c） |
    | `needs_review` | 第三层校验改过这一行的 `date` / `amount` / `currency` / `kind` 之一；或**同一批内有完全相同的行**。**分类被置空不打这个标记**（它由"待归类"筛选和提交前置校验兜底） |
 
    **同一批内完全相同的行不合并**（决策 §14.31）：都保留、都打 `needs_review`，`hint` 写"本批内有相同的行（第 N 行）"，由用户在 review 里取舍。没有第五种"已合并"标记。
 
 6. **Review**：只有 `ready` 才能读写草稿行。
    - `GET .../rows` 列出草稿行（`limit` 上限 500）。
-   - `PATCH .../rows/{rid}` 改单行，可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`matched_transaction_id`（退款原单 / 转账对腿，也可置 `null` 取消建议）、`counterpart_source_id`（转账对手账户），以及把 `status` 改成 `skipped`。**普通行不能改账户**——整批只有一个目标账户（决策 §14.52 A5）；只有转账行能改对手账户。
+   - `PATCH .../rows/{rid}` 改单行，可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`matched_transaction_id`（退款原单 / 转账对腿，也可置 `null` 取消建议）、`counterpart_source_id`（转账对手账户，**必须是本账本的未归档账户**——不存在或不属于本账本 → 404 `not_found`，已归档 → 409 `source_archived`，决策 §14.53c），以及把 `status` 改成 `skipped`。**普通行不能改账户**——整批只有一个目标账户（决策 §14.52 A5）；只有转账行能改对手账户。
    - `PATCH .../imports/{bid}/rows` **批量**改：体是行 id 数组 + 同一份改动，用于"批量设分类""批量跳过"（决策 §14.52 A4）。
    - review 表格内置筛选：**全部 / 待归类 / 有标记**（决策 §14.52 A4）。"待归类"= 非 transfer 行且 `category_l1` 为空；"有标记"= `flags` 非空。两者**互不排斥**，同一行可能同时出现在两个筛选里。
    - 任何一次 PATCH 把该行 `status` 从 `pending` 变成 `edited`（除非用户显式设成 `skipped`）。**没有"确认这行"动作，也没有"就绪"计数**（决策 §14.7、§14.52 B13）。
@@ -1023,7 +1040,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    - **提交前置校验**：所有 `status != 'skipped'` 的行都必须有合法的 `occurred_at`、`amount`、`kind`，并且非 transfer 行必须有 `category_l1` → 缺日期 / 金额 / kind 的返回 409 `batch_not_ready`，缺一级分类的返回 **409 `rows_uncategorized`**，`detail` 里带出问题的 `row_no` 列表（决策 §5）。
    - **一个数据库事务内**建所有交易：每条 `import_batch_id = batch_id`、`created_by = updated_by =` 提交人、`source_id` = 批次的目标账户；每条 `import_rows.transaction_id` 回填；每条新交易追加一条 `imported` 事件（决策 §14.51）。
    - **退款**：行 `kind='refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选）→ 写入 `refund_of`；不引入"用户已确认"这类额外状态（决策 §14.7）。
-   - **转账配对**：勾选了配对的转账行按 §3.15 A 处理——生成新 `transfer_pair_id` 挂上新旧两条、清空已有那条的 `counterparty`、各追加 `paired` 事件。没配对的转账行按单腿建，`counterparty` 取草稿行上的值。
+   - **转账配对**：`matched_transaction_id` 非空的转账行按 §3.15 A 处理——生成新 `transfer_pair_id` 挂上新旧两条、清空已有那条的 `counterparty`、按 §1.9 **统一两腿的 `transfer_subtype`**（决策 §14.53a）、各追加 `paired` 事件（**两腿再各追加一条 `updated` 事件**，`changes` 记 `transfer_subtype` 的前后值；值未变的那腿 before == after）。`matched_transaction_id` 为空但 `counterpart_source_id` 非空的行**一次建两腿**（对手账户上那腿金额取反）。两个都为空的行按**单腿**建，`counterparty` 取草稿行上的值。
    - 成功 → 批次 `status='committed'`，`committed_at` / `committed_transaction_count` 写入，返回建了多少条。
    - 任一行建失败 → 整批回滚，批次留在 `ready`，返回 400 + 出错行号。
    - 非 `ready` 状态提交 → 409 `batch_not_ready`；已经是 `committed` 的批次重复提交 → 409 `batch_already_committed`（幂等保护，决策 §14.18）。
@@ -1111,30 +1128,35 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
       +-------------------------+                    +---------------------------+
              |         ^                                    |          ^
              |         |                                    |          |
-             |         |  POST .../transfer/{pair_id}/unpair |          |
+             |         | POST .../transfer/{pair_id}/unpair |          |
              |         +------------------------------------+          |
-             |            两腿 pair_id 置 NULL                          |
-             |            各追加一条 unpaired 事件                      |
-             |                                                          |
-             |  POST .../transactions/{tid}/pair                        |
-             |  body: {counterpart_transaction_id, updated_at}          |
-             +----------------------------------------------------------+
-                两条方向相反、仍为单腿、不同账户、账户未归档
+             |             两腿 pair_id 置 NULL                        |
+             |             各追加一条 unpaired 事件                    |
+             |                                                         |
+             |  POST .../transactions/{tid}/pair                       |
+             |  body: {counterpart_transaction_id, updated_at}         |
+             +---------------------------------------------------------+
+                两条方向相反、仍为单腿、不同账户、账户未归档（子类型不作要求）
                 -> 生成新 pair_id 写到两条上，counterparty 一起清空
-                -> 各追加一条 paired 事件
+                -> 统一 transfer_subtype：任一腿 repayment 且转入腿账户是 credit
+                   -> 整对 repayment，否则整对 plain（决策 §14.53a）
+                -> 各追加一条 paired 事件；两腿再各追加一条 updated 事件
+                   （changes 记 transfer_subtype 前后值，值未变的那腿 before == after）
 
    配对的失败分支（事务回滚，两条都不动）：
-     对方或本行已经是两腿的一半  -> 409 already_paired
-     对方不是转账 / 方向相同     -> 400 pair_target_invalid
-     两条在同一个账户上          -> 400 same_source
-     任一账户已归档              -> 409 source_archived
-     updated_at 对不上           -> 409 stale_update
-     对方不在本账本 / 不存在     -> 404 not_found
+     对方或本行已有 transfer_pair_id        -> 400 pair_invalid
+     对方不是转账 / 方向相同                -> 400 pair_invalid
+     两条在同一个账户上                     -> 400 same_source
+     任一账户已归档                         -> 409 source_archived
+     updated_at 对不上                      -> 409 stale_update
+     对方不在本账本 / 不存在                -> 404 not_found
 
    导入 review 里的自动建议（transfer_candidate）只是"预填 + 默认勾选"，
-   提交时才真正生成 pair_id；不勾就按单腿建。
+   提交时才真正生成 pair_id；不勾就按单腿建。多候选不预填，只打
+   needs_review + hint，由用户在 review 里挑一条（决策 §14.53b）。
 
-   注意：配对**不要求**两腿金额相等或币种相同（跨币种转账是设计特性）；
+   注意：配对**不要求**两腿金额相等、币种相同或 transfer_subtype 相同
+        （跨币种转账是设计特性；子类型在配对时由服务端统一，§1.9 / §3.15 B）；
         ±3 天 / 同额 / 同币种只是自动建议的筛选条件，手动配对不受此限。
 ```
 
@@ -1147,45 +1169,46 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
               |
               |  同步校验（秒级，无后台任务、无进度、无轮询）
               |
-      +-------+--------------------------------------------------+
-      |                                                          |
-      | 版本不符 / 缺 # version 行  -> 400 skill_outdated         |
-      | 表头不符 / 列数不对 / 编码坏 -> 400 import_file_invalid    |
-      | 文本 > 2 MB                -> 413 file_too_large          |
-      | 不是 CSV                   -> 415 unsupported_file        |
-      | 目标账户已归档              -> 409 source_archived         |
-      | 每小时 > 10 批              -> 429 import_rate_limited     |
-      |                                                          |
-      | 以上任何一种：**不建批次**，没有任何行落库                |
-      +----------------------------------------------------------+
+      +-------+------------------------------------------------------------+
+      |                                                                    |
+      | 编码不可读 / 表头不符 / 列数不对     -> 400 import_format_invalid  |
+      | 缺 # version: 行（属结构错）         -> 400 import_format_invalid  |
+      | 版本行存在但与当前版本不一致         -> 400 skill_outdated         |
+      | 数据行 > 2000                        -> 400 rows_exceed_limit      |
+      | 文本 > 2 MB                          -> 413 file_too_large         |
+      | 目标账户已归档                       -> 409 source_archived        |
+      | 每小时 > 10 批                       -> 429 import_rate_limited    |
+      |                                                                    |
+      | 以上任何一种：**不建批次**，没有任何行落库                         |
+      +--------------------------------------------------------------------+
               |
               | 校验通过（行级问题只打标记，不丢行）
               v
       +---------------------------+                +-------------------+
-      |          ready            |  POST .../commit  |   committed    |
-      |  201 同步返回批次 + 全部  |----------------->|  交易已建，带   |
-      |  草稿行；可读写、可提交   |                  |  import_batch_id|
+      |          ready            | POST .../commit|    committed      |
+      |  201 同步返回批次 + 全部  |--------------->|  交易已建，带     |
+      |  草稿行；可读写、可提交   |                |  import_batch_id  |
       +---------------------------+                +-------------------+
-          |    ^                                        |
-          |    | PATCH .../rows/{rid}                   |
-          |    | PATCH .../rows（批量设分类 / 跳过）    |
-          |    +------------------------------------+   |
-          |      （自环：pending -> edited/skipped）     |
-          |                                              |
-          | DELETE（丢弃：删批次和草稿行，              | DELETE（撤销：删掉这批建的
-          |         不碰任何交易）                       |         所有交易 + 事件，
-          v                                              v         不限时限，返回条数）
+          |    ^                                   |
+          |    | PATCH .../rows/{rid}              |
+          |    | PATCH .../rows（批量设分类/跳过） |
+          |    +------------------------------+    |
+          |    （自环：pending -> edited/skipped） |
+          |                                        |
+          | DELETE（丢弃：删批次和草稿行，         | DELETE（撤销：删掉这批建的
+          |          不碰任何交易）                |          所有交易 + 事件，
+          v                                        v          不限时限，返回条数）
       +--------------------------------------------------------------------+
-      |                               GONE                                 |
-      |  import_rows 随 batch 级联删除；不保留"已撤销"批次、无撤销原因      |
+      |                              GONE                                  |
+      | import_rows 随 batch 级联删除；不保留已撤销的批次、无撤销原因      |
       +--------------------------------------------------------------------+
 
-   commit 前置未过（缺日期/金额/kind）      -> 409 batch_not_ready，留在 ready
-   commit 前置未过（有行没有一级分类）      -> 409 rows_uncategorized，留在 ready
-   已 committed 再 commit                   -> 409 batch_already_committed
-   已 committed 再 PATCH 草稿行             -> 409 batch_not_ready
-   DELETE ?dry_run=true                     -> 不删，返回交易数 +
-                                               orphaned_refunds / refunds_in_batch 两个计数
+   commit 前置未过（缺日期/金额/kind）       -> 409 batch_not_ready，留在 ready
+   commit 前置未过（有行没有一级分类）       -> 409 rows_uncategorized，留在 ready
+   已 committed 再 commit                    -> 409 batch_already_committed
+   已 committed 再 PATCH 草稿行              -> 409 batch_not_ready
+   DELETE ?dry_run=true                      -> 不删，返回交易数 +
+                                                orphaned_refunds / refunds_in_batch 两个计数
 ```
 
 ### 4.4 账本成员关系（决策 §2）
@@ -1516,7 +1539,10 @@ POST /ledgers/{id}/transactions/{T7}/pair
 {"counterpart_transaction_id": "{T8}", "updated_at": "..."}
 
 校验：都是 transfer ✓ / 都还是单腿 ✓ / role 一进一出 ✓ / 不同账户 ✓ / 都未归档 ✓
+      （transfer_subtype 不参与校验，决策 §14.53a）
 动作：生成新的 transfer_pair_id 写到 T7、T8；T7 的 counterparty "工资卡" 清空；
+      统一 transfer_subtype：转入腿 T7 在信用卡账户上且是 repayment -> 整对 repayment
+      （本例两腿本来就都是 repayment，统一后值不变，仍按 §14.53a 各写一条 updated 事件）；
       各追加一条 paired 事件
 ```
 
@@ -1576,24 +1602,24 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 5 | `category_l2` 属于 `category_l1` | 同上 |
 | 6 | 分类表与说明文字只能改代码发版，用户改不了 | 没有分类管理接口；`GET /categories` 只读，带 `version`（决策 §1.3、§14.21） |
 | 7 | `refund_of` 指向同账本的 `kind='expense'` | 创建/更新时校验（决策 §1.1） |
-| 8 | 两腿转账原子创建、原子修改、原子删除；**两腿 `transfer_subtype` 始终一致**（`occurred_at` 只在 `transfer` 接口建 / 改时同写两腿，配对出来的一对允许两腿日期不同） | 专用 transfer 接口，单请求单事务；`POST .../{tid}/pair` 第 5 步校验 subtype 相同；`PATCH .../transfer/{pair_id}` 的 `occurred_at` / `subtype` / `note` 同写两腿（决策 §1.2、§14.34） |
+| 8 | 两腿转账原子创建、原子修改、原子删除；**配对后两腿 `transfer_subtype` 始终一致**（配对时按决策 §14.53a 统一：任一腿是 `repayment` 且转入腿账户 `type='credit'` → 整对 `repayment`，否则整对 `plain`）；`occurred_at` 只在 `transfer` 接口建 / 改时同写两腿，配对出来的一对允许两腿日期不同 | 专用 transfer 接口，单请求单事务；`POST .../{tid}/pair` 与导入提交在同一个事务里把两腿写成同一子类型并**给两腿各写一条 `updated` 事件**（值未变的那腿 before == after）；`PATCH .../transfer/{pair_id}` 的 `occurred_at` / `subtype` / `note` 同写两腿（决策 §1.2、§14.34、§14.53a） |
 | 9 | 两腿转账的两个账户不同 | `POST .../transfer` 与 `POST .../{tid}/pair` 都校验 `same_source` |
 | 10 | 两腿转账的任一腿不能被单独 PATCH / DELETE | 普通交易接口检测 `transfer_pair_id` 非空 → 409 `use_transfer_endpoint` |
 | 11 | `transfer_pair_id` 永远由服务端生成，客户端不能自带 | `POST /transactions` 拒绝该字段；只有两腿接口和 `pair` 端点会生成 |
-| 12 | **配对只能发生在两条仍为单腿、方向相反、`transfer_subtype` 相同、不同账户、账户未归档的转账之间**；配对成功时两条的 `counterparty` 一起清空 | `POST .../{tid}/pair` 的八步校验（§3.15 B），一个事务（决策 §14.34） |
+| 12 | **配对只能发生在两条仍为单腿、方向相反、不同账户、账户未归档的转账之间**——**子类型不作要求**（配对时统一，决策 §14.53a）；配对成功时两条的 `counterparty` 一起清空 | `POST .../{tid}/pair` 的七步校验（§3.15 B），一个事务（决策 §14.34、§14.53a） |
 | 13 | 拆开只把 `transfer_pair_id` 置 NULL，不动金额、账户、日期 | `POST .../transfer/{pair_id}/unpair`（决策 §14.34） |
 | 14 | `transaction_events` **只追加**：没有任何路径会 UPDATE 或单独 DELETE 一条事件，唯一的消失方式是随交易级联删除 | 事件写入只有 INSERT；表上不暴露改 / 删接口（决策 §14.51） |
 | 15 | **每一条改交易的路径都追加一条事件**（普通 CRUD、转账接口、配对 / 拆开、导入提交、退款关联变化） | §1.10 的路径表；服务层统一在事务内写入（决策 §14.51） |
 | 16 | 归档账户不能新建交易、不能作为导入目标、不能作为转账腿或配对对腿 | 四处入口各自校验（决策 §3、§14.34） |
 | 17 | **归档账户不计入资产 / 负债 / 净资产与首页合计** | 统计与账户列表按 `archived = false` 过滤（决策 §14.50，§5.5） |
-| 18 | 账户 `default_currency` 创建后不可改 | `PATCH .../sources/{sid}` 校验 → 400 `currency_immutable`（决策 §14.50） |
+| 18 | 账户 `default_currency` 创建后不可改 | `PATCH .../sources/{sid}` 校验 → 400 `currency_locked`（决策 §14.50） |
 | 19 | 有交易的账户不能删除 | `DELETE .../sources/{sid}` 校验（决策 §3） |
 | 20 | 同一账本内账户**允许重名** | 不加唯一约束，只在界面提示（决策 §14.40，01-6） |
 | 21 | `transactions` / `finance_sources` / `ledgers` 的 PATCH 必须带匹配的 `updated_at`，否则 409 `stale_update`；两腿转账**两条腿都比对** | 决策 §2、§14.40（01-11） |
 | 22 | 邀请码一次性、10 分钟过期；**用掉即删、过期即删、作废即删**，表里只有有效的码 | 生成 / 加入 / 作废三个动作各自清理（决策 §14.29） |
 | 23 | `POST /ledgers/join` 端点级 1 QPS（突发 3），被限流的请求**不触碰邀请码** | 令牌桶中间件 → 429 `invite_rate_limited`（决策 §14.35） |
 | 24 | 每人 ≤ 10 本账、每本 ≤ 10 人 | 建账本 / 生成邀请码 / 加入时应用层 `COUNT(*)` 校验，不加触发器（决策 §2、§14.41） |
-| 25 | 导入文件**只接受 CSV**，且首行版本必须与应用当前分类表版本一致 | 上传时校验 → 415 `unsupported_file` / 400 `skill_outdated`（决策 §14.30、§14.47） |
+| 25 | 导入文件**只接受 CSV**，且首行版本必须与应用当前分类表版本一致 | 上传时按**解码 → 结构 → 版本**的顺序校验：解码失败（非 CSV 的二进制文件在这一步被挡下）、缺 `# version:` 行、表头或列数不对 → 400 `import_format_invalid`；版本行存在但不一致 → 400 `skill_outdated`（决策 §14.30、§14.47、§14.53d） |
 | 26 | 结构错误不产生批次；行级问题不丢行、只打标记并写 `hint` | 同步校验的三层（§3.17 第 3 步，决策 §5、§14.52 B2） |
 | 27 | 自动标记**只有四种**：`duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review`；批内重复行不合并 | 标记算法（决策 §14.31、§14.34） |
 | 28 | 提交导入时所有未跳过的行都有日期 / 金额 / kind，非 transfer 行有 `category_l1` | commit 前置校验 → 409 `batch_not_ready` / 409 `rows_uncategorized`（决策 §5） |
@@ -1615,7 +1641,8 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 不保证 | 原因 |
 |---|---|
 | 两腿转账两条腿的金额相等或币种相同 | 跨币种转账是设计特性（决策 §1.2）；手动配对也不做这个校验（§3.15 B） |
-| 配对出来的两条腿日期相同 | ±3 天只是自动建议的筛选条件，手动配对不校验日期；两腿转账对象顶层的 `occurred_at` 取 `out` 腿的值（§1.9、§3.15 B）。**`transfer_subtype` 则相反——两腿必须相同，配对端点第 5 步硬校验** |
+| 配对出来的两条腿日期相同 | ±3 天只是自动建议的筛选条件，手动配对不校验日期；两腿转账对象顶层的 `occurred_at` 取 `out` 腿的值（§1.9、§3.15 B） |
+| 配对**之前**两条单腿的 `transfer_subtype` 相同 | 同一笔还款在储蓄卡账单里常写成 `plain`、在信用卡账单里写成 `repayment`，硬卡会让配对永远触发不了；子类型在配对时由服务端统一，**配对之后**才保证一致（决策 §14.53a、§6.2 不变量 8） |
 | 累计退款不超过原单金额 | 前端警告、允许保存；已退完的原单仍可选（决策 §1.1、§14.52 B10） |
 | 退款行一定有 `refund_of` | 可以不关联；原单删除后也会置空（决策 §1.1） |
 | 单腿转账的对手账户存在于应用中 | 单腿的定义就是对手不在应用里（决策 §1.2） |
@@ -1647,7 +1674,7 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 11 | 两腿转账 PATCH 时用哪条腿的 `updated_at` 做乐观并发比较 | **已由决策 §14.40 裁定**（01-11）：**两条腿都比对**，任一条更新过就 409 `stale_update`；`unpair` 同理（§3.16） |
 | 12 | 归档账户上的历史交易是否允许 PATCH | **已由决策 §14.40 裁定**（01-12）：允许，只禁止新建（§3.10） |
 
-本章引用的下列 code 是本轮新增的，需由 [`./03-backend-api.md`](./03-backend-api.md) §4.2 登记（决策 §14.4 要求各章的 code 都能在注册表里找到）：`skill_outdated`（400，决策 §14.30 点名）、`import_file_invalid`（400，CSV 结构错）、`currency_immutable`（400，账户币种创建后不可改，决策 §14.50）、`pair_target_invalid`（400）与 `already_paired`（409）（配对校验，决策 §14.34）。同时**作废**的 code：解析失败、解析中断、批次未失败不可重试这三类随两态状态机一并消失。
+本章引用的错误 code **全部**取自 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的唯一注册表，本章不自造同义名（决策 §14.4、§14.53d）。其中与本章流程关系最紧的几个：`skill_outdated`（400，版本行存在但与当前分类表版本不一致，决策 §14.30）、`import_format_invalid`（400，结构错误——编码不可读、缺 `# version:` 行、表头或列数不对；只接受 CSV，别的文件都在解码这一步落到这个 code 上）、`rows_exceed_limit`（400，数据行超过 2000）、`currency_locked`（400，账户币种创建后不可改，决策 §14.50）、`pair_invalid`（400，配对校验任一条不过，决策 §14.34、§14.53a）。同时**作废**的 code：解析失败、解析中断、批次未失败不可重试这三类随两态状态机一并消失。
 
 ---
 
