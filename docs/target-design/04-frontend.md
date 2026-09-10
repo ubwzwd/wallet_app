@@ -6,12 +6,13 @@
 
 描述**现状**时（`path:line` 形式的引用）指的是 [`../current-design/04-frontend.md`](../current-design/04-frontend.md) 所描述的、当前仓库里真实存在的代码；描述**目标**时不假设任何代码已经存在。所有相对路径以仓库根目录为基准。
 
-> **修订说明（2026-09-11，本轮）**：按决策 §14.20–§14.52 做**删旧立新**的同步，不是加注。
+> **修订说明（2026-09-11，本轮）**：按决策 §14.20–§14.53 做**删旧立新**的同步，不是加注。
 >
-> - **应用不接入 LLM**（决策 §5、§6、§14.25）：删除 LLM 设置页 `/settings/llm`、`LlmSettings` / `LlmSettingsPut` / `LlmTestResult` 三个类型、`llmApi.*` 全部函数、`User.has_llm_settings`、`llm_*` 三个错误 code。
+> - **应用不接入 LLM**（决策 §5、§6、§14.25）：删除 LLM 设置页 `/settings/llm`、`LlmSettings` / `LlmSettingsPut` / `LlmTestResult` 三个类型、`llmApi.*` 全部函数、`User.has_llm_settings`，以及三个与模型调用有关的错误 code。
 > - **导入改为同步校验模型**（决策 §5、§14.47）：删除解析进度与轮询、页面缩略图侧栏与它的页号字段、视觉路径标志位、`retry` 端点、置信度列、「已合并」标记，以及后台解析才会有的那三个错误 code；新增**导入指南页**（`GET /import-format`）、粘贴 CSV 入口、结构错误与 `skill_outdated` 两种失败态、批量改行端点。标准格式只有 CSV。
 > - **转账配对**（决策 §14.34）：review 表格的 `transfer_candidate` 建议与「关联为一笔转账」勾选框、交易详情的「关联为转账对腿」与「拆开」、`txApi.pair` / `txApi.unpair`。
 > - **屏幕稿审阅后的裁定**（决策 §14.47–§14.52）：账户四种类型与资产 / 负债 / 净资产、`archived_at`、币种创建后不可改、交易列表合并转账行 + 按日小计 + `summary`、金额区间按基准币种、`transaction_events` 操作记录时间线、邀请码可作废、外观设置存本机、首页趋势只放支出。
+> - **按 §14.53 统一各章打架之处**（决策 §14.53 a–f）：§3.7 的文案表与 03 §4.2 注册表**双向**对齐（`pair_invalid` / `unpair_invalid` / `import_format_invalid` / `currency_locked` / `repayment_target_not_credit` 补齐，`rows_exceed_limit` 是 400，两个前端本地 key 移到表外）；`ImportFileError` 改成 `errors[{line, message}]` + `current_version` / `file_version` / `guide_url`；review 的转账配对**只用 `matched_transaction_id` 一列**（多候选不预填、打 `needs_review`、给「选一条」按钮复用交易列表接口）；没找到对腿时对手账户不预选；配对后两腿子类型由服务端统一；`RefundRef` / `RefundOrigin` / `ImportBatch` / `ImportRow` 与 03 的响应体逐字段对齐。
 > - **§6 整章重写**：A/B/C 三个候选方向与 mockup 清单作废（决策 §14.45），改为「已定稿：04 柔和圆润」，token 引用 [`./mockups/tokens.json`](./mockups/tokens.json)，并给出 16 张屏幕稿的索引与「按裁定需改之处」。
 > - **待决清空**：D-1 至 D-13 全部已被决策 §14.42、§14.45、§14.46 等裁定，文末只留结论。
 ---
@@ -56,8 +57,8 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 | 交易列表筛选栏 + URL 同步 + 分页 | 决策 §4 |
 | 导入指南页（三步说明 + skill 文本复制 / 下载 + 示例 CSV，数据来自 `GET /import-format`） | 决策 §6 |
 | 导入流程：上传或粘贴 CSV → 同步校验 → review 表格 → 提交 → 历史（§4.10、§4.11） | 决策 §5、§14.47 |
-| review 表格的转账配对建议与「关联为一笔转账」勾选框（§4.11.3） | 决策 §14.34 |
-| 交易详情的「关联为转账对腿」/「拆开」、`refunds[]`、原单摘要、操作记录时间线（§4.7） | 决策 §14.34、§14.46、§14.51 |
+| review 表格的转账配对建议与「关联为一笔转账」勾选框（§4.11.3） | 决策 §14.34、§14.53b |
+| 交易详情的「关联为转账对腿」/「拆开」、`refunds[]`、原单摘要、操作记录时间线（§4.7） | 决策 §14.34、§14.46、§14.51、§14.53a |
 | 注册页启动读 `GET /config`，关闭时直接显示提示（§4.2） | 决策 §14.46 |
 | 个人设置的显示名 `display_name` 与「外观」（跟随系统 / 浅色 / 深色，存本机）（§4.13） | 决策 §14.6、§14.52 |
 | i18n（中英双语，默认跟随系统） | 决策 §0.4 |
@@ -530,15 +531,26 @@ export interface TransactionPairRef {
   out: { transaction_id: Uuid; source_id: Uuid; amount: Money; currency: string };
   in:  { transaction_id: Uuid; source_id: Uuid; amount: Money; currency: string };
 }
-// 支出详情上的退款列表（决策 §14.46 的 04-D-6）
-export interface RefundRef {
+// 一笔退款的摘要；字段逐条对齐 03 §5.27 里 refund_of_detail.other_refunds[] 的元素（决策 §14.53f）
+export interface RefundBrief {
   id: Uuid; occurred_at: IsoDate; amount: Money; currency: string; note: string | null;
 }
-// 退款详情上的原单摘要（决策 §14.46 的 04-D-6）
+// 支出详情上的退款列表（决策 §14.46 的 04-D-6）；字段逐条对齐 03 §5.27 的 refunds[]（决策 §14.53f）
+// 比 RefundBrief 多一个 source_id：03 只在 refunds[] 的元素上给了退回账户
+export interface RefundRef extends RefundBrief {
+  source_id: Uuid;                     // 退回账户——画这一行时要显示账户名（决策 §14.53f）
+}
+// 退款详情上的原单摘要（决策 §14.46 的 04-D-6、§14.52 A25），逐字段同 03 §5.27 的 refund_of_detail
 export interface RefundOrigin {
   id: Uuid; occurred_at: IsoDate; merchant: string | null;
   amount: Money; currency: string;
+  source_id: Uuid;                     // 原单记在哪个账户上（决策 §14.53f）
+  category_l1: string | null;          // 原单的分类，登记退款时沿用（决策 §14.53f）
+  category_l2: string | null;
   refunded_total: Money; refundable: Money;
+  other_refunds: RefundBrief[];        // 指向**同一张原单**的其它退款，不含当前这条，按日期升序
+                                       // （决策 §14.52 A25）；只被退过这一次时是空数组。03 §5.27 的这些
+                                       // 元素**没有** source_id，所以这里用窄类型，界面上不显示退回账户
 }
 // 操作记录（决策 §14.51）：只追加不修改，交易删除时级联删除
 export type TransactionEventType =
@@ -663,33 +675,40 @@ export type ImportRowStatus = 'pending' | 'edited' | 'skipped';
 // 标记只有四种（决策 §5、§14.31、§14.34）：旧的 repayment 改名为 transfer_candidate，「已合并」整条取消
 export type ImportFlag = 'duplicate' | 'refund_candidate' | 'transfer_candidate' | 'needs_review';
 
+// 批次的字段名以 [`./02-database.md`](./02-database.md) §1.7 的 DDL 为准，
+// 03 §5.38 的响应用的是同一套名字（决策 §14.53e）：source / filename / size_bytes /
+// skill_version / row_count / committed_at。
 export interface ImportBatch {
   id: Uuid; ledger_id: Uuid; source_id: Uuid; source_name: string;
-  created_by: Uuid; created_by_name: string | null;   // display_name，空则前端回退邮箱前缀
-  origin: 'csv' | 'paste';         // 上传文件还是粘贴文本（决策 §5）
-  filename: string | null;         // 只记名字与大小，**不保存文件**（决策 §14.28）
-  size_bytes: number;
+  source: 'csv' | 'paste';         // 上传文件还是粘贴文本；只有这两个值（决策 §5、§14.47）
+  filename: string | null;         // 只记名字与大小，**不保存文件**（决策 §14.28）；粘贴批次为 null
+  size_bytes: number;              // 文件或粘贴文本的 UTF-8 字节数
   skill_version: string;           // 文件里那一行 '# version:'
   status: ImportStatus;
   row_count: number;
   net_amount: Money;               // 这批交易金额之和，按账本基准币种（决策 §14.52 A17）
-  net_currency: string;
+  base_currency: string;           // net_amount 所用的币种 = 账本基准币种
   flags_summary: Record<ImportFlag, number>;
   row_status_summary: Record<ImportRowStatus, number>;
   uncategorized_count: number;     // 还差几行没补一级分类（提交阻断条件，§4.11.8）
+  created_by: Uuid;                // 只回 UUID；上传人的名字由前端用成员列表映射（决策 §14.43 的 03-4）
   created_at: IsoDateTime; updated_at: IsoDateTime;
   committed_at: IsoDateTime | null;
 }
-// 列表项比详情少三个汇总字段
-export interface ImportBatchListItem extends Omit<ImportBatch,
-  'source_name' | 'row_status_summary' | 'uncategorized_count'> {}
+// 列表项与详情**同形状**（03 §5.38：净额、标记数、目标账户名、上传人在列表里就有，
+// 前端不用为列表再查一遍详情）
+export type ImportBatchListItem = ImportBatch;
 // POST /ledgers/{id}/imports 的成功响应：批次 + 全部草稿行，一次给完（同步校验，决策 §5）
 export interface ImportUploadResult { batch: ImportBatch; rows: ImportRow[]; }
-// 400 结构错误 / skill_outdated 的响应体：不建批次，按行号列错误（决策 §5）
+// 400 结构错误 / skill_outdated 的响应体：不建批次（决策 §5）。
+// 四个扩展字段逐字段照抄 03 §5.37 的响应体（决策 §14.53f），不另起名字。
 export interface ImportFileError extends ApiError {
-  rows?: Array<{ row_no: number; message: string }>;   // 结构错误时按行号给
-  expected_version?: string;                           // skill_outdated 时给应用当前版本
-  got_version?: string | null;
+  errors?: Array<{ line: number; message: string }>;   // import_format_invalid 时给；
+                                                       // line 是**文件里的物理行号**（1 起：
+                                                       // '# version:' 是第 1 行、表头是第 2 行）
+  current_version?: string;                            // skill_outdated：应用当前的分类表版本
+  file_version?: string | null;                        // skill_outdated：文件首行声明的版本
+  guide_url?: string;                                  // skill_outdated：导入指南页链接，渲染成按钮
 }
 
 // 草稿行；行号列名是 row_no（决策 §14.5），日期字段在接口上仍叫 date（决策 §14.41 的 02-D-3）
@@ -700,13 +719,12 @@ export interface ImportRow {
   category_l1: string | null; category_l2: string | null;
   source_ref: string | null;                // skill 写的「原文哪一行」，只读
   flags: ImportFlag[];
-  matched_transaction_id: Uuid | null;      // refund_candidate 的原支出 / transfer_candidate 的对腿
-  pair_candidates?: Array<{                 // transfer_candidate 多候选时给（决策 §14.34）
-    transaction_id: Uuid; source_id: Uuid; source_name: string;
-    occurred_at: IsoDate; amount: Money; currency: string;
-  }>;
-  pair_confirmed: boolean;                  // 「关联为一笔转账」勾选框；唯一候选时服务端预置为 true
-  counterpart_source_id: Uuid | null;       // 转账行的对手账户（不合并时用）
+  matched_transaction_id: Uuid | null;      // refund_candidate 的原支出 / transfer_candidate 的对腿。
+                                            // 转账配对的**唯一载体**（决策 §14.53b）：非空 = 勾上
+                                            // 「关联为一笔转账」，取消勾选就 PATCH 成 null。
+                                            // 配对状态**只有这一列**：多候选时它是 null，候选列表不落库
+  counterpart_source_id: Uuid | null;       // 转账行的对手账户（不合并、按两腿建时用）；
+                                            // 服务端不猜，找不到对腿时留空由用户选（决策 §14.53c）
   counterparty: string | null;              // 单腿转账的对手文本；校验阶段恒为 null，
                                             // 只有 review 里 PATCH 才有值（决策 §14.10、§14.16）
   transfer_role: TransferRole | null;
@@ -721,19 +739,25 @@ export interface ImportRowListParams {
 }
 export type ImportRowPatch = Partial<Pick<ImportRow,
   'status' | 'date' | 'amount' | 'currency' | 'kind' | 'merchant' | 'note' |
-  'category_l1' | 'category_l2' | 'matched_transaction_id' | 'pair_confirmed' |
+  'category_l1' | 'category_l2' | 'matched_transaction_id' |
   'counterpart_source_id' | 'counterparty' | 'transfer_role' | 'transfer_subtype'>>;
 // 注意 hint / flags / source_ref / row_no 不在可改字段里
-// PATCH .../imports/{bid}/rows（批量，决策 §14.52 A4）
+// PATCH .../imports/{bid}/rows（批量，决策 §14.52 A4）。
+// **要么全成要么全不成**（03 §5.42）：整批在一个事务里跑，任何一行校验不过就 400 并全部回滚，
+// 没有「部分成功」这种响应，因此响应里也没有「被跳过的行」这一项。
 export interface ImportRowsBulkPatch { row_ids: Uuid[]; patch: ImportRowPatch; }
 export interface ImportRowsBulkResult {
-  updated: ImportRow[];
-  skipped_row_ids: Uuid[];      // 收支方向与分类不符等原因被跳过的行
+  updated: number;              // 改掉的行数
+  rows: ImportRow[];            // 这些行改完之后的完整形态，字段同 ImportRow
 }
 // POST .../imports/{bid}/commit（无请求体，决策 §14.18）
 export interface ImportCommitResult {
   batch_id: Uuid; status: 'committed';
-  created_transactions: number; created_transfer_pairs: number; skipped_rows: number;
+  created_transactions: number;        // 这一批建出来的交易条数
+  created_transfer_pairs: number;      // 由 counterpart_source_id 两腿一起建出来的转账对数
+  paired_existing_transfers: number;   // 与库里已有的单腿转账配对成功的行数（决策 §14.34）
+  linked_refunds: number;              // 写进 refund_of 的退款行数（决策 §14.7）
+  skipped_rows: number;
   committed_at: IsoDateTime;
 }
 // DELETE .../imports/{bid}：带 ?dry_run=true 先问要删多少，再真删（决策 §14.43、§14.52 B24）
@@ -793,7 +817,7 @@ export interface CurrencyList { currencies: Record<string, string>; }
 | `POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair` | `txApi.unpair(l: Uuid, pairId: Uuid): Promise<UnpairResult>`（拆开，两腿各自变回单腿，决策 §14.34） |
 | `GET /ledgers/{id}/stats/summary?month=` | `statsApi.summary(l: Uuid, p: { month: string }): Promise<StatsSummary>` |
 | `GET /ledgers/{id}/stats/trend?months=` | `statsApi.trend(l: Uuid, p: { months: number; end?: string }): Promise<StatsTrend>` |
-| `POST /ledgers/{id}/imports`（multipart CSV） | `importsApi.upload(l: Uuid, b: { source_id: Uuid; file: File \| Blob }, onProgress?): Promise<ImportUploadResult>`（**同步校验**：200 就直接带回批次与全部草稿行） |
+| `POST /ledgers/{id}/imports`（multipart CSV） | `importsApi.upload(l: Uuid, b: { source_id: Uuid; file: File \| Blob }, onProgress?): Promise<ImportUploadResult>`（**同步校验**：201 就直接带回批次与全部草稿行） |
 | `POST /ledgers/{id}/imports`（JSON 粘贴） | `importsApi.uploadText(l: Uuid, b: { source_id: Uuid; text: string }): Promise<ImportUploadResult>`（与上传走同一套校验，决策 §5、§14.47） |
 | `GET /ledgers/{id}/imports` | `importsApi.list(l: Uuid, p?: { status?: ImportStatus[]; limit?: number; offset?: number }): Promise<Paged<ImportBatchListItem>>` |
 | `GET /ledgers/{id}/imports/{bid}` | `importsApi.get(l: Uuid, bid: Uuid): Promise<ImportBatch>` |
@@ -891,13 +915,13 @@ export class ApiClientError extends Error {
   code: string;                // 决策 §9 的 snake_case code；网络失败用 'network_error'
   detail: string;              // 服务端原文，仅用于日志与「详情」折叠
   fields?: Record<string, string>;  // 422 时按字段拆开，喂给表单
-  payload?: unknown;           // 结构化错误体（如 ImportFileError 的 rows[]），页面按 code 取用
+  payload?: unknown;           // 结构化错误体（如 ImportFileError 的 errors[]），页面按 code 取用
 }
 ```
 
 - 422（FastAPI 校验错误，`detail` 是数组）：按 `loc` 的最后一段归到 `fields`，`code` 置 `validation_error`。
 - 无响应（超时 / 离线 / CORS）：`status=0`、`code='network_error'`。
-- 导入的 400（`import_file_invalid` / `skill_outdated`）带结构化字段（`rows[]` / `expected_version`），整个响应体挂在 `payload` 上，由 §4.10 步骤 1 的失败态渲染。
+- 导入的 400（`import_format_invalid` / `skill_outdated`）带结构化字段（`errors[]` / `current_version` / `file_version` / `guide_url`，形状见 §3.3 的 `ImportFileError`），整个响应体挂在 `payload` 上，由 §4.10 步骤 1 的失败态渲染。
 
 **文案映射全部走 i18n**（§5），组件永远不直接显示 `detail`：
 
@@ -907,11 +931,19 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 }
 ```
 
-`errors.*` 语言包：`errorMessage()` 查的是 `errors.${e.code}`，所以**每个 key 必须是 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的 code 原名**（决策 §14.4）。下表按注册表顺序列出本章会遇到的全部 code，外加一个纯前端的 `network_error` 和兜底的 `unknown`。**模型调用相关的三个 code（`llm_not_configured`、`llm_error`、`llm_test_rate_limited`）以及后台解析相关的三个（并发解析、重试非失败批次、服务重启打断）已随决策 §14.25 一并删除**，语言包里不再有它们。
+`errors.*` 语言包：`errorMessage()` 查的是 `errors.${e.code}`，所以**每个 key 必须是 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的 code 原名**（决策 §14.4、§14.53d）。下表按注册表顺序**一条不多一条不少**地列出注册表里的全部 code：注册表有 44 个 code，这张表就有 44 行，两边是**双向**一致的——语言包里既不能缺 key，也不能有注册表之外的 key（由 §8.1 的一个用例把两份清单对拍）。应用不接入大模型，也没有后台解析，所以与之相关的 code 在服务端就不存在（决策 §14.25），这张表里自然也没有对应的行。
+
+先把两个**不是服务端 code** 的 key 单列出来——它们是纯前端的本地状态，不在注册表里，对拍用例把它们放进白名单：
+
+| key | 何时出现 | zh | en |
+|---|---|---|---|
+| `network_error` | **非服务端 code**：请求没拿到响应（超时 / 离线 / CORS），拦截器置 `status=0` | 网络连接失败，请检查网络后重试 | Can't reach the server. Check your connection. |
+| `unknown` | **非服务端 code**：`errorMessage()` 的兜底 key，服务端新增了前端还没翻译的 code 时命中 | 出错了（{{detail}}） | Something went wrong ({{detail}}) |
+
+下面是注册表里的 44 个服务端 code，顺序与 03 §4.2 完全一致：
 
 | code | HTTP | zh | en |
 |---|---|---|---|
-| `network_error` | — | 网络连接失败，请检查网络后重试 | Can't reach the server. Check your connection. |
 | `validation_error` | 422 / 400 | 有几项填得不对，请检查标红的字段 | Some fields need fixing |
 | `unauthorized` | 401 | 登录已过期，请重新登录 | Your session expired. Please sign in again. |
 | `invalid_credentials` | 401 | 邮箱或密码不正确 | Incorrect email or password |
@@ -936,34 +968,35 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | `import_rate_limited` | 429 | 这一小时的导入次数已用完（10 批），请稍后再试 | You've used up this hour's imports (10). Try again later. |
 | `source_archived` | 409 | 这个账户已归档，不能再记账，也不能作为导入目标 | This account is archived |
 | `source_has_transactions` | 409 | 这个账户下还有交易，只能归档不能删除 | This account has transactions — archive it instead |
+| `currency_locked` | 400 | 账户的币种创建后不能改；要换币种请新建一个账户，把旧的归档 | An account's currency can't be changed — create a new account and archive the old one |
 | `same_source` | 400 | 转出和转入不能是同一个账户 | The two sides of a transfer must be different accounts |
+| `repayment_target_not_credit` | 400 | 信用卡还款的转入方必须是信用卡账户 | A card repayment must go into a credit card account |
 | `category_invalid` | 400 | 分类不可用，请重新选择 | That category isn't valid |
 | `category_kind_mismatch` | 400 | 这个分类和收支类型对不上，请重新选择 | That category doesn't match this transaction type |
 | `kind_change_not_allowed` | 400 | 转账和其他类型之间不能互改，请删掉这条重新记 | You can't switch between transfer and other types — delete and re-enter |
 | `refund_target_invalid` | 400 | 关联的原支出不可用，请重新选择或不关联 | That original expense can't be linked |
 | `transfer_pair_incomplete` | 409 | 这笔转账的数据不完整（缺一条腿），请刷新后重试 | This transfer is missing one side. Reload and try again. |
-| `pair_target_invalid` | 400 | 这条不能和它配对：对方必须是同币种、同金额、方向相反且仍是单腿的转账 | Can't pair with that one — it must be a single-leg transfer of the same amount and currency, in the opposite direction |
-| `already_paired` | 409 | 这两条里有一条已经和别的交易配过对了，请先拆开 | One of these is already paired — unpair it first |
-| `import_file_invalid` | 400 | 这个文件读不了（表头、`# version:` 行或列数不对），下面列出了出问题的行 | We couldn't read this file — the header, the `# version:` line or a row's column count is wrong. See the rows below. |
-| `skill_outdated` | 400 | 分类表已经更新，请更新 skill 后重新整理这份账单 | The category list changed — update your skill and re-generate this file |
+| `pair_invalid` | 400 | 这条不能和它配对：对方要是同一账本里方向相反、仍是单腿的转账，且不能是同一个账户或它自己 | Can't pair these — the other one must be a single-leg transfer in the opposite direction, on a different account in this ledger |
+| `unpair_invalid` | 409 | 这笔转账拆不开（它下面不是恰好两条腿），请刷新后重试 | This transfer can't be unpaired — it doesn't have exactly two legs. Reload and try again. |
+| `skill_outdated` | 400 | 分类表已经更新，请按导入指南更新 skill 后重新整理这份账单 | The category list changed — follow the import guide to update your skill, then re-generate this file |
+| `import_format_invalid` | 400 | 这个文件读不了（编码、`# version:` 行、表头或某行的列数不对），下面按文件行号列出了出问题的行 | We couldn't read this file — its encoding, its `# version:` line, the header or a row's column count is wrong. The problem lines are listed below. |
 | `file_too_large` | 413 | 文件超过 2 MB | File is larger than 2 MB |
-| `unsupported_file` | 415 | 只接受 skill 生成的 CSV 文件 | Only the CSV file produced by the skill is accepted |
-| `rows_exceed_limit` | 422 | 这份文件超过 2000 行，请按月分批 | This file has more than 2000 rows — split it by month |
-| `batch_not_ready` | 409 | 这批账单还不能提交，请先补齐日期、金额和类型 | This batch isn't ready yet — fill in date, amount and type first |
+| `rows_exceed_limit` | 400 | 这份文件超过 2000 行，请按月分批 | This file has more than 2000 rows — split it by month |
+| `batch_not_ready` | 409 | 这批账单现在不能改：它可能已经提交过了，或者还有行缺日期 / 金额 / 币种 / 类型 | This batch can't be changed right now — it may already be submitted, or some rows are still missing a date, amount, currency or type |
 | `batch_already_committed` | 409 | 这批账单已经提交过了 | This batch has already been submitted |
 | `rows_uncategorized` | 409 | 还有行没有选一级分类，补齐后才能提交 | Some rows still need a top-level category |
 | `rows_all_skipped` | 409 | 这批账单的所有行都被跳过了，没有可提交的内容 | Every row is skipped — there's nothing to submit |
 | `fx_unavailable` | 503 | 暂时拿不到汇率，折算金额可能缺失 | Exchange rates are unavailable right now |
 | `internal_error` | 500 | 服务器出错了，请稍后重试 | Something went wrong on the server. Please try again. |
-| `unknown` | — | 出错了（{{detail}}） | Something went wrong ({{detail}}) |
 
-三条注意：
+四条注意：
 
+- **`import_format_invalid` 与 `skill_outdated` 的分工**（决策 §14.53d）：**结构**不对（编码读不出、缺 `# version:` 行、表头对不上、某行列数不对）是 `import_format_invalid`；**只有版本行在、但版本对不上**才是 `skill_outdated`。编码读不出的文件先于版本检查判定，所以它永远落在 `import_format_invalid` 上。两句文案的修法完全不同：前者是「让你的 ChatGPT / Claude 重新导出一份」，后者是「去导入指南更新 skill」。
 - **`forbidden` 与 `not_owner` 是两个 code**：`forbidden` 是通用权限拒绝，owner-only 的操作用 `not_owner`，所以「只有账本创建者可以…」这句文案必须挂在 `not_owner` 上。
 - **`not_found` 是通用的**：账本不可见、交易被别人删了、路径里的 id 打错了都用它，所以文案要写得两边都成立，不能写死成「这个账本不存在」。判定「被移出账本」要看是哪个 query 报的 404，见 §1.5 第 4 条。
 - **`invite_rate_limited` 的文案改过**：限流是端点级 1 QPS（决策 §14.35），不是「你输错太多次」，而且**被限流的请求不会消耗邀请码**，所以要明确告诉用户「码仍然有效，过几秒再试」。
 
-新增后端 code 时，缺 key 会落到 `errors.unknown` 并把 `detail` 显示出来——不会出现空白提示。
+新增后端 code 时，缺 key 会落到 `errors.unknown` 并把 `detail` 显示出来——不会出现空白提示。但这只是兜底：注册表加了 code 就要同时加这两行文案，§8.1 的对拍用例会把漏掉的那条报出来。
 
 ### 3.8 409 `stale_update` 的统一处理（决策 §2）
 
@@ -1271,11 +1304,14 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 - **头部**：kind 徽章 + 金额（转账不染语义色）+ 商户 + 日期 + 账户 + 分类。**不显示交易编号**（决策 §14.52 A6）。
 - **汇率行**（决策 §14.52 A24）：`currency !== base_currency` 时显示「≈ ¥1,032.40 · 按 2026-08-14 汇率 1 USD = 7.1694 CNY」，数据来自 `amount_base` / `rate_used` / `rate_date`。`rate_date !== occurred_at`（回退到最近行情日，决策 §8）时补一句「该日无行情，用了 08-13 的汇率」。汇率**只读**（决策 §14.52 A10）。
-- **支出行**：`refunds[]` 非空时列出每一笔退款（日期、金额、备注，可点进），并给一行「已退 ¥259.00 / 可退 ¥1,040.00」（决策 §14.46 的 04-D-6）。
-- **退款行**：把 `refund_of_detail` 渲染成一张原单摘要卡（日期、商户、金额、已退 / 可退，可点进），带「解除关联」；**同一原单的其它退款**也列出来（决策 §14.52 A25），免得重复登记。没有 `refund_of` 时显示「未关联原支出」+「去关联」。
+- **支出行**：`refunds[]` 非空时列出每一笔退款（日期、金额、备注，外加 `source_id` 映射出的**退回账户**名，可点进），并给一行「已退 ¥259.00 / 可退 ¥1,040.00」（决策 §14.46 的 04-D-6）。
+- **退款行**：把 `refund_of_detail` 渲染成一张原单摘要卡（日期、商户、金额、`source_id` 对应的账户、`category_l1` / `category_l2` 对应的分类名、已退 / 可退，可点进），带「解除关联」；卡片下面把 `refund_of_detail.other_refunds[]` ——**指向同一张原单、不含当前这条的其它退款**——按日期升序列出来（每条只有日期、金额、币种、备注，03 §5.27 的这些元素**不带**退回账户，所以这里不显示账户名；决策 §14.52 A25），免得重复登记；数组为空时这一块整块不渲染。没有 `refund_of` 时显示「未关联原支出」+「去关联」；原单已被删除（`refund_of` 与 `refund_of_detail` 同时为 `null`）时显示「原单已删除」。
 - **转账行**：
   - 两腿（`pair` 非空）：两条腿并排显示（账户、金额、币种），跨币种时两边金额各自显示。**不显示「余后」余额**（决策 §14.52 A7）。操作里有 **「拆开」**——`POST .../transfer/{pair_id}/unpair`，确认框说明「拆开后两条各自变成单腿转账，仍计入账户余额，但不再互相关联」（决策 §14.34）。
   - 单腿（`transfer_pair_id === null`）：显示 `counterparty` 或「对方不在应用里」。操作里有 **「关联为转账对腿」**——打开一个选择器，**复用交易列表的筛选组件**，只列**方向相反的单腿转账**（`kind=transfer`、`transfer_role` 取反、`transfer_pair_id` 为空、默认同币种同金额、±3 天，条件可放宽），选中后 `POST .../transactions/{tid}/pair`。配对成功后跳两腿详情，原来两条的 `counterparty` 被清空（决策 §14.34）。
+    - **子类型不必相同**（决策 §14.53a）：选择器**不**按 `transfer_subtype` 过滤——储蓄卡账单写「普通转账」、信用卡账单写「还款」的同一笔还款很常见，按子类型硬卡会让配对永远不触发。确认框里写清楚配对后的结果：「**配对后两条的子类型会统一**：任一条是『还款』且**转入方的账户是信用卡**，这一对就记成还款；否则记成普通转账。」服务端在同一个事务里把两腿改成同一个值；**只有值真的变了的那一腿**会多一条 `updated` 事件（`changes` 记 `transfer_subtype` 的 before / after），原值已经等于统一值的那一腿不写事件（决策 §14.53a、§14.51）——最常见的 `plain` + `repayment` 配对只会多出一条 `updated`。
+    - 两腿的 `occurred_at` **允许不同**（配对出来的一对各自保留原来的日期，决策 §14.53a）；两腿详情页头部显示的日期、子类型与备注取**转出腿**的值。
+    - 选不到合适的对腿时，选择器给一句「没有能配对的转账。对腿必须是本账本里方向相反、仍是单腿的转账，且不在同一个账户上」；硬点了不合规的一条，服务端回 400 `pair_invalid`（§3.7）。
 - **两种关联都可以在导入之后改**（决策 §14.34）：退款的 `refund_of` 和转账的配对，在这一页都能改选或解除，review 里的自动建议只是预填。
 - **操作记录时间线**（`events[]`，决策 §14.51）：详情页底部一块 `EventTimeline`，按时间倒序：
 
@@ -1349,10 +1385,10 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
  /imports/guide            /imports/new                    /imports/:bid              /imports/:bid
 ┌──────────────────┐     ┌───────────────────┐  POST     ┌────────────────────┐ POST ┌──────────────┐
 │ 0 导入指南        │────▶│ 1 选账户 +         │──同步────▶│ 2 review 表格      │commit▶│ 3 已提交      │
-│ 三步说明 / skill  │     │   上传或粘贴 CSV   │  200      │ status='ready'     │      │ 'committed'   │
+│ 三步说明 / skill  │     │   上传或粘贴 CSV   │  201      │ status='ready'     │      │ 'committed'   │
 │ 文本 / 示例文件   │     └─────────┬─────────┘           │ （可编辑草稿行）    │      └──────┬───────┘
 └──────────────────┘               │                     └────────────────────┘             │
-                                    │ 400 结构错误 / skill_outdated                          │ DELETE = 撤销
+                                    │ 400 import_format_invalid / skill_outdated             │ DELETE = 撤销
                                     ▼                                                        ▼
                           ┌───────────────────────┐                                  ┌──────────────┐
                           │ 校验失败态（不建批次） │                                  │ 整批删除      │
@@ -1387,17 +1423,16 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | 粘贴文本 | 一个等宽多行文本框，占位符是示例的头两行 | `POST /ledgers/{id}/imports`，JSON：`{source_id, text}` |
 
   两者切换是一个 `SegmentedControl`（「上传文件」/「粘贴 CSV」）。**没有 JSON 入口**：标准格式只有 CSV（决策 §14.47）。
-- **客户端预检**（服务端仍会再验，决策 §5、§9）：文件 > 2 MB 直接拒绝；扩展名不是 `.csv` 直接拒绝并提示「请上传 skill 生成的 CSV 文件；PDF、图片、Excel 请先交给你的 ChatGPT / Claude 整理」——这是最容易犯的错，文案要指回步骤 0。
-- **上传用 `uploadClient`**（§3.2），显示上传进度条。**上传完成即校验完成**：响应就是 `ImportBatchDetail`（批次 + 汇总），成功后 `router.replace('/l/:id/imports/:bid')` 直接进 review 表格。
+- **客户端预检**（服务端仍会再验，决策 §5、§9）：文件 > 2 MB 直接拒绝；扩展名不是 `.csv` 直接拒绝并提示「请上传 skill 生成的 CSV 文件；PDF、图片、Excel 请先交给你的 ChatGPT / Claude 整理」——这是最容易犯的错，文案要指回步骤 0。这一条只是省一次往返：真把非 CSV 传上去，服务端一律按结构错误回 400 `import_format_invalid`（决策 §14.53d），没有单独的「文件类型不支持」分支。
+- **上传用 `uploadClient`**（§3.2），显示上传进度条。**上传完成即校验完成**：响应是 §3.3 的 `ImportUploadResult`（`{batch, rows}`——批次 + 全部草稿行，一次给完），成功后先把 `rows` 灌进 review 表格的 query 缓存，再 `router.replace('/l/:id/imports/:bid')` 直接进 review 表格，**不发第二次请求**。
 - **校验失败态**（不产生批次，页面停在原地）：
 
 | 情况 | HTTP / code | 界面 |
 |---|---|---|
-| 结构错误：不是可读文本、缺 `# version:` 首行、表头与 11 列不符、某行列数不对 | 400 `import_file_invalid` | 红色错误卡：一句主文案 +**按行号列出的错误清单**（`error.rows: [{row_no, message}]`），最多显示 20 条、其余折叠成「还有 N 条」；下面是 `[复制错误清单]`（把行号 + 错误拼成纯文本，决策 §14.52 A18），文案「把它贴回你的 ChatGPT / Claude，让它照着改」；再下面 `[重新选择文件]` |
-| 分类表版本缺失或与应用当前版本不一致 | 400 `skill_outdated` | 黄色提示卡：「你的 skill 是 <文件里的 version>，应用现在是 <当前 version>，分类表变了。请更新 skill 后重新整理这份账单。」两个按钮 `[去导入指南更新 skill →]`（跳步骤 0 并滚到 skill 文本）与 `[重新选择文件]`。**没有「忽略并继续」**——版本不一致是硬拒绝（决策 §14.30） |
+| 结构错误：编码读不出、缺 `# version:` 首行、表头与 11 列不符、某行列数不对；**传了非 CSV 的文件也落在这里**（决策 §14.53d） | 400 `import_format_invalid` | 红色错误卡：一句主文案 +**按文件行号列出的错误清单**（`error.errors: [{line, message}]`，`line` 是文件里的物理行号，1 起——`# version:` 是第 1 行、表头是第 2 行），每条渲染成「**文件第 {{line}} 行**：{{message}}」，最多显示 20 条、其余折叠成「还有 N 条」；下面是 `[复制错误清单]`（读的是同一个 `errors[]`，拼成「文件第 N 行：…」的纯文本，决策 §14.52 A18），文案「把它贴回你的 ChatGPT / Claude，让它照着改」；再下面 `[重新选择文件]` |
+| 版本行在、但与应用当前版本不一致（缺版本行属于上一行的结构错误，决策 §14.53d） | 400 `skill_outdated` | 黄色提示卡：「你的 skill 是 `error.file_version`，应用现在是 `error.current_version`，分类表变了。请更新 skill 后重新整理这份账单。」两个按钮：`[去导入指南更新 skill →]`——**用响应里的 `error.guide_url` 做跳转目标**（决策 §14.53f，前端不硬编码这个路径）——与 `[重新选择文件]`。**没有「忽略并继续」**：版本不一致是硬拒绝（决策 §14.30） |
 | 文件超 2 MB | 413 `file_too_large` | 「文件超过 2 MB。一份月账单通常只有几十 KB，请确认传的是 CSV 而不是原始 PDF。」 |
-| 不是 CSV | 415 `unsupported_file` | 同上，指回步骤 0 |
-| 超过 2000 行 | 422 `rows_exceed_limit` | 「这份文件有 N 行，超过单批 2000 行上限，请让 skill 按月分批输出。」 |
+| 超过 2000 行 | 400 `rows_exceed_limit` | 「这份文件有 N 行，超过单批 2000 行上限，请让 skill 按月分批输出。」 |
 | 这一小时导入次数用完 | 429 `import_rate_limited` | 「这一小时的导入次数已用完（10 批），请稍后再试。」 |
 
   行级问题（日期格式、金额非数字、币种不合法、kind 不认识、分类 code 不在表内）**不出现在这里**：它们不丢行，只在 review 里打标记（决策 §5），错误卡的文案要说清这一点，免得用户以为整份文件废了。
@@ -1408,7 +1443,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 #### 步骤 3 — 已提交与撤销（`status='committed'`）
 
-- 显示「已导入 N 条交易（其中 M 对转账合并成 M 笔）」，三个按钮：`[查看这批交易]`（跳 `/l/:id/transactions?import_batch_id=<bid>`，决策 §14.46）、`[再导一批]`、`[撤销这批导入]`。
+- 显示「已导入 `created_transactions` 条交易（其中 `created_transfer_pairs` 对两腿转账一起建、`paired_existing_transfers` 条与已有转账配成一对、`linked_refunds` 条关联到了原支出，跳过 `skipped_rows` 行）」，三个按钮：`[查看这批交易]`（跳 `/l/:id/transactions?import_batch_id=<bid>`，决策 §14.46）、`[再导一批]`、`[撤销这批导入]`。
 - **撤销确认**（决策 §14.22、§14.43 的 03-9、§14.52 的 B24）：先带 `?dry_run=true` 调一次 `DELETE`，把返回的**两个计数分开措辞**放进确认框——它们说的不是一回事：
 
 ```
@@ -1431,7 +1466,8 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 #### 历史批次列表 `/l/:ledgerId/imports`
 
 - **端点**：`GET /ledgers/{id}/imports`，分页 20 条一页。
-- 每行（决策 §14.52 A17）：文件名 · 目标账户 · 上传时间 · **上传人**（`display_name`，没填时显示邮箱 `@` 前的部分，决策 §14.40 的 01-7）· 状态徽章（只有 `ready` / `committed` 两种）· 行数 · **净额**（这批交易金额之和，按账本基准币种）· **标记数**（`⚑ 3` 形式，聚合 `flags_summary` 里非零的项）。
+- 每行（决策 §14.52 A17）用的字段名与 03 §5.38 / 02 §1.7 完全一致（决策 §14.53e）：`filename` · `source_name` 目标账户 · `created_at` 上传时间 · **上传人**（`created_by` 经成员列表映射成 `display_name`，没填时显示邮箱 `@` 前的部分，决策 §14.40 的 01-7、§14.43 的 03-4）· `status` 徽章（只有 `ready` / `committed` 两种）· `row_count` 行数 · **净额**（`net_amount`，币种是 `base_currency`）· **标记数**（`⚑ 3` 形式，聚合 `flags_summary` 里非零的项）。
+- **粘贴进来的批次没有文件名**（`source === 'paste'` 时 `filename` 为 `null`，由 [`./02-database.md`](./02-database.md) §1.7 的 `ck_import_batches_filename` 绑死）：文件名那一格显示固定占位「粘贴的 CSV 文本」+ 一枚「粘贴」小徽章，不留空白。`source === 'csv'` 的行显示 `filename` 并在旁边给 `size_bytes` 的人类可读形式。
 - 按钮：`ready` → `[继续 review]` + `[丢弃]`；`committed` → `[查看这批交易]` + `[撤销]`。
 - 顶部常驻 `[导入新账单]` 与 `[导入指南]` 两个入口。
 - 空态：「还没有导入过账单」+ 一句「账单交给你的 ChatGPT / Claude 整理成 CSV，再传进来」+ `[看看怎么做 →]`（跳步骤 0）。
@@ -1479,7 +1515,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | 备注 | ✓ | 文本框 | `note`（≤500） |
 | 一级分类 | ✓ | `CategoryPicker` | `category_l1`；transfer 行置 `—` 且禁用（决策 §10）。选择器里每个一级选项是**两行**：名称 + `categoryDesc()` 判据（`text.caption`、`fg.muted`、单行截断，长按 / hover 看全文，决策 §14.21）——这一列的错分成本最高，判据必须就在眼前 |
 | 二级分类 | ✓ | `CategoryPicker` | `category_l2`；随一级过滤，第一项固定「不细分」。二级没有说明文字（`desc` 恒为 `null`），保持单行 |
-| 关联 / 对手 | ✓ | 见 §4.11.3 | 一格三种形态：退款行 = 原单选择器（`matched_transaction_id`）；转账行 = 配对建议 + 对手账户 / 对手文本；其余 = `—` |
+| 关联 / 对手 | ✓ | 见 §4.11.3 | 一格三种形态：退款行 = 原单选择器（`matched_transaction_id`）；转账行 = 配对勾选框（同样绑 `matched_transaction_id`，决策 §14.53b）+ 对手账户 / 对手文本；其余 = `—` |
 | 标记 | 否 | Badge | `flags`（四种，见下）+ 派生的「待归类」；跳过开关也在这一格 |
 
 **账户列不存在**：一份文件对应一个目标账户（决策 §5），普通行改不了账户（决策 §14.52 A5）；只有转账行能选**对手**账户，那是另一回事。
@@ -1494,25 +1530,38 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 - 提交时的规则：行 `kind='refund'` 且 `matched_transaction_id` 非空就写 `refund_of`，**不需要用户额外确认**（决策 §14.7）。
 - 关联之后仍可在交易详情页改或解除（决策 §14.34），review 里的预填只是建议。
 
-**转账行**（`kind='transfer'`）——配对建议 + 对手（决策 §14.34）：
+**转账行**（`kind='transfer'`）——配对建议 + 对手（决策 §14.34、§14.53a/b/c）：
 
 ```
-┌ 关联 / 对手 ────────────────────────────┐
-│ ☑ 找到对方账户的另一半，关联为一笔转账？  │   ← 唯一候选：默认勾选
-│   招行储蓄卡 · 08-05 · −¥1,000.00   ▾   │   ← 多候选：下拉列出，默认选最近的一条
-│ ─────────────────────────────────────── │
-│ 或：对手账户 [ 不在应用里 ▾ ]            │
-│      对方文本 [ 工资卡__________ ]       │   ← counterparty，≤100 字
-│ 方向 (● 转入 ○ 转出)  子类型 (○普通 ●还款)│
-└─────────────────────────────────────────┘
+┌ 关联 / 对手（三种状态，同一格随数据切换） ─────────┐
+│ ▸ 唯一候选：服务端已预填 matched_transaction_id    │
+│ ☑ 找到对方账户的另一半，关联为一笔转账？           │
+│   招行储蓄卡 · 08-05 · −¥1,000.00                  │
+│   配对后两条会统一成同一个子类型                   │
+├────────────────────────────────────────────────────┤
+│ ▸ 多候选：不预填，标 needs_review                  │
+│ ☐ 找到 3 条可以配对的转账，请选一条                │
+│   [ 选一条 ▾ ] → 打开交易选择器（复用列表接口）    │
+├────────────────────────────────────────────────────┤
+│ ▸ 没找到对腿：两个控件互斥，都不预选               │
+│ 对手账户 [ 请选择 ▾ ]（本账本未归档账户）          │
+│ 对方文本 [ 工资卡__________ ]                      │
+├────────────────────────────────────────────────────┤
+│ 方向 (● 转入 ○ 转出)  子类型 (○ 普通 ● 还款)       │
+└────────────────────────────────────────────────────┘
 ```
 
-- 服务端按 §5 / §14.34 的规则找**对方账户上 ±3 天、同币种同金额、方向相反、仍是单腿**的转账，唯一候选则预填 `matched_transaction_id` 并打 `transfer_candidate`，**勾选框默认勾上**（决策 §14.34）。文案就是「找到对方账户的另一半，关联为一笔转账？」。
-- **多候选**：勾选框下面是一个下拉，逐条列出候选（账户 · 日期 · 金额），默认选日期最近的那条；用户可换、可整格取消勾选。
-- **取消勾选**后这一行按单腿建：可以选一个 `counterpart_source_id`（对手账户在应用里但你不想合并），或选「不在应用里」并填 `counterparty` 文本（决策 §14.10、§14.16——这个字段解析阶段恒为空，只有在这里填才有值）。
+- **勾选框绑的就是 `matched_transaction_id`**，没有第二个字段（决策 §14.53b）：非空 = 勾上「关联为一笔转账」，取消勾选就发 `PATCH .../rows/{rid}` `{"matched_transaction_id": null}`。`flags` 里的 `transfer_candidate` 保留——它记的是「当时找到过候选」这个事实，真正决定提交时怎么建的是这个值。勾选状态**只从这一列读、也只往这一列写**，候选列表既不落库也不单独建接口。
+- **唯一候选**：服务端按 §5 / §14.34 的规则找**对方账户上 ±3 天、同币种同金额、方向相反、仍是单腿**的转账，只在候选**唯一**时预填 `matched_transaction_id` 并打 `transfer_candidate`，勾选框因此默认是勾上的。文案就是「找到对方账户的另一半，关联为一笔转账？」。
+- **多候选**（决策 §14.53b）：服务端**不预填**，改打 `needs_review`，`hint` 写「找到 N 条可以配对的转账，请选一条」。这一格把 `hint` 显示出来，勾选框空着，旁边给一个 `[选一条]` 按钮：点开的选择器**复用交易列表接口**（`kind=transfer`、仍是单腿、方向相反、其他账户、±3 天、同币种同金额——与退款候选是同一套做法，决策 §14.11），选中一条即 `PATCH {"matched_transaction_id": "<id>"}`，勾选框随之勾上。
+- **配对后子类型由服务端统一**（决策 §14.53a）：两腿的 `transfer_subtype` **不要求相同**（储蓄卡账单写「普通转账」、信用卡账单写「还款」的同一笔还款很常见）。提交时任一腿是「还款」且**转入腿的账户是信用卡**，整对记成还款；否则整对记成普通转账。格里给一句小字「配对后两条会统一成同一个子类型」，免得用户以为自己这一行的选择被吞了。
+- **没找到对腿时不猜对手账户**（决策 §14.53c）：`counterpart_source_id` 留空、**不预选任何账户**。这一格给两个**互斥**的控件，由用户显式选一个：
+  - **对手账户 Picker**——只列**本账本的未归档账户**（服务端同样校验，不满足就是 404 `not_found`），选了就表示「对方账户在应用里但没有现成的那条腿」，提交时按两腿建；
+  - **对方文本框**（`counterparty`，≤100 字，如「老婆」「工资卡」）——对方不在应用里，提交时按单腿建（决策 §14.10、§14.16：这个字段校验阶段恒为空，只有在这里填才有值）。
+  - 填了其中一个就把另一个置灰并清空；两个都留空也行，那就是一条没有对手信息的单腿转账。给了 `matched_transaction_id` 时这两个控件整体折叠——已经有现成的对腿，不该再造一条。
 - 对方**已经是两腿转账的一半**时服务端不给配对建议，改打 `duplicate`（决策 §14.34），格里显示「对方那笔已经配过对了」。
-- 同格里另有 `transfer_role`（转出 / 转入）与 `transfer_subtype`（普通 / 还款）两个小开关，都可改（决策 §5 的 review 要求）。
-- 提交时：勾选了配对的行与已有那条共用一个**新的** `transfer_pair_id`，已有行的 `counterparty` 被清空（决策 §14.34）。
+- 同格里另有 `transfer_role`（转出 / 转入）与 `transfer_subtype`（普通 / 还款）两个小开关，都可改（决策 §5 的 review 要求）；配对成行时子类型按上面那条规则统一，这两个开关改的是**本行**的值。
+- 提交时：`matched_transaction_id` 非空的行与它指向的那条共用一个**新的** `transfer_pair_id`，已有行的 `counterparty` 被清空，两腿子类型按上面的规则统一（决策 §14.34、§14.53a）。
 
 **其余行**：显示 `—`，禁用。
 
@@ -1524,7 +1573,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 |---|---|---|---|
 | ⚑ 可能重复 | `flags` 含 `duplicate` | `flag.duplicate` | 同账户同日同金额的交易已存在；或这一行要配对的那笔转账已经配过对了。默认**不自动跳过**，但在「有标记」筛选里排最前，提供「跳过这些重复行」的批量操作 |
 | ⚑ 疑似退款 | `flags` 含 `refund_candidate` | `status.info.*` | 已把 `kind` 置 `refund` 并预填了唯一候选原单（§4.11.3）。悬停显示原单摘要 |
-| ⚑ 可配对转账 | `flags` 含 `transfer_candidate` | `status.info.*` | 在对方账户上找到了可配对的单腿转账，「关联为一笔转账」默认勾选（决策 §14.34） |
+| ⚑ 可配对转账 | `flags` 含 `transfer_candidate` | `status.info.*` | 在对方账户上找到了**唯一**一条可配对的单腿转账，`matched_transaction_id` 已预填，「关联为一笔转账」因此默认勾上（决策 §14.34）。**找到多条时不打这个标记**，改打 `needs_review` 并在 `hint` 里请用户选一条（决策 §14.53b） |
 | ⚑ 需核对 | `flags` 含 `needs_review` | `flag.needs_review` | 校验时改过或没认出这一行的某个字段（日期、金额、币种、kind），或本批内有完全相同的行（决策 §5、§14.31）。具体原因在该行的 `hint` 里 |
 | ⚠︎ 待归类 | 派生：`category_l1 == null && kind !== 'transfer' && status !== 'skipped'` | `flag.uncategorized` | **提交前必须补齐**（决策 §1.3、§5） |
 | 已跳过 | `status === 'skipped'` | `fg.muted` | 整行置灰删除线，不参与提交，不参与「待归类」计数 |
@@ -1544,7 +1593,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 - **行内筛选切片**（表格上方 `SegmentedControl`）：**全部 / 待归类 / 有标记 / 已跳过**，每片带计数。切片只影响显示，不影响选中集合（切走再切回来选中还在）。默认落在「全部」，但存在待归类行时首次进入自动落在「待归类」。
 - **批量端点**：`PATCH /ledgers/{id}/imports/{bid}/rows`，体是 `{row_ids: Uuid[], patch: ImportRowPatch}`——**一次请求改一批**，不是前端并发发几十个单行 `PATCH`（决策 §14.52 A4）。
-- **批量设分类**：选中若干行 → 选一个一级（可选二级）→ 一次 `PATCH`。kind 不匹配的行（如给收入行设支出分类）由服务端跳过并在响应里回 `skipped_row_ids`，界面说明「其中 1 行的收支方向与该分类不符，已跳过」。这里的一级列表同样是两行选项（名称 + `categoryDesc()`，决策 §14.21）：一次改几十行，选错的代价比单条更大。
+- **批量设分类**：选中若干行 → 选一个一级（可选二级）→ 一次 `PATCH`。**这一批要么全成要么全不成**（03 §5.42）：混进一行 kind 对不上的（如给收入行设支出分类），服务端在事务里 400 并**全部回滚**，`detail` 指出是哪一行；界面提示「第 12 行是收入行，和这个支出分类对不上，这一批没有改动」并把那一行高亮滚动到位。所以选择器要先按**当前选中行的 kind 取交集**过滤分类，把注定失败的选项挡在点击之前。这里的一级列表同样是两行选项（名称 + `categoryDesc()`，决策 §14.21）：一次改几十行，选错的代价比单条更大。
 - **批量跳过 / 取消跳过**：把 `status` 设成 `skipped` / `pending`。
 - **批量设 kind**、**批量设币种**：同一个端点，同一套交互。
 - 批量请求成功后整表 `invalidate`（这时用户不在编辑单元格，可以安全重取）。
@@ -1592,7 +1641,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 └───────────────────────────────────┘
 ```
 
-- 一行一卡，最常改的两件事（kind、分类）直接在卡上；其余字段进「编辑详情」底部抽屉；转账行的配对勾选框直接放在卡上（它是默认勾选的，用户要能一眼看见并取消）。
+- 一行一卡，最常改的两件事（kind、分类）直接在卡上；其余字段进「编辑详情」底部抽屉；转账行的配对勾选框直接放在卡上（唯一候选时它是勾上的，用户要能一眼看见并取消）；多候选那种的 `[选一条]` 按钮也放在卡上，点开是全屏选择器。
 - 批量操作放在底部固定条：长按进入多选模式后出现。
 - 顶部筛选切片保留，默认落在「待归类」——手机上最合理的用法是「只把待归类的补完，剩下的回电脑上处理」。
 
@@ -1879,7 +1928,7 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 |---|---|---|
 | `屏幕 01 · 首页.dc.html` | §4.4 首页（资产 / 负债 / 净资产、账户余额卡、本月分类排行、12 月趋势） | 趋势保持只有支出（已定，决策 §14.52 B20）；宽屏侧栏去掉「报表」「成员」两个顶级页（A21） |
 | `屏幕 02 · 交易列表.dc.html` | §4.5 交易列表（筛选栏、按日分组、合并转账行、底部 summary） | 筛选栏补「币种」；行上显示原币金额 + 折算（决策 §14.49）；两腿转账合并行保留（B15）；去掉「导出 CSV」（A1） |
-| `屏幕 03 · 导入 review.dc.html` | §4.11 review 表格（列、徽章、行内筛选、批量操作） | 去掉「确认这行」与「就绪」计数（B13）；普通行不可改账户，只有转账行改对手账户（A5）；去掉分类「建议」chip（A3）；补画退款原单 / 转账配对的确认与改选交互（默认勾选、多候选下拉，B12） |
+| `屏幕 03 · 导入 review.dc.html` | §4.11 review 表格（列、徽章、行内筛选、批量操作） | 去掉「确认这行」与「就绪」计数（B13）；普通行不可改账户，只有转账行改对手账户（A5）；去掉分类「建议」chip（A3）；补画退款原单 / 转账配对的确认与改选交互（唯一候选默认勾上、多候选**不预填**并给「选一条」按钮打开交易选择器，B12、决策 §14.53b） |
 | `屏幕 04 · 记一笔.dc.html` | §4.6.1 支出 tab、§4.6.2 收入 tab（含分类选择器的两行选项、录入辅助） | 分类判据文字与二级样例一律按决策 §1.3 的 `desc_zh`（C1–C3）；商户字段叫「商户」不叫「交易内容」（C14） |
 | `屏幕 05 · 记一笔 转账.dc.html` | §4.6.4 转账 tab（单腿 / 两腿 / 跨币种 / 还款） | 汇率 chip 改只读（A10）；转账不设商户 / 标题（B16） |
 | `屏幕 06 · 记一笔 退款.dc.html` | §4.6.3 退款 tab + 关联原支出选择器 | 已退完的原单**可选**但带超额警告，不置灰禁选（B10）；「仅支出」条件固定不可移除（B11） |
@@ -1981,7 +2030,7 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 | 待归类判定（§4.11.4） | `skipped` 行不算；`transfer` 行不算；`category_l1` 为空的 expense 行算 |
 | 信用卡期初余额换算（§4.9，决策 §14.52 A13） | 类型为 `credit` 时输入 `3204` 提交成 `-3204.0000`；切换类型时符号正确翻转 |
 | `errorMessage` 映射（§3.7） | 已知 code 命中文案；未知 code 落到 `errors.unknown` 且带 detail |
-| **`errors.*` 与后端注册表对齐**（§3.7） | 一个用例把 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的 code 清单写成常量数组，断言 `zh` / `en` 两个语言包里**每个 code 都有 key**，并且**语言包里没有注册表之外的死 key**（`llm_*` 与后台解析那几个已删的 code 不能留在包里） |
+| **`errors.*` 与后端注册表对齐**（§3.7） | 一个用例把 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的 code 清单写成常量数组，**双向**断言：`zh` / `en` 两个语言包里每个 code 都有 key，且语言包里**没有注册表之外的死 key**。唯二的例外是 §3.7 表外那两个前端本地 key（`network_error`、`unknown`），用例把它们写进白名单 |
 | 语言包完整性 | `zh` 与 `en` 的 key 集合完全相同；没有空字符串；插值变量名两边一致 |
 
 ### 8.2 API 层测试（mock adapter，不打真网络）
@@ -1994,7 +2043,7 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 | 401 响应 | 触发 `onUnauthorized()` 恰好一次；`GET /me` 的 401 走引导路径不重复触发 |
 | 422 响应 | `ApiClientError.fields` 按 `loc` 正确拆分；`code === 'validation_error'`；**不出现** `[object Object]`（这是现状的真实 bug，现状文档 §5.3） |
 | 409 `stale_update` | 抛出的 `ApiClientError.code === 'stale_update'`、`status === 409` |
-| 400 `import_file_invalid` / `skill_outdated` | 结构化体（`rows[]` / `expected_version`）挂在 `ApiClientError.payload` 上，没有被字符串化 |
+| 400 `import_format_invalid` / `skill_outdated` | 结构化体（`errors[]` / `current_version` / `file_version` / `guide_url`）挂在 `ApiClientError.payload` 上，没有被字符串化 |
 | 网络失败 | `status === 0`、`code === 'network_error'` |
 | 每个 API 函数 | 请求方法、URL（含 `ledgerId` 拼接）、query 序列化（数组用重复键）、body 形状；上传走 `uploadClient` 且不设 `Content-Type`；粘贴走普通 JSON 实例 |
 | 失效矩阵（§3.6） | 每个 mutation 触发后，断言 `queryClient` 上被 invalidate 的 key 集合与矩阵一致；`patchRow` **不** invalidate 整表、`patchRows` **会** |
@@ -2027,10 +2076,10 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 3. **改 kind 联动**：把一行从 `expense` 改成 `transfer` → 分类被清空且禁用、「关联 / 对手」格变可用、金额符号跟着 kind 规则走。
 4. **行内编辑落库**：改商户 → 500ms 后恰好发一次 `PATCH`，body 只含 `merchant`；请求失败 → 值回滚且该格出现重试。
 5. **不被后台刷新打断**：正在编辑某格时触发窗口聚焦 → 不发生 `refetch`（`refetchOnWindowFocus: false` 生效）。
-6. **转账配对建议**（决策 §14.34）：`flags` 含 `transfer_candidate` 且只有一个候选 → 勾选框**默认勾上**、显示对方账户与金额；有多个候选 → 渲染下拉且默认选日期最近的；取消勾选 → 露出对手账户 Picker 与 `counterparty` 文本框；勾选状态改变时 `PATCH` 的 body 里是 `pair_confirmed`。
+6. **转账配对建议**（决策 §14.34、§14.53b/c）：`flags` 含 `transfer_candidate`（唯一候选）→ 勾选框**默认勾上**、显示对方账户与金额；取消勾选恰好发一次 `PATCH`，body **只有** `{matched_transaction_id: null}` 这一个键，勾选框随之空掉。多候选的行 → `flags` 里**没有** `transfer_candidate`、有 `needs_review`，`matched_transaction_id` 为 `null`，渲染 `hint`「找到 3 条可以配对的转账，请选一条」+ `[选一条]` 按钮；点开选择器发的是**交易列表**请求（带 `kind=transfer` 等筛选），选中一条后 `PATCH` 的 body 是 `{matched_transaction_id: '<id>'}`。没有 `matched_transaction_id` 的转账行 → 对手账户 Picker 与 `counterparty` 文本框都**不预选 / 不预填**，两者互斥（填了一个另一个禁用），Picker 里**不出现已归档账户**。
 7. **退款候选**：`refund_candidate` 行显示预填的原单摘要，改选后 `PATCH` 的 body 里是 `matched_transaction_id`，清空后该行提交时不写 `refund_of`。
 8. **批内重复行**（决策 §14.31）：两行完全相同 → **两行都在**、都带 `needs_review` 徽章、`hint` 显示「本批内有相同的行（第 N 行）」；**没有「已合并」徽章**。
-9. **批量操作**（决策 §14.52 A4）：选 5 行（其中 1 行是收入）→ 设支出分类 → 恰好发**一次** `PATCH .../rows`（不是 5 次），响应的 `skipped_row_ids` 有 1 条且界面说明「1 行被跳过」；批量跳过后提交计数相应减少。
+9. **批量操作**（决策 §14.52 A4）：选 5 行（kind 都能接受这个分类）→ 设支出分类 → 恰好发**一次** `PATCH .../rows`（不是 5 次），响应的 `rows` 回填进表格；选中集合里混进一行收入行时服务端回 400，断言**一行都没被改**（整表重取后 5 行都是原值）且出错行号被高亮；批量跳过后提交计数相应减少。
 10. **行内筛选切片**：全部 / 待归类 / 有标记 / 已跳过 四片计数正确；切片不清空选中集合。
 11. **徽章渲染**：`flags: ['duplicate','needs_review']` 的行同时渲染两个徽章，且各带**文字标签**（不只颜色）；四种之外的值不会渲染出徽章。
 12. **键盘导航**：`↓` 移动焦点行、`Enter` 进入编辑、`Esc` 恢复原值、`S` 切跳过、`[`/`]` 在待归类行之间跳、`⌘/Ctrl+Enter` 在阻断条件下**不触发**提交；`C` 打开分类选择器且输入判据文字能搜到分类。
@@ -2042,11 +2091,11 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 1. **导入指南**：`GET /import-format` 的 `skill_markdown` / `sample_csv` 渲染出来，「复制」写进剪贴板，「下载」生成的 Blob 内容与响应一致；页面**不硬编码**任何列名（把 mock 的 `headers` 改掉，界面跟着变）。
 2. **上传成功即 review**：`POST /imports` 返回 `{batch, rows}` → **不发第二次请求**就渲染出 review 表格（同步模型，没有轮询）。
 3. **粘贴入口**：粘贴 CSV 文本走 JSON 体 `{source_id, text}`，命中与上传同一套渲染。
-4. **结构错误态**：400 `import_file_invalid` → 停在上传页、按行号列出错误、`[复制错误清单]` 写进剪贴板的是「第 N 行：…」的纯文本；**不产生批次**（列表 query 没被 invalidate）。
-5. **版本过期态**：400 `skill_outdated` → 显示应用当前版本与文件版本、`[去导入指南更新 skill]` 跳 `/imports/guide`；**没有「忽略并继续」按钮**（决策 §14.30）。
-6. **非 CSV 被前端拦下**：选一个 `.pdf` → 不发请求，提示指回导入指南。
+4. **结构错误态**：400 `import_format_invalid` → 停在上传页、按 `errors[].line` 列出错误、每条渲染成「文件第 N 行：…」，`[复制错误清单]` 写进剪贴板的是同一份 `errors[]` 拼出的纯文本；**不产生批次**（列表 query 没被 invalidate）。缺 `# version:` 行的文件走的也是这一条（决策 §14.53d），断言它命中的是结构错误态而不是版本过期态。
+5. **版本过期态**：400 `skill_outdated` → 显示 `current_version` 与 `file_version`、`[去导入指南更新 skill]` 的跳转目标取自响应里的 `guide_url`（把 mock 的 `guide_url` 改掉，按钮跟着变）；**没有「忽略并继续」按钮**（决策 §14.30）。
+6. **非 CSV 被前端拦下**：选一个 `.pdf` → 不发请求，提示指回导入指南；绕过预检真传上去时服务端回 400 `import_format_invalid`，走第 4 条那套失败态。
 7. **撤销确认的两个方向**（决策 §14.52 B24）：`dry_run` 返回 `orphaned_refunds: 2, refunds_in_batch: 3` → 确认框里出现**两条措辞不同**的提示；某个数为 0 时对应那条不渲染；确认后才发真正的 `DELETE`，成功后跳回历史列表。
-8. **历史列表**：每行显示上传人（`display_name` 回退邮箱前缀）、净额、标记数；状态只有 `ready` / `committed` 两种徽章，**没有「已撤销」**。
+8. **历史列表**：每行显示上传人（`created_by` 经成员列表映射成 `display_name`，为空回退邮箱前缀）、净额（`net_amount` + `base_currency`）、标记数；`source === 'paste'`（`filename` 为 `null`）的批次显示「粘贴的 CSV 文本」占位而不是空白；状态只有 `ready` / `committed` 两种徽章，**没有「已撤销」**。
 
 ### 8.6 不做的
 
