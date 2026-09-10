@@ -13,7 +13,7 @@
 > - **`finance_sources.type` 四选一** `checking` / `credit` / `cash` / `other`（决策 §14.48，不再有第五种），并新增 `archived_at`（决策 §14.50）。
 > - **新表 `transaction_events`**（决策 §14.51）：交易操作记录，只追加，随交易级联删除。
 > - **没有任何文件系统状态**：不保存上传的账单文件，上传目录、上传卷、目录清理全部取消（决策 §14.28）。
-> - **转账配对 / 拆开**（决策 §14.34）落在 `transactions` 的 `transfer_pair_id` 与 `counterparty` 两列上，由既有的 `UNIQUE (transfer_pair_id, transfer_role)` 与互斥 CHECK 兜底（§1.6.3）。
+> - **转账配对 / 拆开**（决策 §14.34）落在 `transactions` 的 `transfer_pair_id` 与 `counterparty` 两列上，**不加新列、不加新约束**：既有的 `UNIQUE (transfer_pair_id, transfer_role)` 挡住"两腿方向相同"、互斥 CHECK 挡住"忘了清 `counterparty`"，而"两腿必须都还是单腿"数据库管不到，只能由应用层加行锁后断言（§1.6.3、§3.2）。
 > - 02 章原有的待决七条（D-3 至 D-9）已由决策 §14.29、§14.40、§14.41 全部裁定或作废，本章不再有待决项。
 >
 > 关于篇幅：本文长于最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十张表的完整 DDL、六步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
@@ -388,7 +388,21 @@ UPDATE transactions
  WHERE ledger_id = :lid AND transfer_pair_id = :pair_id;  -- 影响行数必须 = 2
 ```
 
-数据库替这两个动作兜住两件事，应用层不必自己查重：`uq_transactions_transfer_pair_role (transfer_pair_id, transfer_role)` 保证一个 `pair_id` 上最多一条 `out`、一条 `in`——所以"把一条已经配过对的腿再配一次"必然撞唯一约束；`ck_transactions_counterparty (transfer_pair_id IS NULL OR counterparty IS NULL)` 保证配对成功后不可能残留对方文本——所以"配对时忘了清 `counterparty`"这种漏写会被 CHECK 直接打回，而不是留下一条既有对腿又有对方文本的自相矛盾的行。应用层仍要校验的是数据库看不见的部分：两行同账本、`kind='transfer'`、账户不同、方向相反、都还是单腿（决策 §1.2、§14.34）。
+数据库只替这两个动作兜住两件事：
+
+- `uq_transactions_transfer_pair_role (transfer_pair_id, transfer_role)` 兜住的是**两腿方向相同**——同一个 `pair_id` 上出现两条 `out` 或两条 `in` 会直接撞唯一约束，写不进去。
+- `ck_transactions_counterparty (transfer_pair_id IS NULL OR counterparty IS NULL)` 兜住的是**配对时忘了清 `counterparty`**——这种漏写会被 CHECK 直接打回，不会留下一条既有对腿又有对方文本的自相矛盾的行。
+
+数据库**不管**的是"两行都还是单腿"。配对写的是一个**新**的 `pair_id = uuid4()`，所以把一条已经配过对的腿 `tid_old` 再配一次，写出来的是 `(P2, 'out')` / `(P2, 'in')`，不违反上面任何一条约束——它只是让 `tid_old` 原来的对腿留下 `(P1, 'in')` 这条指向虚空的孤儿腿（正是 §3.3 第一行承认的残留），而且是安静地留下，没有任何异常。因此**应用层必须自己查重**：在同一事务内先把两行锁住再断言，
+
+```sql
+SELECT id, kind, ledger_id, source_id, transfer_role, transfer_pair_id
+  FROM transactions
+ WHERE ledger_id = :lid AND id IN (:tid_new, :tid_old)
+   FOR UPDATE;          -- 两行都必须取到，且两行的 transfer_pair_id IS NULL，否则 409
+```
+
+行锁是必需的：没有它，两个并发请求可以各自读到"还是单腿"再各自配对，同样造出孤儿腿。断言通过后才执行上面那条 `UPDATE`。除此之外应用层还要校验数据库看不见的其余部分：两行同账本、`kind='transfer'`、账户不同、方向相反（决策 §1.2、§14.34）。
 
 配对与拆开各写一条 `transaction_events`（`paired` / `unpaired`，每腿一条，§1.9）。
 
@@ -440,6 +454,7 @@ CREATE INDEX ix_import_batches_ledger_created
 
 - `source` **只有两种**：`csv`（上传文件）与 `paste`（在应用内文本框粘贴 CSV 文本）。决策 §14.47 定下"标准导入格式只有 CSV"，JSON 不再接受，所以上一版清单里的第三种取值不存在；两条入口走的是同一套校验、产出同一形状的批次，`source` 只用来在导入历史里区分来源。
 - `filename` 只在 `source='csv'` 时有值（`paste` 没有文件名），由 `ck_import_batches_filename` 绑死。**只记名字，不保存文件**（决策 §14.28）：库里没有任何指向磁盘的路径，服务端也没有上传目录——原始 CSV 在校验完成后即被丢弃，用户要重来就重新上传。
+  `ck_import_batches_filename` 是**本章为 `paste` 定的约定，决策没有直接规定**（决策 §5 只说"只记文件名与大小"）。它反向约束两处，需要 [`README.md`](./README.md) 的跨章比对确认：[`03-backend-api.md`](./03-backend-api.md) 的 `POST /ledgers/{id}/imports` 粘贴分支必须写 `filename = NULL`（请求体里不接受文件名），[`04-frontend.md`](./04-frontend.md) 的导入历史列表对 `source='paste'` 的行显示固定占位文案（决策 §14.52 A17 要求这个列表显示目标账户 / 上传人等信息，粘贴批次没有文件名可显示）。
 - `size_bytes` 是上传文件或粘贴文本的 UTF-8 字节数，上限 2 MB 直接写进 CHECK（决策 §5、§9）。`row_count` 是校验后落库的草稿行数，上限 2000（决策 §5）。
 - `skill_version` 是文件首行 `# version: 2026-09-10` 里的那个版本串，也就是生成这份 CSV 的 skill 所用的分类表版本（决策 §14.30）。它与应用当前的 `CATEGORY_VERSION` 不一致或缺失时**根本不会建批次**——那是 400 `skill_outdated`（决策 §5），所以能进这张表的 `skill_version` 一定等于当时的应用版本；留下这一列是为了事后能看出"这批是哪版分类表导进来的"。形如 `2026-09-10`，`VARCHAR(16)` 足够。
 - `status` **只有两个值**：`ready`（校验通过、草稿已落库、等着 review）和 `committed`（已提交建账）。决策 §5 的状态机就是 `ready → committed` 两态：校验是同步完成的（秒级），不通过就返回 400 且**不产生批次**，因此没有 `uploaded` / `parsing` / `failed`，也没有进度、轮询、重试、僵尸批次。相应地，上一版为"同一账本同时只有一个批次在解析"准备的那个部分唯一索引一并删除。
@@ -568,9 +583,9 @@ CREATE INDEX ix_transaction_events_transaction_at
 | `imported` | `POST .../imports/{bid}/commit` 建出的每条交易 | `null`；批次记在 `import_batch_id` 上 |
 | `updated` | `PATCH` 改了交易的任何字段（含 `PATCH .../transfer/{pair_id}` 改两腿，每腿一条） | 只含真正变了的字段：`{"amount": {"before": "-88.00", "after": "-99.00"}, "merchant": {...}}` |
 | `paired` | 两条单腿转账配成一笔（`POST .../{tid}/pair`，或导入提交时按 `transfer_candidate` 配对），**两腿各写一条** | `{"transfer_pair_id": {"before": null, "after": "<pair_id>"}}`，`counterparty` 被清空时一并记 |
-| `unpaired` | `POST .../transfer/{pair_id}/unpair` 拆开，**两腿各写一条** | `{"transfer_pair_id": {"before": "<pair_id>", "after": null}}` |
+| `unpaired` | `POST .../transfer/{pair_id}/unpair` 拆开，**两腿各写一条**；撤销导入把批外转账腿打回单腿时也各写一条（§6.6） | `{"transfer_pair_id": {"before": "<pair_id>", "after": null}}` |
 | `refund_linked` | 退款行关联到原单（手工选、`PATCH` 改 `refund_of`、导入提交时按 `refund_candidate` 写入） | `{"refund_of": {"before": null, "after": "<tid>"}}`；写在**退款行**上 |
-| `refund_unlinked` | 解除退款关联（`PATCH` 把 `refund_of` 置空） | `{"refund_of": {"before": "<tid>", "after": null}}` |
+| `refund_unlinked` | 解除退款关联（`PATCH` 把 `refund_of` 置空）；撤销导入使批外退款行因 `ON DELETE SET NULL` 失去原单时也各写一条（§6.6） | `{"refund_of": {"before": "<tid>", "after": null}}` |
 
 列语义：
 
@@ -818,6 +833,7 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 生成的邀请码与当前有效的码不重复 | 生成前查一次未过期的同码，撞上重摇（数据库无唯一索引，§1.4） | 决策 §14.29 |
 | 账户 `default_currency` 创建后不可改 | `PATCH /sources/{sid}` 的请求体里没有这个字段 | 决策 §14.50 |
 | 归档 / 取消归档时同步维护 `archived_at` | 写入点只有 `PATCH {"archived": …}` 一处，`TRUE` 时写 `now()`、`FALSE` 时写 NULL（CHECK 兜底） | 决策 §14.50 |
+| 配对前两腿必须都是单腿（`transfer_pair_id IS NULL`） | 同一事务内 `SELECT ... WHERE id IN (两条) FOR UPDATE` 加行锁后逐条断言，任一条已有 pair 就 409；数据库对此**没有**任何约束，漏掉这一步会把旧对腿变成孤儿腿（§1.6.3） | 决策 §14.34 |
 | 配对 / 拆开只改 `transfer_pair_id` 与 `counterparty`，且两腿同事务 | 见 §1.6.3 的两条 `UPDATE`，影响行数必须为 2 | 决策 §14.34 |
 | 每一次改交易都追加一条 `transaction_events` | 所有写交易的路径（CRUD、转账接口、配对 / 拆开、导入提交、退款关联变化）共用同一个 `record_event()` 辅助函数，与交易写入同一事务 | 决策 §14.51 |
 | `import_batches` 状态机的合法迁移（`ready → committed`，不可回头） | 每个写接口先断言当前状态；重复提交由 409 `batch_already_committed` 挡住（决策 §14.18） | 决策 §5 |
@@ -1273,7 +1289,7 @@ def upgrade() -> None:
                     sqlite_where=sa.text("import_batch_id IS NOT NULL"))
 ```
 
-`TRANSACTION_CHECKS` 是**写在这个迁移文件顶部的字面量列表**，内容是 §1.6 DDL 里那 12 条 CHECK 的 `(后缀, SQL 表达式)` 二元组（其中 7 条来自决策 §10 的 8 个约束，第 8 个是 `uq_transactions_transfer_pair_role`，由上一行的 `create_unique_constraint` 单独建，见 §1.6.1），照抄字符串、不 import 任何应用代码（§5.0）。这里存的是**后缀**而不是全名——`create_check_constraint` 会经过 naming convention，`ck_transactions_` 前缀由它补上（§5.0），拼出来正好是 §1.7 DDL 里的全名：
+`TRANSACTION_CHECKS` 是**写在这个迁移文件顶部的字面量列表**，内容是 §1.6 DDL 里那 12 条 CHECK 的 `(后缀, SQL 表达式)` 二元组（其中 7 条来自决策 §10 的 8 个约束，第 8 个是 `uq_transactions_transfer_pair_role`，由上一行的 `create_unique_constraint` 单独建，见 §1.6.1），照抄字符串、不 import 任何应用代码（§5.0）。这里存的是**后缀**而不是全名——`create_check_constraint` 会经过 naming convention，`ck_transactions_` 前缀由它补上（§5.0），拼出来正好是 §1.6 DDL 里的全名：
 
 ```python
 TRANSACTION_CHECKS = [
@@ -1440,7 +1456,7 @@ COMMIT;
 | 过期 | 下一次生成或校验时顺手清（惰性） | 生成前：`DELETE FROM ledger_invites WHERE ledger_id = :lid AND expires_at <= :now`；校验前：`DELETE FROM ledger_invites WHERE expires_at <= :now` |
 | 作废 | owner 在账本设置里点"作废"（`DELETE /ledgers/{id}/invites/{code}`，决策 §14.52 A2） | `DELETE FROM ledger_invites WHERE ledger_id = :lid AND code = :code`（影响 0 行 → 404，返回 204） |
 
-三条都是普通删除，**没有定时任务、没有后台扫描**（决策 §14.29"不做定时清理"）。惰性清理已经够用：生成新码是清理的天然时机，而校验路径每分钟至多被调用 60 次（端点 1 QPS，§6.2）。即使某个账本再也没人生成码、留下一两行过期数据，也不会造成任何影响——`code` 没有唯一索引（§1.5），过期行既挡不住新码，也永远匹配不上校验时的 `expires_at > now()`。
+三条都是普通删除，**没有定时任务、没有后台扫描**（决策 §14.29"不做定时清理"）。惰性清理已经够用：生成新码是清理的天然时机，而校验路径每分钟至多被调用 60 次（端点 1 QPS，§6.2）。即使某个账本再也没人生成码、留下一两行过期数据，也不会造成任何影响——`code` 没有唯一索引（§1.4），过期行既挡不住新码，也永远匹配不上校验时的 `expires_at > now()`。
 
 删账本时这张表随 `ON DELETE CASCADE` 清空（§6.7）。
 
@@ -1495,9 +1511,14 @@ BEGIN;
    WHERE t.refund_of IN (SELECT id FROM transactions WHERE import_batch_id = :bid)
      AND (t.import_batch_id IS NULL OR t.import_batch_id <> :bid);
                                                                            -- 批外退款将失去原单
-  SELECT count(*) FROM transactions                                        -- refunds_in_batch：
-   WHERE import_batch_id = :bid AND kind = 'refund' AND refund_of IS NOT NULL;
-                                                                           -- 批内退款删除后原支出恢复可退额度
+  SELECT count(*) FROM transactions r                                      -- refunds_in_batch：
+   WHERE r.import_batch_id = :bid AND r.kind = 'refund'                    -- 批内退款删除后
+     AND r.refund_of IS NOT NULL                                           -- 其原支出恢复可退额度
+     AND r.refund_of NOT IN (SELECT id FROM transactions                   -- 只数原单在批外的：
+                              WHERE import_batch_id = :bid);               -- 原单也在本批内的话，
+                                                                           -- 原单会被同一条 DELETE
+                                                                           -- 一起删掉，谈不上"恢复
+                                                                           -- 可退额度"，数进来会虚高
 
   -- 必须先把"与批外单腿转账配的对"拆开，再删交易（见下方说明）
   UPDATE transactions SET transfer_pair_id = NULL, updated_at = :now
@@ -1512,6 +1533,13 @@ COMMIT;
 ```
 
 删交易那一句会连带触发两条级联：批外退款行的 `refund_of` 被 `ON DELETE SET NULL` 置空（退款行本身保留，决策 §1.1），被删交易的 `transaction_events` 随 `ON DELETE CASCADE` 消失（决策 §14.51）。
+
+**被改到的存活交易要补事件**。上面那条 `UPDATE` 和这条 `SET NULL` 级联改的都是**不属于本批、撤销之后仍然存在**的交易，它们的事件不会被 CASCADE 带走，也就必须按决策 §14.51"任何改交易的路径都追加一条"补写（§6.10）：
+
+- `UPDATE` 命中的每一条**批外转账腿**各写一条 `unpaired` 事件，`actor_id` = 点撤销的人，`changes` 记 `transfer_pair_id` 的 `{before, after: null}`；
+- 因 `ON DELETE SET NULL` 失去原单的每一条**批外退款行**各写一条 `refund_unlinked` 事件，`changes` 记 `refund_of` 的 `{before, after: null}`。
+
+两处受影响的 id 都必须在 `DELETE FROM transactions` **之前**先 `SELECT` 出来存好——批外转账腿要在 `UPDATE` 之前查（`UPDATE ... RETURNING id` 亦可），批外退款行要在 `DELETE` 之前按 `refund_of IN (本批 id)` 查（就是上面 `orphaned_refunds` 那条计数的同一个集合），删完就再也查不到了。事件行本身在同一事务内、`DELETE` 之后 `INSERT`（这两条交易都不在被删集合里，不会被 CASCADE 连坐）。
 
 顺序选择：**应用层在事务内先删交易再删批次**，`transactions.import_batch_id` 上的 `ON DELETE SET NULL` 只是兜底（万一有人绕过 API 直接删批次，交易不会丢，只是失去归属）。理由：如果反过来依赖 CASCADE 删交易，一次误删批次就会连带删掉用户已经手工编辑过的交易，不可逆；SET NULL 则至少保住数据。撤销时若某条交易是两腿转账的一腿，两腿都带同一个 `import_batch_id`（决策 §5：提交时一个事务里建完，含配对建出的对腿），会被同一条 `DELETE` 一起删掉；而"提交时与一条**已有**的单腿转账配了对"的情况（决策 §14.34）不同：已有的那条腿不属于本批、不会被删，只是它的 `transfer_pair_id` 会指向一条已消失的对腿。所以上面那条 `UPDATE` 要把它打回单腿，而且**必须排在 `DELETE FROM transactions` 之前**——一旦本批的行先被删掉，子查询就再也找不到那个 `transfer_pair_id`，那条腿会永远挂着一个指向虚空的 pair。数据库不会替这件事报错（`transfer_pair_id` 没有外键，决策 §1.2），只有唯一约束还在，所以漏掉这一句的后果是安静的脏数据，不是异常。
 
@@ -1560,7 +1588,9 @@ transaction_events -> import_rows -> transactions -> import_batches
 | 任何改交易的路径（`POST` / `PATCH` / 转账接口 / 配对 / 拆开 / 导入提交 / 退款关联变化） | 与交易写入**同一个事务**里 `INSERT` 一行；两腿一起动的操作（建转账、改转账、配对、拆开）各写一条 |
 | 事件写入之后 | 永不 `UPDATE`、永不单独 `DELETE`——这是一张只追加的表 |
 | 交易被删除（普通删、删转账两腿、撤销导入、删账本） | 该交易的全部事件随 `ON DELETE CASCADE` 消失 |
-| 撤销导入 | 删交易那一句就把事件带走了，不需要另写清理；批次行本身消失后，残留在别的交易上的 `import_batch_id` 由 `ON DELETE SET NULL` 置空 |
+| 撤销导入（被删的交易） | 删交易那一句就把事件带走了，不需要另写清理；批次行本身消失后，残留在别的交易上的 `import_batch_id` 由 `ON DELETE SET NULL` 置空 |
+| 撤销导入（批外转账腿被打回单腿） | 每条各写一条 `unpaired`，`actor_id` = 点撤销的人，`changes` 记 `transfer_pair_id` 的 `{before, after: null}`（§6.6） |
+| 撤销导入（批外退款行失去原单） | 每条各写一条 `refund_unlinked`，`changes` 记 `refund_of` 的 `{before, after: null}`（§6.6） |
 
 不做归档、不做清理、不做保留期：一条交易一生的事件是个位数，一本账几年下来也就是交易数的几倍（§7.4）。
 
@@ -1635,7 +1665,7 @@ UPDATE transactions
 
 沿用现状：`backend/tests/conftest.py:10` 在导入任何 `app` 模块前把 `DATABASE_URL` 设成 `sqlite:///:memory:`，`conftest.py:47-50` 建专用引擎，`conftest.py:58-69` 的 session 级 fixture 调 `Base.metadata.create_all` / `drop_all`。目标态对这条路径的要求：
 
-1. **`create_all` 必须能建出全部十张表和全部 CHECK**（十张表含 `transaction_events` 与 `exchange_rates`，模型里必须有它们，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致（`ck_finance_sources_archived_at` 的 `archived = (archived_at IS NOT NULL)` 与 `ck_transactions_transfer_role` 属于同一类布尔等价写法，两边都成立）。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 §1 里没有任何一条 CHECK 用裸 `LIKE`；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.5）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
+1. **`create_all` 必须能建出全部十张表和全部 CHECK**（十张表含 `transaction_events` 与 `exchange_rates`，模型里必须有它们，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致（`ck_finance_sources_archived_at` 的 `archived = (archived_at IS NOT NULL)` 与 `ck_transactions_transfer_role` 属于同一类布尔等价写法，两边都成立）。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 §1 里没有任何一条 CHECK 用裸 `LIKE`；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.4）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
 2. **CHECK 在 SQLite 上是真的生效的**，所以约束测试可以全部跑在内存库上：插入 `kind='expense', amount=100` 必须抛 `IntegrityError`。这是把不变量写进数据库而不是只写在 pydantic 里的最大回报——现状的 `finance_sources.type` 只有注释没有 CHECK（backend/app/models/finance_source.py:19），SQLite 上根本测不到。
 3. **外键在 SQLite 上默认不生效**，现状没有任何 `PRAGMA foreign_keys=ON`（`../current-design/02-database.md` §1.2）。目标态在测试引擎上挂一个连接事件把它打开，否则 `ON DELETE CASCADE` / `SET NULL` 的行为在测试里完全测不到：
 
