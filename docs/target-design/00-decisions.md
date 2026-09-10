@@ -209,7 +209,7 @@
 | 分类 | `GET /categories`（公开，带 `version`，`Cache-Control: immutable`） |
 | 账本 | `GET /ledgers`、`POST /ledgers`、`GET/PATCH/DELETE /ledgers/{id}`、`GET /ledgers/{id}/members`、`DELETE /ledgers/{id}/members/{user_id}`、`POST /ledgers/{id}/leave`、`POST /ledgers/{id}/transfer-ownership`、`POST /ledgers/{id}/invites`、`POST /ledgers/join` |
 | 账户 | `GET/POST /ledgers/{id}/sources`（GET 含余额）、`GET/PATCH/DELETE /ledgers/{id}/sources/{sid}` |
-| 交易 | `GET/POST /ledgers/{id}/transactions`、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}` |
+| 交易 | `GET/POST /ledgers/{id}/transactions`、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}`、`POST /ledgers/{id}/transactions/{tid}/pair`（与另一条单腿转账配对，§14.34）、`POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair`（拆开） |
 | 统计 | `GET /ledgers/{id}/stats/summary?month=YYYY-MM`、`GET /ledgers/{id}/stats/trend?months=12` |
 | 导入 | `POST /ledgers/{id}/imports`（multipart 文件，或 JSON 体 `{source_id, text}` 粘贴；同步校验，直接返回批次与草稿行）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready = 丢弃；committed = 撤销）；`GET /import-format`（公开：标准格式说明、示例文件、skill 文本，带 version） |
 | 汇率 | 现有 `rates` 接口保留 |
@@ -276,3 +276,4 @@
 36. **P-8 至 P-11 追认**（2026-09-10 用户确认）：外部转入默认建议记为收入；分类 code 用英文标识、中英显示名进常量；分类表经公开接口下发并永久缓存；加入账本为 owner 生成码、对方输入。
 37. **P-13 至 P-18 追认**（2026-09-10 用户确认）：账本内账户完全共享；每人 10 本、每本 10 人；owner / member 两档、owner 退出前先转让、删账本级联；基准币种归账本；注册自动建"我的账本"；乐观锁 409、聚焦刷新、不做实时同步。
 38. **P-19 至 P-23、P-25 追认**（2026-09-10 用户确认）：接口账本前缀与成员鉴权；账户类型含 cash、有交易只能归档、归档不可记账 / 导入；ILIKE 搜索与筛选参数、筛选放 URL；上传时手选目标账户；导入 ≤2 MB / ≤2000 行；三种自动标记的判定规则。
+39. **P-27 至 P-32 追认**（2026-09-10 用户确认）：限流数值与错误体格式；VARCHAR + CHECK 与交易表约束；两腿转账只走转账接口；§11 接口目录（已含配对 / 拆开两个端点，不含任何 LLM 设置接口）；前端沿用技术栈；迁移策略。
