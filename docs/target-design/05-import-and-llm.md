@@ -60,12 +60,12 @@
                                                         │transfer_cand. / needs_rev│
                                                         └────────────┬─────────────┘
                                                                      ↓
-      ┌─────────────────────┐                            ┌──────────────────────────┐
-      │ review 表格         │←── 200 批次 + 全部草稿行 ──│ import_batches  status=  │
-      │ 筛选：全部/待归类/  │    （同步返回，无轮询、    │ 'ready'                  │
-      │       有标记        │      无后台任务、无进度）  │ import_rows  status=     │
-      │ 改一行 / 批量改     │─── PATCH .../rows/{rid}    │ 'pending'                │
-      │ 关联原单 / 配对转账 │─── PATCH .../rows（批量）  └──────────────────────────┘
+      ┌─────────────────────┐                           ┌──────────────────────────┐
+      │ review 表格         │←── 200 批次 + 全部草稿行 ─│ import_batches  status=  │
+      │ 筛选：全部/待归类/  │    （同步返回，无轮询、   │ 'ready'                  │
+      │       有标记        │      无后台任务、无进度） │ import_rows  status=     │
+      │ 改一行 / 批量改     │─── PATCH .../rows/{rid}   │ 'pending'                │
+      │ 关联原单 / 配对转账 │─── PATCH .../rows（批量） └──────────────────────────┘
       └──────────┬──────────┘
                  │  POST .../commit
                  ↓
@@ -135,9 +135,10 @@
 | `category_invalid` | 400 | §4.3 二级不属于一级 / 转账行带分类 |
 | `refund_target_invalid` | 400 | §4.3 退款原单不是同账本的 `kind='expense'` |
 | `pair_invalid` | 400 | §4.3 配对目标不满足配对条件：不是同账本的 `kind='transfer'`、方向相同、同一个账户，或在提交前已被别人配走（已有 `transfer_pair_id`，不再是单腿）。决策 §14.53d：只有这一个名字 |
-| `stale_update` | 409 | `PATCH .../rows` 的乐观锁（决策 §2） |
+| `same_source` | 400 | §4.1、§4.3 `counterpart_source_id` 等于批次自己的目标账户（两腿转账的转出与转入落在同一个账户上，[`03-backend-api.md`](./03-backend-api.md) §4.2） |
+| `repayment_target_not_credit` | 400 | §4.3 单腿落库的 `transfer_role='in'` + `transfer_subtype='repayment'` 行，批次目标账户不是 `credit`（决策 §14.52 A11；两腿路径由 §4.5 的统一子类型规则消化，不会走到这里） |
 
-这 16 个名字与 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表逐字一致（决策 §14.4：注册表是唯一来源，§14.53d 把几处曾经打架的名字定死）。本章不自造同义名，也不在正文里提那些没被采用的旧名字。
+这 17 个名字与 [`03-backend-api.md`](./03-backend-api.md) §4.2 注册表逐字一致（决策 §14.4：注册表是唯一来源，§14.53d 把几处曾经打架的名字定死）。本章不自造同义名，也不在正文里提那些没被采用的旧名字。
 
 ### 0.3 `services/importing/` 四个模块
 
@@ -696,7 +697,7 @@ def flag_duplicates(db, ctx, rows):
 | `abs(amount) >= 退款额` | 退款不能超过原单 |
 | **可退额度 > 0** | 原单金额 − 已关联退款合计 > 0（部分退款，决策 §1.1） |
 
-打分（只用来在多候选时挑出"最像的那一笔"写进 `hint`，既不改变硬条件、也不决定是否预填）：
+打分（只给候选排序，**既不改变硬条件、也不决定是否预填**；这个排序**不对外可见** —— 候选不落库、不进响应、不进 `hint`，草稿行上没有"候选数组"这种字段，决策 §14.53b）：
 
 ```text
 score = 0
@@ -762,12 +763,10 @@ def flag_refund_candidates(db, ctx, rows):
             _add_hint(r, f"已关联 {best.occurred_at} 的原支出，可改选")
         else:                                                # 多候选：一律交给用户选
             r.flags.add("needs_review")                      # matched_transaction_id 保持 None
-            top = scored[0][1]                               # 打分只用来给一条线索
-            _add_hint(r, f"找到 {len(scored)} 笔可能的原支出（最像的是 "
-                         f"{top.occurred_at} {top.merchant or '无商户'}），请选一笔")
+            _add_hint(r, f"找到 {len(scored)} 笔可能的原支出，请选一笔")
 ```
 
-商户相同、金额相等这类信号只进 `score()`，**不构成预填的理由**：决策 §5 的原话是"商户只作加分，仅在候选唯一时预填"，而按决策 §14.7 预填的 `matched_transaction_id` 在提交时**无条件**写进 `refund_of`，一次打分领先就会变成正式数据里的错关联。所以判据只有一条 `len(scored) == 1`，与 §3.3 转账配对的 `len(single) == 1` 是同一口径；打分保留下来只剩一个用途：多候选时把最像的那笔写进 `hint` 当线索，用户照着去选。
+商户相同、金额相等这类信号只进 `score()`，**不构成预填的理由**：决策 §5 的原话是"商户只作加分，仅在候选唯一时预填"，而按决策 §14.7 预填的 `matched_transaction_id` 在提交时**无条件**写进 `refund_of`，一次打分领先就会变成正式数据里的错关联。所以判据只有一条 `len(scored) == 1`，与 §3.3 转账配对的 `len(single) == 1` 是同一口径。多候选时服务端**不预填、也不在 `hint` 里点名任何一笔**：`hint` 只写"找到 N 笔可能的原支出，请选一笔"（决策 §14.53b 给转账多候选定的同一口径），哪一笔"最像"由用户在选择器里自己判断 —— 排序留在服务端是实现细节，不是用户可见行为。
 
 把 `kind` 改成 `refund` 之后**必须**重跑 `sanitize_category`，不能只在 `category_l1 is None` 时才覆盖：skill 若原本把这行判成收入并给了收入分类，直接改 `kind` 会留下 `kind='refund'` + 收入分类的非法组合（决策 §1.3 规定退款只能用支出分类）。
 
@@ -890,11 +889,11 @@ def flag_transfer_candidates(db, ctx, rows):
 | `merchant` / `note` / `source_ref` | 文本，长度上限同 §2.4 ⑧ |
 | `category_l1` / `category_l2` | 必须在表内且收支组匹配，否则 400 `category_invalid` / `category_kind_mismatch` |
 | `matched_transaction_id` | 退款原单（`kind='refund'` 时）或配对目标（`kind='transfer'` 时）；置 `null` = 取消关联。它是"选中了哪一条"的**唯一载体**（决策 §14.53b）：多候选时服务端不预填，用户在前端用交易列表选一条后就是一次这样的 PATCH，非空即"已勾选"，没有第二个状态字段。**同一次 PATCH 里改了 `kind` 会先把它清掉**（见下），要保留关联就别在同一次请求里改 `kind` |
-| `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿）。必须是**本账本的未归档账户**且不等于批次的目标账户，否则 404 `not_found`（决策 §14.53c）；服务端从不替用户猜这个值（§3.3） |
+| `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿）。必须是**本账本的未归档账户**，否则 404 `not_found`（决策 §14.53c）；**不能等于批次自己的目标账户** `batch.source_id`，否则 400 `same_source`（[`03-backend-api.md`](./03-backend-api.md) §4.2 注册表；两腿转账的两条腿必须落在不同账户上，[`01-domain-model.md`](./01-domain-model.md) §6 不变量 9）。03 §5.41 的错误表眼下把"等于目标账户"归在通用的 `validation_error` 下，以注册表里更专属的 `same_source` 为准（§4.2 自己的规矩：有专属 code 就不用 `validation_error`），由 README 校对收口。服务端从不替用户猜这个值（§3.3） |
 | `counterparty` | 单腿转账的对手文本，例如"老婆""工资卡"（决策 §14.10、§14.16：只有用户填，skill 不猜） |
 | `status` | `pending` / `edited` / `skipped`，三个值，没有第四个（决策 §5） |
 
-服务端在任何一次 PATCH 之后把 `status` 置为 `edited`（用户显式标跳过时置 `skipped`），并按 §2.4 重跑该行的校验；`hint` 由服务端重写（原来的校验提示如果已经被用户改掉就该消失）。批次不是 `ready` 时一律 409 `batch_not_ready`。请求体带客户端看到的 `updated_at`，不一致 409 `stale_update`（决策 §2）。
+服务端在任何一次 PATCH 之后把 `status` 置为 `edited`（用户显式标跳过时置 `skipped`），并按 §2.4 重跑该行的校验；`hint` 由服务端重写（原来的校验提示如果已经被用户改掉就该消失）。批次不是 `ready` 时一律 409 `batch_not_ready`。**草稿行不做乐观并发**：请求体里没有 `updated_at`，最后写的赢（[`03-backend-api.md`](./03-backend-api.md) §5.41）。决策 §2 的乐观锁只管 `transactions` / `finance_sources` / `ledgers` 这些正式对象，草稿行不在其列 —— 一份批次的 review 通常只有一个人在做，冲突风险由"批次是 `ready` 且属于本账本"兜住，与批量端点（下面）同一口径。
 
 **PATCH 改动 `kind` 时**，服务端在重跑校验之前**无条件**清空该行的 `matched_transaction_id` / `counterpart_source_id`，并去掉 `refund_candidate` / `transfer_candidate` 两个标记，再按新 `kind` 重跑 §3.2 / §3.3 的候选查找（`kind` 没变时不动这三样，用户手工选的原单不能被一次改分类冲掉）。理由与 §3.2 / §3.3 开头清空 `duplicate` 预填值完全相同：`duplicate` 的 `matched_transaction_id` 指的是"同日同额的已有交易"，一旦这行被改成 `refund`，§4.4 会把它当原单写进 `refund_of`，落成一条用户从没关联过的错关联（目标不是 `expense` 时更糟，整批 400 `refund_target_invalid`，而用户看不懂自己错在哪）。
 
@@ -914,7 +913,7 @@ def flag_transfer_candidates(db, ctx, rows):
 - `patch` 的可改字段与单行相同，但**不接受** `matched_transaction_id` / `counterpart_source_id` / `counterparty` —— 那三个是逐行的关联，批量套用没有意义且危险。
 - 界面上的两个用法就是决策点名的两个：**批量设分类**、**批量跳过**（`{"status": "skipped"}`）。
 - 一个事务，全成或全不成；任一行校验不过返回 400 并带 `rows: [row_no, ...]`。
-- 批量端点不做乐观锁（列表里一次选十几行，逐行比对 `updated_at` 只会让用户反复失败）；它改的是自己刚拉到的这一批草稿，冲突风险由"批次是 `ready` 且属于本账本"兜住。
+- 与单行一样**不做乐观锁**（列表里一次选十几行，逐行比对 `updated_at` 只会让用户反复失败）；它改的是自己刚拉到的这一批草稿，冲突风险由"批次是 `ready` 且属于本账本"兜住。
 
 ### 4.2 review 内筛选
 
@@ -944,13 +943,17 @@ def flag_transfer_candidates(db, ctx, rows):
 | `kind='refund'` 且 `matched_transaction_id` 非空时，该目标仍是同账本的 `kind='expense'` 交易 | 400 | `refund_target_invalid` |
 | `kind='transfer'` 且 `matched_transaction_id` 非空时，该目标仍是同账本、方向相反的转账，且在此刻仍是**单腿**（`transfer_pair_id IS NULL`） | 400 | `pair_invalid` |
 | `counterpart_source_id` 非空时，它必须属于本账本（`finance_sources.ledger_id = batch.ledger_id`）且未归档 | 404 | `not_found`（决策 §14.53c） |
+| `counterpart_source_id` 非空时，它**不得等于** `batch.source_id` | 400 | `same_source`（[`01-domain-and-flows.md`](./01-domain-and-flows.md) §6 不变量 9：两腿转账的两个账户不同） |
+| 落成**单腿**（`matched_transaction_id` 与 `counterpart_source_id` 都为空）的 `kind='transfer'` + `transfer_role='in'` + `transfer_subtype='repayment'` 行，批次目标账户必须是 `credit` | 400 | `repayment_target_not_credit`（[`03-backend-api.md`](./03-backend-api.md) §4.2、§5.43，决策 §14.52 A11） |
 | 批次的目标账户仍未归档 | 409 | `source_archived` |
 
 `POST .../commit` **没有请求体**，也不做乐观锁（决策 §14.18）：重复提交靠 `batch_already_committed` 保护。
 
-两条**不**拦的：`needs_review` 行照样能提交（标记是提示不是闸）；`kind='transfer'` 且 `matched_transaction_id`、`counterpart_source_id` 都为空的行照样能提交 —— 那就是"对方不在应用里"或"用户没选对手账户"的单腿转账（决策 §1.2、§14.53c）。
+两条**不**拦的：`needs_review` 行照样能提交（标记是提示不是闸）；`kind='transfer'` 且 `matched_transaction_id`、`counterpart_source_id` 都为空的行照样能提交 —— 那就是"对方不在应用里"或"用户没选对手账户"的单腿转账（决策 §1.2、§14.53c）——唯一的例外是 `transfer_role='in'` + `transfer_subtype='repayment'` 落在非信用卡目标账户上，那条见上表最后第三行。
 
 **两腿的 `transfer_subtype` 不要求相同**（决策 §14.53a）：储蓄卡账单写 `plain`、信用卡账单写 `repayment` 的同一笔还款很常见，配对时服务端把两腿统一成一个值（规则见 §4.5），所以这里不设"子类型必须一致"的检查，也不因子类型不同而拒绝配对。
+
+**`repayment` 的转入腿必须落在信用卡上**（决策 §14.52 A11）这条不变量在导入路径上分两处兜：走两腿的（§4.5 ① / ②）由统一子类型规则消化 —— 转入腿账户不是 `credit` 就整对降成 `plain`，不报错；走单腿的（§4.5 ③）没有第二条腿可降，只能硬拦，就是上表那行 400 `repayment_target_not_credit`，与 `POST .../transactions/transfer`（[`03-backend-api.md`](./03-backend-api.md) §5.30）、`POST .../{tid}/pair`（§5.33）同一个 code。导入**不是**绕过这条不变量的旁门。`transfer_role='out'` 的单腿不判定（钱从哪个账户出去与还款目标无关，同 03 §5.26）。
 
 ### 4.4 字段映射
 
@@ -965,7 +968,7 @@ def flag_transfer_candidates(db, ctx, rows):
 | `amount` | `amount` | `NUMERIC(18,4)`，符号已在 §2.4 ⑤ 校正 |
 | `currency` | `currency` | |
 | `kind` | `kind` | |
-| `transfer_role` / `transfer_subtype` | 同名 | 非 transfer 为 NULL。落成一对两腿转账时（§4.5 ① / ②）`transfer_subtype` 按**统一子类型**规则改写：任一腿是 `repayment` 且**转入腿的账户是 `credit`** → 整对 `repayment`，否则整对 `plain`；两腿在同一事务里改成同一个值（决策 §14.53a）。单腿（§4.5 ③）原样落库 |
+| `transfer_role` / `transfer_subtype` | 同名 | 非 transfer 为 NULL。落成一对两腿转账时（§4.5 ① / ②）`transfer_subtype` 按**统一子类型**规则改写：任一腿是 `repayment` 且**转入腿的账户是 `credit`** → 整对 `repayment`，否则整对 `plain`；两腿在同一事务里改成同一个值（决策 §14.53a）。单腿（§4.5 ③）原样落库 —— 单腿没有第二条腿可降级，所以 `role='in'` + `repayment` 落在非 `credit` 目标账户上的行由 §4.3 的前置校验直接拦成 400 `repayment_target_not_credit`（决策 §14.52 A11），不会静悄悄落库 |
 | — | `transfer_pair_id` | 只有配对或新建对腿时才有值，见 §4.5 |
 | `counterparty` | `counterparty` | 只有单腿转账写；有 `transfer_pair_id` 的行必须为 NULL（决策 §10） |
 | `merchant` | `merchant` | ≤200；转账行一般为空（决策 §14.52 B16） |
@@ -1245,6 +1248,7 @@ def delete_batch(db, batch_id, actor_id, client=None, dry_run=False) -> DeleteRe
 | `filename`、`size_bytes` | 02 §1.7 同名列 | 只记名字与字节数，**文件不保存**（§4.11）；`source='paste'` 时 `filename` 为 NULL |
 | `skill_version` | 02 §1.7 同名列 | 文件里的 `# version:` 值 |
 | `row_count` | 02 §1.7 同名列 | 数据行数 |
+| `warnings` | 02 §1.7 同名列 | **整批级**警告数组（例如"第 1 行是表头之外的注释行，已忽略"这类不针对某一行的提示）；**行级**说明一律写在各行的 `hint` 上，不进这里（决策 §5）。[`03-backend-api.md`](./03-backend-api.md) §5.38 / §5.39 的响应目前没有这个字段，由 README 校对收口：要么补进响应，要么把这一列从 02 §1.7 删掉，不能一列谁也不写谁也不读 |
 | `source_id` + `source_name` | 02 §1.7 `source_id` 列 + join | 目标账户；前端要显示名字，接口直接带上（03 §5.38） |
 | `created_by` | 02 §1.7 同名列 | 上传人的用户 id，前端用成员列表映射成 `display_name`（决策 §14.43 03-4、§14.40 01-7） |
 | `net_amount` + `base_currency` | 现算 | 本批**净额**：非转账行按账本基准币种折算后求和（收入 + 退款 − 支出），转账不计入（决策 §14.52 A17、§7） |
@@ -1765,7 +1769,7 @@ fixture 由维护者手工写，姓名统一"张三" / "John Doe"，卡号统一
 | 库里有两笔同日同额 | `duplicate`，`matched_transaction_id` 为 `None` |
 | `kind=refund` 32，库里 30 天前有 32 同商户支出 | `refund_candidate`，预填该笔，分类沿用 |
 | 同上但库里有两笔 32、商户都不同 | `refund_candidate`，**不**预填，`needs_review` |
-| 同上但一笔商户相同、一笔不同 | 两笔候选 → **不**预填（`matched_transaction_id is None`），`refund_candidate` + `needs_review`；`hint` 里点名的"最像的"是商户相同的那笔（打分只决定这一句线索，§3.2） |
+| 同上但一笔商户相同、一笔不同 | 两笔候选 → **不**预填（`matched_transaction_id is None`），`refund_candidate` + `needs_review`；`hint` = "找到 2 笔可能的原支出，请选一笔"（商户相同只加分、不改变硬条件，更不构成预填理由，§3.2） |
 | `kind=refund` 32，库里只有 100 天前的 32 支出 | 无候选 |
 | `kind=refund` 32，原单已被别的退款退完 | 无候选（可退额度 = 0） |
 | `kind=refund` 32，**同时**命中 `duplicate`，但退款候选为空 | `flags` 含 `duplicate`、不含 `refund_candidate`；`matched_transaction_id` 必须是 `None`（§3.2 查候选前已清空）；提交后该交易 `refund_of IS NULL` |
@@ -1833,11 +1837,11 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
     bad = client.post(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/commit", headers=auth)
     assert bad.status_code == 409 and bad.json()["code"] == "rows_uncategorized"
 
-    # 4. 改一行（淘宝那行补分类）
+    # 4. 改一行（淘宝那行补分类）——草稿行不做乐观并发，请求体里没有 updated_at（03 §5.41）
     tb = next(x for x in rows if x["merchant"] == "淘宝")
     client.patch(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/rows/{tb['id']}",
-                 json={"category_l1": "shopping", "category_l2": "other_goods",
-                       "updated_at": tb["updated_at"]}, headers=auth)
+                 json={"category_l1": "shopping", "category_l2": "other_goods"},
+                 headers=auth)
 
     # 5. commit
     c = client.post(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/commit", headers=auth)
@@ -1906,6 +1910,9 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
 | 两个批次同时想配到同一条单腿上 | 一次成功、一次 400 `pair_invalid`（目标已不是单腿），失败的那批仍是 `ready`、一条交易也没建 |
 | 转账行的 `counterpart_source_id` 指向**别的账本**的账户 | `PATCH .../rows/{rid}` 404 `not_found`；直接改库后再 commit 也是 404 `not_found`，整批不落地（决策 §14.53c） |
 | 转账行的 `counterpart_source_id` 指向本账本**已归档**的账户 | 同上：404 `not_found`（决策 §14.53c） |
+| 转账行的 `counterpart_source_id` 选成**批次自己的目标账户** | `PATCH .../rows/{rid}` 400 `same_source`；直接改库后再 commit 也是 400 `same_source`，整批不落地（01 §6 不变量 9：两腿转账的两个账户不同） |
+| `role='in'` + `subtype='repayment'` 的行落在**非信用卡**目标账户上，且没选对腿也没选对手账户（单腿） | commit 400 `repayment_target_not_credit`，整批不落地（§4.3、决策 §14.52 A11）——导入不是绕过这条不变量的旁门 |
+| 同上但用户选了对手账户（两腿，转入腿仍是本账户且非信用卡） | 200，两腿的 `transfer_subtype` 都被降成 `plain`（§4.5 的统一子类型规则，决策 §14.53a），不报错 |
 | 库里没有对腿的转账行 | `counterpart_source_id is None`（服务端不猜，§3.3）；用户不填就按单腿建，`transfer_pair_id is None`、`counterparty` 是用户填的文本或 NULL |
 | 用户给该行选了对手账户后 commit | 建出两腿：两条同一个 `transfer_pair_id`、`counterparty` 都为 NULL、`transfer_subtype` 是同一个值（§4.5 ②、决策 §14.53a），两条各一条 `imported` 事件 |
 | 提交后**不撤销**、直接重传同一份文件 | 所有行 `duplicate`；退款行**仍命中 `refund_candidate` 并预填同一张原单**（1299 退了 299，可退额度还有 1000 > 0，候选依旧唯一），要靠用户在 review 里把整批标 `skipped`，不是靠算法拦；还款行因对腿已配对而是 `duplicate` 不是 `transfer_candidate` |
@@ -1926,7 +1933,7 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
 
 无。本章原有的 17 条待决全部关闭：其中与解析流水线、视觉路径、进度、文件存储、批内合并相关的条目随决策 §14.25 / §14.28 / §14.31 一并作废（对应正文已删除，不是加注保留），其余由决策 §14.7、§14.10、§14.11、§14.19、§14.22、§14.34、§14.47 逐条裁定并写进正文。
 
-§0.2 列出的 16 个错误 code 都在 [`03-backend-api.md`](./03-backend-api.md) §4.2 的注册表里，名字逐字一致（决策 §14.4、§14.53d）：配对失败只有 `pair_invalid` 一个 code，结构错误只有 `import_format_invalid` 一个 code，版本行存在但不一致才是 `skill_outdated`。这是跨章对齐的结果，不是待决。
+§0.2 列出的 17 个错误 code 都在 [`03-backend-api.md`](./03-backend-api.md) §4.2 的注册表里，名字逐字一致（决策 §14.4、§14.53d）：配对失败只有 `pair_invalid` 一个 code，结构错误只有 `import_format_invalid` 一个 code，版本行存在但不一致才是 `skill_outdated`。这是跨章对齐的结果，不是待决。
 
 ---
 
