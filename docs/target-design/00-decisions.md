@@ -247,16 +247,16 @@
 7. **导入提交时写 `refund_of` 的条件**：行 `kind = 'refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选），提交时写入 `refund_of`；不引入"用户已确认"这类额外状态。（2026-09-10 用户追认。）
 8. **篇幅**：各章的行数目标只是参考，不作为验收项。不得为压行数删除被点名要求的内容，也不要把提示词、schema 拆到附录文件。（2026-09-10 用户追认。）
 9. **导入分块超长时的图片切分**：图片块被模型截断（`finish_reason = length`）时无条件对半切一次（重叠 6%），子块标记为已切分；已切分的子块再次被截断则整批 `failed`，不再递归。
-10. **导入草稿行的对手文本**：`import_rows` 增加 `counterparty VARCHAR(100) NULL`，`PATCH .../rows/{rid}` 可改；提交单腿转账时写入 `transactions.counterparty`。
-11. **退款候选列表**：不单独建接口。review 界面和记账表单的「关联原单」选择器都复用 `GET /ledgers/{id}/transactions`（expense 行自带 `refunded_total` / `refundable`）。
+10. **导入草稿行的对手文本**：`import_rows` 增加 `counterparty VARCHAR(100) NULL`，`PATCH .../rows/{rid}` 可改；提交单腿转账时写入 `transactions.counterparty`。（2026-09-10 用户追认。）
+11. **退款候选列表**：不单独建接口。review 界面和记账表单的「关联原单」选择器都复用 `GET /ledgers/{id}/transactions`（expense 行自带 `refunded_total` / `refundable`）。（2026-09-10 用户追认。）
 12. **视觉路径的页面缩略图**：解析时把渲染出的页面图存到 `UPLOAD_DIR/{ledger_id}/{batch_id}/pages/{page_no}.png`；批次响应在 `used_vision = true` 时带 `pages: [{page_no, image_url}]`，草稿行带 `page_no`（非视觉路径为 NULL，`import_rows` 增加 `page_no INTEGER NULL`）；图片经鉴权接口 `GET /ledgers/{id}/imports/{bid}/pages/{page_no}` 返回，批次删除时连同删除。
-13. **账本名长度**：1–100 字符，与账户名一致。
+13. **账本名长度**：1–100 字符，与账户名一致。（2026-09-10 用户追认。）
 14. **服务重启时的失败 code**：`import_interrupted`（500），登记进 03 §4.2 注册表；`import_batches.error_code` 写同一个名字。
 15. **批次错误字段的暴露**：数据库存 `error_code` / `error_message` / `error_chunk` 三列；接口响应只暴露 `error: {code, message}`，`error_chunk` 仅用于服务端日志与重试定位，前端不展示。
-16. **`import_rows.counterparty` 的来源**：解析阶段恒为 NULL（LLM 不猜对手账户，输出 schema 里没有这个字段），只有用户在 review 里通过 `PATCH .../rows/{rid}` 填写才有值。
+16. **`import_rows.counterparty` 的来源**：解析阶段恒为 NULL（LLM 不猜对手账户，输出 schema 里没有这个字段），只有用户在 review 里通过 `PATCH .../rows/{rid}` 填写才有值；skill 不猜对手账户。（2026-09-10 用户追认。）
 17. **缩略图 `image_url` 的形态**：相对 API 根的路径（例如 `/ledgers/{id}/imports/{bid}/pages/1`，不含 `/api/v1` 前缀），前端用已配置 baseURL 与鉴权头的 axios 实例直接请求并取 blob；`pages` 数组按磁盘上实际存在的 `{page_no}.png` 升序生成，越界判断也以此为准，不用 `chunk_total`。
-18. **`POST .../imports/{bid}/commit` 无请求体**：不做乐观锁校验，重复提交靠 409 `batch_already_committed` 保护。
-19. **草稿行提示字段名**：统一叫 `hint`（对应 `import_rows.hint`），不再使用 `note_hint`。
+18. **`POST .../imports/{bid}/commit` 无请求体**：不做乐观锁校验，重复提交靠 409 `batch_already_committed` 保护。（2026-09-10 用户追认。）
+19. **草稿行提示字段名**：统一叫 `hint`（对应 `import_rows.hint`），不再使用 `note_hint`。（2026-09-10 用户追认。）
 20. **生活购物 / 消费购物的边界**（2026-09-09 用户决定）：按消耗品 / 耐用品区分，不按必需 / 非必需；「日用杂货」归生活购物并吞并「家居耗材」（code `household`，名「日用杂货」）；消费购物增加 `other_goods` 其他物件；删除 `misc_goods`。§1.3 的表已按此更新。
 21. **一级分类带说明文字**（2026-09-09 用户提出）：`desc_zh` / `desc_en` 进常量、随 `GET /categories` 下发、前端选分类处显示、LLM 提示词作判据。全文见 §1.3。
 22. **撤销导入整批删除**（2026-09-09 用户决定，README U-1）：不引入 `reverted` 状态，不为追溯保留已撤销批次，避免数据库里留垃圾。
