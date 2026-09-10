@@ -41,7 +41,7 @@
 - 表单和导入的默认逻辑：外部转入默认建议记为 `income`（分类"人情往来"等），用户明确选转账才记转账，避免真正的收入消失在统计之外。
 - 两腿转账支持跨币种：两腿各自存自己的 `currency` 和 `amount`（出 100 USD / 入 720 CNY），不要求金额相等。手续费另记一笔 `expense`（分类 其他/手续费）。
 - 有 `transfer_pair_id` 的两腿只能通过 `POST /ledgers/{id}/transactions/transfer` 一起创建、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}` 一起修改/删除；对单腿用普通交易接口。
-- 导入时的还款去重：对手账户 ±3 天内同金额、`subtype=repayment` 的反向腿已存在则标"可能重复"。
+- 导入时的转账配对（2026-09-10 用户决定，见 §14.34）：转账行（还款与普通划转都算）在其他账户上找 ±3 天内同币种同金额、方向相反、**仍是单腿**的转账；唯一候选则预填并在 review 里默认勾选"关联为一笔转账"，提交时两条挂同一个 `transfer_pair_id`；对方若已是两腿转账的一半，则本行标 `duplicate`。
 
 ### 1.3 分类（固定常量）
 
@@ -155,7 +155,7 @@
 - **一份文件对应一个目标账户**，上传时由用户选；文件里不含账户信息。
 - **状态机**：`ready → committed`。校验通过即 `ready`（同步返回批次和全部草稿行，没有 parsing / 进度 / 轮询）；`ready` 下可编辑草稿和提交；`committed` 后可整批撤销 = 整批删除（§14.22）。校验不通过不产生批次。
 - **两张表**：`import_batches`（账本、目标账户、上传人、来源 `json` / `csv` / `paste`、原文件名与大小（只记名字，**不保存文件**，2026-09-10 用户决定）、`skill_version`、状态、行数、警告、时间戳）与 `import_rows`（批次、`row_no`、状态 `pending` / `edited` / `skipped`、date、amount、currency、kind、transfer_role、transfer_subtype、merchant、note、category_l1、category_l2、source_ref、`hint`、flags、matched_transaction_id、counterpart_source_id、counterparty、提交后的 transaction_id）。不再有 confidence、page_no、chunk_*、raw_response、error_* 列。
-- **自动标记**不变：`ready` 时打 `duplicate`（同账户同日同金额已存在）、`refund_candidate`（按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`repayment`（按 §1.2 规则找对手账户、去重）；外加上面的 `needs_review`。 同一批内完全相同的行**不合并**：都保留、都打 `needs_review`，`hint` 写"本批内有相同的行（第 N 行）"，由用户在 review 里取舍；标记只有这四种，没有 `merged_duplicates`（2026-09-10 用户决定）。退款候选以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
+- **自动标记**不变：`ready` 时打 `duplicate`（同账户同日同金额已存在）、`refund_candidate`（按 §1.1 规则找到唯一候选原单则预填 `matched_transaction_id`）、`transfer_candidate`（按 §1.2 / §14.34 规则找到可配对的单腿转账则预填 `matched_transaction_id`）；外加上面的 `needs_review`。 同一批内完全相同的行**不合并**：都保留、都打 `needs_review`，`hint` 写"本批内有相同的行（第 N 行）"，由用户在 review 里取舍；标记只有这四种，没有 `merged_duplicates`（2026-09-10 用户决定）。退款候选以金额 + 时间窗 + 同账户为主，商户只作加分，仅在候选唯一时预填。
 - **review 表格**不变：每行所有字段可改、可标跳过、可改 kind、可选分类、可关联退款原单、可选对手账户；没一级分类的行显示"待归类"，提交前必须补齐；不再有页面缩略图（应用拿不到原始账单）。
 - **提交**：`POST .../imports/{batch_id}/commit`，一个数据库事务内建所有交易（两腿还款一起建），每条交易记 `import_batch_id`；成功后批次 `committed`。
 - **限制与限流**：导入每用户每小时 10 批；上传 ≤2 MB。
@@ -268,6 +268,7 @@
 28. **不保存上传的导入文件，也不存原始行值**（2026-09-10 用户决定，README U-7 作废）：批次只记文件名与大小；校验改动写进行的 `hint`；后端没有文件系统状态，`UPLOAD_DIR`、上传卷、目录清理全部取消（05 待决 8 随之作废）。
 29. **邀请码不要求全表唯一，用掉即删、过期即删**（2026-09-10 用户决定，README U-8 改、02 待决 D-6 一并定）：`ledger_invites.code` 不建唯一索引；生成时只保证与当前有效的码不重复，撞上就重新生成；`POST /ledgers/join` 只在未过期的码中查找，加入成功即删除该行；过期的行在下次生成或校验时删除；不做定时清理，表里没有 `used_by` / `used_at`。
 30. **分类表版本号：日期串，导入时硬校验**（2026-09-10 用户决定，README U-9、04 待决 D-8 前半）：`CATEGORY_VERSION` 形如 `2026-09-10`，改分类表时手工递增并重新生成 skill；skill 输出带同一版本号；上传时与应用当前版本不一致或缺失 → 400 `skill_outdated`，不允许带警告继续。
-31. **批内重复行不合并**（2026-09-10 用户决定，README U-11 改）：完全相同的行全部保留并打 `needs_review` + `hint`，标记维持 `duplicate` / `refund_candidate` / `repayment` / `needs_review` 四种，删除 `merged_duplicates`。
+31. **批内重复行不合并**（2026-09-10 用户决定，README U-11 改）：完全相同的行全部保留并打 `needs_review` + `hint`，标记维持 `duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review` 四种，删除 `merged_duplicates`。
 32. **交易日期是无时区的日历日期**（2026-09-10 用户确认 P-1 并提出）：`occurred_at` 用 Postgres `DATE`，不存时间、不带时区，用户换时区不会变。接口一律用 `YYYY-MM-DD` 字符串传输；前端把它当字符串显示和比较，**不得**用 `new Date("YYYY-MM-DD")` 再格式化（会按 UTC 零点换算导致差一天）；表单默认"今天"取浏览器本地日期而非 UTC 日期；导入文件的 `date` 同样是无时区字符串；汇率按该日历日期查。
 33. **P-2 至 P-6 追认**（2026-09-10 用户确认）：不做"不计收支 / 不计预算"标记；注册开关默认开；宽屏 ≥1024px 侧栏、窄屏底部五 tab；退款候选默认最近 90 天；转账手续费另记一笔支出。
+34. **两条单腿转账可以配对成一笔转账**（2026-09-10 用户决定，取代 P-7 的"标可能重复"）：导入 review 里对转账行自动找对方账户上 ±3 天、同币种同金额、方向相反、仍为单腿的转账，唯一候选默认勾选"关联为一笔转账"，多候选列出让用户选；提交时新行与已有行共用新的 `transfer_pair_id`，已有行的 `counterparty` 清空。对方已是两腿转账的一半时本行标 `duplicate`。交易详情页提供"关联为转账对腿"（选一条单腿转账配对）和"拆开"（两腿各自变回单腿）两个操作。标记名 `repayment` 改为 `transfer_candidate`，预填复用 `matched_transaction_id`。**各章待同步**：01 流程与状态图、03 导入行 PATCH 字段与 commit 逻辑、新增配对 / 拆开端点、04 review 表格与详情页、05 自动标记算法。
