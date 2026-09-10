@@ -136,7 +136,7 @@
 
 ## 3. 资金账户（finance_sources）
 
-- 挂账本；字段：id、ledger_id、name、type（`checking` / `savings` / `credit` / `cash` / `other`）、default_currency、opening_balance（`NUMERIC(18,4)`，默认 0）、archived、created_by、updated_by、created_at、updated_at。
+- 挂账本；字段：id、ledger_id、name、type（`checking` 储蓄卡 / `credit` 信用卡 / `cash` 现金 / `other` 其他；无 `savings`，2026-09-11 用户决定 §14.48）、default_currency、opening_balance（`NUMERIC(18,4)`，默认 0）、archived、created_by、updated_by、created_at、updated_at。
 - 余额 = opening_balance + 该账户所有交易 `amount` 之和（含单腿转账）。
 - 归档规则维持：归档后不能再记账、不能作为导入目标，历史保留；有交易的账户不能删除，只能归档。
 
@@ -226,7 +226,7 @@
 
 1. 建 `ledgers`、`ledger_members`、`ledger_invites`、`import_batches`、`import_rows`。
 2. 每个现有用户建默认账本 + owner 成员，`base_currency` 复制自 `users.base_currency`。
-3. `finance_sources`、`transactions` 加 `ledger_id`（回填为该用户默认账本）、`created_by`、`updated_by`、`updated_at`；账户加 `opening_balance`、`type` 增加 `cash`。
+3. `finance_sources`、`transactions` 加 `ledger_id`（回填为该用户默认账本）、`created_by`、`updated_by`、`updated_at`；账户加 `opening_balance`、`type` 增加 `cash`、现有 `savings` 回填为 `checking`（§14.48）。
 4. `transactions`：`description` → `note`；加 `kind`（回填：`transfer_pair_id` 非空 → transfer，否则金额 <0 → expense、≥0 → income）、`transfer_role`（按符号）、`transfer_subtype`（回填 `plain`）、`refund_of`、`counterparty`、`category_l1` / `category_l2`（现有 expense/income 行回填 `other` / `other_income`）、`import_batch_id`；加 §10 的 CHECK。
 5. 删除 `transaction_tags`。
 6. 把 `users.base_currency` 保留为"新建账本默认币种"。
@@ -284,3 +284,4 @@
 45. **视觉方向定稿**（2026-09-10 用户在 Claude Design 里决定，04-D-13 关闭）：采用「04 柔和圆润」——Figtree + IBM Plex Mono、C2 密度（列表行高 56、圆角 sm 8 / md 14 / lg 18）、淡鼠尾草底、交易四色砖红 / 深青 / 橄榄金 / 板岩蓝、森林绿强调（深色下翻亮为 #6FB98A）。token 的唯一来源是 `docs/target-design/mockups/tokens.json`（从 Claude Design 导出的「Design Tokens v2 · 定稿」提取），16 张屏幕稿在同一目录。04 章 §6 的 A/B/C 三方向作废，改为引用该目录；实现前不再需要另出 mockup。
 46. **04 章待决最后 5 条**（2026-09-11 用户决定）：04-D-1 路由用 Expo Router；04-D-5 加匿名可读的 `GET /config` 返回 `{registration_open}`，注册关闭时注册页直接显示提示；04-D-6 支出详情带 `refunds[]`（每笔退款的日期、金额、备注），退款详情把 `refund_of` 展开成原单摘要（日期、商户、金额、已退 / 可退）；04-D-7 交易列表加 `?import_batch_id=` 筛选；04-D-11 不做按成员筛选。至此 README §6 的全部待决项处理完毕。
 47. **导入文件只做 CSV**（2026-09-11 用户决定，屏幕稿审阅 B4）：标准导入格式只有 CSV（固定 11 列表头 + `# version:` 首行），不再接受 JSON；粘贴入口粘的也是 CSV 文本。skill 输出 CSV。§5、§6、§11 已同步。
+48. **账户类型四种**（2026-09-11 用户决定，屏幕稿审阅 B6）：`checking`（储蓄卡 / Checking）、`credit`（信用卡）、`cash`（现金）、`other`（其他）；不设 `savings`（新加坡没有这个区分，"储蓄"就是 checking）。迁移把现有 `savings` 改为 `checking`。
