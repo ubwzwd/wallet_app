@@ -207,9 +207,10 @@
 | 认证 | 现有 `auth` 接口保留（注册受 `REGISTRATION_OPEN` 控制） |
 | 我 | `GET /me`、`PATCH /me`（默认币种、语言） |
 | 分类 | `GET /categories`（公开，带 `version`，`Cache-Control: immutable`） |
+| 配置 | `GET /config`（公开，`{registration_open}`，供注册页提前判断；§14.46） |
 | 账本 | `GET /ledgers`、`POST /ledgers`、`GET/PATCH/DELETE /ledgers/{id}`、`GET /ledgers/{id}/members`、`DELETE /ledgers/{id}/members/{user_id}`、`POST /ledgers/{id}/leave`、`POST /ledgers/{id}/transfer-ownership`、`POST /ledgers/{id}/invites`、`POST /ledgers/join` |
 | 账户 | `GET/POST /ledgers/{id}/sources`（GET 含余额）、`GET/PATCH/DELETE /ledgers/{id}/sources/{sid}` |
-| 交易 | `GET/POST /ledgers/{id}/transactions`、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}`、`POST /ledgers/{id}/transactions/{tid}/pair`（与另一条单腿转账配对，§14.34）、`POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair`（拆开） |
+| 交易 | `GET/POST /ledgers/{id}/transactions`（列表支持 `?import_batch_id=` 筛选；详情：支出行带 `refunds[]`、退款行带 `refund_of` 展开的原单摘要，§14.46）、`GET/PATCH/DELETE /ledgers/{id}/transactions/{tid}`、`POST /ledgers/{id}/transactions/transfer`、`PATCH/DELETE /ledgers/{id}/transactions/transfer/{pair_id}`、`POST /ledgers/{id}/transactions/{tid}/pair`（与另一条单腿转账配对，§14.34）、`POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair`（拆开） |
 | 统计 | `GET /ledgers/{id}/stats/summary?month=YYYY-MM`、`GET /ledgers/{id}/stats/trend?months=12` |
 | 导入 | `POST /ledgers/{id}/imports`（multipart 文件，或 JSON 体 `{source_id, text}` 粘贴；同步校验，直接返回批次与草稿行）、`GET /ledgers/{id}/imports`、`GET /ledgers/{id}/imports/{bid}`、`GET .../rows`、`PATCH .../rows/{rid}`、`POST .../commit`、`DELETE /ledgers/{id}/imports/{bid}`（ready = 丢弃；committed = 撤销）；`GET /import-format`（公开：标准格式说明、示例文件、skill 文本，带 version） |
 | 汇率 | 现有 `rates` 接口保留 |
@@ -283,3 +284,4 @@
 43. **03 章待决 4 条**（2026-09-10 用户决定）：03-4 `created_by` / `updated_by` 只回用户 id，前端用成员列表映射；03-6 删除类端点统一 204，撤销导入例外（回撤销条数）；03-8 注册限流同 IP 每小时 5 次，实现为进程内令牌桶（与登录、加入账本共用同一组件，重启清零、单实例）；03-9 撤销导入的 `dry_run` 返回 `orphaned_refunds` 计数。
 44. **03 章待决最后 5 条**（2026-09-10 用户决定）：03-10 分类当月支出可为负，照实返回；03-12 汇率回退窗口 `FX_MAX_BACKFILL_DAYS = 10`，超过用最新汇率；03-13 `occurred_at` 最晚今天 + 1 天；03-14 `limit` 上限交易列表 200、草稿行 500；03-15 uvicorn 加 `--proxy-headers`（infra 改动）。
 45. **视觉方向定稿**（2026-09-10 用户在 Claude Design 里决定，04-D-13 关闭）：采用「04 柔和圆润」——Figtree + IBM Plex Mono、C2 密度（列表行高 56、圆角 sm 8 / md 14 / lg 18）、淡鼠尾草底、交易四色砖红 / 深青 / 橄榄金 / 板岩蓝、森林绿强调（深色下翻亮为 #6FB98A）。token 的唯一来源是 `docs/target-design/mockups/tokens.json`（从 Claude Design 导出的「Design Tokens v2 · 定稿」提取），16 张屏幕稿在同一目录。04 章 §6 的 A/B/C 三方向作废，改为引用该目录；实现前不再需要另出 mockup。
+46. **04 章待决最后 5 条**（2026-09-11 用户决定）：04-D-1 路由用 Expo Router；04-D-5 加匿名可读的 `GET /config` 返回 `{registration_open}`，注册关闭时注册页直接显示提示；04-D-6 支出详情带 `refunds[]`（每笔退款的日期、金额、备注），退款详情把 `refund_of` 展开成原单摘要（日期、商户、金额、已退 / 可退）；04-D-7 交易列表加 `?import_batch_id=` 筛选；04-D-11 不做按成员筛选。至此 README §6 的全部待决项处理完毕。
