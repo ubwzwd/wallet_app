@@ -67,7 +67,7 @@
 |---|---|---|---|
 | §1 | 交易新增 `kind` 列（`expense` / `income` / `refund` / `transfer`），方向由 kind 决定，金额符号只是它的推论；四种之外不再加 | DB · API · 前端 · 导入 | [01 §2 交易的四种 kind](./01-domain-and-flows.md#2-交易的四种-kind) · [02 §1.6 transactions](./02-database.md#16-transactions) · [03 §5.26 POST transactions](./03-backend-api.md#526-post-apiv1ledgersidtransactions) · [04 §4.6 记一笔](./04-frontend.md#46-记一笔-lledgeridtransactionsnewkind) |
 | §1.1 | 退款：自引用外键 `refund_of` 指向同账本的一条 `expense`，支持部分 / 超额退款（超额只警告不拦），原单删除时置空 | DB · API · 前端 · 导入 | [01 §1.8 退款关联](./01-domain-and-flows.md#18-退款关联决策-11) · [01 §3.12 记退款](./01-domain-and-flows.md#312-记退款并关联原单决策-111452-a20) · [03 §5.27 交易详情](./03-backend-api.md#527-get-apiv1ledgersidtransactionstid) · [05 §3.2 refund_candidate](./05-import-and-llm.md#32-refund_candidate) |
-| §1.2 | 转账：`transfer_role`（out/in）、`transfer_subtype`（plain/repayment）、可空的 `transfer_pair_id`、单腿的 `counterparty` 文本；两腿走独立端点、支持跨币种、金额不要求相等 | DB · API · 前端 · 导入 | [01 §1.9 转账腿](./01-domain-and-flows.md#19-转账腿决策-121434) · [01 §3.13 两腿转账](./01-domain-and-flows.md#313-两腿转账的创建-编辑-删除决策-121452-a11) · [03 §5.30 POST transfer](./03-backend-api.md#530-post-apiv1ledgersidtransactionstransfer) · [05 §4.5 转账的三种落地方式](./05-import-and-llm.md#45-转账的三种落地方式) |
+| §1.2 | 转账：`transfer_role`（out/in）、`transfer_subtype`（plain/repayment）、可空的 `transfer_pair_id`、单腿的 `counterparty` 文本；两腿走独立端点、支持跨币种、金额不要求相等 | DB · API · 前端 · 导入 | [01 §1.9 转账腿](./01-domain-and-flows.md#19-转账腿决策-121434) · [01 §3.13 两腿转账](./01-domain-and-flows.md#313-两腿转账的创建--编辑--删除决策-121452-a11) · [03 §5.30 POST transfer](./03-backend-api.md#530-post-apiv1ledgersidtransactionstransfer) · [05 §4.5 转账的三种落地方式](./05-import-and-llm.md#45-转账的三种落地方式) |
 | §1.3 | 两级分类冻结成后端常量（`category_l1` / `category_l2` 存 code），公开只读接口 + 前端永久缓存；一级带 `desc_zh` / `desc_en` 判据文字；**删除 `transaction_tags` 表与全部标签功能** | DB · API · 前端 · 导入 | [01 §2.3 分类的边界与说明文字](./01-domain-and-flows.md#23-分类的边界与说明文字决策-1314201421) · [02 §5.5 删除 transaction_tags](./02-database.md#55-第-5-步删除-transaction_tags) · [03 §5.5 GET /categories](./03-backend-api.md#55-get-apiv1categories) · [04 §2.3 分类表缓存](./04-frontend.md#23-分类表启动拉取按-version-永久缓存决策-13) |
 | §1.4 | `transactions.description` 改名 `note`（≤500）；`merchant`（≤200）保留为独立字段，搜索 / 退款匹配 / 去重都靠它；转账行不设 `merchant` | DB · API · 前端 | [02 §0.1 列级差异](./02-database.md#01-列级差异) · [02 §5.4 第 4 步](./02-database.md#54-第-4-步交易的-kind分类退款导入列) · [03 §5.26](./03-backend-api.md#526-post-apiv1ledgersidtransactions) |
 | §2 | 新增 `ledgers` / `ledger_members` / `ledger_invites` 三张表；owner / member 两种角色；6 位一次性邀请码 10 分钟过期，用掉即删、过期即删、可主动作废 | DB · API · 前端 | [01 §1.3–§1.5](./01-domain-and-flows.md#13-账本-ledgers决策-2) · [02 §1.2–§1.4](./02-database.md#12-ledgers) · [03 §5.8–§5.19](./03-backend-api.md#58-get-apiv1ledgers) · [04 §4.3 账本列表](./04-frontend.md#43-账本列表-ledgers新建-ledgersnew加入-ledgersjoin) |
@@ -84,8 +84,8 @@
 | §7 | 统计：按月一级分类收支（可下钻二级）、退款按退款日期冲减、转账不计入、最近 12 个月**只放支出**趋势，全部折到账本基准币种；首页给资产 / 负债 / 净资产三个数 | API · 前端 | [01 §5 统计口径](./01-domain-and-flows.md#5-统计口径的精确定义) · [01 §5.5 净资产](./01-domain-and-flows.md#55-资产负债与净资产决策-71450) · [03 §5.35 stats/summary](./03-backend-api.md#535-get-apiv1ledgersidstatssummary) · [04 §4.4 首页](./04-frontend.md#44-首页-lledgeridmonthyyyy-mm) |
 | §8 | 汇率收敛成一个函数族（现状两套公式不一致的问题就此消除）：读取时计算、交易与统计用发生日汇率、余额用最新汇率、无行情日回退（窗口 10 天）；重建 `exchange_rates` 缓存表 | DB · API | [01 §5.3 折算规则](./01-domain-and-flows.md#53-折算规则与日期规则决策-81432) · [02 §1.10 exchange_rates](./02-database.md#110-exchange_rates) · [03 §6 汇率服务](./03-backend-api.md#6-汇率服务) |
 | §9 | 注册开关 `REGISTRATION_OPEN`、四处限流（登录同 IP 10 次/分钟、注册同 IP 5 次/小时、加入账本端点全局 1 QPS、导入每用户 10 批/小时）、上传 ≤2 MB、管理员重置密码脚本 | API · 前端 | [03 §2.1 配置字段表](./03-backend-api.md#21-字段表) · [03 §8.2 各限流点](./03-backend-api.md#82-各限流点) · [04 §4.2 注册页](./04-frontend.md#42-注册-register) |
-| §9 | 错误响应统一成 `{"detail": "...", "code": "snake_case_code"}`，code 有**唯一注册表**（44 条），前端按 code 查中英文案，两份清单双向对拍 | API · 前端 · 导入 | [03 §4.2 全局 code 清单](./03-backend-api.md#42-全局-code-清单) · [04 §3.7 错误归一化与文案](./04-frontend.md#37-错误归一化与-detail-code-文案) |
-| §10 | 目标 schema **十张表**（§10 的九张 + §14.51 的 `transaction_events`），枚举一律 `VARCHAR + CHECK`；`transactions` 的七条关键约束逐条落进 DDL | DB | [02 §0 目标表清单](./02-database.md#0-总览目标表清单与对现状的差异) · [02 §3.1 数据库保证](./02-database.md#31-数据库保证) · [01 §6.1 数据库保证](./01-domain-and-flows.md#61-数据库保证check-unique-外键决策-10) |
+| §9 | 错误响应统一成 `{"detail": "...", "code": "snake_case_code"}`，code 有**唯一注册表**（44 条），前端按 code 查中英文案，两份清单双向对拍 | API · 前端 · 导入 | [03 §4.2 全局 code 清单](./03-backend-api.md#42-全局-code-清单) · [04 §3.7 错误归一化与文案](./04-frontend.md#37-错误归一化与-detail-code--文案) |
+| §10 | 目标 schema **十张表**（§10 的九张 + §14.51 的 `transaction_events`），枚举一律 `VARCHAR + CHECK`；`transactions` 的七条关键约束逐条落进 DDL | DB | [02 §0 目标表清单](./02-database.md#0-总览目标表清单与对现状的差异) · [02 §3.1 数据库保证](./02-database.md#31-数据库保证) · [01 §6.1 数据库保证](./01-domain-and-flows.md#61-数据库保证check--unique--外键决策-10) |
 | §11 | API 目录定为 **47 条业务路由**（5 条沿用现状路径 + 9 条改前缀 + 33 条新增），含 `/config`、`/import-format`、pair / unpair、邀请码作废、草稿行批量 PATCH | API · 前端 | [03 §0 差异总览](./03-backend-api.md#0-与现状的差异总览) · [03 §5 接口逐个说明](./03-backend-api.md#5-接口逐个说明) · [04 §3.4 函数清单](./04-frontend.md#34-函数清单与决策-11-逐条对应) |
 | §12 | 前端页面与路由定型（登录 / 注册 / 账本 / 首页 / 交易 / 记一笔 / 账户 / 导入 / 账本设置 / 个人设置），当前账本 id 与筛选条件都写进 URL；技术栈沿用 Expo / react-native-web / TanStack Query / axios | 前端 | [04 §1 信息架构](./04-frontend.md#1-信息架构与导航) · [04 §1.2 路由表](./04-frontend.md#12-路由表) · [04 §3 API 客户端层](./04-frontend.md#3-api-客户端层) |
 | §13 | 从现状迁移：一条 Alembic 迁移链接在 head `8a4f4d66d893` 之后，六步走完，空库与有数据的库都要跑通并有 Postgres 迁移测试 | DB | [02 §5 迁移计划](./02-database.md#5-迁移计划) · [02 §5.7 迁移链总览](./02-database.md#57-迁移链总览) · [02 §8.2 Postgres 迁移测试](./02-database.md#82-postgres-迁移测试postgres-marker) |
@@ -99,7 +99,7 @@
 | §14.1 | `exchange_rates` 用**新形状**重建：`(date, base, symbol, rate, fetched_at)`，主键 `(date, base, symbol)`；目标币种列叫 `symbol` 不叫 `quote`；upsert 保留全部历史行，不整表刷新 | DB · API | [02 §1.10 exchange_rates](./02-database.md#110-exchange_rates) · [02 §6.8 汇率缓存](./02-database.md#68-汇率缓存exchange_rates) · [03 §6.1 与现状的关系](./03-backend-api.md#61-与现状的关系) |
 | §14.2 | 账户余额以账户 `default_currency` 计价，另给 `balance_base` / `balance_rate` / `balance_rate_date`；**不按币种分桶** | API · 前端 | [01 §5.4 账户余额](./01-domain-and-flows.md#54-账户余额决策-3142) · [03 §5.20 GET sources](./03-backend-api.md#520-get-apiv1ledgersidsources) |
 | §14.3 | `expense` / `income` / `refund` 之间可 PATCH 改 `kind`；`transfer` 与非 `transfer` 之间**禁止互改**，400 `kind_change_not_allowed` | API · 前端 | [01 §2.4 允许的编辑](./01-domain-and-flows.md#24-允许的编辑) · [01 §4.1 交易状态图](./01-domain-and-flows.md#41-交易按-kind-的允许迁移) · [03 §5.28 PATCH transactions](./03-backend-api.md#528-patch-apiv1ledgersidtransactionstid) |
-| §14.4 | 错误 code 的**唯一注册表**是 03 §4.2；01 / 02 / 04 / 05 只能引用，不许自造同义名 | API · 前端 · 导入 | [03 §4.2 全局 code 清单](./03-backend-api.md#42-全局-code-清单) · [04 §3.7 文案表](./04-frontend.md#37-错误归一化与-detail-code-文案) |
+| §14.4 | 错误 code 的**唯一注册表**是 03 §4.2；01 / 02 / 04 / 05 只能引用，不许自造同义名 | API · 前端 · 导入 | [03 §4.2 全局 code 清单](./03-backend-api.md#42-全局-code-清单) · [04 §3.7 文案表](./04-frontend.md#37-错误归一化与-detail-code--文案) |
 | §14.5 · §14.41 | `import_rows` 的行号列叫 `row_no`（从 1 起）；日期列与交易表一致叫 `occurred_at`，**导入文件与接口字段仍叫 `date`**，映射在服务层 | DB · API · 导入 | [02 §1.8 import_rows](./02-database.md#18-import_rows) · [05 §1.2 列定义](./05-import-and-llm.md#12-列定义) · [05 §4.4 字段映射](./05-import-and-llm.md#44-字段映射) |
 | §14.6 · §14.40 | `users` 加 `display_name VARCHAR(40) NULL` 与 `language VARCHAR(8) NULL`（NULL = 跟随系统），删 `default_source_id`；`ledger_invites` 加 `created_at` | DB · API · 前端 | [02 §1.1 users](./02-database.md#11-users) · [03 §5.4 PATCH /me](./03-backend-api.md#54-patch-apiv1me) · [04 §4.13 个人设置](./04-frontend.md#413-个人设置-settings) |
 | §14.7 | 一行同时命中 `duplicate` 与 `refund_candidate` 时 `matched_transaction_id` 归退款候选；提交时写 `refund_of` 的条件只有"`kind='refund'` 且 `matched_transaction_id` 非空" | 导入 | [05 §3.5 四种标记对照](./05-import-and-llm.md#35-四种标记对照) · [05 §4.4 字段映射](./05-import-and-llm.md#44-字段映射) |
@@ -113,6 +113,8 @@
 
 ### 2.3 §14.20–§14.46：分类边界、导入改版与前后端收尾
 
+§14.33、§14.36–§14.39 是对 §0–§13 中 P-2…P-32 各条的逐条追认，没有引入新改动，因此不单列行；它们对应的改动已经写在 §2.1 里。
+
 | 决策 | 改动一句话 | 层 | 去哪读 |
 |---|---|---|---|
 | §14.20 · §14.21 | 生活购物 / 消费购物按**消耗品 / 耐用品**划分（不按必需 / 非必需）；每个一级分类带 `desc_zh` / `desc_en` 判据文字，随 `GET /categories` 下发、选分类处显示、skill 提示词里作判据 | API · 前端 · 导入 | [01 §2.3 分类的边界与说明文字](./01-domain-and-flows.md#23-分类的边界与说明文字决策-1314201421) · [03 §5.5 GET /categories](./03-backend-api.md#55-get-apiv1categories) · [04 §5.3 分类名不进语言包](./04-frontend.md#53-分类名不进语言包决策-13) · [05 §5.2 SKILL.md 全文](./05-import-and-llm.md#52-skillmd-全文) |
@@ -122,12 +124,12 @@
 | §14.27 | 导入代码放 `backend/app/services/importing/`，按读文件 / 校验 / 标记 / 提交撤销分四个模块，**没有抽取器目录** | API · 导入 | [03 §1.1 目标模块图](./03-backend-api.md#11-目标模块图) · [05 §0.3 四个模块](./05-import-and-llm.md#03-servicesimporting-四个模块) |
 | §14.28 | **不保存上传的导入文件，也不存原始行值**：批次只记文件名与大小，校验改动写进行的 `hint`；后端没有任何文件系统状态 | DB · API · 导入 | [02 §1.7 import_batches](./02-database.md#17-import_batches) · [03 §9.3 上传内容的处理](./03-backend-api.md#93-上传内容的处理) · [05 §4.11 不保存文件](./05-import-and-llm.md#411-不保存文件决策-1428) |
 | §14.29 | 邀请码不要求全表唯一：生成时只与当前有效码比对，用掉即删、过期即删；表里永远只有有效码，没有使用者 / 使用时间两列，也没有定时清理 | DB · API | [01 §4.5 邀请码生命周期](./01-domain-and-flows.md#45-邀请码生命周期决策-214291435) · [02 §1.4 ledger_invites](./02-database.md#14-ledger_invites) · [02 §6.3 邀请码的三种死法](./02-database.md#63-邀请码的三种死法) |
-| §14.30 | `CATEGORY_VERSION` 是日期串（如 `2026-09-10`）；导入文件的版本行**存在但不一致** → 400 `skill_outdated`，不允许带警告继续 | API · 前端 · 导入 | [03 §5.5 GET /categories](./03-backend-api.md#55-get-apiv1categories) · [05 §2.3 版本检查](./05-import-and-llm.md#23-版本检查-400-skill_outdated) |
+| §14.30 | `CATEGORY_VERSION` 是日期串（如 `2026-09-10`）；导入文件的版本行**存在但不一致** → 400 `skill_outdated`，不允许带警告继续 | API · 前端 · 导入 | [03 §5.5 GET /categories](./03-backend-api.md#55-get-apiv1categories) · [05 §2.3 版本检查](./05-import-and-llm.md#23-版本检查--400-skill_outdated) |
 | §14.31 | 批内完全相同的行**不合并**：全部保留、都打 `needs_review` + `hint`，由用户在 review 里取舍；标记只有四种 | API · 前端 · 导入 | [05 §2.7 批内重复行不合并](./05-import-and-llm.md#27-批内重复行不合并决策-1431) · [05 §3.5 四种标记对照](./05-import-and-llm.md#35-四种标记对照) |
 | §14.32 | `occurred_at` 是**无时区的日历日期**（Postgres `DATE`），接口用 `YYYY-MM-DD` 字符串传输；前端当字符串比较显示，**不得** `new Date("YYYY-MM-DD")` 再格式化 | DB · API · 前端 · 导入 | [01 §5.3 折算规则与日期规则](./01-domain-and-flows.md#53-折算规则与日期规则决策-81432) · [02 §7.1 类型映射](./02-database.md#71-类型映射) · [04 §5.4 日期与金额格式化](./04-frontend.md#54-日期与金额格式化) |
-| §14.34 | 两条单腿转账可以**配对**成一笔，也可以**拆开**：导入 review 自动找 ±3 天同币种同额反方向的单腿，唯一候选默认勾选；新增 `POST .../{tid}/pair` 与 `POST .../transfer/{pair_id}/unpair` 两个端点；标记名叫 `transfer_candidate` | DB · API · 前端 · 导入 | [01 §3.15 转账配对与拆开](./01-domain-and-flows.md#315-转账配对与拆开决策-1434) · [01 §4.2 单腿 ⇄ 两腿](./01-domain-and-flows.md#42-转账形态单腿-两腿决策-1434) · [03 §5.33 pair](./03-backend-api.md#533-post-apiv1ledgersidtransactionstidpair) · [05 §3.3 transfer_candidate](./05-import-and-llm.md#33-transfer_candidate决策-1434) |
+| §14.34 | 两条单腿转账可以**配对**成一笔，也可以**拆开**：导入 review 自动找 ±3 天同币种同额反方向的单腿，唯一候选默认勾选；新增 `POST .../{tid}/pair` 与 `POST .../transfer/{pair_id}/unpair` 两个端点；标记名叫 `transfer_candidate` | DB · API · 前端 · 导入 | [01 §3.15 转账配对与拆开](./01-domain-and-flows.md#315-转账配对与拆开决策-1434) · [01 §4.2 单腿 ⇄ 两腿](./01-domain-and-flows.md#42-转账形态单腿--两腿决策-1434) · [03 §5.33 pair](./03-backend-api.md#533-post-apiv1ledgersidtransactionstidpair) · [05 §3.3 transfer_candidate](./05-import-and-llm.md#33-transfer_candidate决策-1434) |
 | §14.35 | 邀请码限流改为**端点级全局 1 QPS**（令牌桶，突发 3，429 + `Retry-After`，code `invite_rate_limited`），删掉"同一用户 15 分钟 5 次" | API | [01 §3.5 加入账本](./01-domain-and-flows.md#35-加入账本决策-2914291435) · [03 §8.2 各限流点](./03-backend-api.md#82-各限流点) |
-| §14.42 | **不做向后兼容**：`/me` 是唯一入口（auth 下不注册别名），`default_source_id` 直接移除，各章不保留任何过渡期措施 | DB · API · 前端 | [02 §5.6 第 6 步 users 收尾](./02-database.md#56-第-6-步users-收尾) · [03 §5.3 GET /me](./03-backend-api.md#53-get-apiv1me) · [04 §2.1 AuthContext](./04-frontend.md#21-authcontext保留-一处修复) |
+| §14.42 | **不做向后兼容**：`/me` 是唯一入口（auth 下不注册别名），`default_source_id` 直接移除，各章不保留任何过渡期措施 | DB · API · 前端 | [02 §5.6 第 6 步 users 收尾](./02-database.md#56-第-6-步users-收尾) · [03 §5.3 GET /me](./03-backend-api.md#53-get-apiv1me) · [04 §2.1 AuthContext](./04-frontend.md#21-authcontext保留--一处修复) |
 | §14.43 · §14.44 | 后端一批数值与形态定死：`created_by` / `updated_by` 只回 id；删除类端点统一 204（撤销导入回条数）；注册限流同 IP 5 次/小时；撤销 `dry_run` 报数；分类当月支出可为负；`FX_MAX_BACKFILL_DAYS = 10`；`occurred_at` 最晚今天 + 1 天；`limit` 上限 200 / 500 | API | [03 §4.3 分页](./03-backend-api.md#43-分页) · [03 §6.2 回退算法](./03-backend-api.md#62-函数签名与回退算法) · [03 §8.2 各限流点](./03-backend-api.md#82-各限流点) · [03 §5.44 DELETE imports](./03-backend-api.md#544-delete-apiv1ledgersidimportsbid) |
 | §14.45 | 视觉方向定稿「**04 柔和圆润**」：Figtree + IBM Plex Mono、C2 密度、淡鼠尾草底、交易四色、森林绿强调；token 的唯一来源是 [`mockups/tokens.json`](./mockups/tokens.json)，16 张屏幕稿在同一目录；04 章原 A/B/C 三方向作废，实现前**不再另出 mockup** | 前端 | [mockups/README.md](./mockups/README.md) · [04 §6 视觉设计](./04-frontend.md#6-视觉设计已定稿04-柔和圆润) · [04 §6.2 设计 token](./04-frontend.md#62-设计-token) |
 | §14.46 | 前端五条收尾：路由用 Expo Router；加匿名可读的 `GET /config`；支出详情带 `refunds[]`、退款详情展开原单摘要；交易列表加 `?import_batch_id=`；不做按成员筛选 | API · 前端 | [03 §5.6 GET /config](./03-backend-api.md#56-get-apiv1config) · [03 §5.27 交易详情](./03-backend-api.md#527-get-apiv1ledgersidtransactionstid) · [04 §1.1 路由库](./04-frontend.md#11-路由库) · [04 §4.7 交易详情](./04-frontend.md#47-交易详情-lledgeridtransactionstxid-与编辑) |
@@ -145,9 +147,9 @@
 | §14.53a | 配对**不要求**两腿 `transfer_subtype` 原本相同，改为**配对时统一**：任一腿是 `repayment` 且转入腿账户是 `credit` → 整对 `repayment`，否则整对 `plain`；两腿同一事务改成同值并**各写一条 `updated` 事件**。两腿 `occurred_at` 允许不同；转账对象顶层的 `occurred_at` / `transfer_subtype` / `note` 取转出腿，`PATCH .../transfer/{pair_id}` 改这三个字段时同写两腿 | API · 前端 · 导入 | [01 §1.9 转账腿](./01-domain-and-flows.md#19-转账腿决策-121434) · [01 §3.15 转账配对与拆开](./01-domain-and-flows.md#315-转账配对与拆开决策-1434) · [01 §6.2 应用层保证](./01-domain-and-flows.md#62-应用层保证决策-1914) · [03 §5.33 pair](./03-backend-api.md#533-post-apiv1ledgersidtransactionstidpair) · [05 §4.5 转账的三种落地方式](./05-import-and-llm.md#45-转账的三种落地方式) |
 | §14.53b | 多候选转账**不新增字段**：`matched_transaction_id` 是唯一载体；多候选时不预填、打 `needs_review`、`hint` 写"找到 N 条可以配对的转账，请选一条"，前端"选一条"复用交易列表接口筛选。候选列表不落库、不单独建接口 | API · 前端 · 导入 | [01 §3.15 转账配对与拆开](./01-domain-and-flows.md#315-转账配对与拆开决策-1434) · [03 §5.41 PATCH rows](./03-backend-api.md#541-patch-apiv1ledgersidimportsbidrowsrid) · [05 §3.3 transfer_candidate](./05-import-and-llm.md#33-transfer_candidate决策-1434) |
 | §14.53c | 没找到对腿时**不猜对手账户**：`counterpart_source_id` 留空，由用户在 review 里显式选；它必须是本账本的**未归档**账户，否则 404 `not_found` | API · 前端 · 导入 | [01 §1.12 导入草稿行](./01-domain-and-flows.md#112-导入草稿行-import_rows决策-51441) · [03 §5.41 PATCH rows](./03-backend-api.md#541-patch-apiv1ledgersidimportsbidrowsrid) · [05 §3.3 transfer_candidate](./05-import-and-llm.md#33-transfer_candidate决策-1434) |
-| §14.53d | 错误 code 定名以 03 §4.2 注册表为准：`pair_invalid`、`import_format_invalid`、`currency_locked`、`rows_exceed_limit`（400）。**缺 `# version:` 行属结构错误** → `import_format_invalid`；只有版本行存在但不一致才是 `skill_outdated`；编码不可读先于版本检查 | API · 前端 · 导入 | [03 §4.2 全局 code 清单](./03-backend-api.md#42-全局-code-清单) · [05 §2.1 校验顺序](./05-import-and-llm.md#21-校验顺序) · [04 §3.7 文案表](./04-frontend.md#37-错误归一化与-detail-code-文案) |
+| §14.53d | 错误 code 定名以 03 §4.2 注册表为准：`pair_invalid`、`import_format_invalid`、`currency_locked`、`rows_exceed_limit`（400）。**缺 `# version:` 行属结构错误** → `import_format_invalid`；只有版本行存在但不一致才是 `skill_outdated`；编码不可读先于版本检查 | API · 前端 · 导入 | [03 §4.2 全局 code 清单](./03-backend-api.md#42-全局-code-清单) · [05 §2.1 校验顺序](./05-import-and-llm.md#21-校验顺序) · [04 §3.7 文案表](./04-frontend.md#37-错误归一化与-detail-code--文案) |
 | §14.53e | 导入批次的列名以 02 §1.7 的 DDL 为准（`filename` / `size_bytes` / `skill_version` / `row_count` / `committed_at` …），03 的响应字段与 05 的描述用同一套名字，不另起别名 | DB · API · 前端 · 导入 | [02 §1.7 import_batches](./02-database.md#17-import_batches) · [03 §5.37 POST imports](./03-backend-api.md#537-post-apiv1ledgersidimports) · [04 §3.3 类型定义](./04-frontend.md#33-类型定义) · [05 §4.9 批次列表与详情](./05-import-and-llm.md#49-批次列表与详情) |
-| §14.53f | 04 的类型定义以 03 的响应体为准：上传失败体是 `errors: [{line, message}]` + `current_version` / `file_version` / `guide_url`；退款原单摘要含 `source_id`、分类与 `other_refunds[]`；前端文案表**只收注册表里的 code** | API · 前端 | [03 §5.37 POST imports](./03-backend-api.md#537-post-apiv1ledgersidimports) · [03 §5.27 交易详情](./03-backend-api.md#527-get-apiv1ledgersidtransactionstid) · [04 §3.3 类型定义](./04-frontend.md#33-类型定义) · [04 §3.7 文案表](./04-frontend.md#37-错误归一化与-detail-code-文案) |
+| §14.53f | 04 的类型定义以 03 的响应体为准：上传失败体是 `errors: [{line, message}]` + `current_version` / `file_version` / `guide_url`；退款原单摘要含 `source_id`、分类与 `other_refunds[]`；前端文案表**只收注册表里的 code** | API · 前端 | [03 §5.37 POST imports](./03-backend-api.md#537-post-apiv1ledgersidimports) · [03 §5.27 交易详情](./03-backend-api.md#527-get-apiv1ledgersidtransactionstid) · [04 §3.3 类型定义](./04-frontend.md#33-类型定义) · [04 §3.7 文案表](./04-frontend.md#37-错误归一化与-detail-code--文案) |
 
 ---
 
@@ -313,14 +315,14 @@ frontend/src/
 | U-9 | `GET /categories` 的 `version` 形态 | 决策 §14.30：日期串，导入时硬校验 |
 | U-11 | 批内重复行要不要合并、要不要第五个标记 | 决策 §14.31：不合并，标记只有四种 |
 
-### 6.3 仍需你确认的：只有决策 §14.53
+### 6.3 唯一由 Claude 裁定的一条：决策 §14.53（已在看板 S14-53 确认，供最终追认）
 
-**§14.53（章节同步时的取舍，a–f 六条）是这套文档里唯一一条由 Claude 裁定、再写进决策记录的**——它不来自设计评审，而是各章并行改写完之后，终审发现六处互相打架、由 Claude 按"哪种写法能让功能真的跑起来"裁定的。已在决策看板 S14-53 上记录并由你确认；这里再列一次，方便你最终追认或推翻。逐条改的是什么、代价在哪：
+**§14.53（章节同步时的取舍，a–f 六条）是这套文档里唯一一条由 Claude 裁定、再写进决策记录的**——它不来自设计评审，而是各章并行改写完之后，终审发现六处互相打架、由 Claude 按"哪种写法能让功能真的跑起来"裁定的。已在决策看板 S14-53 上记录并由你确认；这里再列一次，方便你最终追认或推翻（除此之外没有任何未决项）。逐条改的是什么、代价在哪：
 
 | 条 | 裁定 | 为什么这样选 | 推翻的话要改什么 |
 |---|---|---|---|
 | a | 配对**不要求**两腿子类型原本相同，改为配对时统一（任一腿 `repayment` 且转入腿账户是 `credit` → 整对 `repayment`，否则整对 `plain`），值有变化的腿各写一条 `updated` 事件；两腿 `occurred_at` 允许不同，转账对象顶层三字段取转出腿 | 同一笔还款，储蓄卡账单常写 `plain`、信用卡账单写 `repayment`。硬卡"必须相同"会让这类配对**永远触发不了**，而它恰恰是配对最常见的用途 | 01 §1.9 / §3.15 / §6.2、03 §5.31 / §5.33、05 §4.5：改回"子类型不同 → 400 `pair_invalid`"，并接受还款配对基本不可用 |
-| b | 多候选转账**不新增字段**：不预填、打 `needs_review`、`hint` 写"找到 N 条…请选一条"，前端复用交易列表接口挑一条写回 `matched_transaction_id` | 与 §14.11 对退款候选的处理完全同一做法；候选列表落库或单开接口都要多一份筛选逻辑去维护，而它本质上就是一次普通的交易查询 | 03 §5.41、05 §3.3、04 §4.11：要新增一个专门装候选列表的字段或端点，02 的 `import_rows` 也要跟着加列 |
+| b | 多候选转账**不新增字段**：不预填、在 `transfer_candidate` 之外另打 `needs_review`、`hint` 写"找到 N 条…请选一条"，前端复用交易列表接口挑一条写回 `matched_transaction_id` | 与 §14.11 对退款候选的处理完全同一做法；候选列表落库或单开接口都要多一份筛选逻辑去维护，而它本质上就是一次普通的交易查询 | 03 §5.41、05 §3.3、04 §4.11：要新增一个专门装候选列表的字段或端点，02 的 `import_rows` 也要跟着加列 |
 | c | 没找到对腿时 `counterpart_source_id` **留空、不猜**；它必须是本账本的未归档账户，否则 404 `not_found` | 猜错的代价是凭空建出一条别人账户上的交易，比留空让用户选贵得多；"账本里只有一个候选账户"也不猜 | 05 §3.3 的算法要加一条"唯一候选就填"的分支，01 §1.12 / 03 §5.41 同步 |
 | d | code 定名一律取注册表里的名字：`pair_invalid`、`import_format_invalid`、`currency_locked`、`rows_exceed_limit`（400）；**缺 `# version:` 行是结构错误**，不是版本问题；编码不可读先于版本检查 | 注册表是唯一契约（§14.4），同义名会让前端文案表对不上；缺版本行和版本过期两种情况给用户的修法完全不同（重新导出 vs 重装 skill），所以必须分到两个 code 上 | 03 §4.2 注册表 + 04 §3.7 文案表 + 01/05 的引用，一起改名 |
 | e | 导入批次的列名以 02 §1.7 的 DDL 为准，03 的响应与 05 的描述不另起别名 | 三章各起一套名字是这轮最容易出的错；把 DDL 定为准，接口响应逐列对应，读者不用做名字翻译 | 03 §5.37–§5.39 的响应字段与 04 §3.3 的类型一起改名 |
@@ -336,9 +338,9 @@ frontend/src/
 | [`01-domain-and-flows.md`](./01-domain-and-flows.md) | 1693 |
 | [`02-database.md`](./02-database.md) | 1805 |
 | [`03-backend-api.md`](./03-backend-api.md) | 3621 |
-| [`04-frontend.md`](./04-frontend.md) | 2143 |
+| [`04-frontend.md`](./04-frontend.md) | 2144 |
 | [`05-import-and-llm.md`](./05-import-and-llm.md) | 1951 |
-| 本文 `README.md` | 440 |
+| 本文 `README.md` | 456 |
 | [`design-brief.md`](./design-brief.md) | 95 |
 | [`mockups/README.md`](./mockups/README.md) | 16 |
 | [`mockups/REVIEW-2026-09-11.md`](./mockups/REVIEW-2026-09-11.md) | 93 |
@@ -420,10 +422,24 @@ frontend/src/
 | 状态名与标记名 | grep 全套 | 批次只有 `ready` / `committed`，行只有 `pending` / `edited` / `skipped`，标记只有 `duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review` |
 | 列名 | grep 全套 | 草稿行日期列在库里叫 `occurred_at`、在文件与接口里叫 `date`；行号叫 `row_no`；批次列名（`filename` / `size_bytes` / `skill_version` / `row_count` / `committed_at` / `warnings`）三章一套（§14.53e） |
 | 限制数值 | grep 全套 | 2 MB、2000 行、6 位码、10 分钟、加入账本 1 QPS、每人 10 本 / 每本 10 人、导入 10 批/小时、登录 10 次/分钟、注册 5 次/小时、`FX_MAX_BACKFILL_DAYS = 10`、`limit` 上限 200 / 500 —— 各章一致 |
-| 链接与锚点 | 脚本按 GitHub 的锚点规则（小写、去标点、空格换连字符）算出每个标题的锚点，再校验全部 Markdown 链接的文件与 `#fragment` | 六个文件 + 设计稿目录的全部链接都指向存在的文件与存在的小节，零失效 |
+| 链接与锚点 | 脚本按 GitHub 的锚点规则（小写、去标点、空格换连字符，**连续的连字符不合并**）算出每个标题的锚点，再校验全部 Markdown 链接的文件与 `#fragment` | 六个文件 + 设计稿目录的全部链接都指向存在的文件与存在的小节，零失效（本轮第一版的脚本误把连续连字符合并了，漏掉本文 9 处失效锚点，已在 §9.4 修好并用正确规则复跑） |
 | tokens 引用 | grep `tokens.json` | 04 §6.2、mockups/README.md 与本文都指向同一份 [`mockups/tokens.json`](./mockups/tokens.json)，色值只有那一份 |
 
-**核对无误、未作改动的项**：§14.47–§14.53 十三条裁定在各章的落地（只收 CSV、四种账户类型、`transaction_events`、`archived_at` 与净资产、列表 `summary`、批量端点、邀请码作废、`dry_run` 两计数、外观设置、配对统一子类型、多候选无新字段、不猜对手账户、code 定名、批次列名、04 类型对 03）逐条都能在各章找到实处；跨章小节引用（03→02、03→05、04→03、05→02/03、01→各章）逐个核对无误；每章 `## 另见` 都链接了本文、[`00-decisions.md`](./00-decisions.md)、其余各章与相关的 `../current-design/` 章节；五章的 `## 待决` 都是零条未决。
+**核对无误、未作改动的项**：§14.47–§14.53 的裁定在各章的落地（只收 CSV、四种账户类型、`transaction_events`、`archived_at` 与净资产、列表 `summary`、批量端点、邀请码作废、`dry_run` 两计数、外观设置、配对统一子类型、不猜对手账户、code 定名、批次列名、04 类型对 03）逐条都能在各章找到实处（**§14.53b 多候选行的 `flags` 是个例外，本轮漏检，见 §9.4**）；跨章小节引用（03→02、03→05、04→03、05→02/03、01→各章）逐个核对无误；每章 `## 另见` 都链接了本文、[`00-decisions.md`](./00-decisions.md)、其余各章与相关的 `../current-design/` 章节；五章的 `## 待决` 都是零条未决。
+
+
+### 9.4 第八轮（2026-09-11，终审回修）
+
+终审在第七轮的成果上挑出两处硬伤，本轮只修这两处 + 两处记录问题：
+
+| # | 位置 | 问题 | 改动 |
+|---|---|---|---|
+| 1 | 本文 §2.1 / §2.3 / §2.4 / §5 的 9 处链接（6 个不同标题） | 标题里 ` / `、`→`、`⇄`、`+` 这类符号被 GitHub 去掉后，**两侧的空格各生成一个连字符**，锚点里应当是**双**连字符；第七轮把它们写成了单连字符。第七轮自查的锚点脚本错误地合并了连续连字符，所以没报出来 | 6 个锚点改成双连字符（如 `#313-两腿转账的创建--编辑--删除决策-121452-a11`、`#37-错误归一化与-detail-code--文案`），锚点脚本改成不合并连字符后复跑为零 |
+| 2 | [04 §8.4 用例 6](./04-frontend.md#84-review-表格的关键用例411) · [04 §4.11](./04-frontend.md#411-导入-review-表格statusready决策-5) | 多候选转账行的 `flags`：04 写「**没有** `transfer_candidate`」，而 [03 §5.40](./03-backend-api.md#540-get-apiv1ledgersidimportsbidrows) 、[05 §3.3](./05-import-and-llm.md#33-transfer_candidate决策-1434) 、[01 §3.15](./01-domain-and-flows.md#315-转账配对与拆开决策-1434) 都是「`transfer_candidate` **与** `needs_review` 同时打」；04 同章 §4.11 又写着「`transfer_candidate` 保留」，自相矛盾 | 以 [`00-decisions.md`](./00-decisions.md) §14.53b 与 03 / 05 / 01 为准：04 §8.4 用例 6 改成「`flags` **同时含** 两者、`matched_transaction_id` 为 `null`」，§4.11 的正文与 ASCII 示意把「改打 `needs_review`」改成「**另打** `needs_review`（`transfer_candidate` 仍在）」 |
+| 3 | 本文 §2.3 | 表里没有 §14.33、§14.36–§14.39 五行，也没有像 §2.2 那样说明为什么 | 表前补一句：这五条是对 §0–§13 中 P-2…P-32 的逐条追认，不引入新改动，故不单列行 |
+| 4 | 本文 §6.3 | 标题写「仍需你确认」，正文写「已由你确认」，口径打架 | 标题改成「唯一由 Claude 裁定的一条：决策 §14.53（已在看板 S14-53 确认，供最终追认）」 |
+
+第七轮报告里「锚点零失效」与「§14.53 逐条落地无误」两句因此是不准确的，已在 §9.3 就地更正。
 
 ---
 
