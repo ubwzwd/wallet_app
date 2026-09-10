@@ -531,9 +531,13 @@ export interface TransactionPairRef {
   out: { transaction_id: Uuid; source_id: Uuid; amount: Money; currency: string };
   in:  { transaction_id: Uuid; source_id: Uuid; amount: Money; currency: string };
 }
-// 支出详情上的退款列表（决策 §14.46 的 04-D-6）；字段逐条对齐 03 §5.27 的 refunds[]（决策 §14.53f）
-export interface RefundRef {
+// 一笔退款的摘要；字段逐条对齐 03 §5.27 里 refund_of_detail.other_refunds[] 的元素（决策 §14.53f）
+export interface RefundBrief {
   id: Uuid; occurred_at: IsoDate; amount: Money; currency: string; note: string | null;
+}
+// 支出详情上的退款列表（决策 §14.46 的 04-D-6）；字段逐条对齐 03 §5.27 的 refunds[]（决策 §14.53f）
+// 比 RefundBrief 多一个 source_id：03 只在 refunds[] 的元素上给了退回账户
+export interface RefundRef extends RefundBrief {
   source_id: Uuid;                     // 退回账户——画这一行时要显示账户名（决策 §14.53f）
 }
 // 退款详情上的原单摘要（决策 §14.46 的 04-D-6、§14.52 A25），逐字段同 03 §5.27 的 refund_of_detail
@@ -544,8 +548,9 @@ export interface RefundOrigin {
   category_l1: string | null;          // 原单的分类，登记退款时沿用（决策 §14.53f）
   category_l2: string | null;
   refunded_total: Money; refundable: Money;
-  other_refunds: RefundRef[];          // 指向**同一张原单**的其它退款，不含当前这条，按日期升序
-                                       // （决策 §14.52 A25）；只被退过这一次时是空数组
+  other_refunds: RefundBrief[];        // 指向**同一张原单**的其它退款，不含当前这条，按日期升序
+                                       // （决策 §14.52 A25）；只被退过这一次时是空数组。03 §5.27 的这些
+                                       // 元素**没有** source_id，所以这里用窄类型，界面上不显示退回账户
 }
 // 操作记录（决策 §14.51）：只追加不修改，交易删除时级联删除
 export type TransactionEventType =
@@ -977,7 +982,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | `import_format_invalid` | 400 | 这个文件读不了（编码、`# version:` 行、表头或某行的列数不对），下面按文件行号列出了出问题的行 | We couldn't read this file — its encoding, its `# version:` line, the header or a row's column count is wrong. The problem lines are listed below. |
 | `file_too_large` | 413 | 文件超过 2 MB | File is larger than 2 MB |
 | `rows_exceed_limit` | 400 | 这份文件超过 2000 行，请按月分批 | This file has more than 2000 rows — split it by month |
-| `batch_not_ready` | 409 | 这批账单已经提交过了，不能再改行 | This batch has already been submitted — its rows can't be edited |
+| `batch_not_ready` | 409 | 这批账单现在不能改：它可能已经提交过了，或者还有行缺日期 / 金额 / 币种 / 类型 | This batch can't be changed right now — it may already be submitted, or some rows are still missing a date, amount, currency or type |
 | `batch_already_committed` | 409 | 这批账单已经提交过了 | This batch has already been submitted |
 | `rows_uncategorized` | 409 | 还有行没有选一级分类，补齐后才能提交 | Some rows still need a top-level category |
 | `rows_all_skipped` | 409 | 这批账单的所有行都被跳过了，没有可提交的内容 | Every row is skipped — there's nothing to submit |
@@ -1300,11 +1305,11 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 - **头部**：kind 徽章 + 金额（转账不染语义色）+ 商户 + 日期 + 账户 + 分类。**不显示交易编号**（决策 §14.52 A6）。
 - **汇率行**（决策 §14.52 A24）：`currency !== base_currency` 时显示「≈ ¥1,032.40 · 按 2026-08-14 汇率 1 USD = 7.1694 CNY」，数据来自 `amount_base` / `rate_used` / `rate_date`。`rate_date !== occurred_at`（回退到最近行情日，决策 §8）时补一句「该日无行情，用了 08-13 的汇率」。汇率**只读**（决策 §14.52 A10）。
 - **支出行**：`refunds[]` 非空时列出每一笔退款（日期、金额、备注，外加 `source_id` 映射出的**退回账户**名，可点进），并给一行「已退 ¥259.00 / 可退 ¥1,040.00」（决策 §14.46 的 04-D-6）。
-- **退款行**：把 `refund_of_detail` 渲染成一张原单摘要卡（日期、商户、金额、`source_id` 对应的账户、`category_l1` / `category_l2` 对应的分类名、已退 / 可退，可点进），带「解除关联」；卡片下面把 `refund_of_detail.other_refunds[]` ——**指向同一张原单、不含当前这条的其它退款**——按日期升序列出来（决策 §14.52 A25），免得重复登记；数组为空时这一块整块不渲染。没有 `refund_of` 时显示「未关联原支出」+「去关联」；原单已被删除（`refund_of` 与 `refund_of_detail` 同时为 `null`）时显示「原单已删除」。
+- **退款行**：把 `refund_of_detail` 渲染成一张原单摘要卡（日期、商户、金额、`source_id` 对应的账户、`category_l1` / `category_l2` 对应的分类名、已退 / 可退，可点进），带「解除关联」；卡片下面把 `refund_of_detail.other_refunds[]` ——**指向同一张原单、不含当前这条的其它退款**——按日期升序列出来（每条只有日期、金额、币种、备注，03 §5.27 的这些元素**不带**退回账户，所以这里不显示账户名；决策 §14.52 A25），免得重复登记；数组为空时这一块整块不渲染。没有 `refund_of` 时显示「未关联原支出」+「去关联」；原单已被删除（`refund_of` 与 `refund_of_detail` 同时为 `null`）时显示「原单已删除」。
 - **转账行**：
   - 两腿（`pair` 非空）：两条腿并排显示（账户、金额、币种），跨币种时两边金额各自显示。**不显示「余后」余额**（决策 §14.52 A7）。操作里有 **「拆开」**——`POST .../transfer/{pair_id}/unpair`，确认框说明「拆开后两条各自变成单腿转账，仍计入账户余额，但不再互相关联」（决策 §14.34）。
   - 单腿（`transfer_pair_id === null`）：显示 `counterparty` 或「对方不在应用里」。操作里有 **「关联为转账对腿」**——打开一个选择器，**复用交易列表的筛选组件**，只列**方向相反的单腿转账**（`kind=transfer`、`transfer_role` 取反、`transfer_pair_id` 为空、默认同币种同金额、±3 天，条件可放宽），选中后 `POST .../transactions/{tid}/pair`。配对成功后跳两腿详情，原来两条的 `counterparty` 被清空（决策 §14.34）。
-    - **子类型不必相同**（决策 §14.53a）：选择器**不**按 `transfer_subtype` 过滤——储蓄卡账单写「普通转账」、信用卡账单写「还款」的同一笔还款很常见，按子类型硬卡会让配对永远不触发。确认框里写清楚配对后的结果：「**配对后两条的子类型会统一**：任一条是『还款』且**转入方的账户是信用卡**，这一对就记成还款；否则记成普通转账。」服务端在同一个事务里把两腿改成同一个值，并各写一条 `updated` 事件（决策 §14.51），所以配对后两条的操作记录里都会多一行。
+    - **子类型不必相同**（决策 §14.53a）：选择器**不**按 `transfer_subtype` 过滤——储蓄卡账单写「普通转账」、信用卡账单写「还款」的同一笔还款很常见，按子类型硬卡会让配对永远不触发。确认框里写清楚配对后的结果：「**配对后两条的子类型会统一**：任一条是『还款』且**转入方的账户是信用卡**，这一对就记成还款；否则记成普通转账。」服务端在同一个事务里把两腿改成同一个值；**只有值真的变了的那一腿**会多一条 `updated` 事件（`changes` 记 `transfer_subtype` 的 before / after），原值已经等于统一值的那一腿不写事件（决策 §14.53a、§14.51）——最常见的 `plain` + `repayment` 配对只会多出一条 `updated`。
     - 两腿的 `occurred_at` **允许不同**（配对出来的一对各自保留原来的日期，决策 §14.53a）；两腿详情页头部显示的日期、子类型与备注取**转出腿**的值。
     - 选不到合适的对腿时，选择器给一句「没有能配对的转账。对腿必须是本账本里方向相反、仍是单腿的转账，且不在同一个账户上」；硬点了不合规的一条，服务端回 400 `pair_invalid`（§3.7）。
 - **两种关联都可以在导入之后改**（决策 §14.34）：退款的 `refund_of` 和转账的配对，在这一页都能改选或解除，review 里的自动建议只是预填。
@@ -1380,7 +1385,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
  /imports/guide            /imports/new                    /imports/:bid              /imports/:bid
 ┌──────────────────┐     ┌───────────────────┐  POST     ┌────────────────────┐ POST ┌──────────────┐
 │ 0 导入指南        │────▶│ 1 选账户 +         │──同步────▶│ 2 review 表格      │commit▶│ 3 已提交      │
-│ 三步说明 / skill  │     │   上传或粘贴 CSV   │  200      │ status='ready'     │      │ 'committed'   │
+│ 三步说明 / skill  │     │   上传或粘贴 CSV   │  201      │ status='ready'     │      │ 'committed'   │
 │ 文本 / 示例文件   │     └─────────┬─────────┘           │ （可编辑草稿行）    │      └──────┬───────┘
 └──────────────────┘               │                     └────────────────────┘             │
                                     │ 400 import_format_invalid / skill_outdated             │ DELETE = 撤销
@@ -1923,7 +1928,7 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 |---|---|---|
 | `屏幕 01 · 首页.dc.html` | §4.4 首页（资产 / 负债 / 净资产、账户余额卡、本月分类排行、12 月趋势） | 趋势保持只有支出（已定，决策 §14.52 B20）；宽屏侧栏去掉「报表」「成员」两个顶级页（A21） |
 | `屏幕 02 · 交易列表.dc.html` | §4.5 交易列表（筛选栏、按日分组、合并转账行、底部 summary） | 筛选栏补「币种」；行上显示原币金额 + 折算（决策 §14.49）；两腿转账合并行保留（B15）；去掉「导出 CSV」（A1） |
-| `屏幕 03 · 导入 review.dc.html` | §4.11 review 表格（列、徽章、行内筛选、批量操作） | 去掉「确认这行」与「就绪」计数（B13）；普通行不可改账户，只有转账行改对手账户（A5）；去掉分类「建议」chip（A3）；补画退款原单 / 转账配对的确认与改选交互（默认勾选、多候选下拉，B12） |
+| `屏幕 03 · 导入 review.dc.html` | §4.11 review 表格（列、徽章、行内筛选、批量操作） | 去掉「确认这行」与「就绪」计数（B13）；普通行不可改账户，只有转账行改对手账户（A5）；去掉分类「建议」chip（A3）；补画退款原单 / 转账配对的确认与改选交互（唯一候选默认勾上、多候选**不预填**并给「选一条」按钮打开交易选择器，B12、决策 §14.53b） |
 | `屏幕 04 · 记一笔.dc.html` | §4.6.1 支出 tab、§4.6.2 收入 tab（含分类选择器的两行选项、录入辅助） | 分类判据文字与二级样例一律按决策 §1.3 的 `desc_zh`（C1–C3）；商户字段叫「商户」不叫「交易内容」（C14） |
 | `屏幕 05 · 记一笔 转账.dc.html` | §4.6.4 转账 tab（单腿 / 两腿 / 跨币种 / 还款） | 汇率 chip 改只读（A10）；转账不设商户 / 标题（B16） |
 | `屏幕 06 · 记一笔 退款.dc.html` | §4.6.3 退款 tab + 关联原支出选择器 | 已退完的原单**可选**但带超额警告，不置灰禁选（B10）；「仅支出」条件固定不可移除（B11） |
