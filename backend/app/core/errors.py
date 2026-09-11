@@ -5,8 +5,9 @@ Every non-2xx response body has the shape ``{"detail": str, "code": str}``
 registry of all ``code`` values (§4.2); new codes must be added there first.
 """
 from fastapi import FastAPI, Request, status
-from fastapi.exceptions import HTTPException, RequestValidationError
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 class ErrorCode:
@@ -101,10 +102,13 @@ async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     )
 
 
-async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+async def _http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail, "code": _http_status_to_code(exc.status_code)},
+        content={"detail": detail, "code": _http_status_to_code(exc.status_code)},
     )
 
 
@@ -116,7 +120,6 @@ async def _validation_exception_handler(
         content={
             "detail": _format_validation_error(exc),
             "code": ErrorCode.VALIDATION_ERROR,
-            "errors": exc.errors(),
         },
     )
 
@@ -131,6 +134,6 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 def install_error_handlers(app: FastAPI) -> None:
     """Register handlers so every error response body is {"detail", "code"} (§4.1)."""
     app.add_exception_handler(ApiError, _api_error_handler)
-    app.add_exception_handler(HTTPException, _http_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_exception_handler(Exception, _unhandled_exception_handler)

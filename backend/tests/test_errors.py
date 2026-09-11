@@ -58,7 +58,8 @@ def test_validation_error_shape():
     # detail is a single compressed sentence, "<loc>: <msg>" per error, joined by "; "
     assert isinstance(body["detail"], str)
     assert "amount" in body["detail"]
-    assert "errors" in body and isinstance(body["errors"], list)
+    # raw pydantic error array is not returned (§4.1: "原始数组放在 detail 之外不再返回")
+    assert set(body.keys()) == {"detail", "code"}
 
 
 def test_unhandled_exception_returns_internal_error_without_leaking_stack():
@@ -68,6 +69,24 @@ def test_unhandled_exception_returns_internal_error_without_leaking_stack():
     assert body["code"] == "internal_error"
     assert "kaboom" not in body["detail"]
     assert "Traceback" not in body["detail"]
+
+
+def test_unregistered_path_returns_not_found_code():
+    """Starlette's router-level 404 (unknown path) must still get {detail, code}."""
+    resp = client.get("/no-such-route")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["code"] == "not_found"
+    assert isinstance(body["detail"], str)
+
+
+def test_wrong_method_returns_validation_error_code():
+    """Starlette's router-level 405 (wrong method) must still get {detail, code}."""
+    resp = client.post("/boom/http-exception")
+    assert resp.status_code == 405
+    body = resp.json()
+    assert body["code"] == "validation_error"
+    assert isinstance(body["detail"], str)
 
 
 def test_import_app_main_succeeds():
