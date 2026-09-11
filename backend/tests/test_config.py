@@ -1,4 +1,6 @@
 """Settings tests: SECRET_KEY validation, defaults, DEBUG/echo gating (BUG-04, §2.1)."""
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -89,6 +91,20 @@ def test_new_field_defaults_match_design():
     assert s.RATE_LIMIT_IMPORTS_PER_HOUR == 10
     assert s.MAX_LEDGERS_PER_USER == 10
     assert s.MAX_MEMBERS_PER_LEDGER == 10
+
+
+def test_env_example_secret_key_placeholder_is_rejected():
+    """env.example's SECRET_KEY must be a sentinel that Settings rejects, so a careless
+    `cp env.example .env` cannot leave a guessable/public key in production (H-08)."""
+    env_example_path = Path(__file__).resolve().parent.parent / "env.example"
+    placeholder = None
+    for line in env_example_path.read_text().splitlines():
+        if line.startswith("SECRET_KEY="):
+            placeholder = line.split("=", 1)[1]
+            break
+    assert placeholder is not None, "SECRET_KEY line not found in backend/env.example"
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, SECRET_KEY=placeholder)
 
 
 def test_exchange_rate_api_url_default():
