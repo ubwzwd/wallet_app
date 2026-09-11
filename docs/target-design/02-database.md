@@ -911,6 +911,26 @@ def delete_and_warn(table: str, where: str, why: str) -> None:
 ```
 
   `table` / `where` 都是迁移文件内的字面量，不来自外部输入，所以 f-string 拼接是安全的。
+- 同样地，凡是**收窄列宽**（把无界 `VARCHAR` 改成带长度上限的类型）的地方，先 `truncate_and_warn`
+  截断超长值再改类型，不能指望 Postgres 的收窄 `ALTER` 自己报错后手动补救——那会让整条链在生产上半途
+  回滚。写法与 `delete_and_warn` 同一风格（同步 2026-09-12）：
+
+```python
+def truncate_and_warn(table: str, column: str, length: int) -> None:
+    bind = op.get_bind()
+    n = bind.execute(
+        sa.text(f"SELECT count(*) FROM {table} WHERE length({column}) > {length}")
+    ).scalar_one()
+    if n:
+        logging.getLogger("alembic.runtime.migration").warning(
+            "backfill: truncating %d %s.%s values to %d characters", n, table, column, length)
+    bind.execute(sa.text(
+        f"UPDATE {table} SET {column} = substr({column}, 1, {length}) "
+        f"WHERE length({column}) > {length}"))
+```
+
+  这是有损操作（截掉的字符不会回来），第 3 步用它把 `finance_sources.name` 收窄到 `VARCHAR(100)`
+  之前先截断超长值——现有数据只有测试数据，迁移允许粗回填（决策 §13），所以直接截断而不是报错中止。
 - 在 `backend/migrations/env.py` 与 `Base.metadata` 上配置同一套命名规则，否则 `batch_alter_table` 无法按名字 drop 约束：
 
 ```python
@@ -1086,6 +1106,35 @@ def upgrade() -> None:
 
 **revision** `b1f3c2a10d43_scope_sources_and_transactions_to_ledger`。
 
+（同步 2026-09-12）这一步顺带解决 `accounts → finance_sources` 改名遗留的两处历史包袱
+（`026ee0aecb66` 只改了表名和列名，没跟着改约束名）：`finance_sources.name` 从初始迁移建的
+无界 `VARCHAR` 收窄到 §1.5 的 `VARCHAR(100)`（先 `truncate_and_warn` 截断超长值，理由见
+§5.0）；主键 `pk_accounts` 改名为 `pk_finance_sources`，`transactions` 上指向它的外键
+`fk_transactions_account_id_accounts` 改名为 `fk_transactions_source_id_finance_sources`。
+两个辅助函数：
+
+```python
+def is_postgres() -> bool:
+    """部署目标是 Postgres；这条链也必须在 SQLite 上跑通（§5.0）。"""
+    return op.get_bind().dialect.name == "postgresql"
+
+
+def rename_constraint(table: str, old: str, new: str) -> None:
+    """Postgres 上原地改名（先查 pg_constraint 确认约束还叫 old 才改——一个 create_all
+    建的库已经是新名，§8.2 的旧版 fixture 甚至直接把外键删了，所以不能无条件执行）；
+    SQLite 没有 RENAME CONSTRAINT，新名字是下面 batch 块里 drop + create 重建出来的，
+    这里的调用只是给 Postgres 用的收尾。"""
+    if not is_postgres():
+        return
+    bind = op.get_bind()
+    present = bind.execute(sa.text(
+        "SELECT count(*) FROM pg_constraint "
+        "WHERE conname = :name AND conrelid = CAST(:table AS regclass)"
+    ), {"name": old, "table": table}).scalar_one()
+    if present:
+        op.execute(sa.text(f'ALTER TABLE {table} RENAME CONSTRAINT "{old}" TO "{new}"'))
+```
+
 ```python
 def upgrade() -> None:
     # --- finance_sources ---
@@ -1116,6 +1165,9 @@ def upgrade() -> None:
     # 否则 ck_finance_sources_archived_at 会因为"archived = TRUE 但 archived_at 为空"加不上。
     op.execute("UPDATE finance_sources SET archived_at = updated_at WHERE archived = TRUE AND archived_at IS NULL")
     op.execute("UPDATE finance_sources SET archived_at = NULL WHERE archived = FALSE")
+    # name 从无界 VARCHAR 收窄到 §1.5 的 VARCHAR(100)，Postgres 的收窄 ALTER 遇到超长值会
+    # 直接失败，所以先截断（同步 2026-09-12；理由见 §5.0）。
+    truncate_and_warn("finance_sources", "name", 100)
     # 与下面 transactions 的处理对称：本地 SQLite 开发库不开 PRAGMA foreign_keys
     # (../current-design/02-database.md:53)，可能留下 user_id 指向已删用户的账户行，
     # 那种行上面的相关子查询取不到 ledger_id，随后的 alter_column(nullable=False) 会失败。
@@ -1134,6 +1186,12 @@ def upgrade() -> None:
         b.alter_column("updated_by", nullable=False)
         b.alter_column("updated_at", nullable=False)
         b.alter_column("default_currency", type_=sa.CHAR(3), existing_type=sa.String(3))
+        b.alter_column("name", type_=sa.String(100), existing_type=sa.String(), existing_nullable=False)
+        if not is_postgres():
+            # batch 重建拷贝的是反射到的旧 DDL，那里还叫 pk_accounts；Postgres 走下面的
+            # rename_constraint 原地改名（同步 2026-09-12）。
+            b.drop_constraint("pk_accounts", type_="primary")
+            b.create_primary_key("pk_finance_sources", ["id"])
         b.create_foreign_key("fk_finance_sources_ledger_id_ledgers", "ledgers", ["ledger_id"], ["id"], ondelete="CASCADE")
         b.create_foreign_key("fk_finance_sources_created_by_users", "users", ["created_by"], ["id"])
         b.create_foreign_key("fk_finance_sources_updated_by_users", "users", ["updated_by"], ["id"])
@@ -1146,6 +1204,8 @@ def upgrade() -> None:
         b.create_check_constraint("archived_at",
             "archived = (archived_at IS NOT NULL)")                            # -> ck_finance_sources_archived_at（决策 §14.50）
         b.drop_column("user_id")          # 索引已在 batch 之前显式 drop（两个名字都跑过 DROP INDEX IF EXISTS）
+    # 026ee0aecb66 只重命名了表，没跟着重命名建表时的主键（同步 2026-09-12）。
+    rename_constraint("finance_sources", "pk_accounts", "pk_finance_sources")
     op.create_index("ix_finance_sources_ledger_id", "finance_sources", ["ledger_id"])
 
     # --- transactions ---
@@ -1181,7 +1241,17 @@ def upgrade() -> None:
         b.create_foreign_key("fk_transactions_ledger_id_ledgers", "ledgers", ["ledger_id"], ["id"], ondelete="CASCADE")
         b.create_foreign_key("fk_transactions_created_by_users", "users", ["created_by"], ["id"])
         b.create_foreign_key("fk_transactions_updated_by_users", "users", ["updated_by"], ["id"])
+        if not is_postgres():
+            # 同一个改名遗留问题：反射到的旧外键还叫 fk_transactions_account_id_accounts；
+            # §8.2 的旧版 fixture 只在 Postgres 上跑，所以 SQLite 上这个旧名一定还在
+            # （同步 2026-09-12）。
+            b.drop_constraint("fk_transactions_account_id_accounts", type_="foreignkey")
+            b.create_foreign_key("fk_transactions_source_id_finance_sources",
+                "finance_sources", ["source_id"], ["id"])
         b.drop_column("user_id")
+    # 026ee0aecb66 重命名了 transactions.account_id，没跟着重命名它上面的外键（同步 2026-09-12）。
+    rename_constraint("transactions", "fk_transactions_account_id_accounts",
+                       "fk_transactions_source_id_finance_sources")
     op.drop_index("ix_transactions_occurred_at", table_name="transactions")   # 两种来源同名，可直接 drop
     # 这一条不能直接 drop_index：初始迁移建的名字是 ix_transactions_account_id
     # (e533c88884b7_initial_schema_users_accounts_.py:71)，而 026ee0aecb66_rename_accounts_to_finance_sources.py:27
@@ -1408,7 +1478,7 @@ with op.batch_alter_table("users", copy_from=users_tbl) as b:
 |---|---|---|---|---|---|
 | 1 | `b1f3c2a10d41` | create_ledger_import_and_event_tables | 建 7 张新表（`ledgers` / `ledger_members` / `ledger_invites` / `import_batches` / `import_rows` / `transaction_events`（决策 §14.51）+ `exchange_rates`（决策 §14.1））+ 索引 | 是 | 是 |
 | 2 | `b1f3c2a10d42` | backfill_default_ledgers | 每用户一本"我的账本" + owner 成员 | 是（0 行） | 是 |
-| 3 | `b1f3c2a10d43` | scope_sources_and_transactions_to_ledger | `ledger_id` / `created_by` / `updated_by` / `updated_at` / `opening_balance` / `archived_at`（决策 §14.50）；`type` 收敛为四种并回填旧值（决策 §14.48）；删两张表的 `user_id`（batch 前先 `DROP INDEX IF EXISTS` 三个索引名）| 是 | 是 |
+| 3 | `b1f3c2a10d43` | scope_sources_and_transactions_to_ledger | `ledger_id` / `created_by` / `updated_by` / `updated_at` / `opening_balance` / `archived_at`（决策 §14.50）；`type` 收敛为四种并回填旧值（决策 §14.48）；删两张表的 `user_id`（batch 前先 `DROP INDEX IF EXISTS` 三个索引名）；`finance_sources.name` 收窄到 `VARCHAR(100)` 前先 `truncate_and_warn` 截断超长值；`pk_accounts → pk_finance_sources`、`fk_transactions_account_id_accounts → fk_transactions_source_id_finance_sources` 两处改名（`rename_constraint`：Postgres 原地 `RENAME CONSTRAINT`，SQLite 走 batch 重建）（同步 2026-09-12）| 是 | 是 |
 | 4 | `b1f3c2a10d44` | transactions_kind_category_refund | `description→note`；kind / 转账 / 分类 / 退款 / 导入列 + 全部 CHECK | 是 | 是（含三条清洗语句） |
 | 5 | `b1f3c2a10d45` | drop_transaction_tags | 删 `transaction_tags` | 是 | 是 |
 | 6 | `b1f3c2a10d46` | users_base_currency_as_ledger_default | `display_name`（决策 §14.40）/ `language`（决策 §14.6）/ `updated_at`；删 `default_source_id`（决策 §14.6，外键名有分叉，见 §5.6）| 是 | 是 |
@@ -1419,7 +1489,7 @@ with op.batch_alter_table("users", copy_from=users_tbl) as b:
 |---|---|---|
 | 1 | 逆序 `op.drop_table(...)` 七张表（`transaction_events` 最先删，`exchange_rates` 无依赖任意位置），索引随表消失 | 无损（表本来就是新建的；缓存表丢了会被下次请求重新拉回来，操作记录丢了只影响时间线展示） |
 | 2 | `DELETE FROM ledger_members;` 再 `DELETE FROM ledgers;` | **破坏性**：第 2 步之后用户新建的账本与回填的账本无法区分，会一并删掉 |
-| 3 | 加回 `user_id`（从 `created_by` 回填）、删掉新列（含 `archived_at`）与新约束、重建 upgrade 里 drop 掉的全部旧索引（`ix_transactions_occurred_at`、`ix_transactions_account_id`、`ix_accounts_user_id`、`ix_transactions_user_id`；`create_all` 库上对应 `ix_transactions_source_id` / `ix_finance_sources_user_id`） | 有损：被 `delete_and_warn` 删掉的孤儿行（`finance_sources` 与 `transactions` 各一批）不可恢复 |
+| 3 | 加回 `user_id`（从 `created_by` 回填）、删掉新列（含 `archived_at`）与新约束、重建 upgrade 里 drop 掉的全部旧索引（`ix_transactions_occurred_at`、`ix_transactions_account_id`、`ix_accounts_user_id`、`ix_transactions_user_id`；`create_all` 库上对应 `ix_transactions_source_id` / `ix_finance_sources_user_id`）；`finance_sources.name` 改回无界 `VARCHAR`；`pk_finance_sources → pk_accounts`、`fk_transactions_source_id_finance_sources → fk_transactions_account_id_accounts` 两处改名改回去（同步 2026-09-12） | 有损：被 `delete_and_warn` 删掉的孤儿行（`finance_sources` 与 `transactions` 各一批）、被 `truncate_and_warn` 截断的 `name` 值均不可恢复 |
 | 4 | 按 §1.6 的**全名** drop 全部新 CHECK / UNIQUE / FK / 索引与新列（§5.0），`note` 改回 `description`，`op.create_index("idx_transactions_transfer_pair", ...)` | 有损：`amount = 0` 的行与被打散的 `transfer_pair_id` 不可恢复 |
 | 5 | `op.create_table("transaction_tags", ...)` 重建空表 | 有损：标签数据不可恢复（这正是决策 §13 允许删表的前提） |
 | 6 | 加回 `default_source_id`（值全为 NULL）与外键 `fk_users_default_source`（只在 Postgres 分支上按名字建，与 upgrade 的写法 A 对称），删掉 `display_name` / `language` / `updated_at` 与三条 CHECK | 有损：`default_source_id` 与 `display_name` 的值不可恢复 |
