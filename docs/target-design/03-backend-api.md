@@ -3490,7 +3490,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 |---|---|
 | `POST /auth/register` | 成功建用户 + 默认账本 + owner 成员（查库确认三张表）；重复邮箱 409 `email_exists`；`REGISTRATION_OPEN=false` → 403；口令 7 字节 → 422；口令 73 字节 → 422（不是 500）；第 6 次 → 429 `register_rate_limited` |
 | `POST /auth/login` | 成功签发；错口令 401 `invalid_credentials`；未知邮箱同样 401 且响应完全一致；第 11 次 → 429 |
-| `GET/PATCH /me` | **auth 路由下的 `me` 两条别名都不存在（404）**（决策 §14.42）；改 `language`；`{"language": null}` 恢复跟随系统；改 `display_name`、传 `null` 清空；请求体带 `default_source_id` 被忽略且不报 500；改不支持的币种 → 400 |
+| `GET/PATCH /me` | **auth 路由下的 `me` 两条别名都不存在（404）**（决策 §14.42）；改 `language`；`{"language": null}` 恢复跟随系统；改 `display_name`、传 `null` 清空；请求体带 `default_source_id` 这类未知字段 → 422 `validation_error`（请求模型拒绝未知字段，决策 §14.42 不做兼容）；改不支持的币种 → 400 |
 | `GET /categories` | 22 个一级；每个二级的 parent 正确；**每个一级的 `desc_zh` / `desc_en` 都非空、每个二级的都是 `null`**（决策 §14.21）；`version` 与 `CATEGORY_VERSION` 一致；`If-None-Match` 命中 → 304 |
 | `GET /config` | 匿名可读；`REGISTRATION_OPEN` 两种取值各一次，返回值跟着变 |
 | `GET /import-format` | 匿名可读；`version` == `CATEGORY_VERSION`；`file.header` 与 05 章的 11 列逐字相同；**`sample_csv` 拿去 `POST /imports` 能直接建出批次**（这一条同时守住了"文档与实现不漂移"） |

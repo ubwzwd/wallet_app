@@ -7,7 +7,7 @@ tables back rather than by trusting the 201.
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.core.security import decode_access_token
@@ -79,6 +79,18 @@ def test_register_stores_the_email_lower_cased_and_rejects_a_second_one(client, 
     # The rejected attempt wrote nothing.
     assert len(db.execute(select(User)).scalars().all()) == 1
     assert len(db.execute(select(Ledger)).scalars().all()) == 1
+
+
+def test_register_rejects_a_currency_the_provider_does_not_support(client, db):
+    """Same check as §5.4 and §5.9: the account would start unconvertible."""
+    response = client.post(REGISTER_URL, json=register_body(base_currency="xyz"))
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "validation_error"
+    assert "XYZ" in response.json()["detail"]
+    # Nothing was written: no user, hence no default ledger either.
+    assert db.execute(select(func.count()).select_from(User)).scalar_one() == 0
+    assert db.execute(select(func.count()).select_from(Ledger)).scalar_one() == 0
 
 
 def test_register_is_refused_while_registration_is_closed(client, db, monkeypatch):

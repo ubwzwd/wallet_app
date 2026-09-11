@@ -5,7 +5,6 @@ Default path: a SQLite in-memory database built from the models
 (02-database.md §8.1). Migration tests get a throwaway Postgres database
 (§8.2, skipped without TEST_POSTGRES_URL) or a SQLite file database.
 """
-import datetime as dt
 import os
 import uuid
 
@@ -21,16 +20,13 @@ from sqlalchemy import create_engine, event, make_url  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
+from app.core.clock import utcnow  # noqa: E402
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 MIGRATIONS_DIR = BACKEND_DIR / "migrations"
 
 # The quotation day the fake Frankfurter reports for /latest.
 FAKE_RATE_DAY = "2026-09-11"
-
-
-def _naive_utcnow() -> dt.datetime:
-    """Naive UTC, the shape every timestamp column stores (02-database.md §7.2)."""
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
 
 
 def alembic_config(url: str) -> Config:
@@ -144,6 +140,28 @@ def client(db):
 
 
 @pytest.fixture()
+def fresh_session():
+    """Open a second ``Session`` on the test database, closed afterwards.
+
+    Used where a case has to look at what a request *committed*: roll the
+    ``db`` session back first, then read through a session that has no
+    identity map of its own.
+    """
+    opened = []
+
+    def make():
+        session = _TestingSessionLocal()
+        opened.append(session)
+        return session
+
+    try:
+        yield make
+    finally:
+        for session in opened:
+            session.close()
+
+
+@pytest.fixture()
 def user_factory(db):
     """Insert users straight into the table, bypassing ``POST /auth/register``.
 
@@ -164,7 +182,7 @@ def user_factory(db):
     ) -> User:
         nonlocal created
         created += 1
-        now = _naive_utcnow()
+        now = utcnow()
         user = User(
             email=email or f"user{created}-{uuid.uuid4().hex[:8]}@example.test",
             password_hash=get_password_hash(password),
@@ -207,7 +225,7 @@ def ledger_factory(db):
         base_currency: str | None = None,
         members=(),
     ) -> Ledger:
-        now = _naive_utcnow()
+        now = utcnow()
         ledger = Ledger(
             name=name,
             base_currency=(base_currency or owner.base_currency).upper(),

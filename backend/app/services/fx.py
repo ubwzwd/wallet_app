@@ -47,6 +47,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.core.errors import ApiError, ErrorCode
 from app.models.exchange_rate import ExchangeRate
@@ -298,6 +299,38 @@ def warm_cache(
             continue
 
 
+def ensure_supported(code: str, current: str | None = None) -> str:
+    """Upper-case ``code`` and require it to be one upstream knows (§5.4, §5.9, §5.11).
+
+    A code outside the list is 400 ``validation_error``. While Frankfurter is
+    unreachable the list cannot be consulted at all, and then the only code
+    that still goes through is ``current`` — the currency already in effect
+    (the caller's own default, the ledger's own when patching). That keeps the
+    ordinary path working through an upstream blip without ever letting an
+    unverified code become a base currency nothing can convert from; anything
+    else surfaces the 503 ``fx_unavailable``. ``current`` is ``None`` where
+    there is no currency in effect yet (registration), so nothing is waved
+    through while upstream is down.
+    """
+    currency = code.upper()
+    try:
+        supported = supported_currencies()
+    except ApiError as exc:
+        if (
+            exc.code != ErrorCode.FX_UNAVAILABLE
+            or current is None
+            or currency != current.upper()
+        ):
+            raise
+        return currency
+
+    if currency not in supported:
+        raise ApiError(
+            400, ErrorCode.VALIDATION_ERROR, f"Currency {currency} is not supported"
+        )
+    return currency
+
+
 def supported_currencies() -> dict[str, str]:
     """Frankfurter's currency code -> name map, cached for the process (§5.45)."""
     global _CURRENCIES
@@ -403,7 +436,7 @@ def _throttled(base: str, symbol: str, row) -> bool:
     ]
     if not stamps:
         return False
-    return (_utcnow() - max(stamps)) < FX_FETCH_THROTTLE
+    return (utcnow() - max(stamps)) < FX_FETCH_THROTTLE
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +504,7 @@ def _fetch_latest(db: Session, base: str, symbols: Sequence[str]) -> None:
     # The attempt is stamped before the call, so a pair that already has a row
     # to serve is not asked again for an hour; ``_throttled`` ignores the stamp
     # when the cache is empty, so a failure here never suppresses a retry.
-    now = _utcnow()
+    now = utcnow()
     for symbol in symbols:
         _LAST_FETCH[(base, symbol.upper())] = now
     payload = _get("/latest", {"from": base, "to": ",".join(symbols)})
@@ -490,7 +523,7 @@ def _upsert(
     db: Session, rows: Sequence[tuple[dt.date, str, str, Decimal]], *, refresh: bool
 ) -> None:
     """Upsert rate rows on (date, base, symbol); ``refresh`` rewrites rate/fetched_at."""
-    fetched_at = _utcnow()
+    fetched_at = utcnow()
     values = [
         {"date": day, "base": base, "symbol": symbol, "rate": rate, "fetched_at": fetched_at}
         for day, base, symbol, rate in rows
@@ -531,11 +564,6 @@ def quantize_rate(rate: Decimal) -> Decimal:
 
 def _fx_unavailable(detail: str) -> ApiError:
     return ApiError(503, ErrorCode.FX_UNAVAILABLE, detail)
-
-
-def _utcnow() -> dt.datetime:
-    """Naive UTC, matching how timestamps are stored (02-database.md §7.2)."""
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
 
 
 def _today() -> dt.date:

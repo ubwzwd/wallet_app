@@ -15,6 +15,11 @@ from typing import Annotated, Generic, TypeVar
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer
 
 
+# ISO 4217 codes are accepted in either case and upper-cased server side
+# (§4.5). Defined here once; every schema that takes a currency imports it.
+CURRENCY_PATTERN = r"^[A-Za-z]{3}$"
+
+
 class ApiModel(BaseModel):
     """Base class for response schemas: reads straight off ORM objects."""
 

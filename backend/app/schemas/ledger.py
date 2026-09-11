@@ -4,9 +4,8 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from app.schemas.common import ApiModel, ApiRequestModel, UtcDatetime
+from app.schemas.common import CURRENCY_PATTERN, ApiModel, ApiRequestModel, UtcDatetime
 
-CURRENCY_PATTERN = r"^[A-Za-z]{3}$"
 INVITE_CODE_PATTERN = r"^[0-9]{6}$"
 
 
@@ -19,11 +18,12 @@ class LedgerCounts(ApiModel):
 
 
 class LedgerResponse(ApiModel):
-    """Response for §5.8-§5.11 and §5.19.
+    """The ledger body of §5.8, §5.9 and §5.11 — no ``counts``.
 
-    ``counts`` is only populated by ``GET /ledgers/{id}`` (§5.10) and
-    ``POST /ledgers/join`` (§5.19); every other endpoint that returns this
-    shape (§5.8, §5.9, §5.11) leaves it ``None``.
+    The three counts are expensive enough to be worth asking for, so the two
+    endpoints that do hand them out return :class:`LedgerDetailResponse`
+    instead. Keeping them out of this class is what makes ``counts`` absent
+    from the list, create and patch bodies rather than present and ``null``.
     """
 
     id: uuid.UUID
@@ -32,24 +32,33 @@ class LedgerResponse(ApiModel):
     role: Literal["owner", "member"]
     member_count: int
     created_by: uuid.UUID
-    counts: LedgerCounts | None = None
     created_at: UtcDatetime
     updated_at: UtcDatetime
 
 
+class LedgerDetailResponse(LedgerResponse):
+    """§5.10 and §5.19: the same body plus the delete-dialog counts."""
+
+    counts: LedgerCounts
+
+
 class LedgerCreate(ApiRequestModel):
-    """§5.9 request body."""
+    """§5.9 request body.
+
+    ``name`` is stripped *before* its length is measured, so "   " is one
+    character short of the bound rather than three characters long, and
+    ``base_currency`` may be omitted or ``null`` — both mean "the caller's own
+    default currency" (§5.9).
+    """
 
     name: str = Field(..., min_length=1, max_length=100)
     base_currency: str | None = Field(default=None, pattern=CURRENCY_PATTERN)
 
-    @field_validator("name")
+    @field_validator("name", mode="before")
     @classmethod
-    def _strip_name(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("name must not be blank")
-        return stripped
+    def _strip_name(cls, value: object) -> object:
+        """Trim first; ``min_length`` / ``max_length`` then judge the real name."""
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("base_currency")
     @classmethod
@@ -58,21 +67,34 @@ class LedgerCreate(ApiRequestModel):
 
 
 class LedgerPatch(ApiRequestModel):
-    """§5.11 request body: ``updated_at`` is the optimistic-concurrency stamp (§4.4)."""
+    """§5.11 request body: ``updated_at`` is the optimistic-concurrency stamp (§4.4).
+
+    Both editable fields follow ``MePatch``'s rule: omitting one means "leave
+    it alone" (the default is never validated and stays out of
+    ``model_fields_set``), while an explicit ``null`` is a 422 — there is no
+    such thing as a ledger without a name or without a base currency. The
+    ``str | None`` annotation is the honest one for the omitted case; the
+    ``mode="before"`` validators are what refuse the null.
+    """
 
     updated_at: UtcDatetime
     name: str | None = Field(default=None, min_length=1, max_length=100)
     base_currency: str | None = Field(default=None, pattern=CURRENCY_PATTERN)
 
-    @field_validator("name")
+    @field_validator("name", mode="before")
     @classmethod
-    def _strip_name(cls, value: str | None) -> str | None:
+    def _strip_name(cls, value: object) -> object:
+        """Refuse ``null``, then trim so the bounds judge the real name."""
         if value is None:
-            return None
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("name must not be blank")
-        return stripped
+            raise ValueError("name does not accept null")
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("base_currency", mode="before")
+    @classmethod
+    def _reject_null_currency(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("base_currency does not accept null")
+        return value
 
     @field_validator("base_currency")
     @classmethod

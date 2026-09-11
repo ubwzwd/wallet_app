@@ -10,13 +10,10 @@ import uuid
 from sqlalchemy import func, select
 
 from app.core import ratelimit
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.models.ledger import Ledger, LedgerInvite, LedgerMember
 from app.services.ledger_service import INVITE_TTL
-
-
-def _naive_utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
 
 
 def issue_code(client, ledger, owner, auth_headers) -> str:
@@ -30,7 +27,7 @@ def issue_code(client, ledger, owner, auth_headers) -> str:
 
 def plant_invite(db, ledger, owner, code: str, *, expires_in: dt.timedelta) -> LedgerInvite:
     """Insert a code straight into the table, so its expiry can be chosen."""
-    now = _naive_utcnow()
+    now = utcnow()
     invite = LedgerInvite(
         ledger_id=ledger.id,
         code=code,
@@ -182,7 +179,9 @@ def test_a_code_works_only_once(client, db, user_factory, auth_headers, ledger_f
     )
 
 
-def test_an_expired_code_is_refused(client, db, user_factory, auth_headers, ledger_factory):
+def test_an_expired_code_is_refused(
+    client, db, user_factory, auth_headers, ledger_factory, fresh_session
+):
     alice = user_factory()
     bob = user_factory()
     ledger = ledger_factory(alice)
@@ -190,8 +189,8 @@ def test_an_expired_code_is_refused(client, db, user_factory, auth_headers, ledg
     code = issue_code(client, ledger, alice, auth_headers)
     invite = db.execute(select(LedgerInvite)).scalar_one()
     # Age the row: the CHECK wants expires_at > created_at, so both move back.
-    invite.created_at = _naive_utcnow() - dt.timedelta(minutes=30)
-    invite.expires_at = _naive_utcnow() - dt.timedelta(seconds=1)
+    invite.created_at = utcnow() - dt.timedelta(minutes=30)
+    invite.expires_at = utcnow() - dt.timedelta(seconds=1)
     db.commit()
 
     response = client.post(
@@ -200,8 +199,15 @@ def test_an_expired_code_is_refused(client, db, user_factory, auth_headers, ledg
 
     assert response.status_code == 400
     assert response.json()["code"] == "invite_invalid"
-    # The stale row is swept on the way past (decision §14.29).
-    assert db.execute(select(func.count()).select_from(LedgerInvite)).scalar_one() == 0
+    # The stale row is swept on the way past (decision §14.29) — and the sweep
+    # is *committed*, so it survives the 400 the request ends with. Rolling the
+    # request's session back first is what makes the next assertion mean that:
+    # an uncommitted delete would come back here.
+    db.rollback()
+    assert (
+        fresh_session().execute(select(func.count()).select_from(LedgerInvite)).scalar_one()
+        == 0
+    )
 
 
 def test_a_revoked_code_no_longer_joins(
@@ -411,6 +417,46 @@ def test_join_is_globally_rate_limited_without_consuming_codes(
     assert retried.json()["member_count"] == 5
 
 
+def test_the_join_bucket_is_sized_from_the_configured_qps(
+    client, db, user_factory, auth_headers, ledger_factory, monkeypatch
+):
+    """§8.2: ``RATE_LIMIT_JOIN_QPS`` is what sets the refill rate, not a constant.
+
+    Time is faked so the case does not sleep: every ``check`` sees the clock 50
+    milliseconds further along. At the default 1 QPS that refills 0.05 tokens
+    per attempt, so the burst of three is spent and the fourth is a 429; at 100
+    QPS the same 50 milliseconds refill the whole bucket and nothing is
+    throttled. The codes are deliberately unknown — the limiter runs before the
+    code is looked at, so a 400 proves the request got past it.
+    """
+    alice = user_factory()
+    ledger_factory(alice)
+    db.commit()
+
+    def fake_clock(step=[0.0]):
+        step[0] += 0.05
+        return step[0]
+
+    monkeypatch.setattr(ratelimit, "clock", fake_clock)
+
+    def statuses() -> list[int]:
+        ratelimit.reset_all()
+        return [
+            client.post(
+                "/api/v1/ledgers/join",
+                json={"code": f"{index:06d}"},
+                headers=auth_headers(alice),
+            ).status_code
+            for index in range(10)
+        ]
+
+    assert 429 in statuses()
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_JOIN_QPS", 100)
+
+    assert statuses() == [400] * 10
+
+
 # ---------------------------------------------------------------------------
 # §5.13 GET /ledgers/{id}/members
 # ---------------------------------------------------------------------------
@@ -424,7 +470,7 @@ def test_member_list_puts_the_owner_first(
     carol = user_factory(email="carol@example.test")
     ledger = ledger_factory(alice, members=[bob, carol])
     # Bob joined last, so joined_at decides the order behind the owner.
-    now = _naive_utcnow()
+    now = utcnow()
     for user, joined in ((bob, now), (carol, now - dt.timedelta(days=1))):
         membership = db.execute(
             select(LedgerMember).where(

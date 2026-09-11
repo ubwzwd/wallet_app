@@ -3,9 +3,7 @@ from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
 
-from app.schemas.common import ApiModel, ApiRequestModel
-
-CURRENCY_PATTERN = r"^[A-Za-z]{3}$"
+from app.schemas.common import CURRENCY_PATTERN, ApiModel, ApiRequestModel
 
 
 class RegisterRequest(ApiRequestModel):
@@ -41,6 +39,12 @@ class LoginRequest(ApiRequestModel):
 
     email: EmailStr
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, value: str) -> str:
+        """Stored addresses are lower-cased (§5.1), so the lookup must be too."""
+        return value.lower()
 
 
 class TokenResponse(ApiModel):
