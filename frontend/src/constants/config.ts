@@ -1,26 +1,17 @@
 /**
- * AUTO-MANAGED SOURCE: dev / native default.
- * Active config.ts is restored to this file after `npm run build:web`.
- * Native dev (iOS simulator / Android emulator) cannot resolve relative paths,
- * so we keep the absolute URL here. (D-03)
+ * Build-time configuration (04 §7.2).
+ *
+ * `EXPO_PUBLIC_API_BASE_URL` is inlined by Expo at bundle time. Production web builds
+ * set it to `/api/v1` (same origin behind Caddy); dev and native default to the local
+ * backend, because the iOS simulator / Android emulator cannot resolve relative URLs.
  */
-export const API_BASE_URL = 'http://localhost:8000/api/v1';
+export const API_BASE_URL: string =
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
-// Storage keys for AsyncStorage
-export const STORAGE_KEYS = {
-  AUTH_TOKEN: '@wallet_app:auth_token',
-  USER_DATA: '@wallet_app:user_data',
-} as const;
+/** AsyncStorage key for the JWT — unchanged from v2 so existing sessions survive. */
+export const AUTH_TOKEN_KEY = '@wallet_app:auth_token';
 
-// App metadata
-export const APP_NAME = 'Wallet App';
-export const APP_VERSION = '1.0.0';
+/** Value sent as the `X-Client` header on every request (03 §4.7; ≤16 chars). */
+export const CLIENT_NAME = 'web';
 
-// Query keys for TanStack Query
-export const QUERY_KEYS = {
-  USER: 'user',
-  FINANCE_SOURCES: 'finance_sources',
-  TRANSACTIONS: 'transactions',
-  CURRENCIES: 'currencies',
-  EXCHANGE_RATES: 'exchange_rates',
-} as const;
+export const APP_NAME = 'Wallet';
