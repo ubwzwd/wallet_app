@@ -117,7 +117,7 @@ input{font-family:inherit;box-sizing:border-box}
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 28px">
           <div style="padding:0 4px 18px">
             <div style="font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">注册</div>
-            <div style="margin-top:6px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">注册完还要建一本账，或者用别人的邀请码加入。</div>
+            <div style="margin-top:6px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">注册后会自动为你建一本「我的账本」，也可以用邀请码加入别人的。</div>
           </div>
 
           <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
@@ -156,7 +156,7 @@ input{font-family:inherit;box-sizing:border-box}
         <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px 28px 56px">
           <div style="width:420px">
             <div style="font:700 30px/38px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">注册</div>
-            <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">注册完还要建一本账，或者用别人的邀请码加入。</div>
+            <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">注册后会自动为你建一本「我的账本」，也可以用邀请码加入别人的。</div>
             <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
               <div>
                 <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">邮箱</div>
@@ -235,6 +235,52 @@ input{font-family:inherit;box-sizing:border-box}
       <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">和注册页同一个位置、同一张卡，只是内容换成一段话 —— 从链接点过来的人不会怀疑自己走错了页面。</div>
     </div>
   </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">D</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">三个错误态</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">统一放在表单上方的行内错误条，字段本身只在与它有关时描红</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+    <sc-for list="{{ errorCases }}" as="e" hint-placeholder-count="3">
+      <div>
+        <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · {{ e.tag }}</div>
+        <div data-screen-label="{{ e.label }}" style="width:375px;min-height:560px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+          <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 28px">
+            <div style="padding:0 4px 16px">
+              <div style="font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">{{ e.title }}</div>
+            </div>
+
+            <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
+              <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;background:#F3E7E2">
+                <span style="color:#8A3529;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:600 13px/19px 'Figtree','PingFang SC',sans-serif;color:#16201A">{{ e.errTitle }}</span>
+                  <span style="display:block;margin-top:2px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#8A3529">{{ e.errBody }}</span>
+                </span>
+              </div>
+
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">邮箱</div>
+                <div style="height:52px;padding:0 16px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;font:400 16px/24px 'IBM Plex Mono',monospace;color:#16201A;box-shadow:{{ e.emailRing }}">wang@example.com</div>
+              </div>
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">口令</div>
+                <div style="height:52px;padding:0 16px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;justify-content:space-between;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;box-shadow:{{ e.pwdRing }}"><span>••••••••</span><span style="color:#5F6A62;display:flex">{{ iconEye }}</span></div>
+              </div>
+
+              <button style="height:52px;border:none;border-radius:14px;background:{{ e.btnBg }};color:{{ e.btnFg }};font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:{{ e.btnCursor }}">{{ e.btnLabel }}</button>
+            </div>
+
+            <div style="margin-top:16px;padding:0 4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ e.note }}</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ e.caption }}</div>
+      </div>
+    </sc-for>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
@@ -255,6 +301,33 @@ class Component extends DCLogic {
       iconBack: svg([P('M12 5.5 7.5 10l4.5 4.5')], 20, 2),
       iconLock: svg([R(4.25,8.75,11.5,8,2.5), P('M7 8.75V6.5a3 3 0 0 1 6 0v2.25')], 24, 1.8),
       toggleReveal: () => this.setState(s => ({ reveal: !s.reveal })),
+      iconAlert: svg([P('M10 3 17.5 16.5h-15z'), P('M10 8v4M10 14.5h.01')], 18),
+      errorCases: [
+        {
+          tag:'口令错误', label:'登录 口令错误 375', title:'登录',
+          errTitle:'邮箱或口令不对', errBody:'再试一次；连续错 5 次会暂时锁定。',
+          emailRing:'none', pwdRing:'inset 0 0 0 1.5px #AC4335',
+          btnBg:'#2F4A38', btnFg:'#FFFFFF', btnCursor:'pointer', btnLabel:'登录',
+          note:'不说是邮箱错还是口令错 —— 免得被人拿来试探哪些邮箱注册过。',
+          caption:'错误条在表单最上方，口令框描红并保留已输内容，不清空。',
+        },
+        {
+          tag:'邮箱已注册', label:'注册 邮箱已注册 375', title:'注册',
+          errTitle:'这个邮箱已经注册过', errBody:'直接去登录，或者换一个邮箱。',
+          emailRing:'inset 0 0 0 1.5px #AC4335', pwdRing:'none',
+          btnBg:'#2F4A38', btnFg:'#FFFFFF', btnCursor:'pointer', btnLabel:'去登录',
+          note:'注册页才会出现，这里描红的是邮箱字段。',
+          caption:'主按钮改成「去登录」—— 已经有账号的人下一步一定是登录，不该让他再填一遍。',
+        },
+        {
+          tag:'尝试太频繁', label:'登录 限流 375', title:'登录',
+          errTitle:'尝试太频繁，请稍后再试', errBody:'2 分钟后可以再登录一次。',
+          emailRing:'none', pwdRing:'none',
+          btnBg:'#E1EAE2', btnFg:'#8A968C', btnCursor:'not-allowed', btnLabel:'2:00 后可重试',
+          note:'两个字段都不描红：错的不是你填的内容，是次数。',
+          caption:'按钮禁用并把倒计时写在按钮上，比只给一句提示更能让人停手。',
+        },
+      ],
     };
   }
 }

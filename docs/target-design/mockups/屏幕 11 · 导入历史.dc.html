@@ -188,7 +188,7 @@ a:hover{color:#1F3527}
   <div style="display:flex;align-items:baseline;gap:10px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
     <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">B</span>
     <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">撤销确认</span>
-    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">dbs-09.csv · 11 笔 · 其中 2 笔退款关联着原单</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">dbs-09.csv · 11 笔 · 批内 1 笔退款；批外 2 笔退款指向本批原单</span>
   </div>
 
   <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
@@ -377,7 +377,7 @@ class Component extends DCLogic {
   renderVals() {
     const rows = [
       { file:'cmb-09.csv', time:'09-10 21:14', s:'ready',     uploader:'我',   count:'10 笔', net:'+18,087.80', account:'招行储蓄卡', note:'3 行待归类', flags:'4 个' },
-      { file:'dbs-09.csv', time:'09-09 08:02', s:'committed', uploader:'老婆', count:'11 笔', net:'−1,204.60',  account:'DBS Multiplier', note:'含 2 笔退款已关联原单', flags:'1 个' },
+      { file:'dbs-09.csv', time:'09-09 08:02', s:'committed', uploader:'老婆', count:'11 笔', net:'−1,204.60',  account:'DBS Multiplier', note:'批内 1 笔退款；批外 2 笔退款指向本批原单', flags:'1 个' },
       { file:'cmb-08.csv', time:'08-31 22:40', s:'committed', uploader:'我',   count:'32 笔', net:'+11,420.00', account:'招行储蓄卡', note:'—', flags:'无' },
       { file:'ccb-08.csv', time:'08-30 19:11', s:'committed', uploader:'老婆', count:'9 笔',  net:'−3,215.00',  account:'建行信用卡', note:'—', flags:'无' },
     ];

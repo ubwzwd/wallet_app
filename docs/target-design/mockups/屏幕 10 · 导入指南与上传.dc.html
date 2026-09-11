@@ -78,7 +78,7 @@ input{font-family:inherit;box-sizing:border-box}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #EDF2ED">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
                 <span style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">skill 文本</span>
-                <span style="font:450 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">v {{ skillVersion }} · 4.2 KB</span>
+                <span style="font:450 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">v 2026-09-10 · 4.2 KB</span>
               </div>
               <div style="margin-top:8px;padding:12px 14px;border-radius:12px;background:#F1F6F1;font:400 12px/18px 'IBM Plex Mono',monospace;color:#3E4A42;max-height:90px;overflow:hidden">你是账单整理助手。把用户提供的银行账单转成 CSV。首行写 # version: 2026-09-10，第二行是固定 11 列表头：date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref…</div>
               <div style="margin-top:10px;display:flex;gap:8px">
@@ -218,7 +218,7 @@ input{font-family:inherit;box-sizing:border-box}
               <div style="margin-top:20px;padding-top:18px;border-top:1px solid #EDF2ED">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
                   <span style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">skill 文本</span>
-                  <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">v {{ skillVersion }} · 4.2 KB</span>
+                  <span style="font:450 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">v 2026-09-10 · 4.2 KB</span>
                 </div>
                 <div style="margin-top:10px;padding:14px 16px;border-radius:14px;background:#F1F6F1;font:400 13px/20px 'IBM Plex Mono',monospace;color:#3E4A42;max-height:140px;overflow:hidden">你是账单整理助手。把用户提供的银行账单转成 CSV。<br># version: 2026-09-10<br>date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref<br>kind 只能是 expense / income / refund / transfer。日期一律 YYYY-MM-DD…</div>
                 <div style="margin-top:12px;display:flex;gap:10px">
@@ -328,8 +328,6 @@ class Component extends DCLogic {
       })),
       staleShow: stale ? 'block' : 'none',
       errorShow: error ? 'block' : 'none',
-      skillVersion: stale ? '2026-08-01' : '2026-09-10',
-      skillVersionShort: stale ? '2026-08-01 · 旧' : '2026-09-10',
       steps: [
         { n:'1', title:'安装 skill',                 body:'把下面的 skill 文本复制或下载，添加到你自己的 ChatGPT / Claude 里。',
           numBg:'#2F4A38', numFg:'#FFFFFF' },
@@ -341,7 +339,7 @@ class Component extends DCLogic {
       errors: [
         { line:'第 1 行',  msg:'缺少 # version: 行',                 raw:'date,amount,currency,kind,transfer_role,…' },
         { line:'第 2 行',  msg:'表头与固定 11 列不符',                raw:'date,amount,currency,kind,merchant,note,category_l1,category_l2' },
-        { line:'第 17 行', msg:'列数为 10，应为 11',                  raw:'2026-09-07,128.00,CNY,expense,,,美团外卖,,餐饮,午餐' },
+        { line:'第 17 行', msg:'列数为 10，应为 11',                  raw:'2026-09-07,-128.00,CNY,expense,,,美团外卖,,food,lunch' },
       ],
       dropRing:   error ? '#AC4335' : '#C4D1C6',
       dropIconBg: error ? '#F3E7E2' : '#E4EDE5',

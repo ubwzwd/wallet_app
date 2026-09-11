@@ -52,6 +52,7 @@ input{font-family:inherit;box-sizing:border-box}
             <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#5F6A62;text-transform:uppercase">本次导入</div>
             <div style="margin-top:8px;display:grid;gap:6px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif">
               <div style="display:flex;justify-content:space-between"><span style="color:#3E4A42">文件</span><span style="font:450 12px/19px 'IBM Plex Mono',monospace">cmb-09.csv</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px"><span style="color:#3E4A42;flex:none">目标账户</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">招行储蓄卡</span></div>
               <div style="display:flex;justify-content:space-between"><span style="color:#3E4A42">校验</span><span style="color:#1F6A46;font-weight:600">通过</span></div>
               <div style="display:flex;justify-content:space-between"><span style="color:#3E4A42">共</span><span style="font:450 12px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">10 行</span></div>
             </div>
@@ -82,7 +83,7 @@ input{font-family:inherit;box-sizing:border-box}
 
           <div style="margin-top:14px;background:#FFFFFF;border-radius:18px 18px 0 0;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden;flex:1;min-height:0">
             <div style="max-height:498px;overflow:auto">
-              <div style="display:grid;grid-template-columns:40px 44px 78px 108px 68px 88px minmax(0,1.05fr) minmax(0,1fr) 106px 106px minmax(0,1fr) 156px;gap:10px;padding:11px 18px;background:#F7FAF7;border-bottom:1px solid #E1EAE2;position:sticky;top:0;z-index:2">
+              <div style="display:grid;grid-template-columns:36px 30px 58px 96px 50px 78px minmax(110px,1.3fr) minmax(84px,1fr) 92px 88px 156px 100px;gap:7px;padding:11px 18px;background:#F7FAF7;border-bottom:1px solid #E1EAE2;position:sticky;top:0;z-index:2">
                 <div onClick="{{ toggleAll }}" style="cursor:pointer;display:flex;align-items:center"><span style="width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#FFF;background:{{ allBoxBg }};box-shadow:{{ allBoxRing }}">{{ allTick }}</span></div>
                 <sc-for list="{{ headers }}" as="h" hint-placeholder-count="11">
                   <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase;text-align:{{ h.align }}">{{ h.name }}</div>
@@ -91,7 +92,7 @@ input{font-family:inherit;box-sizing:border-box}
 
               <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
                 <div style="border-bottom:1px solid #EDF2ED;background:{{ r.rowBg }}">
-                <div style="display:grid;grid-template-columns:40px 44px 78px 108px 68px 88px minmax(0,1.05fr) minmax(0,1fr) 106px 106px minmax(0,1fr) 156px;gap:10px;padding:10px 18px;align-items:center" style-hover="background:#F7FAF7">
+                <div style="display:grid;grid-template-columns:36px 30px 58px 96px 50px 78px minmax(110px,1.3fr) minmax(84px,1fr) 92px 88px 156px 100px;gap:7px;padding:10px 18px;align-items:center" style-hover="background:#F7FAF7">
                   <div onClick="{{ toggleRow }}" data-row="{{ r.no }}" style="cursor:pointer;display:flex;align-items:center"><span style="width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#FFF;background:{{ r.boxBg }};box-shadow:{{ r.boxRing }}">{{ r.tick }}</span></div>
                   <div style="font:450 12px/17px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">{{ r.no }}</div>
                   <div style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#3E4A42">{{ r.date }}</div>
@@ -104,7 +105,10 @@ input{font-family:inherit;box-sizing:border-box}
                   <div style="min-width:0"><span style="display:inline-flex;align-items:center;gap:4px;max-width:100%;height:30px;padding:0 8px;border-radius:9px;font:500 13px/19px 'Figtree','PingFang SC',sans-serif;cursor:pointer;color:{{ r.l2Color }};background:#F1F6F1" style-hover="background:#E9F0E9"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.l2 }}</span>{{ iconChevXs }}</span></div>
                   <div style="min-width:0">
                     <span style="display:{{ r.accStaticShow }};font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.counterparty }}</span>
-                    <span style="display:{{ r.accEditShow }};align-items:center;gap:4px;max-width:100%;height:30px;padding:0 8px;border-radius:9px;background:#F1F6F1;color:#16201A;font:500 13px/19px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.counterparty }}</span>{{ iconChevXs }}</span>
+                    <span style="display:{{ r.accEditShow }};flex-direction:column;gap:4px;min-width:0">
+                      <span onClick="{{ pickCpAccount }}" data-row="{{ r.no }}" style="display:inline-flex;align-items:center;gap:4px;max-width:100%;height:30px;padding:0 8px;border-radius:9px;cursor:pointer;font:500 13px/19px 'Figtree','PingFang SC',sans-serif;background:{{ r.cpAccBg }};color:{{ r.cpAccColor }};box-shadow:{{ r.cpAccRing }}" style-hover="background:#E9F0E9"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.cpAccLabel }}</span>{{ iconChevXs }}</span>
+                      <span onClick="{{ pickCpText }}" data-row="{{ r.no }}" style="display:inline-flex;align-items:center;max-width:100%;height:30px;padding:0 8px;border-radius:9px;cursor:text;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;background:{{ r.cpTextBg }};color:{{ r.cpTextColor }};box-shadow:{{ r.cpTextRing }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.cpTextLabel }}</span></span>
+                    </span>
                   </div>
                   <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
                     <span onClick="{{ cycleState }}" data-row="{{ r.no }}" style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:8px;font:600 11px/16px 'Figtree','PingFang SC',sans-serif;white-space:nowrap;cursor:pointer;background:{{ r.stateBg }};color:{{ r.stateColor }}">{{ r.stateLabel }}</span>
@@ -140,7 +144,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </div>
       </div>
-      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">表头粘性（滚动区内 position:sticky）。分类两列本身就是选择器，点开即改；分类留空显示「待归类」。行状态只有三种：待处理、已改、已跳过（点状态 chip 可循环切换）。账户列对支出 / 收入 / 退款是只读文字，只有转账行是可点的对手账户选择器。退款行与转账行在行下方展开关联区：退款默认勾选服务端预填的原单并可「改选」；转账唯一候选时默认勾选并显示对方账户与日期，多候选时不勾选，给「选一条」。</div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">表头粘性（滚动区内 position:sticky）。分类两列本身就是选择器，点开即改；分类留空显示「待归类」。行状态只有三种：待处理、已改、已跳过（点状态 chip 可循环切换）。账户列对支出 / 收入 / 退款是只读文字（整批同一个目标账户），只有转账行能改：选「对手账户」或填「对方」文字，两者互斥 —— 选了一个，另一个就置灰。徽章（退款候选、可配对转账、重复、需核对）说明系统为什么把这行挑出来，和勾选框是两件事。退款行与转账行在行下方展开关联区：退款默认勾选服务端预填的原单并可「改选」；转账唯一候选时默认勾选并显示对方账户与日期，多候选时不勾选，给「选一条」。</div>
     </div>
 
     <!-- ================= 375 ================= -->
@@ -214,19 +218,28 @@ input{font-family:inherit;box-sizing:border-box}
                     </div>
                   </div>
 
-                  <div>
+                  <div style="display:{{ c.catBlockShow }}">
                     <div style="font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#8A4816;margin-bottom:5px">一级分类 · 必填</div>
                     <div style="height:44px;padding:0 12px;border-radius:12px;background:#FFF;box-shadow:inset 0 0 0 1.5px #AC4335;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer"><span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">选择一级分类</span>{{ iconChevSm }}</div>
                   </div>
 
-                  <div>
+                  <div style="display:{{ c.catBlockShow }}">
                     <div style="font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:5px">二级分类 · 选填</div>
                     <div style="height:44px;padding:0 12px;border-radius:12px;background:#F1F6F1;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer"><span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">先选一级</span>{{ iconChevSm }}</div>
                   </div>
 
-                  <div>
-                    <div style="font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:5px">账户 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">来自文件 · 不可改</span></div>
+                  <div style="display:{{ c.catNoteShow }};padding:12px 13px;border-radius:12px;background:#F1F6F1;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">转账不分类，也没有商户 —— 只需要确认对手。</div>
+
+                  <div style="display:{{ c.accStaticBlock }}">
+                    <div style="font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:5px">账户 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">本批目标账户 · 整批一致，不可逐行改</span></div>
                     <div style="height:44px;padding:0 12px;border-radius:12px;background:#F7FAF7;display:flex;align-items:center;gap:8px"><span style="width:24px;height:24px;border-radius:999px;background:#E9F0E9;color:#5F6A62;display:flex;align-items:center;justify-content:center;flex:none">{{ iconWallet }}</span><span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">招行储蓄卡</span></div>
+                  </div>
+
+                  <div style="display:{{ c.accTransferBlock }}">
+                    <div style="font:600 11px/15px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:5px">对手 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">选账户或填文字，二选一</span></div>
+                    <div onClick="{{ pickCpAccount }}" data-row="{{ c.no }}" style="height:44px;padding:0 12px;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;background:{{ c.cpAccBg }};box-shadow:{{ c.cpAccRing }}"><span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif;color:{{ c.cpAccColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.cpAccLabel }}</span>{{ iconChevSm }}</div>
+                    <div style="margin:6px 0;text-align:center;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">或</div>
+                    <div onClick="{{ pickCpText }}" data-row="{{ c.no }}" style="height:44px;padding:0 12px;border-radius:12px;display:flex;align-items:center;cursor:text;background:{{ c.cpTextBg }};box-shadow:{{ c.cpTextRing }}"><span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif;color:{{ c.cpTextColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.cpTextLabel }}</span></div>
                   </div>
 
                   <div>
@@ -302,6 +315,7 @@ class Component extends DCLogic {
     selected: [1,2,3,4,5],
     openCard: 6,
     links: { 3: true, 4: true, 8: false },
+    cpMode: { 4: 'account', 8: 'none' },
     rowState: { 5:'edited', 7:'skipped' },
   };
 
@@ -309,12 +323,12 @@ class Component extends DCLogic {
     const data = [
       { no:1,  date:'09-10', dateFull:'2026-09-10', amount:'−45.00',     amountRaw:'45.00',    currency:'CNY', k:'expense',  merchant:'瑞幸咖啡',        note:'和老婆下午茶', l1:'餐饮', l2:'零食饮料', counterparty:'招行储蓄卡', flags:[] },
       { no:2,  date:'09-10', dateFull:'2026-09-10', amount:'+18,000.00', amountRaw:'18,000.00',currency:'CNY', k:'income',   merchant:'9 月工资',        note:'',             l1:'工资', l2:'基本工资', counterparty:'招行储蓄卡', flags:[] },
-      { no:3,  date:'09-09', dateFull:'2026-09-09', amount:'+199.00',    amountRaw:'199.00',   currency:'CNY', k:'refund',   merchant:'京东退款',        note:'',             l1:'消费购物', l2:'', counterparty:'招行储蓄卡', flags:[] },
-      { no:4,  date:'09-08', dateFull:'2026-09-08', amount:'3,000.00',   amountRaw:'3,000.00', currency:'CNY', k:'transfer', merchant:'招行储蓄卡 → 建行信用卡', note:'信用卡还款', l1:'', l2:'', counterparty:'招行储蓄卡 → 建行信用卡', flags:[] },
-      { no:5,  date:'09-08', dateFull:'2026-09-08', amount:'−S$12.40',   amountRaw:'12.40',    currency:'SGD', k:'expense',  merchant:'Grab 打车',       note:'去机场',       l1:'交通', l2:'打车', counterparty:'DBS Multiplier', converted:'≈ −¥66.20', flags:['review'] },
+      { no:3,  date:'09-09', dateFull:'2026-09-09', amount:'+199.00',    amountRaw:'199.00',   currency:'CNY', k:'refund',   merchant:'京东退款',        note:'',             l1:'消费购物', l2:'', counterparty:'招行储蓄卡', flags:['refundCand'] },
+      { no:4,  date:'09-08', dateFull:'2026-09-08', amount:'3,000.00',   amountRaw:'3,000.00', currency:'CNY', k:'transfer', merchant:'招行储蓄卡 → 建行信用卡', note:'信用卡还款', l1:'', l2:'', counterparty:'招行储蓄卡 → 建行信用卡', flags:['pairable'] },
+      { no:5,  date:'09-08', dateFull:'2026-09-08', amount:'−S$12.40',   amountRaw:'12.40',    currency:'SGD', k:'expense',  merchant:'Grab 打车',       note:'去机场',       l1:'交通', l2:'打车', counterparty:'招行储蓄卡', converted:'≈ −¥66.20', flags:['review'] },
       { no:6,  date:'09-07', dateFull:'2026-09-07', amount:'−128.00',    amountRaw:'128.00',   currency:'CNY', k:'expense',  merchant:'美团外卖',        note:'',             l1:'', l2:'', counterparty:'招行储蓄卡', flags:[] },
       { no:7,  date:'09-06', dateFull:'2026-09-06', amount:'−45.00',     amountRaw:'45.00',    currency:'CNY', k:'expense',  merchant:'瑞幸咖啡',        note:'',             l1:'餐饮', l2:'零食饮料', counterparty:'招行储蓄卡', flags:['duplicate'] },
-      { no:8,  date:'09-05', dateFull:'2026-09-05', amount:'5,000.00',   amountRaw:'5,000.00', currency:'CNY', k:'transfer', merchant:'对方：工资卡',    note:'单腿 · 外部转入', l1:'', l2:'', counterparty:'招行储蓄卡', flags:[] },
+      { no:8,  date:'09-05', dateFull:'2026-09-05', amount:'5,000.00',   amountRaw:'5,000.00', currency:'CNY', k:'transfer', merchant:'对方：工资卡',    note:'单腿 · 外部转入', l1:'', l2:'', counterparty:'—', flags:['pairable'] },
       { no:9,  date:'09-04', dateFull:'2026-09-04', amount:'−69.00',     amountRaw:'69.00',    currency:'CNY', k:'expense',  merchant:'ALIPAY-***2481',  note:'账单未给商户名', l1:'', l2:'', counterparty:'招行储蓄卡', flags:['review'] },
       { no:10, date:'09-03', dateFull:'2026-09-03', amount:'−1,800.00',  amountRaw:'1,800.00', currency:'CNY', k:'expense',  merchant:'房东王',          note:'9 月房租',     l1:'', l2:'', counterparty:'招行储蓄卡', flags:[] },
     ];
@@ -345,6 +359,27 @@ class Component extends DCLogic {
         linkBoxRing: on ? 'none' : 'inset 0 0 0 1.5px #C4D1C6',
       };
     };
+    const CP_ACCOUNT = { 4: '建行信用卡', 8: '选择对手账户' };
+    const CP_TEXT = { 4: '或填「对方」文字', 8: '工资卡' };
+    const cpOf = (r) => {
+      if (r.k !== 'transfer') return {
+        cpAccLabel:'—', cpAccBg:'transparent', cpAccColor:'#5F6A62', cpAccRing:'none',
+        cpTextLabel:'—', cpTextBg:'transparent', cpTextColor:'#5F6A62', cpTextRing:'none',
+      };
+      const mode = this.state.cpMode[r.no] || 'none';
+      const accOn = mode === 'account';
+      const textOn = mode === 'text';
+      return {
+        cpAccLabel: accOn ? CP_ACCOUNT[r.no] : (r.no === 8 ? '选择对手账户' : CP_ACCOUNT[r.no]),
+        cpAccBg: accOn ? '#E4EDEE' : '#F1F6F1',
+        cpAccColor: accOn ? '#2C4B5B' : (textOn ? '#A9B5AB' : '#5F6A62'),
+        cpAccRing: accOn ? 'inset 0 0 0 1.5px #3A5E70' : 'none',
+        cpTextLabel: textOn ? CP_TEXT[r.no] : '对方（文字）',
+        cpTextBg: textOn ? '#E4EDEE' : '#F1F6F1',
+        cpTextColor: textOn ? '#2C4B5B' : (accOn ? '#A9B5AB' : '#5F6A62'),
+        cpTextRing: textOn ? 'inset 0 0 0 1.5px #3A5E70' : 'inset 0 0 0 1px #DCE5DD',
+      };
+    };
     const stateOf = (r) => {
       const s = STATE[this.state.rowState[r.no] || 'pending'];
       return { stateLabel:s.label, stateBg:s.bg, stateColor:s.color };
@@ -368,8 +403,9 @@ class Component extends DCLogic {
         ...box(sel.includes(r.no)),
         ...stateOf(r),
         ...linkOf(r),
+        ...cpOf(r),
         accStaticShow: r.k === 'transfer' ? 'none' : 'block',
-        accEditShow:   r.k === 'transfer' ? 'inline-flex' : 'none',
+        accEditShow:   r.k === 'transfer' ? 'flex' : 'none',
         rowBg: this.state.rowState[r.no] === 'skipped' ? '#F7FAF7' : (un ? '#FBF9F1' : 'transparent'),
         kindIcon: svg(KIND[r.k], 12, 2.2),
         kindLabel: T[r.k].label,
@@ -396,8 +432,13 @@ class Component extends DCLogic {
         ...box(sel.includes(r.no)),
         ...stateOf(r),
         ...linkOf(r),
+        ...cpOf(r),
+        accStaticBlock: r.k === 'transfer' ? 'none' : 'block',
+        accTransferBlock: r.k === 'transfer' ? 'block' : 'none',
+        catBlockShow: r.k === 'transfer' ? 'none' : 'block',
+        catNoteShow: r.k === 'transfer' ? 'block' : 'none',
         kindLabel: T[r.k].label,
-        accountShort: r.counterparty.split(' → ')[0],
+        accountShort: r.k === 'transfer' ? '招行储蓄卡' : r.counterparty.split(' → ')[0],
         amountColor: r.k === 'transfer' ? '#16201A' : T[r.k].fg,
         converted: r.converted || '',
         convertedShow: r.converted ? 'block' : 'none',
@@ -427,8 +468,13 @@ class Component extends DCLogic {
         ...box(sel.includes(openOne.no)),
         ...stateOf(openOne),
         ...linkOf(openOne),
+        ...cpOf(openOne),
+        accStaticBlock: openOne.k === 'transfer' ? 'none' : 'block',
+        accTransferBlock: openOne.k === 'transfer' ? 'block' : 'none',
+        catBlockShow: openOne.k === 'transfer' ? 'none' : 'block',
+        catNoteShow: openOne.k === 'transfer' ? 'block' : 'none',
         kindLabel: T[openOne.k].label,
-        accountShort: openOne.counterparty.split(' → ')[0],
+        accountShort: openOne.k === 'transfer' ? '招行储蓄卡' : openOne.counterparty.split(' → ')[0],
         amountColor: T[openOne.k].fg,
         converted: '', convertedShow: 'none',
         l1Chip: '待归类', l1Bg:'#E8EDE8', l1Color:'#454F48', l1Ring:'inset 0 0 0 1.5px #A9B5AB',
@@ -453,7 +499,7 @@ class Component extends DCLogic {
       cards: cardsWithOpen,
       headers: [
         { name:'#', align:'left' }, { name:'日期', align:'left' }, { name:'金额', align:'right' },
-        { name:'币种', align:'left' }, { name:'种类', align:'left' }, { name:'交易内容', align:'left' },
+        { name:'币种', align:'left' }, { name:'种类', align:'left' }, { name:'商户', align:'left' },
         { name:'备注', align:'left' }, { name:'一级分类', align:'left' }, { name:'二级分类', align:'left' },
         { name:'账户 / 对手', align:'left' }, { name:'状态与标记', align:'left' },
       ],
@@ -483,6 +529,16 @@ class Component extends DCLogic {
         e.stopPropagation();
         const n = Number(e.currentTarget.getAttribute('data-row'));
         this.setState(s => ({ links: { ...s.links, [n]: !s.links[n] } }));
+      },
+      pickCpAccount: (e) => {
+        e.stopPropagation();
+        const n = Number(e.currentTarget.getAttribute('data-row'));
+        this.setState(s => ({ cpMode: { ...s.cpMode, [n]: s.cpMode[n] === 'account' ? 'none' : 'account' } }));
+      },
+      pickCpText: (e) => {
+        e.stopPropagation();
+        const n = Number(e.currentTarget.getAttribute('data-row'));
+        this.setState(s => ({ cpMode: { ...s.cpMode, [n]: s.cpMode[n] === 'text' ? 'none' : 'text' } }));
       },
       cycleState: (e) => {
         e.stopPropagation();

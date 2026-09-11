@@ -493,7 +493,7 @@ a:hover{color:#1F3527}
   <div style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
     <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">D</span>
     <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">一本账都没有</span>
-    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">刚注册完，还没有任何账本 —— 只有两个入口</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">退出了最后一本账之后 —— 只有两个入口</span>
   </div>
 
   <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
@@ -509,7 +509,7 @@ a:hover{color:#1F3527}
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 24px">
           <div style="padding:0 4px 20px">
             <div style="font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">先有一本账</div>
-            <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">所有交易、账户和统计都挂在账本下面。自己新建一本，或者用别人给的邀请码加入他的账本。</div>
+            <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">你退出了最后一本账。所有交易、账户和统计都挂在账本下面，重新新建一本，或者用别人给的邀请码加入他的账本。</div>
           </div>
 
           <div style="display:grid;gap:12px">
@@ -560,7 +560,7 @@ a:hover{color:#1F3527}
           <div style="width:760px;max-width:100%">
             <div style="text-align:center">
               <div style="font:700 30px/38px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">先有一本账</div>
-              <div style="margin-top:10px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">所有交易、账户和统计都挂在账本下面。自己新建一本，或者用别人给的邀请码加入他的账本。</div>
+              <div style="margin-top:10px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">你退出了最后一本账。所有交易、账户和统计都挂在账本下面，重新新建一本，或者用别人给的邀请码加入他的账本。</div>
             </div>
 
             <div style="margin-top:24px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">
@@ -631,7 +631,7 @@ class Component extends DCLogic {
       ],
       ghostBatches: [{ op:'1' }, { op:'.5' }],
       headers: [
-        { name:'日期', align:'left' }, { name:'种类', align:'left' }, { name:'交易内容', align:'left' },
+        { name:'日期', align:'left' }, { name:'种类', align:'left' }, { name:'商户', align:'left' },
         { name:'分类', align:'left' }, { name:'账户', align:'left' }, { name:'备注', align:'left' },
         { name:'金额', align:'right' },
       ],

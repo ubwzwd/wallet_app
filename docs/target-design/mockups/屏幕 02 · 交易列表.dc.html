@@ -87,7 +87,25 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </sc-for>
 
-        <div style="height:8px"></div>
+        <div style="padding:0 16px 14px">
+          <div style="background:#FFFFFF;border-radius:18px;padding:12px 14px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;gap:8px">
+            <span style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+              <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">支出</span>
+              <span style="font:500 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#AC4335">111.20</span>
+            </span>
+            <span style="width:1px;background:#EDF2ED;flex:none"></span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+              <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">收入</span>
+              <span style="font:500 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#0D6A66">18,000.00</span>
+            </span>
+            <span style="width:1px;background:#EDF2ED;flex:none"></span>
+            <span style="flex:1.15;display:flex;flex-direction:column;gap:2px;min-width:0">
+              <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净额 · 不含转账</span>
+              <span style="font:500 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#16201A">+18,087.80</span>
+            </span>
+          </div>
+          <div style="margin-top:6px;padding:0 4px;font:400 11px/16px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">退款 199.00 计入净额；转账 8,000.00 不计。</div>
+        </div>
         <div style="background:#FFFFFF;display:flex;justify-content:space-around;align-items:flex-end;padding:8px 0 14px;box-shadow:0 -2px 10px rgba(28,50,36,.06)">
           <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabHome }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">首页</span></span>
           <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#2F4A38;min-width:56px;min-height:44px;justify-content:center">{{ tabList }}<span style="font:600 10px/13px 'Figtree','PingFang SC',sans-serif">交易</span></span>
@@ -96,7 +114,7 @@ input{font-family:inherit;box-sizing:border-box}
           <span style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#5F6A62;min-width:56px;min-height:44px;justify-content:center">{{ tabMe }}<span style="font:500 10px/13px 'Figtree','PingFang SC',sans-serif">我的</span></span>
         </div>
       </div>
-      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">行内三行：商户 / 分类 / 备注。跨币种把折算值放在金额下方第二行。筛选按钮右上角红点是已选条件数。</div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">行内三行：商户 / 分类 / 备注。跨币种把折算值放在金额下方第二行。筛选按钮右上角红点是已选条件数。底部汇总条和宽屏一致：支出、收入、净额（净额含退款、不含转账）。</div>
     </div>
 
     <!-- 375 筛选抽屉 -->
@@ -302,7 +320,7 @@ input{font-family:inherit;box-sizing:border-box}
             <div style="display:grid;grid-template-columns:104px 92px minmax(0,1.25fr) minmax(0,1fr) 150px minmax(0,1.1fr) 168px;gap:14px;padding:12px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">日期</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">种类</div>
-              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">交易内容</div>
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">商户</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">分类</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">账户</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">备注</div>
@@ -326,7 +344,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </div>
       </div>
-      <div style="margin-top:12px;width:900px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏用真表格：日期、种类、交易内容、分类、账户、备注、金额七列，金额右对齐等宽。单腿转账在「交易内容」列写「对方：工资卡」，账户列只有一个账户；两条腿的转账账户列写「招行 → 建行」。跨币种行金额下方给折算值。</div>
+      <div style="margin-top:12px;width:900px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏用真表格：日期、种类、商户、分类、账户、备注、金额七列，金额右对齐等宽。单腿转账在「交易内容」列写「对方：工资卡」，账户列只有一个账户；两条腿的转账账户列写「招行 → 建行」。跨币种行金额下方给折算值。</div>
     </div>
 
   </div>

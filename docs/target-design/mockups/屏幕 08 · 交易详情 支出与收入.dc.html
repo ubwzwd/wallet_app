@@ -352,7 +352,7 @@ const DATA = {
       { k:'记录人', v:'我 · owner',      font:SANS },
     ],
     log:[
-      { title:'手动录入 · 我', meta:'09-08 07:12 · 客户端 iOS', dot:'#2F4A38' },
+      { title:'手动录入 · 我', meta:'09-08 07:12', dot:'#2F4A38' },
       { title:'补了备注「去机场」· 我', meta:'09-08 07:14', dot:'#C4D1C6' },
     ],
     logCount:'2 条',
@@ -454,7 +454,7 @@ class Component extends DCLogic {
       logRotate: this.state.logOpen ? 'rotate(180deg)' : 'none',
       actionsShow: this.state.actionsOpen ? 'block' : 'none',
       iconBack:   svg([P('M12 4.5 6.5 10l5.5 5.5')], 20, 2),
-      iconShare:  svg([P('M10 13.5V3.5M6.5 7 10 3.5 13.5 7'), P('M4 12v4.5h12V12')], 20),
+      iconShare:  svg([P('M4.5 10h.01M10 10h.01M15.5 10h.01')], 20, 2.4),
       iconChevSm: svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
       iconChevDown: svg([P('M5.5 8 10 12.5 14.5 8')], 16, 2),
       iconClock:  svg([C(10,10,7.25), P('M10 6v4.25l2.75 1.75')], 17),

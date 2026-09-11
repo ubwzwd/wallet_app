@@ -48,9 +48,9 @@ input{font-family:inherit;box-sizing:border-box}
         <div style="padding:0 16px 12px">
           <div style="background:#FFFFFF;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
             <div style="font:500 12px/16px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产 · 折算 CNY</div>
-            <div style="margin-top:2px;font:450 30px/36px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em">¥33,842.10</div>
+            <div style="margin-top:2px;font:450 30px/36px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em">¥34,627.10</div>
             <div style="margin-top:8px;display:flex;gap:14px;font:450 12px/17px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">
-              <span>资产 37,057.10</span><span>负债 3,215.00</span>
+              <span>资产 37,842.10</span><span>负债 3,215.00</span>
             </div>
           </div>
         </div>
@@ -137,7 +137,7 @@ input{font-family:inherit;box-sizing:border-box}
           <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
             <div>
               <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">账户</span>
-              <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">4 个在用 · 2 个已归档 · 净资产 ¥33,842.10</span>
+              <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">4 个在用 · 2 个已归档 · 净资产 ¥34,627.10</span>
             </div>
             <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconPlusSm }}新建账户</button>
           </div>
@@ -170,7 +170,7 @@ input{font-family:inherit;box-sizing:border-box}
               <div style="font:600 14px/20px 'Figtree','PingFang SC',sans-serif">合计 · 在用</div>
               <div></div><div></div>
               <div style="text-align:right;font:450 14px/20px 'IBM Plex Mono',monospace;color:#5F6A62">混合币种</div>
-              <div style="text-align:right;font:500 17px/23px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">33,842.10</div>
+              <div style="text-align:right;font:500 17px/23px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">34,627.10</div>
               <div></div>
             </div>
           </div>
@@ -360,7 +360,7 @@ input{font-family:inherit;box-sizing:border-box}
             </div>
 
             <div style="padding:14px 16px;border-radius:14px;background:#F1F6F1;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">
-              期初余额记在账户上，不是一笔交易。它不出现在交易列表里，也不计入收支，只让账户余额从这个数开始 —— 之后余额 = 期初 ± 所有交易。
+              期初余额记在账户上，不生成任何交易。它不出现在交易列表里，也不计入收支，只让账户余额从这个数开始 —— 之后余额 = 期初 ± 所有交易。
             </div>
           </div>
 
@@ -370,7 +370,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </div>
       </div>
-      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏是 Dialog（620px），类型摊成一行四个方块。底部那段灰色说明解释期初余额会生成一条不可编辑的「建账」记录 —— 否则用户会疑惑余额从哪来、为什么改不了。</div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏是 Dialog（620px），类型摊成一行四个方块。底部那段灰色说明写清期初余额记在账户上、不生成任何交易 —— 否则用户会疑惑余额从哪来、为什么在交易列表里找不到。</div>
     </div>
   </div>
 </div></x-dc>

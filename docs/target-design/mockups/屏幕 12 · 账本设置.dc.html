@@ -83,7 +83,7 @@ input{font-family:inherit;box-sizing:border-box}
 
             <div style="display:{{ inviteIdle }};padding:12px 14px">
               <button onClick="{{ genInvite }}" style="width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconInvite }}生成邀请码</button>
-              <div style="margin-top:8px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">码有效 10 分钟，只能用一次。对方在自己的 App 里输码加入。</div>
+              <div style="margin-top:8px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">码有效 10 分钟，只能用一次。让对方在他的账本列表页输码加入。</div>
             </div>
 
             <div style="display:{{ inviteActive }};padding:12px 14px">
@@ -124,12 +124,8 @@ input{font-family:inherit;box-sizing:border-box}
                 <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
                 <span style="flex:1;min-width:0">
                   <span style="display:block;font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">改基准币种会重算全部历史</span>
-                  <span style="display:block;margin-top:4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#6B540D">历史交易将按各自发生日的汇率重新折算，结果可复现。原币金额不动。</span>
+                  <span style="display:block;margin-top:4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#6B540D">将按各自发生日的汇率重新折算全部 328 笔交易，结果可复现。</span>
                 </span>
-              </div>
-              <div style="margin-top:12px;display:grid;gap:6px;font:450 12px/18px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">
-                <div style="display:flex;justify-content:space-between"><span>净资产</span><span>¥33,842.10 → S$5,674.20</span></div>
-                <div style="display:flex;justify-content:space-between"><span>9 月支出</span><span>6,842.50 → 1,147.30</span></div>
               </div>
               <div style="margin-top:12px;display:flex;gap:8px">
                 <button onClick="{{ toggleCurrency }}" style="flex:1;height:44px;border:none;border-radius:12px;background:#FFFFFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer">先不改</button>
@@ -186,10 +182,9 @@ input{font-family:inherit;box-sizing:border-box}
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
-            <div style="height:1px;background:#E1EAE2;margin:8px 12px"></div>
-            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42">{{ iconMembers }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">成员</span></div>
-            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ iconSettings }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">账本设置</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38">{{ tabMe }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">我的</span></div>
           </div>
+          <button style="height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconPlusSm }}记一笔</button>
           <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px">
             <span style="width:32px;height:32px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;flex:none">W</span>
             <span style="flex:1;min-width:0"><span style="display:block;font:500 14px/19px 'Figtree','PingFang SC',sans-serif">我</span><span style="display:block;font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">owner</span></span>
@@ -236,7 +231,7 @@ input{font-family:inherit;box-sizing:border-box}
                 </sc-for>
 
                 <div style="display:{{ inviteIdle }};padding:16px 20px;align-items:center;justify-content:space-between;gap:16px">
-                  <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">邀请码有效 10 分钟，只能用一次。对方在自己的 App 里输码加入。</span>
+                  <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">邀请码有效 10 分钟，只能用一次。让对方在他的账本列表页输码加入。</span>
                   <button onClick="{{ genInvite }}" style="height:44px;padding:0 18px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px;flex:none" style-hover="background:#253A2C">{{ iconInvite }}生成邀请码</button>
                 </div>
 
@@ -277,25 +272,8 @@ input{font-family:inherit;box-sizing:border-box}
                     <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
                     <span style="flex:1;min-width:0">
                       <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">改基准币种会重算全部历史</span>
-                      <span style="display:block;margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">历史交易将按各自发生日的汇率重新折算，结果可复现。原币金额不变，但历史折算值、趋势图、分类统计都会跟着变；改回来也能算回同样的数。</span>
+                      <span style="display:block;margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">将按各自发生日的汇率重新折算全部 328 笔交易，结果可复现。</span>
                     </span>
-                  </div>
-                  <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
-                    <div style="padding:12px 14px;border-radius:12px;background:#FFFFFF">
-                      <div style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">净资产</div>
-                      <div style="margin-top:2px;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">¥33,842.10</div>
-                      <div style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">→ S$5,674.20</div>
-                    </div>
-                    <div style="padding:12px 14px;border-radius:12px;background:#FFFFFF">
-                      <div style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">9 月支出</div>
-                      <div style="margin-top:2px;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">6,842.50</div>
-                      <div style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">→ 1,147.30</div>
-                    </div>
-                    <div style="padding:12px 14px;border-radius:12px;background:#FFFFFF">
-                      <div style="font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">受影响交易</div>
-                      <div style="margin-top:2px;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">148 笔</div>
-                      <div style="font:400 12px/21px 'Figtree','PingFang SC',sans-serif;color:#6B540D">共 328 笔中</div>
-                    </div>
                   </div>
                   <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:10px">
                     <button onClick="{{ toggleCurrency }}" style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#FFFFFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer">先不改</button>
@@ -458,7 +436,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
 
           <div style="margin-top:18px;padding:14px 24px;background:#F7FAF7;display:flex;align-items:center;justify-content:space-between;gap:14px">
-            <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">想留个底就先去「导出 CSV」。</span>
+            <span></span>
             <span style="display:flex;gap:10px;flex:none">
               <button onClick="{{ closeDelete }}" style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">取消</button>
               <button style="height:44px;padding:0 20px;border:none;border-radius:12px;background:{{ delBtnBg }};color:{{ delBtnColor }};font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:{{ delBtnCursor }}">永久删除</button>
@@ -466,7 +444,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </div>
       </div>
-      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">底部那句「想留个底就先去导出 CSV」是刻意放的 —— 删除对话框里给一条退路，比事后道歉便宜。</div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">删除要手抄账本名才能点亮主按钮 —— 这一步的代价故意做得比其他操作高。</div>
     </div>
   </div>
 </div></x-dc>
@@ -524,7 +502,8 @@ class Component extends DCLogic {
       tabHome:      svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),
       tabList:      svg([P('M3 5.5h14M3 10h14M3 14.5h9')], 22),
       tabImport:    svg([P('M10 14.5V3.5M5.5 8 10 3.5 14.5 8'), P('M3.5 16.5h13')], 22),
-      iconMembers:  svg([C(7.5,7.5,3), P('M2.5 16.5c.75-2.6 2.7-4 5-4s4.25 1.4 5 4'), P('M13.5 5.25a3 3 0 0 1 0 4.5M15 16.5c-.3-1.1-.75-2-1.35-2.7')], 22),
+      tabMe:        svg([C(10,7,3.25), P('M3.75 17c.9-3.1 3.3-4.75 6.25-4.75S15.35 13.9 16.25 17')], 22),
+      iconPlusSm:   svg([P('M10 3.5v13M3.5 10h13')], 18, 2.2),
       iconSettings: svg([C(10,10,2.75), P('M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4')], 22),
     };
   }

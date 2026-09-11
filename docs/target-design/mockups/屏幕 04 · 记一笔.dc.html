@@ -128,7 +128,7 @@ input{font-family:inherit;box-sizing:border-box}
         <div style="padding:0 16px 12px">
           <div style="background:#FFFFFF;border-radius:18px;padding:14px 16px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:12px">
             <div>
-              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">交易内容</div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">商户</div>
               <input type="text" placeholder="如「瑞幸咖啡」" style="width:100%;height:48px;padding:0 14px;border:1.5px solid transparent;border-radius:13px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
               <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
                 <span style="font:400 11px/32px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">最近</span>
@@ -223,7 +223,7 @@ input{font-family:inherit;box-sizing:border-box}
 
                 <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:20px">
                   <div>
-                    <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">交易内容</div>
+                    <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">商户</div>
                     <input type="text" placeholder="如「瑞幸咖啡」" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
                   </div>
                   <div>
@@ -328,11 +328,11 @@ class Component extends DCLogic {
 
   renderVals() {
     const cats = [
-      { name:'餐饮',     rule:'外食、外卖、买菜做饭、零食饮料',   subs:['正餐','外卖','零食饮料','买菜'] },
-      { name:'居住',     rule:'房租房贷、物业水电燃气、家庭维修', subs:['房租','水电燃气','物业','维修'] },
-      { name:'生活购物', rule:'日用品、衣物、家电数码；退货记退款', subs:['日用品','衣物','家电数码'] },
-      { name:'交通',     rule:'公共交通、打车、加油停车、机票火车', subs:['公共交通','打车','加油停车','机票火车'] },
-      { name:'娱乐',     rule:'订阅、旅行、门票、爱好花销',       subs:['订阅','旅行','门票','爱好'] },
+      { name:'餐饮',     rule:'日常吃喝：堂食、外卖、咖啡奶茶、零食。旅途中的吃喝归旅游', subs:['早餐','午餐','晚餐','夜宵','零食饮料'] },
+      { name:'居住',     rule:'住的固定大头：房租、房贷。水电物业归固定支出', subs:['房租','房贷'] },
+      { name:'生活购物', rule:'消耗品和家里的日常运转。判据：用完就没了', subs:['买菜','洗护清洁','厨房用品','日用杂货'] },
+      { name:'交通',     rule:'日常出行：公交地铁、打车、加油、停车、火车飞机。旅游期间的交通归旅游', subs:['公交地铁','打车','加油','停车','火车','飞机'] },
+      { name:'消费购物', rule:'耐用品和一次性大件。判据：买一次用几年', subs:['数码','家电','家具','其他物件'] },
     ];
     const k = this.state.kind;
     const isTransfer = k === 'transfer';

@@ -1,6 +1,6 @@
 # 设计稿（来自 Claude Design）
 
-2026-09-10 从 Claude Design 项目「设计方案反馈」整体导出，未做修改；2026-09-11 按 [`CLAUDE-DESIGN-CHANGES.md`](./CLAUDE-DESIGN-CHANGES.md) 在 Claude Design 里修改后再次整体导出并覆盖（屏幕 01–03、05–15 更新，新增屏幕 17；token 与其余画板未变）。文件是 Claude Design 的画板格式（`.dc.html`，配套 `support.js` 供本地打开）。
+2026-09-10 从 Claude Design 项目「设计方案反馈」整体导出，未做修改；2026-09-11 按 [`CLAUDE-DESIGN-CHANGES.md`](./CLAUDE-DESIGN-CHANGES.md) 在 Claude Design 里修改后再次整体导出并覆盖（屏幕 01–03、05–15 更新，新增屏幕 17；token 与其余画板未变）；同日按其 §4 第二轮提示词再改一次并第三次导出覆盖（屏幕 02–12、15、16、17 更新；01、13、14 与 token 未变）。文件是 Claude Design 的画板格式（`.dc.html`，配套 `support.js` 供本地打开）。
 
 **选定方向**：`04 柔和圆润 · 深化` → `Design Tokens v2 · 定稿`：Figtree（中文走系统字）+ IBM Plex Mono 数字，C2 密度（行高 56、圆角 18），N5 淡鼠尾草底，S4 交易色（砖红 / 深青 / 橄榄金 / 板岩蓝），X1 森林绿强调。取代了 04 章 §6 里的方向 A/B/C（决策 §14.45）。
 
