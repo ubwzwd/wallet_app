@@ -17,7 +17,17 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    base_currency: Mapped[str] = mapped_column(CHAR(3), nullable=False, default="USD")
+    # The comment is part of the schema: migration b1f3c2a10d46 writes it, so
+    # the model has to carry it or compare_metadata reports drift (§5.6).
+    base_currency: Mapped[str] = mapped_column(
+        CHAR(3),
+        nullable=False,
+        default="USD",
+        comment=(
+            "Default base currency for newly created ledgers "
+            "(see ledgers.base_currency)"
+        ),
+    )
     language: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
