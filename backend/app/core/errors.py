@@ -92,7 +92,7 @@ def _format_validation_error(exc: RequestValidationError) -> str:
         loc = ".".join(str(part) for part in error.get("loc", ()))
         msg = error.get("msg", "")
         parts.append(f"{loc}: {msg}" if loc else msg)
-    return "; ".join(parts)
+    return "; ".join(parts) or "Request validation failed"
 
 
 async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
@@ -109,6 +109,7 @@ async def _http_exception_handler(
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": detail, "code": _http_status_to_code(exc.status_code)},
+        headers=getattr(exc, "headers", None),
     )
 
 
@@ -116,7 +117,7 @@ async def _validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         content={
             "detail": _format_validation_error(exc),
             "code": ErrorCode.VALIDATION_ERROR,

@@ -20,6 +20,34 @@ def _build_app() -> FastAPI:
 
         raise HTTPException(status_code=404, detail="Ledger not found")
 
+    @app.get("/boom/http-exception-headers")
+    def boom_http_exception_headers():
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    @app.get("/boom/unauthorized")
+    def boom_unauthorized():
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    @app.get("/boom/forbidden")
+    def boom_forbidden():
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    @app.get("/boom/bad-gateway")
+    def boom_bad_gateway():
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=502, detail="Upstream failed")
+
     @app.post("/boom/validation")
     def boom_validation(amount: int):
         return {"amount": amount}
@@ -48,6 +76,34 @@ def test_http_exception_maps_to_not_found_code():
     body = resp.json()
     assert body["detail"] == "Ledger not found"
     assert body["code"] == "not_found"
+
+
+def test_http_exception_headers_pass_through():
+    """A header set on the HTTPException (e.g. WWW-Authenticate, Retry-After)
+    must survive through the unified handler, not just the code/detail."""
+    resp = client.get("/boom/http-exception-headers")
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["code"] == "unauthorized"
+    assert resp.headers["www-authenticate"] == "Bearer"
+
+
+def test_http_status_to_code_unauthorized():
+    resp = client.get("/boom/unauthorized")
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "unauthorized"
+
+
+def test_http_status_to_code_forbidden():
+    resp = client.get("/boom/forbidden")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "forbidden"
+
+
+def test_http_status_to_code_server_error():
+    resp = client.get("/boom/bad-gateway")
+    assert resp.status_code == 502
+    assert resp.json()["code"] == "internal_error"
 
 
 def test_validation_error_shape():
