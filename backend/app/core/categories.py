@@ -7,7 +7,7 @@ and a `CATEGORY_VERSION` bump (decision §1.3, §14.21, §14.30).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 # Content version of the category table (decision §14.30). Bump this whenever
@@ -25,7 +25,7 @@ class Category:
     # Only present on l1 categories; always None on l2 (decision §14.21).
     desc_zh: str | None = None
     desc_en: str | None = None
-    children: tuple["Category", ...] = field(default_factory=tuple)
+    children: tuple["Category", ...] = ()
 
 
 def _l2(code: str, name_zh: str, name_en: str) -> Category:
@@ -457,8 +457,10 @@ def render_skill_categories(lang: str = "zh") -> str:
     """
     if lang == "zh":
         expense_title, income_title = "支出：", "收入："
-    else:
+    elif lang == "en":
         expense_title, income_title = "Expense:", "Income:"
+    else:
+        raise ValueError(f"unsupported lang: {lang}")
 
     expense_block = _render_section(expense_title, EXPENSE_CATEGORIES, lang)
     income_block = _render_section(income_title, INCOME_CATEGORIES, lang)
