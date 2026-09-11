@@ -28,7 +28,12 @@ Two rules this module had to pin down, since the docs leave them to it:
 * **Throttling.** The one hour throttle (decision §14.1) only suppresses a
   request when the pair already has a cached row to serve — 02-database.md
   §6.8 words it as "库里有，但……"; an empty cache always retries, so one
-  transient upstream blip cannot pin a pair to 503 for an hour.
+  transient upstream blip cannot pin a pair to 503 for an hour. Inside a single
+  ``latest_rates`` call that is not enough: a pair with no cached row would be
+  asked again one by one after the batch call failed, so ``latest_rates`` marks
+  the pairs it already asked for and the per symbol resolution skips them. That
+  keeps §5.46's "0 or 1 upstream call" without touching the cross request
+  throttle semantics.
 """
 import datetime as dt
 import time
@@ -152,12 +157,25 @@ def latest_rate(db: Session, currency: str, to_currency: str) -> tuple[Decimal, 
     Uses the newest cached row; refreshes it from upstream when it is more than
     ``FX_STALE_DAYS`` old and the pair was not fetched within the last hour.
     """
-    base, symbol = currency.upper(), to_currency.upper()
+    return _latest_rate(db, currency.upper(), to_currency.upper(), frozenset())
+
+
+def _latest_rate(
+    db: Session, base: str, symbol: str, attempted: frozenset[str] | set[str]
+) -> tuple[Decimal, dt.date]:
+    """``latest_rate`` with the symbols upstream was already asked for this call.
+
+    ``attempted`` holds the symbols a caller (``latest_rates``) already sent to
+    ``/latest`` in this very call — successfully or not. They are never asked
+    again here, so one request never produces two upstream calls for the same
+    pair (§5.46). It is per call state only: the next request starts empty and
+    the cross request rule stays exactly the one hour throttle of §6.2/§14.1.
+    """
     if base == symbol:
         return Decimal("1"), _today()
 
     row = _cached_latest(db, base, symbol)
-    if not _is_fresh(row) and not _throttled(base, symbol, row):
+    if not _is_fresh(row) and symbol not in attempted and not _throttled(base, symbol, row):
         try:
             _fetch_latest(db, base, [symbol])
         except FxUpstreamError:
@@ -190,16 +208,18 @@ def latest_rates(
         row = _cached_latest(db, base, code)
         if not _is_fresh(row) and not _throttled(base, code, row):
             stale.append(code)
+    attempted: frozenset[str] = frozenset()
     if stale:
+        attempted = frozenset(stale)    # asked now; do not ask again below
         try:
             _fetch_latest(db, base, stale)
         except FxUpstreamError:
-            pass  # latest_rate below decides between a stale row and 503
+            pass  # the loop below decides between a stale row and 503
 
     rates: dict[str, Decimal] = {}
     days: list[dt.date] = []
     for symbol in symbols:
-        rate, rate_date = latest_rate(db, base, symbol)
+        rate, rate_date = _latest_rate(db, base, symbol, attempted)
         rates[symbol] = quantize_rate(rate)     # §5.46 renders 8 decimals
         if symbol != base:
             days.append(rate_date)
