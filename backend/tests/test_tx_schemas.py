@@ -125,6 +125,13 @@ def test_source_create_opening_balance_defaults_zero_and_quantizes():
     assert json.loads(src2.model_dump_json())["opening_balance"] == "-2300.0000"
 
 
+def test_source_create_opening_balance_out_of_precision_is_422_not_500():
+    """Same ``decimal.InvalidOperation`` guard as ``TransactionCreate.amount``
+    (the quantize helper is shared, imported from ``app.schemas.transaction``)."""
+    with pytest.raises(ValidationError):
+        SourceCreate(name="x", type="cash", default_currency="cny", opening_balance="1e40")
+
+
 def test_source_patch_requires_updated_at():
     with pytest.raises(ValidationError):
         SourcePatch(name="new name")
@@ -201,6 +208,23 @@ def test_transaction_create_amount_rejects_zero():
             source_id=UID(),
             kind="expense",
             amount=Decimal("0"),
+            currency="EUR",
+            occurred_at=dt.date.today(),
+            category_l1="groceries",
+        )
+
+
+def test_transaction_create_amount_out_of_precision_is_422_not_500():
+    """A finite but huge amount (``1e40``) needs more digits than the default
+    ``decimal`` context precision (28) to quantize, which raises
+    ``decimal.InvalidOperation`` from inside the ``AfterValidator``. That must
+    surface as a pydantic ``ValidationError`` (422), never an uncaught
+    exception (which would 500 through FastAPI)."""
+    with pytest.raises(ValidationError):
+        TransactionCreate(
+            source_id=UID(),
+            kind="expense",
+            amount=Decimal("1e40"),
             currency="EUR",
             occurred_at=dt.date.today(),
             category_l1="groceries",
@@ -441,6 +465,28 @@ def test_pair_ref_renames_in_field_in_json():
     assert data["in"]["currency"] == "CNY"
 
 
+def test_pair_ref_round_trips_through_its_own_alias_dump():
+    """The ``in`` rename is a field alias, not a wrapping serializer, so the
+    model must be able to re-validate its own ``by_alias`` dump (and a plain
+    ``model_dump()``/``model_dump_json()``, since ``serialize_by_alias`` makes
+    the alias the default) — an endpoint returning a hand-built dict with key
+    ``"in"`` must not 500 with a ``ResponseValidationError``."""
+    ref = PairRef(
+        pair_id=UID(),
+        out=PairLeg(transaction_id=UID(), source_id=UID(), amount=Decimal("-100"), currency="USD"),
+        in_=PairLeg(transaction_id=UID(), source_id=UID(), amount=Decimal("720"), currency="CNY"),
+    )
+    assert "in" in ref.model_dump()
+    round_tripped = PairRef.model_validate(ref.model_dump(by_alias=True))
+    assert round_tripped == ref
+    # A plain dict with the wire key also validates (service code building a
+    # response body by hand, not just from another PairRef instance).
+    from_dict = PairRef.model_validate(
+        {"pair_id": ref.pair_id, "out": ref.out.model_dump(), "in": ref.in_.model_dump()}
+    )
+    assert from_dict == ref
+
+
 def test_event_item_event_enum():
     now = dt.datetime(2026, 9, 1, 18, 20, 0)
     EventItem(
@@ -651,3 +697,9 @@ def test_trend_response_has_no_income_or_net_fields():
     assert set(data.keys()) == {"base_currency", "months", "rate_missing_count"}
     assert "income" not in data["months"][0]
     assert data["months"][0]["expense"] == "8421.6600"
+
+
+def test_month_expense_amount_out_of_precision_is_422_not_500():
+    """Same shared ``Amount`` quantize guard as the transaction/source tests above."""
+    with pytest.raises(ValidationError):
+        MonthExpense(month="2026-09", expense=Decimal("1e40"))

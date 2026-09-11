@@ -1,39 +1,27 @@
 """Finance source (account) schemas (03-backend-api.md §5.20-§5.24).
 
 Money fields are ``Decimal`` quantized to 4 decimal places, exchange rates to
-8 (§4.5) — the ``Amount`` / ``Rate`` annotated types below do the quantizing
-so the JSON output always has the right number of digits regardless of how
-many decimals the caller happened to pass in (pydantic v2 serializes
-``Decimal`` to a string that mirrors its own exponent, so quantizing on the
-way in is what fixes the digit count on the way out).
+8 (§4.5) — the ``Amount`` / ``Rate`` annotated types (imported from
+``app.schemas.transaction``, the one place they are defined — see that
+module's docstring) do the quantizing so the JSON output always has the
+right number of digits regardless of how many decimals the caller happened
+to pass in (pydantic v2 serializes ``Decimal`` to a string that mirrors its
+own exponent, so quantizing on the way in is what fixes the digit count on
+the way out).
 """
 from __future__ import annotations
 
 import datetime as dt
 import uuid
-from decimal import ROUND_HALF_UP, Decimal
-from typing import Annotated, Literal
+from decimal import Decimal
+from typing import Literal
 
-from pydantic import AfterValidator, Field, field_validator
+from pydantic import Field, field_validator
 
 from app.schemas.common import CURRENCY_PATTERN, ApiModel, ApiRequestModel, UtcDatetime
-
-AMOUNT_QUANTUM = Decimal("0.0001")
-RATE_QUANTUM = Decimal("0.00000001")
+from app.schemas.transaction import Amount, Rate
 
 SourceType = Literal["checking", "credit", "cash", "other"]
-
-
-def _quantize_amount(value: Decimal) -> Decimal:
-    return value.quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
-
-
-def _quantize_rate(value: Decimal) -> Decimal:
-    return value.quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
-
-
-Amount = Annotated[Decimal, AfterValidator(_quantize_amount)]
-Rate = Annotated[Decimal, AfterValidator(_quantize_rate)]
 
 
 class SourceCreate(ApiRequestModel):

@@ -14,13 +14,17 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, Field, field_validator, model_serializer
+from pydantic import AfterValidator, ConfigDict, Field, field_validator, model_serializer
 
 from app.schemas.common import CURRENCY_PATTERN, ApiModel, ApiRequestModel, UtcDatetime
 
+# Defined once here (rather than in app/schemas/common.py, which is out of
+# scope for this task) and imported by finance_source.py / stats.py so the
+# quantizing behaviour — including the ``InvalidOperation`` guard below —
+# only has to be fixed in one place.
 AMOUNT_QUANTUM = Decimal("0.0001")
 RATE_QUANTUM = Decimal("0.00000001")
 
@@ -33,11 +37,25 @@ EventName = Literal[
 
 
 def _quantize_amount(value: Decimal) -> Decimal:
-    return value.quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
+    """Quantize to 4 dp; an out-of-precision value (e.g. ``1e40``) is a 422, not a 500.
+
+    ``Decimal.quantize`` raises ``decimal.InvalidOperation`` when the result
+    would need more digits than the current arithmetic context's precision
+    (28 by default). Pydantic only turns ``ValueError``/``AssertionError``
+    into a validation error, so that has to be caught and re-raised here.
+    """
+    try:
+        return value.quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("amount out of range") from exc
 
 
 def _quantize_rate(value: Decimal) -> Decimal:
-    return value.quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
+    """Quantize to 8 dp; see ``_quantize_amount`` for why ``InvalidOperation`` is caught."""
+    try:
+        return value.quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("rate out of range") from exc
 
 
 def _require_nonzero(value: Decimal) -> Decimal:
@@ -177,14 +195,16 @@ class TransactionPatch(ApiRequestModel):
 
 
 class _OptionalRefundFields(ApiModel):
-    """Mixin: ``refunded_total`` / ``refundable`` excluded from output when unset.
+    """Mixin: ``refunded_total`` / ``refundable`` dropped from output when ``None``.
 
     Both only apply to ``kind == 'expense'`` rows (§5.25); on every other kind
     they are left ``None`` and must not appear in the JSON body at all, rather
     than showing up as ``null`` next to fields that are genuinely nullable
-    (``category_l2``, ``note``, ...). A wrapping ``model_serializer`` is the
-    field-level way to do that: it only pops these two keys, so other
-    ``None``-valued fields still serialize as ``null`` normally.
+    (``category_l2``, ``note``, ...). §5.25 never needs to distinguish "unset"
+    from "explicitly null" for these two fields, so a plain ``is None`` check
+    is enough. A wrapping ``model_serializer`` is the field-level way to do
+    that: it only pops these two keys when ``None``, so other ``None``-valued
+    fields still serialize as ``null`` normally.
     """
 
     refunded_total: Amount | None = None
@@ -268,17 +288,20 @@ class PairLeg(ApiModel):
 class _WithInLeg(ApiModel):
     """Base for response models with a leg named ``in`` in JSON.
 
-    ``in`` is a Python keyword, so the attribute is ``in_`` and this wrapping
-    serializer renames it back to ``in`` on the way out (subclasses only add
-    fields; the rename logic lives here once).
+    ``in`` is a Python keyword, so the attribute is ``in_``; a field alias
+    (rather than a wrapping serializer) renames it on the way out *and* keeps
+    the model able to re-validate its own dump — ``model_dump(by_alias=True)``
+    round-trips through ``model_validate``, and the generated OpenAPI schema
+    documents the real wire name ``in`` instead of ``in_``.
+    ``populate_by_name=True`` lets service code keep constructing these with
+    the ``in_=`` keyword, and ``serialize_by_alias=True`` makes the alias the
+    *default* serialization key so plain ``model_dump()``/``model_dump_json()``
+    calls (not just FastAPI's own alias-aware response encoding) emit ``in``.
     """
 
-    @model_serializer(mode="wrap")
-    def _rename_in(self, handler):  # type: ignore[no-untyped-def]
-        data = handler(self)
-        if "in_" in data:
-            data["in"] = data.pop("in_")
-        return data
+    model_config = ConfigDict(
+        from_attributes=True, populate_by_name=True, serialize_by_alias=True
+    )
 
 
 class PairRef(_WithInLeg):
@@ -286,7 +309,7 @@ class PairRef(_WithInLeg):
 
     pair_id: uuid.UUID
     out: PairLeg
-    in_: PairLeg
+    in_: PairLeg = Field(..., alias="in")
 
 
 class EventItem(ApiModel):
@@ -427,7 +450,7 @@ class TransferResponse(_WithInLeg):
     subtype: TransferSubtype
     note: str | None
     out: TransferLeg
-    in_: TransferLeg
+    in_: TransferLeg = Field(..., alias="in")
     updated_at: UtcDatetime
 
 
