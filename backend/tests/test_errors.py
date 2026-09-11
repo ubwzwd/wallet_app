@@ -1,0 +1,83 @@
+"""Tests for the unified error body and exception handlers (03-backend-api.md §4.1)."""
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.core.errors import ApiError, ErrorCode, install_error_handlers
+
+
+def _build_app() -> FastAPI:
+    """A tiny app with routes that each raise a different kind of error."""
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/boom/api-error")
+    def boom_api_error():
+        raise ApiError(status_code=409, code=ErrorCode.STALE_UPDATE, detail="Stale update")
+
+    @app.get("/boom/http-exception")
+    def boom_http_exception():
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Ledger not found")
+
+    @app.post("/boom/validation")
+    def boom_validation(amount: int):
+        return {"amount": amount}
+
+    @app.get("/boom/unhandled")
+    def boom_unhandled():
+        raise RuntimeError("kaboom")
+
+    return app
+
+
+client = TestClient(_build_app(), raise_server_exceptions=False)
+
+
+def test_api_error_shape():
+    resp = client.get("/boom/api-error")
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["detail"] == "Stale update"
+    assert body["code"] == "stale_update"
+
+
+def test_http_exception_maps_to_not_found_code():
+    resp = client.get("/boom/http-exception")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["detail"] == "Ledger not found"
+    assert body["code"] == "not_found"
+
+
+def test_validation_error_shape():
+    resp = client.post("/boom/validation", json={})
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "validation_error"
+    # detail is a single compressed sentence, "<loc>: <msg>" per error, joined by "; "
+    assert isinstance(body["detail"], str)
+    assert "amount" in body["detail"]
+    assert "errors" in body and isinstance(body["errors"], list)
+
+
+def test_unhandled_exception_returns_internal_error_without_leaking_stack():
+    resp = client.get("/boom/unhandled")
+    assert resp.status_code == 500
+    body = resp.json()
+    assert body["code"] == "internal_error"
+    assert "kaboom" not in body["detail"]
+    assert "Traceback" not in body["detail"]
+
+
+def test_import_app_main_succeeds():
+    import app.main  # noqa: F401
+
+
+def test_health_endpoint():
+    from app.main import app as main_app
+
+    with TestClient(main_app) as c:
+        resp = c.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "healthy"
