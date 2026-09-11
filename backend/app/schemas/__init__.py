@@ -1,6 +1,12 @@
 """Pydantic schemas (03-backend-api.md §5)."""
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.common import ApiModel, ApiRequestModel, ListResponse, UtcDatetime
+from app.schemas.finance_source import (
+    SourceCreate,
+    SourceListResponse,
+    SourcePatch,
+    SourceResponse,
+)
 from app.schemas.ledger import (
     InviteResponse,
     JoinRequest,
@@ -10,6 +16,27 @@ from app.schemas.ledger import (
     LedgerResponse,
     MemberResponse,
     TransferOwnershipRequest,
+)
+from app.schemas.stats import CategoryStat, MonthExpense, SubStat, SummaryResponse, TrendResponse
+from app.schemas.transaction import (
+    EventItem,
+    PairLeg,
+    PairRef,
+    PairRequest,
+    RefundOrigin,
+    RefundRef,
+    TransactionCreate,
+    TransactionDetail,
+    TransactionItem,
+    TransactionListResponse,
+    TransactionPatch,
+    TransactionSummary,
+    TransferCreate,
+    TransferLeg,
+    TransferPatch,
+    TransferResponse,
+    UnpairedLeg,
+    UnpairResponse,
 )
 from app.schemas.user import MePatch, MeResponse
 
@@ -31,4 +58,31 @@ __all__ = [
     "InviteResponse",
     "JoinRequest",
     "TransferOwnershipRequest",
+    "SourceCreate",
+    "SourcePatch",
+    "SourceResponse",
+    "SourceListResponse",
+    "TransactionCreate",
+    "TransactionPatch",
+    "TransactionItem",
+    "TransactionDetail",
+    "TransactionListResponse",
+    "TransactionSummary",
+    "RefundRef",
+    "RefundOrigin",
+    "PairRef",
+    "PairLeg",
+    "EventItem",
+    "TransferCreate",
+    "TransferPatch",
+    "TransferLeg",
+    "TransferResponse",
+    "PairRequest",
+    "UnpairedLeg",
+    "UnpairResponse",
+    "CategoryStat",
+    "SubStat",
+    "SummaryResponse",
+    "MonthExpense",
+    "TrendResponse",
 ]
