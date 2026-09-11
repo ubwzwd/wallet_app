@@ -106,6 +106,14 @@ def test_validate_category_income_with_expense_category_rejected():
     assert exc_info.value.code == "category_kind_mismatch"
 
 
+def test_validate_category_kind_mismatch_takes_precedence_over_bad_l2():
+    # food (expense side) + a nonsense l2 under an income kind: the more
+    # specific kind-mismatch error must win over the l2-membership error.
+    with pytest.raises(Exception) as exc_info:
+        validate_category("income", "food", "nonsense")
+    assert exc_info.value.code == "category_kind_mismatch"
+
+
 def test_validate_category_refund_with_expense_category_passes():
     validate_category("refund", "food", "lunch")  # should not raise
 
@@ -126,6 +134,8 @@ def test_category_table_shape():
     assert set(table.keys()) == {"version", "expense", "income"}
     assert len(table["expense"]) == 16
     assert len(table["income"]) == 6
+    assert [c["code"] for c in table["expense"]] == [c.code for c in EXPENSE_CATEGORIES]
+    assert [c["code"] for c in table["income"]] == [c.code for c in INCOME_CATEGORIES]
 
     food = next(c for c in table["expense"] if c["code"] == "food")
     assert food["name_zh"] == "餐饮"

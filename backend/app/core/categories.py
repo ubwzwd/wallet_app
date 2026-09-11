@@ -342,12 +342,6 @@ INCOME_CATEGORIES: tuple[Category, ...] = (
 )
 
 
-def _iter_all(categories: tuple[Category, ...]):
-    for cat in categories:
-        yield cat
-        yield from cat.children
-
-
 ALL_L1_CODES: tuple[str, ...] = tuple(
     cat.code for cat in EXPENSE_CATEGORIES + INCOME_CATEGORIES
 )
@@ -376,7 +370,9 @@ def validate_category(kind: str, l1: str | None, l2: str | None) -> None:
     - transfer: both l1 and l2 must be None.
     - other kinds: l1 is required, must be a known l1 code, and its side must
       match kind (expense/refund -> expense side, income -> income side).
-    - l2, if given, must belong to that l1.
+    - l2, if given, must belong to that l1. The side/kind check runs before
+      the l2 membership check, so a wrong-side l1 always reports
+      category_kind_mismatch even if l2 is also invalid for it.
 
     Raises ApiError(400, "category_invalid" | "category_kind_mismatch", ...) on failure.
     """
@@ -401,12 +397,6 @@ def validate_category(kind: str, l1: str | None, l2: str | None) -> None:
     if category is None:
         raise ApiError(400, "category_invalid", f"unknown category_l1: {l1}")
 
-    if l2 is not None:
-        if not any(child.code == l2 for child in category.children):
-            raise ApiError(
-                400, "category_invalid", f"category_l2 {l2!r} does not belong to category_l1 {l1!r}"
-            )
-
     side = _SIDE_BY_L1[l1]
     expected_side = "income" if kind == "income" else "expense"
     if side != expected_side:
@@ -415,6 +405,12 @@ def validate_category(kind: str, l1: str | None, l2: str | None) -> None:
             "category_kind_mismatch",
             f"category_l1 {l1!r} is on the {side} side, incompatible with kind={kind}",
         )
+
+    if l2 is not None:
+        if not any(child.code == l2 for child in category.children):
+            raise ApiError(
+                400, "category_invalid", f"category_l2 {l2!r} does not belong to category_l1 {l1!r}"
+            )
 
 
 def _category_to_dict(category: Category) -> dict:
