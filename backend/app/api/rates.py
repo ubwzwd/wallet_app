@@ -1,106 +1,78 @@
-"""Currency and exchange rate API endpoints."""
-from fastapi import APIRouter, Query
-from datetime import date as date_type
+"""Currency and exchange rate endpoints (03-backend-api.md §5.45-§5.47).
 
+All three are public (no auth, as today) and all three go through
+``services/fx.py`` so there is a single conversion formula (decision §8).
+"""
+import datetime as dt
+from decimal import ROUND_HALF_UP
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.errors import ApiError, ErrorCode
 from app.schemas.currency import (
-    CurrencyList,
-    ExchangeRateResponse,
     ConversionRequest,
     ConversionResult,
+    CurrencyList,
+    ExchangeRateResponse,
 )
-from app.services.rates import (
-    get_supported_currencies,
-    fetch_latest_rates,
-    convert_amount,
-)
+from app.services import fx
 
 router = APIRouter(prefix="/rates", tags=["Currency & Exchange Rates"])
 
 
 @router.get("/currencies", response_model=CurrencyList)
-def get_currencies():
+def get_currencies() -> CurrencyList:
+    """List the currencies Frankfurter supports (§5.45).
+
+    Fetched at most once per process; 503 ``fx_unavailable`` while upstream is
+    down and nothing has been cached yet.
     """
-    Get list of supported currencies.
-    
-    Returns 31 currencies supported by Frankfurter API (ECB data).
-    Includes: USD, EUR, CNY, SGD, HKD, GBP, JPY, and 24 others.
-    """
-    currencies = get_supported_currencies()
-    return {"currencies": currencies}
+    return CurrencyList(currencies=fx.supported_currencies())
 
 
 @router.get("/latest", response_model=ExchangeRateResponse)
 def get_latest_rates(
-    base: str = Query(default="USD", description="Base currency code", min_length=3, max_length=3),
-    symbols: str = Query(default="EUR,GBP,CNY", description="Comma-separated target currency codes")
-):
+    base: str = Query("USD", pattern=r"^[A-Za-z]{3}$", description="Base currency code"),
+    symbols: str = Query("EUR,GBP,CNY", description="Comma separated target currency codes"),
+    db: Session = Depends(get_db),
+) -> ExchangeRateResponse:
+    """Latest rates from ``base`` to each of ``symbols`` (§5.46).
+
+    ``date`` is the upstream quotation day, and every rate fetched is cached in
+    ``exchange_rates``.
     """
-    Get latest exchange rates from base currency to target currencies.
-    
-    Uses real-time data from Frankfurter API (European Central Bank rates).
-    
-    - **base**: Base currency code (e.g., USD, EUR)
-    - **symbols**: Comma-separated list of target currencies (e.g., EUR,GBP,CNY)
-    
-    Example:
-        GET /rates/latest?base=USD&symbols=EUR,CNY,SGD
-    """
-    # Parse symbols into list
-    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-    
-    # Fetch rates
-    rates = fetch_latest_rates(base, symbol_list)
-    
-    # Get today's date for response
-    today = date_type.today().isoformat()
-    
-    return {
-        "base": base.upper(),
-        "date": today,
-        "rates": rates
-    }
+    codes = [code.strip().upper() for code in symbols.split(",") if code.strip()]
+    if not codes:
+        raise ApiError(
+            422, ErrorCode.VALIDATION_ERROR, "query.symbols: at least one currency is required"
+        )
+
+    rates, rate_date = fx.latest_rates(db, base, codes)
+    db.commit()
+    return ExchangeRateResponse(base=base.upper(), date=rate_date, rates=rates)
 
 
 @router.post("/convert", response_model=ConversionResult)
-def convert_currency(request: ConversionRequest):
-    """
-    Convert an amount from one currency to another.
-    
-    Uses latest exchange rates from Frankfurter API.
-    
-    Request body:
-    ```json
-    {
-      "amount": 100.00,
-      "from_currency": "USD",
-      "to_currency": "EUR"
-    }
-    ```
-    
-    Response includes original amount, converted amount, and exchange rate used.
-    """
-    # Convert the amount
-    converted = convert_amount(
-        request.amount,
-        request.from_currency,
-        request.to_currency
-    )
-    
-    # Get the rate for response
-    if request.from_currency.upper() == request.to_currency.upper():
-        rate = 1.0
-    else:
-        rates = fetch_latest_rates(request.from_currency, [request.to_currency])
-        rate = rates[request.to_currency.upper()]
-    
-    today = date_type.today().isoformat()
-    
-    return {
-        "amount": request.amount,
-        "from_currency": request.from_currency.upper(),
-        "to_currency": request.to_currency.upper(),
-        "converted_amount": converted,
-        "rate": rate,
-        "date": today
-    }
+def convert_currency(
+    payload: ConversionRequest, db: Session = Depends(get_db)
+) -> ConversionResult:
+    """Convert one amount between two currencies (§5.47).
 
+    Uses ``on``'s rate when given, otherwise the latest published day; exactly
+    one upstream call at most, and ``date`` is the rate's own day.
+    """
+    on = payload.on or dt.datetime.now(dt.UTC).date()
+    converted, rate, rate_date = fx.convert(
+        db, payload.amount, payload.from_currency, payload.to_currency, on
+    )
+    db.commit()
+    return ConversionResult(
+        amount=payload.amount,
+        from_currency=payload.from_currency.upper(),
+        to_currency=payload.to_currency.upper(),
+        converted_amount=converted.quantize(fx.AMOUNT_QUANTUM, rounding=ROUND_HALF_UP),
+        rate=fx.quantize_rate(rate),
+        date=rate_date,
+    )
