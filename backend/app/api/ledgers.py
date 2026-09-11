@@ -14,7 +14,7 @@ import datetime as dt
 import uuid
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
-from sqlalchemy import case, delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -52,19 +52,22 @@ def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC).replace(tzinfo=None)
 
 
-def _checked_currency(code: str) -> str:
+def _checked_currency(code: str, current: str) -> str:
     """Upper-case ``code`` and require it to be one upstream knows (§5.9, §5.11).
 
     A code outside the list is 400 ``validation_error``. While Frankfurter is
-    unreachable the list cannot be consulted at all; rather than making ledger
-    creation depend on an upstream that has nothing to do with it, the code is
-    accepted — a base currency only decides how figures are displayed.
+    unreachable the list cannot be consulted at all, and then the only code
+    that still goes through is ``current`` — the currency already in effect
+    (the caller's default when creating, the ledger's own when patching). That
+    keeps the ordinary path working through an upstream blip without ever
+    letting an unverified code become a base currency nothing can convert from;
+    anything else surfaces the 503 ``fx_unavailable``.
     """
     currency = code.upper()
     try:
         supported = fx.supported_currencies()
     except ApiError as exc:
-        if exc.code != ErrorCode.FX_UNAVAILABLE:
+        if exc.code != ErrorCode.FX_UNAVAILABLE or currency != current.upper():
             raise
         return currency
 
@@ -170,13 +173,26 @@ def list_ledgers(
         .order_by(Ledger.created_at.asc(), Ledger.id.asc())
     ).all()
 
+    # One grouped count for the whole page rather than one query per ledger
+    # (§5.8 副作用: "一条带 JOIN ledger_members 的查询 + 一条分组 count").
+    ledger_ids = [ledger.id for ledger, _ in rows]
+    member_counts: dict[uuid.UUID, int] = {}
+    if ledger_ids:
+        member_counts = dict(
+            db.execute(
+                select(LedgerMember.ledger_id, func.count())
+                .where(LedgerMember.ledger_id.in_(ledger_ids))
+                .group_by(LedgerMember.ledger_id)
+            ).all()
+        )
+
     items = [
         LedgerResponse(
             id=ledger.id,
             name=ledger.name,
             base_currency=ledger.base_currency,
             role=role,
-            member_count=ledger_service.member_count(db, ledger.id),
+            member_count=member_counts.get(ledger.id, 0),
             created_by=ledger.created_by,
             created_at=ledger.created_at,
             updated_at=ledger.updated_at,
@@ -203,7 +219,9 @@ def create_ledger(
     unsupported code is 400 and an eleventh ledger is 409
     ``ledger_limit_reached``.
     """
-    currency = _checked_currency(payload.base_currency or current_user.base_currency)
+    currency = _checked_currency(
+        payload.base_currency or current_user.base_currency, current_user.base_currency
+    )
 
     ledger = ledger_service.create_ledger(db, current_user, payload.name, currency)
     body = _ledger_response(db, ledger, ledger_service.ROLE_OWNER)
@@ -217,7 +235,9 @@ def create_ledger(
 
 
 @router.get("/{id}", response_model=LedgerResponse)
-def get_ledger(ctx: LedgerContext = Depends(get_ledger_member), db: Session = Depends(get_db)):
+def get_ledger(
+    ctx: LedgerContext = Depends(get_ledger_member), db: Session = Depends(get_db)
+) -> LedgerResponse:
     """One ledger, with the three counts the delete dialog shows (§5.10)."""
     return _ledger_response(db, ctx.ledger, ctx.member.role, with_counts=True)
 
@@ -236,8 +256,16 @@ def update_ledger(
     transaction keeps its own currency and amount, conversion happens on read
     (decision §8).
     """
+    # ``populate_existing`` is what makes this a compare-and-set: the dependency
+    # already put this row in the Session's identity map, and without it the
+    # locking SELECT would hand back that same object with its *pre-lock*
+    # attributes, so the stamp comparison would use a value read before anyone
+    # was locked out (§4.4).
     ledger = db.execute(
-        select(Ledger).where(Ledger.id == ctx.ledger.id).with_for_update()
+        select(Ledger)
+        .where(Ledger.id == ctx.ledger.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one()
 
     if payload.updated_at != ledger.updated_at:
@@ -251,7 +279,9 @@ def update_ledger(
     if fields.get("name") is not None:
         ledger.name = fields["name"]
     if fields.get("base_currency") is not None:
-        ledger.base_currency = _checked_currency(fields["base_currency"])
+        ledger.base_currency = _checked_currency(
+            fields["base_currency"], ledger.base_currency
+        )
 
     ledger.updated_at = _utcnow()
     db.flush()

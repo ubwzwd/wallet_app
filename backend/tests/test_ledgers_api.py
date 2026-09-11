@@ -8,8 +8,9 @@ import datetime as dt
 import uuid
 from decimal import Decimal
 
+import httpx
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.core.config import settings
 from app.models.finance_source import FinanceSource
@@ -98,6 +99,36 @@ def make_batch(db, ledger, source, user) -> ImportBatch:
     db.add(batch)
     db.flush()
     return batch
+
+
+# ---------------------------------------------------------------------------
+# fixture: Frankfurter unreachable, so the supported currency list is unknowable
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def fx_down(monkeypatch):
+    """Replace ``fake_frankfurter``'s upstream with one that only answers 503.
+
+    ``supported_currencies`` then raises ``fx_unavailable`` and the currency
+    check of §5.9/§5.11 has nothing to validate against — the branch the two
+    cases below pin down. Retries are turned off so a case does not pay the
+    real backoff.
+    """
+    from app.services import fx
+
+    monkeypatch.setattr(fx, "HTTP_RETRY_ATTEMPTS", 1)
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+        base_url="https://frankfurter.test/v1",
+    )
+    fx.reset_state()
+    monkeypatch.setattr(fx, "client_factory", lambda: client)
+    try:
+        yield
+    finally:
+        client.close()
+        fx.reset_state()
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +276,40 @@ def test_eleventh_ledger_is_refused(client, db, user_factory, auth_headers, ledg
         db.execute(select(func.count()).select_from(Ledger)).scalar_one()
         == settings.MAX_LEDGERS_PER_USER
     )
+
+
+
+def test_create_ledger_still_works_with_ones_own_currency_while_fx_is_down(
+    client, db, user_factory, auth_headers, fx_down
+):
+    """The currency already in effect needs no list to be validated (§5.9)."""
+    alice = user_factory(base_currency="CNY")
+    db.commit()
+
+    response = client.post(
+        "/api/v1/ledgers", json={"name": "家庭账本"}, headers=auth_headers(alice)
+    )
+
+    assert response.status_code == 201
+    assert response.json()["base_currency"] == "CNY"
+
+
+def test_create_ledger_refuses_an_unverifiable_currency_while_fx_is_down(
+    client, db, user_factory, auth_headers, fx_down
+):
+    """An upstream blip must never write a base currency nobody checked (§5.9)."""
+    alice = user_factory(base_currency="CNY")
+    db.commit()
+
+    response = client.post(
+        "/api/v1/ledgers",
+        json={"name": "家庭账本", "base_currency": "ZZZ"},
+        headers=auth_headers(alice),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "fx_unavailable"
+    assert db.execute(select(func.count()).select_from(Ledger)).scalar_one() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +492,73 @@ def test_patch_to_an_unsupported_currency_is_400(
     assert response.json()["code"] == "validation_error"
     db.expire_all()
     assert db.get(Ledger, ledger.id).base_currency == "CNY"
+
+
+
+def test_patch_compares_the_stamp_against_the_row_it_locked(
+    client, db, user_factory, auth_headers, ledger_factory
+):
+    """§4.4 is a compare-and-set: the locked row decides, not an earlier read.
+
+    ``get_ledger_member`` loads the ledger before the ``FOR UPDATE`` select, so
+    unless that select refreshes the object the comparison would run against the
+    version this Session read first — and a concurrent writer's change would be
+    overwritten with a 200. Here the row moves on behind the Session's back
+    (``synchronize_session=False`` leaves the loaded object untouched, exactly
+    like another connection's commit would), then the old stamp is replayed.
+    """
+    alice = user_factory()
+    ledger = ledger_factory(alice, name="A")
+    db.commit()
+    stale = client.get(f"/api/v1/ledgers/{ledger.id}", headers=auth_headers(alice)).json()
+
+    db.execute(
+        update(Ledger)
+        .where(Ledger.id == ledger.id)
+        .values(name="B", updated_at=dt.datetime(2026, 9, 2, 9, 0, 0, 654321))
+        .execution_options(synchronize_session=False)
+    )
+
+    response = client.patch(
+        f"/api/v1/ledgers/{ledger.id}",
+        json={"name": "C", "updated_at": stale["updated_at"]},
+        headers=auth_headers(alice),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "stale_update"
+    assert (
+        db.execute(select(Ledger.name).where(Ledger.id == ledger.id)).scalar_one() == "B"
+    )
+
+
+def test_patch_refuses_an_unverifiable_currency_while_fx_is_down(
+    client, db, user_factory, auth_headers, ledger_factory, fx_down
+):
+    """Same rule as §5.9: only the ledger's current currency passes unchecked."""
+    alice = user_factory()
+    ledger = ledger_factory(alice, base_currency="CNY")
+    db.commit()
+    stamp = client.get(f"/api/v1/ledgers/{ledger.id}", headers=auth_headers(alice)).json()
+
+    response = client.patch(
+        f"/api/v1/ledgers/{ledger.id}",
+        json={"base_currency": "ZZZ", "updated_at": stamp["updated_at"]},
+        headers=auth_headers(alice),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "fx_unavailable"
+    db.expire_all()
+    assert db.get(Ledger, ledger.id).base_currency == "CNY"
+
+    renamed = client.patch(
+        f"/api/v1/ledgers/{ledger.id}",
+        json={"name": "家用", "base_currency": "cny", "updated_at": stamp["updated_at"]},
+        headers=auth_headers(alice),
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["base_currency"] == "CNY"
 
 
 # ---------------------------------------------------------------------------
