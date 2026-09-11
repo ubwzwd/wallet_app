@@ -7,6 +7,7 @@ Default path: a SQLite in-memory database built from the models
 """
 import os
 import uuid
+from decimal import Decimal
 
 # Set env vars before any app imports so settings picks them up
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -247,6 +248,166 @@ def ledger_factory(db):
             )
         db.flush()
         return ledger
+
+    return make
+
+
+@pytest.fixture()
+def source_factory(db):
+    """Insert a ``FinanceSource`` row directly (02-database.md §1.5)."""
+    from app.models.finance_source import FinanceSource
+
+    def make(
+        ledger,
+        *,
+        name: str = "招行储蓄卡",
+        type: str = "checking",
+        currency: str = "CNY",
+        opening_balance: Decimal = Decimal("0"),
+        archived: bool = False,
+        created_by=None,
+    ) -> FinanceSource:
+        now = utcnow()
+        owner_id = created_by if created_by is not None else ledger.created_by
+        source = FinanceSource(
+            ledger_id=ledger.id,
+            name=name,
+            type=type,
+            default_currency=currency.upper(),
+            opening_balance=opening_balance,
+            archived=archived,
+            archived_at=now if archived else None,
+            created_by=owner_id,
+            updated_by=owner_id,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(source)
+        db.flush()
+        return source
+
+    return make
+
+
+@pytest.fixture()
+def transaction_factory(db):
+    """Insert a ``Transaction`` row directly (02-database.md §1.6).
+
+    Defaults produce a valid ``expense`` leg; pass ``kind="transfer"`` plus
+    ``transfer_pair_id`` to build one leg of a transfer (``pair_factory``
+    builds both legs at once).
+    """
+    from app.models.transaction import Transaction
+
+    def make(
+        ledger,
+        source,
+        *,
+        kind: str = "expense",
+        amount: Decimal = Decimal("-10.0000"),
+        currency: str | None = None,
+        occurred_at=None,
+        category_l1: str | None = None,
+        category_l2: str | None = None,
+        merchant: str | None = None,
+        note: str | None = None,
+        transfer_role: str | None = None,
+        transfer_subtype: str | None = None,
+        transfer_pair_id=None,
+        counterparty: str | None = None,
+        refund_of=None,
+        import_batch_id=None,
+        created_by=None,
+    ) -> Transaction:
+        now = utcnow()
+        owner_id = created_by if created_by is not None else ledger.created_by
+        resolved_currency = (currency or source.default_currency).upper()
+        resolved_occurred_at = occurred_at if occurred_at is not None else now.date()
+
+        resolved_category_l1 = category_l1
+        if kind != "transfer" and resolved_category_l1 is None and category_l2 is None:
+            resolved_category_l1 = "food"
+
+        resolved_role = transfer_role
+        if kind == "transfer" and resolved_role is None:
+            resolved_role = "out" if amount < 0 else "in"
+        resolved_subtype = transfer_subtype
+        if kind == "transfer" and resolved_subtype is None:
+            resolved_subtype = "plain"
+
+        tx = Transaction(
+            ledger_id=ledger.id,
+            source_id=source.id,
+            amount=amount,
+            currency=resolved_currency,
+            occurred_at=resolved_occurred_at,
+            kind=kind,
+            note=note,
+            merchant=merchant,
+            category_l1=resolved_category_l1,
+            category_l2=category_l2,
+            transfer_role=resolved_role,
+            transfer_subtype=resolved_subtype,
+            transfer_pair_id=transfer_pair_id,
+            counterparty=counterparty,
+            refund_of=refund_of,
+            import_batch_id=import_batch_id,
+            created_by=owner_id,
+            updated_by=owner_id,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(tx)
+        db.flush()
+        return tx
+
+    return make
+
+
+@pytest.fixture()
+def pair_factory(transaction_factory):
+    """Build both legs of a transfer sharing one ``transfer_pair_id``."""
+
+    def make(
+        ledger,
+        out_source,
+        in_source,
+        *,
+        amount_out: Decimal,
+        amount_in: Decimal | None = None,
+        currency_out: str | None = None,
+        currency_in: str | None = None,
+        occurred_at=None,
+        subtype: str = "plain",
+        note: str | None = None,
+    ) -> tuple:
+        pair_id = uuid.uuid4()
+        resolved_amount_in = amount_in if amount_in is not None else -amount_out
+        out_leg = transaction_factory(
+            ledger,
+            out_source,
+            kind="transfer",
+            amount=amount_out,
+            currency=currency_out,
+            occurred_at=occurred_at,
+            transfer_role="out",
+            transfer_subtype=subtype,
+            transfer_pair_id=pair_id,
+            note=note,
+        )
+        in_leg = transaction_factory(
+            ledger,
+            in_source,
+            kind="transfer",
+            amount=resolved_amount_in,
+            currency=currency_in,
+            occurred_at=occurred_at,
+            transfer_role="in",
+            transfer_subtype=subtype,
+            transfer_pair_id=pair_id,
+            note=note,
+        )
+        return out_leg, in_leg
 
     return make
 
