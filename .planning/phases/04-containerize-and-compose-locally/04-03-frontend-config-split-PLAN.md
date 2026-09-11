@@ -53,10 +53,6 @@ Purpose: DEPLOY-03 + DOMAIN-04. The literal string `localhost:8000` cannot appea
 Output: Two source-of-truth config files, a swapped artifact `config.ts`, and a build:web script.
 </objective>
 
-<execution_context>
-@$HOME/.claude/get-shit-done/workflows/execute-plan.md
-@$HOME/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md

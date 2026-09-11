@@ -45,10 +45,6 @@ Purpose: SEC-01 (secrets never in repo or image; canonical template with sentine
 Output: `.env.example` template + executable bash coverage script.
 </objective>
 
-<execution_context>
-@$HOME/.claude/get-shit-done/workflows/execute-plan.md
-@$HOME/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md

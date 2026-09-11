@@ -46,10 +46,6 @@ Purpose: DEPLOY-02 + SEC-01 base. Every other Phase 4 plan (compose, migrate ser
 Output: `infra/Dockerfile.api` plus retirement of the old Poetry-only `backend/Dockerfile`.
 </objective>
 
-<execution_context>
-@$HOME/.claude/get-shit-done/workflows/execute-plan.md
-@$HOME/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md

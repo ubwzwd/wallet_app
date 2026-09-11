@@ -53,10 +53,6 @@ Purpose: This is the single executable proof that Phase 4 is done. The orchestra
 Output: One bash script that exits 0 only when all 5 ROADMAP success criteria for Phase 4 are observably true on the dev laptop.
 </objective>
 
-<execution_context>
-@$HOME/.claude/get-shit-done/workflows/execute-plan.md
-@$HOME/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md

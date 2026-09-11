@@ -46,10 +46,6 @@ Purpose: Establish the `infra/` repo layout (D-01) so the prod compose plan can 
 Output: Moved compose file, README updates, .gitignore additions.
 </objective>
 
-<execution_context>
-@$HOME/.claude/get-shit-done/workflows/execute-plan.md
-@$HOME/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md

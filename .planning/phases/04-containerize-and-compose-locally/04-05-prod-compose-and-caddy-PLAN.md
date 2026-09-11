@@ -57,10 +57,6 @@ Purpose: The core of Phase 4 — DEPLOY-01 (orchestration), DEPLOY-04 (migration
 Output: Compose + Caddyfile; together they satisfy 4 of the 5 ROADMAP success criteria for this phase.
 </objective>
 
-<execution_context>
-@$HOME/.claude/get-shit-done/workflows/execute-plan.md
-@$HOME/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
