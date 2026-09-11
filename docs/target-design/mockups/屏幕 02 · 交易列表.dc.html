@@ -146,6 +146,15 @@ input{font-family:inherit;box-sizing:border-box}
             </div>
 
             <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:8px">币种 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">多选</span></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ currencyPills }}" as="c" hint-placeholder-count="3">
+                  <span onClick="{{ toggleCurrency }}" data-cur="{{ c.id }}" style="display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 16px;border-radius:999px;cursor:pointer;font:600 14px/20px 'IBM Plex Mono',monospace;background:{{ c.bg }};color:{{ c.color }};box-shadow:{{ c.ring }}">{{ c.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+
+            <div>
               <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">日期区间</div>
               <div style="display:flex;gap:8px;align-items:center">
                 <div style="flex:1;height:48px;padding:0 14px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;justify-content:space-between;gap:6px"><span style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">2026-09-01</span>{{ iconCal }}</div>
@@ -201,7 +210,7 @@ input{font-family:inherit;box-sizing:border-box}
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ tabHome }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38;cursor:pointer">{{ tabList }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
-            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ navChart }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">报表</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ tabMe }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">我的</span></div>
           </div>
           <button style="height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C">{{ iconPlus }}记一笔</button>
           <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:12px">
@@ -217,7 +226,6 @@ input{font-family:inherit;box-sizing:border-box}
               <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">共 6 笔 · 支出 111.20 · 收入 18,000.00 · 退款 199.00 · 转账 8,000.00</span>
             </div>
             <div style="display:flex;gap:10px">
-              <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#FFF;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;align-items:center;gap:8px" style-hover="background:#F7FAF7">{{ iconExport }}导出 CSV</button>
               <button style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#2F4A38;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#253A2C">{{ iconPlus }}记一笔</button>
             </div>
           </div>
@@ -238,7 +246,15 @@ input{font-family:inherit;box-sizing:border-box}
                 <div style="height:44px;padding:0 14px;border-radius:12px;background:#F1F6F1;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer" style-hover="background:#E9F0E9"><span style="font:400 15px/21px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">招行储蓄卡 +2</span>{{ iconChevSm }}</div>
               </div>
               <div>
-                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">金额区间 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">CNY</span></div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">币种 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">多选 · 不选 = 全部</span></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ currencyPills }}" as="c" hint-placeholder-count="3">
+                    <span onClick="{{ toggleCurrency }}" data-cur="{{ c.id }}" style="display:inline-flex;align-items:center;height:44px;padding:0 16px;border-radius:12px;cursor:pointer;font:600 14px/20px 'IBM Plex Mono',monospace;background:{{ c.bg }};color:{{ c.color }};box-shadow:{{ c.ring }}">{{ c.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">金额区间 <span style="font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">折算 CNY</span></div>
                 <div style="display:flex;gap:8px;align-items:center">
                   <div style="flex:1;height:44px;padding:0 14px;border-radius:12px;background:#F1F6F1;display:flex;align-items:center"><span style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">10.00</span></div>
                   <span style="color:#5F6A62">→</span>
@@ -339,8 +355,9 @@ const T = {
 class Component extends DCLogic {
   state = {
     kinds: [],
+    currencies: ['CNY','SGD'],
     accounts: ['招行储蓄卡','建行信用卡','DBS Multiplier'],
-    chips: ['date','account','amount'],
+    chips: ['date','account','currency','amount'],
     sheetOpen: true,
   };
 
@@ -349,7 +366,7 @@ class Component extends DCLogic {
       { date:'09-10', k:'expense',  merchant:'瑞幸咖啡',   category:'餐饮 / 零食饮料', account:'招行储蓄卡',        note:'和老婆下午茶',       amount:'−45.00',      converted:'' },
       { date:'09-10', k:'income',   merchant:'9 月工资',   category:'工资 / 基本工资', account:'招行储蓄卡',        note:'',                   amount:'+18,000.00',  converted:'' },
       { date:'09-09', k:'refund',   merchant:'京东退款',   category:'消费购物',        account:'招行储蓄卡',        note:'关联 09-02 京东订单', amount:'+199.00',     converted:'' },
-      { date:'09-08', k:'transfer', merchant:'还信用卡',   category:'—',               account:'招行储蓄卡 → 建行信用卡', note:'9 月账单全额',   amount:'3,000.00',    converted:'' },
+      { date:'09-08', k:'transfer', merchant:'招行储蓄卡 → 建行信用卡', category:'—',     account:'招行储蓄卡 → 建行信用卡', note:'信用卡还款 · 9 月账单全额', amount:'3,000.00', converted:'' },
       { date:'09-08', k:'expense',  merchant:'Grab 打车',  category:'交通 / 打车',     account:'DBS Multiplier',    note:'去机场',             amount:'−S$12.40',    converted:'≈ −¥66.20' },
       { date:'09-05', k:'transfer', merchant:'对方：工资卡', category:'—',             account:'招行储蓄卡',        note:'单腿 · 外部转入',     amount:'5,000.00',    converted:'' },
     ];
@@ -383,9 +400,9 @@ class Component extends DCLogic {
     });
 
     const accountsMeta = [
-      { name:'招行储蓄卡',     meta:'储蓄 · CNY',  balance:'12,480.35' },
+      { name:'招行储蓄卡',     meta:'储蓄卡 · CNY',  balance:'12,480.35' },
       { name:'建行信用卡',     meta:'信用卡 · CNY', balance:'−3,215.00' },
-      { name:'DBS Multiplier', meta:'储蓄 · SGD',  balance:'S$4,120.80' },
+      { name:'DBS Multiplier', meta:'储蓄卡 · SGD',  balance:'S$4,120.80' },
     ];
     const accountRows = accountsMeta.map(a => {
       const on = this.state.accounts.includes(a.name);
@@ -397,16 +414,31 @@ class Component extends DCLogic {
       };
     });
 
+    const currencyPills = ['CNY','SGD','USD'].map(id => {
+      const on = this.state.currencies.includes(id);
+      return {
+        id, label: id,
+        bg: on ? '#DDE9DF' : '#F1F6F1',
+        color: on ? '#2F4A38' : '#3E4A42',
+        ring: on ? 'inset 0 0 0 1.5px #2F4A38' : 'none',
+      };
+    });
+
     const chipLabels = {
-      date:    '09-01 → 09-30',
-      account: '账户：招行储蓄卡 +2',
-      amount:  '金额 ≥ 10.00',
+      date:     '09-01 → 09-30',
+      account:  '账户：招行储蓄卡 +2',
+      currency: '币种：CNY · SGD',
+      amount:   '金额 ≥ 10.00',
     };
     const chips = this.state.chips.map(id => ({ id, label: chipLabels[id] }))
       .concat(this.state.kinds.map(k => ({ id: 'kind:' + k, label: '种类：' + T[k].label })));
 
     return {
-      rows, days, kindPills, accountRows, chips,
+      rows, days, kindPills, accountRows, chips, currencyPills,
+      toggleCurrency: (e) => {
+        const id = e.currentTarget.getAttribute('data-cur');
+        this.setState(s => ({ currencies: s.currencies.includes(id) ? s.currencies.filter(x => x !== id) : s.currencies.concat(id) }));
+      },
       chipCount: String(chips.length),
       emptyChips: chips.length ? 'none' : 'inline',
       iconSearch:  svg([C(9,9,5.75), P('M13.2 13.2 17 17')], 18),

@@ -62,7 +62,7 @@ input{font-family:inherit;box-sizing:border-box}
         <div style="padding:0 16px 12px">
           <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 6px 8px">
             <span style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#5F6A62;text-transform:uppercase">成员</span>
-            <span style="font:450 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">2 / 8</span>
+            <span style="font:450 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">2 / 10</span>
           </div>
           <div style="background:#FFFFFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(28,50,36,.07)">
             <sc-for list="{{ members }}" as="m" hint-placeholder-count="2">
@@ -124,7 +124,7 @@ input{font-family:inherit;box-sizing:border-box}
                 <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
                 <span style="flex:1;min-width:0">
                   <span style="display:block;font:700 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">改基准币种会重算全部历史</span>
-                  <span style="display:block;margin-top:4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#6B540D">148 笔外币交易会按<b>今天</b>的汇率重新折算，历史折算值会变，趋势图和分类统计也会跟着变。原币金额不动。</span>
+                  <span style="display:block;margin-top:4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#6B540D">历史交易将按各自发生日的汇率重新折算，结果可复现。原币金额不动。</span>
                 </span>
               </div>
               <div style="margin-top:12px;display:grid;gap:6px;font:450 12px/18px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#6B540D">
@@ -213,7 +213,7 @@ input{font-family:inherit;box-sizing:border-box}
               <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 14px;border-bottom:1px solid #EDF2ED">
                   <span style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">成员</span>
-                  <span style="font:450 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62">2 / 8</span>
+                  <span style="font:450 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62">2 / 10</span>
                 </div>
                 <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(0,1fr) 52px;gap:14px;padding:10px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
                   <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">名称</div>
@@ -277,7 +277,7 @@ input{font-family:inherit;box-sizing:border-box}
                     <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
                     <span style="flex:1;min-width:0">
                       <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">改基准币种会重算全部历史</span>
-                      <span style="display:block;margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">148 笔外币交易会按<b>今天</b>的汇率重新折算。原币金额不变，但历史折算值、趋势图、分类统计都会变 —— 以前看过的数字对不上了。这个操作可以再改回来，但汇率不会回到原来那天的。</span>
+                      <span style="display:block;margin-top:4px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">历史交易将按各自发生日的汇率重新折算，结果可复现。原币金额不变，但历史折算值、趋势图、分类统计都会跟着变；改回来也能算回同样的数。</span>
                     </span>
                   </div>
                   <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
@@ -309,8 +309,8 @@ input{font-family:inherit;box-sizing:border-box}
               <div style="background:#FFFFFF;border-radius:18px;padding:20px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
                 <div style="font:700 15px/21px 'Figtree','PingFang SC',sans-serif">权限</div>
                 <div style="margin-top:12px;display:grid;gap:10px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">
-                  <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#2F4A38;flex:none;margin-top:7px"></span><span><b>owner</b>：邀请与移除成员、改基准币种、删除账本、撤销导入。</span></div>
-                  <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#C4D1C6;flex:none;margin-top:7px"></span><span><b>成员</b>：记账、导入、改分类。看得到全部交易，但改不了账本设置。</span></div>
+                  <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#C4D1C6;flex:none;margin-top:7px"></span><span><b>成员</b>：记账、管理账户、导入和撤销导入。</span></div>
+                  <div style="display:flex;gap:9px"><span style="width:6px;height:6px;border-radius:999px;background:#2F4A38;flex:none;margin-top:7px"></span><span>只有 <b>owner</b> 能生成邀请码、移除成员、改账本名和基准币种、转让、删除账本。</span></div>
                 </div>
               </div>
 

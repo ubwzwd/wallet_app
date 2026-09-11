@@ -109,7 +109,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </div>
       </div>
-      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">按类型分组（储蓄 / 信用卡 / 现金），每组头部给小计。外币账户第二行给折算值。归档区默认收起成一行，展开后整体压到 70% 透明 + 绿灰图标底，和在用账户一眼分得开。</div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">按类型分组（储蓄卡 / 信用卡 / 现金 / 其他），每组头部给小计。外币账户第二行给折算值。归档区默认收起成一行，展开后整体压到 70% 透明 + 绿灰图标底，和在用账户一眼分得开。</div>
     </div>
 
     <div>
@@ -360,7 +360,7 @@ input{font-family:inherit;box-sizing:border-box}
             </div>
 
             <div style="padding:14px 16px;border-radius:14px;background:#F1F6F1;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">
-              期初余额会生成一条不可编辑的「建账」记录，日期为今天。它不计入收支，只让账户余额从这个数开始 —— 之后余额 = 期初 ± 所有交易。
+              期初余额记在账户上，不是一笔交易。它不出现在交易列表里，也不计入收支，只让账户余额从这个数开始 —— 之后余额 = 期初 ± 所有交易。
             </div>
           </div>
 
@@ -386,7 +386,7 @@ const CASH   = [R(2.5,6,15,8,2), C(10,10,2.25)];
 const OTHER  = [C(10,10,7.25), P('M10 6.5v7M6.5 10h7')];
 
 const TYPE = {
-  savings:{ label:'储蓄',   tint:'#E4EDE5', fg:'#2F4A38', on:'#1F3527', icon:WALLET },
+  savings:{ label:'储蓄卡', tint:'#E4EDE5', fg:'#2F4A38', on:'#1F3527', icon:WALLET },
   credit: { label:'信用卡', tint:'#F3E7E2', fg:'#8A3529', on:'#8A3529', icon:CARD },
   cash:   { label:'现金',   tint:'#F1EDDC', fg:'#6B540D', on:'#6B540D', icon:CASH },
   other:  { label:'其他',   tint:'#E4EDEE', fg:'#2C4B5B', on:'#2C4B5B', icon:OTHER },
@@ -420,7 +420,7 @@ class Component extends DCLogic {
     const rows = accounts.map(deco);
 
     const groups = [
-      { name:'储蓄', sum:'≈ ¥37,057.10', rows: rows.filter(r => r.t === 'savings') },
+      { name:'储蓄卡', sum:'≈ ¥37,057.10', rows: rows.filter(r => r.t === 'savings') },
       { name:'信用卡', sum:'−¥3,215.00',  rows: rows.filter(r => r.t === 'credit') },
       { name:'现金',   sum:'¥785.00',     rows: rows.filter(r => r.t === 'cash') },
     ];
@@ -451,8 +451,8 @@ class Component extends DCLogic {
       negSignShow: this.state.formType === 'credit' ? 'inline' : 'none',
       openingAmount: this.state.formType === 'credit' ? '3,215.00' : '0.00',
       openingHint: this.state.formType === 'credit'
-        ? '信用卡填当前欠款，会存成负数（−3,215.00）'
-        : '记账起点时这个账户里有多少钱；留 0 也可以',
+        ? '信用卡填当前欠款，会存成负数（−3,215.00）；记在账户上，不是一笔交易'
+        : '记账起点时这个账户里有多少钱；记在账户上，不是一笔交易',
       openingHintColor: this.state.formType === 'credit' ? '#8A3529' : '#5F6A62',
       iconX:        svg([P('M5 5l10 10M15 5 5 15')], 18, 2.2),
       iconBack:     svg([P('M12 4.5 6.5 10l5.5 5.5')], 20, 2),

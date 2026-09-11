@@ -24,7 +24,7 @@ a:hover{color:#1F3527}
   <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
     <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 15 · Empty states</div>
     <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">空状态 × 3</h1>
-    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">新账本首页、没有交易的列表（区分「真的没有」和「筛没了」）、没有导入记录。三张都不用插画 —— 用条纹占位块标出「这里以后会长出什么」，比一个空盒子图标更说明问题。</div>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">一本账都没有的引导页、新账本首页、没有交易的列表（区分「真的没有」和「筛没了」）、没有导入记录。三张都不用插画 —— 用条纹占位块标出「这里以后会长出什么」，比一个空盒子图标更说明问题。</div>
   </div>
 
   <div style="display:flex;align-items:baseline;gap:10px;margin-top:28px;margin-bottom:14px">
@@ -136,7 +136,7 @@ a:hover{color:#1F3527}
             <div style="display:flex;gap:32px;align-items:center;flex-wrap:wrap">
               <div style="flex:1;min-width:300px">
                 <div style="font:700 22px/30px 'Figtree','PingFang SC',sans-serif">这本账还是空的</div>
-                <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;max-width:460px">三步就能跑起来：建一个账户 → 记一笔或导入账单 → 邀请老婆一起记。分类和判据已经带了一套默认的，不用先去配置。</div>
+                <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;max-width:460px">三步就能跑起来：建一个账户 → 记一笔或导入账单 → 邀请老婆一起记。分类是内置的、不可改，不用先去配置。</div>
                 <div style="margin-top:18px;display:grid;gap:10px;max-width:460px">
                   <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
                     <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#F1F6F1">
@@ -489,6 +489,103 @@ a:hover{color:#1F3527}
       <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">左边解释为什么导入要绕一圈（账单不经过应用），右边用条纹批次卡预告历史列表长什么样并说明「可整批撤销」—— 这是用户决定要不要试的关键信息。</div>
     </div>
   </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">D</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">一本账都没有</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">刚注册完，还没有任何账本 —— 只有两个入口</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="无账本引导 375" style="width:375px;min-height:720px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:flex-end">
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;font:600 13px/18px 'Figtree',sans-serif;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">W</span>
+        </div>
+
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 24px">
+          <div style="padding:0 4px 20px">
+            <div style="font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">先有一本账</div>
+            <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">所有交易、账户和统计都挂在账本下面。自己新建一本，或者用别人给的邀请码加入他的账本。</div>
+          </div>
+
+          <div style="display:grid;gap:12px">
+            <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="width:44px;height:44px;border-radius:14px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconPlusBig }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 17px/24px 'Figtree','PingFang SC',sans-serif">新建账本</span>
+                  <span style="display:block;margin-top:2px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">你是 owner，定基准币种、邀请别人</span>
+                </span>
+              </div>
+              <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">新建账本</button>
+            </div>
+
+            <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="width:44px;height:44px;border-radius:14px;background:#E4EDEE;color:#2C4B5B;flex:none;display:flex;align-items:center;justify-content:center">{{ iconKeyBig }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 17px/24px 'Figtree','PingFang SC',sans-serif">用邀请码加入</span>
+                  <span style="display:block;margin-top:2px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">对方在他的账本设置里生成 6 位码</span>
+                </span>
+              </div>
+              <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">输入邀请码</button>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;padding:0 4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">一个人可以同时在多本账里，比如「家庭账本」和「旅行账本」。</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">没有底部 tab —— 在有账本之前，首页、交易、导入都无处可去。两个入口给同等重量的卡片：新建是主按钮，加入是次按钮。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="无账本引导 1440" style="width:1440px;min-height:640px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="padding:20px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <span style="display:flex;align-items:center;gap:10px">
+            <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif">账</span>
+            <span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭记账</span>
+          </span>
+          <span style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;border-radius:999px;background:#FFFFFF;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">
+            <span style="width:28px;height:28px;border-radius:999px;background:#E9F0E9;color:#3E4A42;display:flex;align-items:center;justify-content:center;font:600 12px/16px 'Figtree',sans-serif">W</span>
+            <span style="font:500 14px/19px 'Figtree','PingFang SC',sans-serif">wang@example.com</span>
+          </span>
+        </div>
+
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px 28px 48px">
+          <div style="width:760px;max-width:100%">
+            <div style="text-align:center">
+              <div style="font:700 30px/38px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">先有一本账</div>
+              <div style="margin-top:10px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">所有交易、账户和统计都挂在账本下面。自己新建一本，或者用别人给的邀请码加入他的账本。</div>
+            </div>
+
+            <div style="margin-top:24px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">
+              <div style="background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;flex-direction:column">
+                <span style="width:48px;height:48px;border-radius:15px;background:#E4EDE5;color:#2F4A38;display:flex;align-items:center;justify-content:center">{{ iconPlusBig }}</span>
+                <div style="margin-top:14px;font:700 19px/26px 'Figtree','PingFang SC',sans-serif">新建账本</div>
+                <div style="margin-top:6px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">你是 owner：定账本名和基准币种，之后可以生成邀请码叫家人进来。</div>
+                <button style="margin-top:18px;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">新建账本</button>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:flex;flex-direction:column">
+                <span style="width:48px;height:48px;border-radius:15px;background:#E4EDEE;color:#2C4B5B;display:flex;align-items:center;justify-content:center">{{ iconKeyBig }}</span>
+                <div style="margin-top:14px;font:700 19px/26px 'Figtree','PingFang SC',sans-serif">用邀请码加入</div>
+                <div style="margin-top:6px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">对方在他的账本设置里生成 6 位码，输进来就成为这本账的成员。</div>
+                <button style="margin-top:18px;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">输入邀请码</button>
+              </div>
+            </div>
+
+            <div style="margin-top:16px;text-align:center;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">一个人可以同时在多本账里，比如「家庭账本」和「旅行账本」。</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏没有左侧导航 —— 没有账本时导航里每一项都点不动。页面只剩顶栏、一句解释和两张卡。</div>
+    </div>
+  </div>
 </div></x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
 const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
@@ -513,6 +610,7 @@ class Component extends DCLogic {
       iconWallet:   svg(WALLET, 18),
       iconWalletSm: svg(WALLET, 17),
       iconPlusBig:  svg([P('M10 3.5v13M3.5 10h13')], 24, 2.2),
+      iconKeyBig:   svg([C(7,12.5,3.75), P('M9.75 9.75 16.5 3.5M14 6l1.75 1.75M12.25 7.75 14 9.5')], 24),
       iconPlusSm:   svg([P('M10 3.5v13M3.5 10h13')], 18, 2.2),
       iconInvite:   svg([C(8,7.5,3), P('M2.5 16.5c.8-2.8 2.9-4.25 5.5-4.25S12.7 13.7 13.5 16.5'), P('M15 6.5v5M12.5 9h5')], 17),
       tabHome:      svg([P('M2.5 8.5 10 2.5l7.5 6'), P('M4.5 10v7.5h11V10')], 22),

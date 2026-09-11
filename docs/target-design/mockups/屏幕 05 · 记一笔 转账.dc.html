@@ -26,7 +26,7 @@ input{font-family:inherit;box-sizing:border-box}
   <div style="max-width:1000px;border-bottom:2px solid #16201A;padding-bottom:12px">
     <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 05 · New entry · 转账</div>
     <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">记一笔 · 转账 · 两种形态</h1>
-    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">上排两腿跨币种，下排单腿只填对方文字。子类型 Segmented 可点 —— 选「信用卡还款」会把转入账户锁到信用卡。</div>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">上排两腿跨币种，下排单腿只填对方文字。子类型 Segmented 可点 —— 选「信用卡还款」后转入账户下拉只列信用卡账户。汇率只读：显示汇率与发生日，不能点开改；另一腿的金额仍可手改。转账表单没有商户和标题字段。</div>
   </div>
 
   <!-- ============ A · 两腿跨币种 ============ -->
@@ -73,7 +73,7 @@ input{font-family:inherit;box-sizing:border-box}
               </div>
               <div style="margin-top:8px;height:56px;padding:0 12px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;gap:11px;cursor:pointer">
                 <span style="width:32px;height:32px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
-                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄 · CNY · 12,480.35</span></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄卡 · CNY · 12,480.35</span></span>
                 {{ iconChevSm }}
               </div>
 
@@ -85,7 +85,7 @@ input{font-family:inherit;box-sizing:border-box}
 
               <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:10px">
                 <span style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">转入账户</span>
-                <span style="display:{{ lockShow }};align-items:center;height:26px;padding:0 9px;border-radius:999px;background:#E4EDEE;color:#2C4B5B;font:600 11px/16px 'Figtree','PingFang SC',sans-serif">还款已锁定</span>
+                <span style="display:{{ lockShow }};align-items:center;height:26px;padding:0 9px;border-radius:999px;background:#E4EDEE;color:#2C4B5B;font:600 11px/16px 'Figtree','PingFang SC',sans-serif">只列信用卡账户</span>
               </div>
               <div style="margin-top:8px;height:56px;padding:0 12px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;gap:11px;cursor:pointer">
                 <span style="width:32px;height:32px;border-radius:999px;background:{{ inTint }};color:{{ inFg }};flex:none;display:flex;align-items:center;justify-content:center">{{ inIcon }}</span>
@@ -112,7 +112,7 @@ input{font-family:inherit;box-sizing:border-box}
 
               <div style="display:{{ crossShow }};align-items:center;gap:8px;padding:10px 0 6px">
                 <span style="flex:1;height:1px;background:#EDF2ED"></span>
-                <span style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;background:#F1F6F1;font:450 12px/16px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#3E4A42;flex:none;cursor:pointer">1 SGD = 5.9641 CNY{{ iconEdit }}</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;background:#F1F6F1;font:450 12px/16px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62;flex:none">1 SGD = 5.9641 CNY · 09-08</span>
                 <span style="flex:1;height:1px;background:#EDF2ED"></span>
               </div>
 
@@ -204,7 +204,7 @@ input{font-family:inherit;box-sizing:border-box}
                     </div>
                     <div style="height:64px;padding:0 16px;border-radius:16px;background:#F1F6F1;display:flex;align-items:center;gap:12px;cursor:pointer" style-hover="background:#E9F0E9">
                       <span style="width:36px;height:36px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
-                      <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄 · CNY · 12,480.35</span></span>
+                      <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄卡 · CNY · 12,480.35</span></span>
                       {{ iconChevSm }}
                     </div>
                   </div>
@@ -214,7 +214,7 @@ input{font-family:inherit;box-sizing:border-box}
                   <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
                       <span style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">转入账户</span>
-                      <span style="display:{{ lockShow }};align-items:center;height:26px;padding:0 9px;border-radius:999px;background:#E4EDEE;color:#2C4B5B;font:600 11px/16px 'Figtree','PingFang SC',sans-serif">还款已锁定</span>
+                      <span style="display:{{ lockShow }};align-items:center;height:26px;padding:0 9px;border-radius:999px;background:#E4EDEE;color:#2C4B5B;font:600 11px/16px 'Figtree','PingFang SC',sans-serif">只列信用卡账户</span>
                     </div>
                     <div style="height:64px;padding:0 16px;border-radius:16px;background:#F1F6F1;display:flex;align-items:center;gap:12px;cursor:pointer" style-hover="background:#E9F0E9">
                       <span style="width:36px;height:36px;border-radius:999px;background:{{ inTint }};color:{{ inFg }};flex:none;display:flex;align-items:center;justify-content:center">{{ inIcon }}</span>
@@ -247,8 +247,8 @@ input{font-family:inherit;box-sizing:border-box}
                     </div>
                   </div>
                   <div style="display:{{ crossShow }};align-items:center;gap:10px;margin-top:14px">
-                    <span style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:#F1F6F1;font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#3E4A42;cursor:pointer" style-hover="background:#E9F0E9">1 SGD = 5.9641 CNY{{ iconEdit }}</span>
-                    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">转入金额按此自动算，可改成银行实际到账数；改了以你填的为准。</span>
+                    <span style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:#F1F6F1;font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">1 SGD = 5.9641 CNY · 2026-09-08</span>
+                    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">汇率取自发生日，不可手改。转入金额按此自动算，可改成银行实际到账数；改了以你填的为准。</span>
                   </div>
                   <div style="display:{{ sameShow }};margin-top:12px;font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">两边同为 CNY，只填一次。</div>
                 </div>
@@ -353,7 +353,7 @@ input{font-family:inherit;box-sizing:border-box}
               <div style="margin-top:6px;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">转入账户</div>
               <div style="margin-top:8px;height:56px;padding:0 12px;border-radius:14px;background:#F1F6F1;display:flex;align-items:center;gap:11px;cursor:pointer">
                 <span style="width:32px;height:32px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
-                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄 · CNY · 12,480.35</span></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄卡 · CNY · 12,480.35</span></span>
                 {{ iconChevSm }}
               </div>
             </div>
@@ -458,7 +458,7 @@ input{font-family:inherit;box-sizing:border-box}
                     <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">转入账户</div>
                     <div style="height:64px;padding:0 16px;border-radius:16px;background:#F1F6F1;display:flex;align-items:center;gap:12px;cursor:pointer" style-hover="background:#E9F0E9">
                       <span style="width:36px;height:36px;border-radius:999px;background:#E4EDE5;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center">{{ iconWallet }}</span>
-                      <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄 · CNY · 12,480.35</span></span>
+                      <span style="flex:1;min-width:0"><span style="display:block;font:500 16px/22px 'Figtree','PingFang SC',sans-serif">招行储蓄卡</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#5F6A62">储蓄卡 · CNY · 12,480.35</span></span>
                       {{ iconChevSm }}
                     </div>
                   </div>
@@ -574,7 +574,7 @@ class Component extends DCLogic {
       lockShow: repay ? 'inline-flex' : 'none',
 
       inName:     repay ? '建行信用卡' : 'DBS Multiplier',
-      inMeta:     repay ? '信用卡 · CNY · −3,215.00' : '储蓄 · SGD · 4,120.80',
+      inMeta:     repay ? '信用卡 · CNY · −3,215.00' : '储蓄卡 · SGD · 4,120.80',
       inTint:     repay ? '#F3E7E2' : '#E0EEEC',
       inFg:       repay ? '#8A3529' : '#0B5450',
       inIcon:     svg(repay ? CARD : WALLET, 18),

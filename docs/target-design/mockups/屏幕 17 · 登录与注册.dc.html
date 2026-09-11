@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FFFFFF}
+body{font-family:'Figtree','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2F4A38}
+a:hover{color:#1F3527}
+input{font-family:inherit;box-sizing:border-box}
+</style>
+</helmet>
+
+<div style="padding:44px 40px 100px;color:#16201A">
+  <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
+    <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 17 · Sign in / Sign up</div>
+    <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">登录 / 注册</h1>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">三张：登录（邮箱、口令）、注册（邮箱、口令、显示名）、注册已关闭。沿用已确认 token，表单控件和账户表单一套。</div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:28px;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">A</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">登录</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">邮箱 + 口令，下方一条去注册的链接</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="登录 375" style="width:375px;min-height:720px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 28px">
+          <div style="padding:0 4px 18px">
+            <span style="width:44px;height:44px;border-radius:14px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 17px/24px 'Figtree','PingFang SC',sans-serif">账</span>
+            <div style="margin-top:14px;font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">登录</div>
+            <div style="margin-top:6px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">用注册时的邮箱登录，账本数据在云端。</div>
+          </div>
+
+          <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">邮箱</div>
+              <input type="email" placeholder="wang@example.com" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'IBM Plex Mono',monospace;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+            </div>
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">口令</div>
+              <div style="position:relative">
+                <input type="password" placeholder="••••••••" style="width:100%;height:52px;padding:0 52px 0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+                <span onClick="{{ toggleReveal }}" style="position:absolute;right:6px;top:6px;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#5F6A62;cursor:pointer" style-hover="background:#E9F0E9">{{ iconEye }}</span>
+              </div>
+            </div>
+            <button style="height:52px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C" style-active="background:#1B2B21">登录</button>
+          </div>
+
+          <div style="margin-top:18px;text-align:center;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">还没有账号？<a href="#signup" style="font-weight:600;text-decoration:none">注册</a></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">整屏只有一件事：两个字段 + 一个主按钮。口令右侧的眼睛图标可点，命中区 40px。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="登录 1440" style="width:1440px;min-height:640px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="padding:20px 28px;display:flex;align-items:center;gap:10px">
+          <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif">账</span>
+          <span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭记账</span>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px 28px 56px">
+          <div style="width:420px">
+            <div style="font:700 30px/38px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">登录</div>
+            <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">用注册时的邮箱登录，账本数据在云端。</div>
+            <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">邮箱</div>
+                <input type="email" placeholder="wang@example.com" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'IBM Plex Mono',monospace;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+              </div>
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">口令</div>
+                <div style="position:relative">
+                  <input type="password" placeholder="••••••••" style="width:100%;height:52px;padding:0 52px 0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+                  <span onClick="{{ toggleReveal }}" style="position:absolute;right:6px;top:6px;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#5F6A62;cursor:pointer" style-hover="background:#E9F0E9">{{ iconEye }}</span>
+                </div>
+              </div>
+              <button style="height:52px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C" style-active="background:#1B2B21">登录</button>
+            </div>
+            <div style="margin-top:18px;text-align:center;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">还没有账号？<a href="#signup" style="font-weight:600;text-decoration:none">注册</a></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏不做左右分栏配图 —— 表单只有两个字段，居中 420px 的卡片就够，和窄屏是同一套控件。</div>
+    </div>
+  </div>
+
+  <div id="signup" style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">B</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">注册</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">邮箱、口令、显示名</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="注册 375" style="width:375px;min-height:720px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 0;display:flex;align-items:center;gap:10px">
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">{{ iconBack }}</span>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 28px">
+          <div style="padding:0 4px 18px">
+            <div style="font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">注册</div>
+            <div style="margin-top:6px;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">注册完还要建一本账，或者用别人的邀请码加入。</div>
+          </div>
+
+          <div style="background:#FFFFFF;border-radius:18px;padding:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">邮箱</div>
+              <input type="email" placeholder="wang@example.com" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'IBM Plex Mono',monospace;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+            </div>
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">口令</div>
+              <div style="position:relative">
+                <input type="password" placeholder="至少 8 位" style="width:100%;height:52px;padding:0 52px 0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+                <span onClick="{{ toggleReveal }}" style="position:absolute;right:6px;top:6px;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#5F6A62;cursor:pointer" style-hover="background:#E9F0E9">{{ iconEye }}</span>
+              </div>
+            </div>
+            <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">显示名</div>
+              <input type="text" placeholder="如「我」或「老公」" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+              <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">账本里的其他人看到的就是这个名字，之后可以改。</div>
+            </div>
+            <button style="height:52px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C" style-active="background:#1B2B21">注册</button>
+          </div>
+
+          <div style="margin-top:18px;text-align:center;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">已经有账号？<a href="#top" style="font-weight:600;text-decoration:none">登录</a></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">显示名放在注册里而不是注册后再补 —— 家庭账本里「谁记的」是天天要看的信息。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="注册 1440" style="width:1440px;min-height:640px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="padding:20px 28px;display:flex;align-items:center;gap:10px">
+          <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif">账</span>
+          <span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭记账</span>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px 28px 56px">
+          <div style="width:420px">
+            <div style="font:700 30px/38px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">注册</div>
+            <div style="margin-top:8px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">注册完还要建一本账，或者用别人的邀请码加入。</div>
+            <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(28,50,36,.07);display:grid;gap:16px">
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">邮箱</div>
+                <input type="email" placeholder="wang@example.com" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'IBM Plex Mono',monospace;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+              </div>
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">口令</div>
+                <div style="position:relative">
+                  <input type="password" placeholder="至少 8 位" style="width:100%;height:52px;padding:0 52px 0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+                  <span onClick="{{ toggleReveal }}" style="position:absolute;right:6px;top:6px;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#5F6A62;cursor:pointer" style-hover="background:#E9F0E9">{{ iconEye }}</span>
+                </div>
+              </div>
+              <div>
+                <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:6px">显示名</div>
+                <input type="text" placeholder="如「我」或「老公」" style="width:100%;height:52px;padding:0 16px;border:1.5px solid transparent;border-radius:14px;background:#F1F6F1;font:400 16px/24px 'Figtree','PingFang SC',sans-serif;color:#16201A;outline:none" style-focus="background:#FFF;border-color:#2F4A38">
+                <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">账本里的其他人看到的就是这个名字，之后可以改。</div>
+              </div>
+              <button style="height:52px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C" style-active="background:#1B2B21">注册</button>
+            </div>
+            <div style="margin-top:18px;text-align:center;font:400 14px/21px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">已经有账号？<a href="#top" style="font-weight:600;text-decoration:none">登录</a></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">和登录同一张卡、同一个宽度，只多一个字段 —— 两张页面之间切换时视觉不跳。</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin-top:44px;padding-top:28px;border-top:1px solid #E1EAE2;margin-bottom:14px">
+    <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;background:#16201A;color:#FFF;font:600 12px/16px 'IBM Plex Mono',monospace">C</span>
+    <span style="font:700 18px/25px 'Figtree','PingFang SC',sans-serif">注册已关闭</span>
+    <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">表单换成一段提示，只留回登录</span>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375</div>
+      <div data-screen-label="注册已关闭 375" style="width:375px;min-height:720px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
+        <div style="padding:6px 16px 0;display:flex;align-items:center;gap:10px">
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFF;display:flex;align-items:center;justify-content:center;color:#3E4A42;box-shadow:0 2px 10px rgba(28,50,36,.07);cursor:pointer">{{ iconBack }}</span>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 16px 28px">
+          <div style="padding:0 4px 18px">
+            <div style="font:700 24px/32px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">注册</div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:22px 18px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+            <span style="width:48px;height:48px;border-radius:15px;background:#E8EDE8;color:#454F48;display:flex;align-items:center;justify-content:center">{{ iconLock }}</span>
+            <div style="margin-top:14px;font:700 18px/25px 'Figtree','PingFang SC',sans-serif">本站暂不开放注册</div>
+            <div style="margin-top:6px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">请向账本 owner 索取邀请。</div>
+            <button style="margin-top:18px;width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">回到登录</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">不保留灰掉的表单 —— 填不了的输入框只会让人反复试。图标用中性灰，不是错误红：这不是用户做错了什么。</div>
+    </div>
+
+    <div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">1440</div>
+      <div data-screen-label="注册已关闭 1440" style="width:1440px;min-height:640px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16);display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="padding:20px 28px;display:flex;align-items:center;gap:10px">
+          <span style="width:32px;height:32px;border-radius:10px;background:#2F4A38;color:#FFF;display:flex;align-items:center;justify-content:center;font:700 13px/18px 'Figtree',sans-serif">账</span>
+          <span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">家庭记账</span>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px 28px 56px">
+          <div style="width:420px">
+            <div style="font:700 30px/38px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">注册</div>
+            <div style="margin-top:20px;background:#FFFFFF;border-radius:18px;padding:24px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+              <span style="width:48px;height:48px;border-radius:15px;background:#E8EDE8;color:#454F48;display:flex;align-items:center;justify-content:center">{{ iconLock }}</span>
+              <div style="margin-top:14px;font:700 19px/26px 'Figtree','PingFang SC',sans-serif">本站暂不开放注册</div>
+              <div style="margin-top:6px;font:400 15px/23px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">请向账本 owner 索取邀请。</div>
+              <button style="margin-top:20px;width:100%;height:48px;border:none;border-radius:14px;background:#F1F6F1;color:#16201A;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">回到登录</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">和注册页同一个位置、同一张卡，只是内容换成一段话 —— 从链接点过来的人不会怀疑自己走错了页面。</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2000}}">
+const svg = (children, w, sw) => React.createElement('svg',{width:w||20,height:w||20,viewBox:'0 0 20 20',fill:'none',stroke:'currentColor',strokeWidth:sw||1.9,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block',flex:'none'}},children);
+const P = (d) => React.createElement('path',{key:d,d});
+const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r,key:'c'+cx+cy+r});
+const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,key:'r'+x+y+w});
+
+class Component extends DCLogic {
+  state = { reveal: false };
+
+  renderVals() {
+    const on = this.state.reveal;
+    return {
+      iconEye: on
+        ? svg([P('M2.5 10s2.75-4.75 7.5-4.75S17.5 10 17.5 10s-2.75 4.75-7.5 4.75S2.5 10 2.5 10'), C(10,10,2.25), P('M3.5 3.5 16.5 16.5')], 20)
+        : svg([P('M2.5 10s2.75-4.75 7.5-4.75S17.5 10 17.5 10s-2.75 4.75-7.5 4.75S2.5 10 2.5 10'), C(10,10,2.25)], 20),
+      iconBack: svg([P('M12 5.5 7.5 10l4.5 4.5')], 20, 2),
+      iconLock: svg([R(4.25,8.75,11.5,8,2.5), P('M7 8.75V6.5a3 3 0 0 1 6 0v2.25')], 24, 1.8),
+      toggleReveal: () => this.setState(s => ({ reveal: !s.reveal })),
+    };
+  }
+}
+</script>
+</body>
+</html>

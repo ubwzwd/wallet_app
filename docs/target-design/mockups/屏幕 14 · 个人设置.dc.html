@@ -25,7 +25,7 @@ input{font-family:inherit;box-sizing:border-box}
   <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
     <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 14 · Profile</div>
     <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">个人设置</h1>
-    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">显示名、默认币种、语言、退出登录。语言三个选项可点切换 —— 切到 English 时，右边会同步显示英文版的样子。</div>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">显示名、默认币种、外观、语言、退出登录。外观三选一（跟随系统 / 浅色 / 深色）和语言都可点切换 —— 切到 English 时，右边会同步显示英文版的样子。</div>
   </div>
 
   <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:28px;align-items:flex-start">
@@ -70,6 +70,16 @@ input{font-family:inherit;box-sizing:border-box}
             </div>
 
             <div>
+              <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:8px">{{ t.appearance }}</div>
+              <div style="display:flex;gap:4px;padding:4px;border-radius:14px;background:#E4EAE5">
+                <sc-for list="{{ themes }}" as="th" hint-placeholder-count="3">
+                  <span onClick="{{ pickTheme }}" data-th="{{ th.id }}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;height:44px;border-radius:11px;cursor:pointer;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;background:{{ th.bg }};color:{{ th.color }};box-shadow:{{ th.shadow }}">{{ th.label }}</span>
+                </sc-for>
+              </div>
+              <div style="margin-top:6px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ t.appearanceHint }}</div>
+            </div>
+
+            <div>
               <div style="font:600 12px/16px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;margin-bottom:8px">{{ t.language }}</div>
               <div style="display:grid;gap:6px">
                 <sc-for list="{{ langs }}" as="l" hint-placeholder-count="3">
@@ -88,19 +98,6 @@ input{font-family:inherit;box-sizing:border-box}
 
         <div style="padding:0 16px 12px">
           <div style="background:#FFFFFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(28,50,36,.07)">
-            <div style="display:flex;align-items:center;gap:12px;padding:0 16px;height:56px;cursor:pointer" style-hover="background:#F7FAF7">
-              <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconBell }}</span>
-              <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ t.notifications }}</span>
-              <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;flex:none">{{ t.notifValue }}</span>
-              {{ iconChevSm }}
-            </div>
-            <div style="height:1px;background:#EDF2ED;margin:0 16px"></div>
-            <div style="display:flex;align-items:center;gap:12px;padding:0 16px;height:56px;cursor:pointer" style-hover="background:#F7FAF7">
-              <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconExport }}</span>
-              <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ t.exportData }}</span>
-              {{ iconChevSm }}
-            </div>
-            <div style="height:1px;background:#EDF2ED;margin:0 16px"></div>
             <div style="display:flex;align-items:center;gap:12px;padding:0 16px;height:56px;cursor:pointer" style-hover="background:#F7FAF7">
               <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconInfo }}</span>
               <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ t.about }}</span>
@@ -166,7 +163,6 @@ input{font-family:inherit;box-sizing:border-box}
                     <span style="display:block;font:700 20px/28px 'Figtree','PingFang SC',sans-serif">我</span>
                     <span style="display:block;font:450 13px/19px 'IBM Plex Mono',monospace;color:#5F6A62">wang@example.com</span>
                   </span>
-                  <button style="height:40px;padding:0 14px;border:none;border-radius:11px;background:#F1F6F1;color:#16201A;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;cursor:pointer;flex:none" style-hover="background:#E9F0E9">{{ t.changeAvatar }}</button>
                 </div>
 
                 <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:20px;padding-top:20px;border-top:1px solid #EDF2ED">
@@ -204,20 +200,17 @@ input{font-family:inherit;box-sizing:border-box}
             </div>
 
             <div style="display:grid;gap:20px">
+              <div style="background:#FFFFFF;border-radius:18px;padding:22px;box-shadow:0 2px 10px rgba(28,50,36,.07)">
+                <div style="font:700 17px/24px 'Figtree','PingFang SC',sans-serif">{{ t.appearance }}</div>
+                <div style="margin-top:14px;display:flex;gap:4px;padding:4px;border-radius:14px;background:#E4EAE5">
+                  <sc-for list="{{ themes }}" as="th" hint-placeholder-count="3">
+                    <span onClick="{{ pickTheme }}" data-th="{{ th.id }}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;height:44px;border-radius:11px;cursor:pointer;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;background:{{ th.bg }};color:{{ th.color }};box-shadow:{{ th.shadow }}">{{ th.label }}</span>
+                  </sc-for>
+                </div>
+                <div style="margin-top:10px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">{{ t.appearanceHint }}</div>
+              </div>
+
               <div style="background:#FFFFFF;border-radius:18px;padding:4px 0;box-shadow:0 2px 10px rgba(28,50,36,.07)">
-                <div style="display:flex;align-items:center;gap:12px;padding:0 20px;height:60px;cursor:pointer" style-hover="background:#F7FAF7">
-                  <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconBell }}</span>
-                  <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ t.notifications }}</span>
-                  <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62;flex:none">{{ t.notifValue }}</span>
-                  {{ iconChevSm }}
-                </div>
-                <div style="height:1px;background:#EDF2ED;margin:0 20px"></div>
-                <div style="display:flex;align-items:center;gap:12px;padding:0 20px;height:60px;cursor:pointer" style-hover="background:#F7FAF7">
-                  <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconExport }}</span>
-                  <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ t.exportData }}</span>
-                  {{ iconChevSm }}
-                </div>
-                <div style="height:1px;background:#EDF2ED;margin:0 20px"></div>
                 <div style="display:flex;align-items:center;gap:12px;padding:0 20px;height:60px;cursor:pointer" style-hover="background:#F7FAF7">
                   <span style="width:32px;height:32px;border-radius:999px;background:#F1F6F1;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center">{{ iconInfo }}</span>
                   <span style="flex:1;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">{{ t.about }}</span>
@@ -253,7 +246,7 @@ const ZH = {
   prefs:'偏好', defaultCurrency:'默认币种', cnyName:'人民币',
   currencyHint:'新建账本和新建账户时的默认值，不改已有的',
   language:'语言', langNote:'语言只影响界面文字。金额格式、千分位、日期一律按账本的基准币种与地区走，不随语言变。',
-  notifications:'通知', notifValue:'老婆记账时提醒', exportData:'导出我的数据', about:'关于',
+  appearance:'外观', appearanceHint:'只改这台设备上的显示，不影响别人。', about:'关于',
   session:'登录', signOut:'退出登录',
   signOutHint:'退出后本地缓存会清掉，账本数据留在云端。下次用同一个邮箱登录就能回来。',
   save:'保存', changeAvatar:'换头像', ledgerName:'家庭账本',
@@ -267,7 +260,7 @@ const EN = {
   prefs:'Preferences', defaultCurrency:'Default currency', cnyName:'Chinese Yuan',
   currencyHint:'Used when creating new ledgers and accounts; existing ones unchanged',
   language:'Language', langNote:'Language affects interface text only. Number formatting, thousands separators and dates always follow the ledger’s base currency and locale.',
-  notifications:'Notifications', notifValue:'When 老婆 adds an entry', exportData:'Export my data', about:'About',
+  appearance:'Appearance', appearanceHint:'Applies to this device only.', about:'About',
   session:'Session', signOut:'Sign out',
   signOutHint:'Signing out clears the local cache. Ledger data stays in the cloud — sign in with the same email to come back.',
   save:'Save', changeAvatar:'Change', ledgerName:'Family ledger',
@@ -275,7 +268,7 @@ const EN = {
 };
 
 class Component extends DCLogic {
-  state = { lang: 'zh' };
+  state = { lang: 'zh', theme: 'system' };
 
   renderVals() {
     const lang = this.state.lang;
@@ -301,6 +294,20 @@ class Component extends DCLogic {
         };
       }),
       pickLang: (e) => this.setState({ lang: e.currentTarget.getAttribute('data-l') }),
+      themes: [
+        { id:'system', label: lang === 'en' ? 'System' : '跟随系统' },
+        { id:'light',  label: lang === 'en' ? 'Light'  : '浅色' },
+        { id:'dark',   label: lang === 'en' ? 'Dark'   : '深色' },
+      ].map(o => {
+        const on = o.id === this.state.theme;
+        return {
+          id: o.id, label: o.label,
+          bg: on ? '#FFFFFF' : 'transparent',
+          color: on ? '#16201A' : '#3E4A42',
+          shadow: on ? '0 1px 4px rgba(28,50,36,.14)' : 'none',
+        };
+      }),
+      pickTheme: (e) => this.setState({ theme: e.currentTarget.getAttribute('data-th') }),
       iconChevSm: svg([P('M8 5.5 12.5 10 8 14.5')], 16, 2),
       iconCheck:  svg([P('M4.5 10.5 8 14l7.5-8')], 18, 2.3),
       iconBell:   svg([P('M6 8.5a4 4 0 0 1 8 0c0 3 1 4 1.5 4.5h-11C5 12.5 6 11.5 6 8.5'), P('M8.5 15.5a1.75 1.75 0 0 0 3 0')], 17),

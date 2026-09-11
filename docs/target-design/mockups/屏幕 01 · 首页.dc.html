@@ -193,10 +193,7 @@ a:hover{color:#1F3527}
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;background:#DDE9DF;color:#2F4A38;cursor:pointer">{{ tabHome }}<span style="font:600 15px/20px 'Figtree','PingFang SC',sans-serif">首页</span></div>
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ tabList }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">交易</span></div>
             <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ tabImport }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">导入</span></div>
-            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ navChart }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">报表</span></div>
-            <div style="height:1px;background:#E1EAE2;margin:8px 12px"></div>
-            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ navMembers }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">成员</span></div>
-            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ navSettings }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">设置</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:0 12px;height:44px;border-radius:12px;color:#3E4A42;cursor:pointer" style-hover="background:#F1F6F1">{{ tabMe }}<span style="font:500 15px/20px 'Figtree','PingFang SC',sans-serif">我的</span></div>
           </div>
 
           <button style="height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 15px/22px 'Figtree','PingFang SC',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#253A2C" style-active="background:#1B2B21">{{ plusSm }}记一笔</button>
@@ -351,9 +348,9 @@ class Component extends DCLogic {
 
   renderVals() {
     const accounts = [
-      { name:'招行储蓄卡',   meta:'储蓄 · CNY',  amount:'12,480.35',  converted:'',              k:'savings', neg:false },
+      { name:'招行储蓄卡',   meta:'储蓄卡 · CNY',  amount:'12,480.35',  converted:'',              k:'savings', neg:false },
       { name:'建行信用卡',   meta:'信用卡 · CNY', amount:'−3,215.00',  converted:'',              k:'credit',  neg:true  },
-      { name:'DBS Multiplier', meta:'储蓄 · SGD',  amount:'S$4,120.80', converted:'≈ ¥24,576.75', k:'savings', neg:false },
+      { name:'DBS Multiplier', meta:'储蓄卡 · SGD',  amount:'S$4,120.80', converted:'≈ ¥24,576.75', k:'savings', neg:false },
     ];
     const accIcon = {
       savings: svg([R(2.75,5.25,14.5,10.5,2.5), P('M13 10.5h2.5')], 18),
@@ -361,11 +358,11 @@ class Component extends DCLogic {
     };
 
     const catData = [
-      { name:'餐饮',     amount:2140,   subs:[['正餐',980],['外卖',620],['零食饮料',340],['买菜',200]] },
-      { name:'居住',     amount:2000,   subs:[['房租',1800],['水电燃气',200]] },
-      { name:'生活购物', amount:1205.5, subs:[['日用品',505.5],['衣物',700]] },
-      { name:'交通',     amount:860,    subs:[['打车',460],['公共交通',400]] },
-      { name:'娱乐',     amount:420,    subs:[['门票',300],['订阅',120]] },
+      { name:'餐饮',     amount:2140,   subs:[['午餐',980],['晚餐',620],['零食饮料',340],['早餐',200]] },
+      { name:'居住',     amount:2000,   subs:[['房租',2000]] },
+      { name:'生活购物', amount:1205.5, subs:[['买菜',700],['洗护清洁',505.5]] },
+      { name:'交通',     amount:860,    subs:[['打车',460],['公交地铁',400]] },
+      { name:'娱乐',     amount:420,    subs:[['电影',300],['游戏',120]] },
     ];
     const total = 6842.5;
     const maxCat = 2140;
@@ -406,7 +403,7 @@ class Component extends DCLogic {
       { name:'瑞幸咖啡',  meta:'餐饮 / 零食饮料 · 招行储蓄卡',        amount:'−45.00',     sub:'09-10', k:'expense'  },
       { name:'9 月工资',  meta:'工资 / 基本工资 · 招行储蓄卡',        amount:'+18,000.00', sub:'09-10', k:'income'   },
       { name:'京东退款',  meta:'消费购物 · 关联 9-02 京东订单',       amount:'+199.00',    sub:'09-09', k:'refund'   },
-      { name:'还信用卡',  meta:'招行储蓄卡 → 建行信用卡',            amount:'3,000.00',   sub:'09-08', k:'transfer' },
+      { name:'招行储蓄卡 → 建行信用卡',  meta:'信用卡还款',          amount:'3,000.00',   sub:'09-08', k:'transfer' },
       { name:'Grab 打车', meta:'交通 / 打车 · DBS Multiplier',       amount:'−S$12.40',   sub:'≈ −¥66.20', k:'expense' },
     ];
 

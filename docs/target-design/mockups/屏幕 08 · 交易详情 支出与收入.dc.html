@@ -103,7 +103,7 @@ a:hover{color:#1F3527}
                 <span style="width:32px;height:32px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconExpenseSm }}</span>
                 <span style="flex:1;min-width:0">
                   <span style="display:block;font:500 15px/20px 'Figtree','PingFang SC',sans-serif">京东订单</span>
-                  <span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#6B540D">09-02 · 生活购物 / 家电数码 · 招行储蓄卡</span>
+                  <span style="display:block;font:400 11px/15px 'IBM Plex Mono',monospace;color:#6B540D">09-02 · 消费购物 / 数码 · 招行储蓄卡</span>
                 </span>
                 <span style="text-align:right;flex:none">
                   <span style="display:block;font:450 15px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#AC4335">−598.00</span>
@@ -276,7 +276,7 @@ a:hover{color:#1F3527}
                   </div>
                   <div style="margin-top:12px;display:flex;align-items:center;gap:12px;cursor:pointer">
                     <span style="width:32px;height:32px;border-radius:999px;background:#F3E7E2;color:#8A3529;flex:none;display:flex;align-items:center;justify-content:center">{{ iconExpenseSm }}</span>
-                    <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">京东订单</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#6B540D">09-02 · 生活购物 / 家电数码</span></span>
+                    <span style="flex:1;min-width:0"><span style="display:block;font:500 15px/21px 'Figtree','PingFang SC',sans-serif">京东订单</span><span style="display:block;font:400 12px/17px 'IBM Plex Mono',monospace;color:#6B540D">09-02 · 消费购物 / 数码</span></span>
                     <span style="font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#AC4335;flex:none">−598.00</span>
                   </div>
                   <div style="margin-top:12px;height:8px;border-radius:999px;background:#EADFC2;overflow:hidden;display:flex">
@@ -340,7 +340,7 @@ const SANS = "500 14px/20px 'Figtree','PingFang SC',sans-serif";
 const DATA = {
   expense: {
     amount:'−S$12.40', converted:'≈ −¥66.20 · 汇率 5.3387', merchant:'Grab 打车',
-    accountLine:'DBS Multiplier · 储蓄 · SGD', catFull:'交通 / 打车', cross:true,
+    accountLine:'DBS Multiplier · 储蓄卡 · SGD', catFull:'交通 / 打车', cross:true,
     accTint:'#F3E7E2', accFg:'#8A3529',
     meta:[
       { k:'日期',   v:'2026-09-08 周二', font:MONO },
@@ -350,7 +350,6 @@ const DATA = {
       { k:'折算 CNY', v:'¥66.20',        font:MONO },
       { k:'备注',   v:'去机场',          font:SANS },
       { k:'记录人', v:'我 · owner',      font:SANS },
-      { k:'编号',   v:'#0141',           font:MONO },
     ],
     log:[
       { title:'手动录入 · 我', meta:'09-08 07:12 · 客户端 iOS', dot:'#2F4A38' },
@@ -360,7 +359,7 @@ const DATA = {
   },
   income: {
     amount:'+18,000.00', converted:'CNY · 基准币种，无需折算', merchant:'9 月工资',
-    accountLine:'招行储蓄卡 · 储蓄 · CNY', catFull:'工资 / 基本工资', cross:false,
+    accountLine:'招行储蓄卡 · 储蓄卡 · CNY', catFull:'工资 / 基本工资', cross:false,
     accTint:'#E4EDE5', accFg:'#2F4A38',
     meta:[
       { k:'日期',   v:'2026-09-10 周四', font:MONO },
@@ -370,7 +369,6 @@ const DATA = {
       { k:'备注',   v:'—',               font:SANS },
       { k:'记录人', v:'我 · owner',      font:SANS },
       { k:'来源',   v:'导入 cmb-09.csv', font:SANS },
-      { k:'编号',   v:'#0143',           font:MONO },
     ],
     log:[
       { title:'导入入账 · 我', meta:'09-10 21:14 · cmb-09.csv 第 2 行', dot:'#2F4A38' },
@@ -379,7 +377,7 @@ const DATA = {
   },
   refund: {
     amount:'+199.00', converted:'CNY · 从原支出里扣回，不算收入', merchant:'京东退款',
-    accountLine:'招行储蓄卡 · 储蓄 · CNY', catFull:'消费购物 · 未细分', cross:false,
+    accountLine:'招行储蓄卡 · 储蓄卡 · CNY', catFull:'消费购物 · 未细分', cross:false,
     accTint:'#E4EDE5', accFg:'#2F4A38',
     meta:[
       { k:'日期',     v:'2026-09-09 周三', font:MONO },
@@ -389,7 +387,6 @@ const DATA = {
       { k:'备注',     v:'尺码不合退货',    font:SANS },
       { k:'记录人',   v:'我 · owner',      font:SANS },
       { k:'来源',     v:'导入 cmb-09.csv', font:SANS },
-      { k:'编号',     v:'#0140',           font:MONO },
     ],
     log:[
       { title:'导入入账 · 我', meta:'09-10 21:14 · cmb-09.csv 第 3 行', dot:'#2F4A38' },

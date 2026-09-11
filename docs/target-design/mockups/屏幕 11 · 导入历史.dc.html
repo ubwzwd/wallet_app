@@ -24,7 +24,7 @@ a:hover{color:#1F3527}
   <div style="max-width:1020px;border-bottom:2px solid #16201A;padding-bottom:12px">
     <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#5F6A62;text-transform:uppercase">Screen 11 · Import history</div>
     <h1 style="margin:8px 0 0;font:700 30px/36px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入历史</h1>
-    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">批次列表：待提交（ready）可继续确认，已提交（committed）可撤销。下面第二组是撤销确认对话框，写明条数和「会有 2 笔退款失去原单」。</div>
+    <div style="margin-top:8px;font:400 14px/22px 'Figtree','PingFang SC',sans-serif;color:#3E4A42">批次只有两种状态：待提交（ready）可继续确认，已提交（committed）可撤销。批次行带上传人。下面第二组是撤销确认对话框，写明条数和「会有 2 笔退款失去原单」。</div>
   </div>
 
   <div style="display:flex;align-items:baseline;gap:10px;margin-top:28px;margin-bottom:14px">
@@ -125,7 +125,7 @@ a:hover{color:#1F3527}
           <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
             <div>
               <span style="font:700 28px/34px 'Figtree','PingFang SC',sans-serif;letter-spacing:-.02em">导入历史</span>
-              <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">4 批 · 1 批待提交 · 已入账 76 笔</span>
+              <span style="margin-left:12px;font:450 14px/20px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#5F6A62">4 批 · 1 批待提交 · 已入账 52 笔</span>
             </div>
             <div style="display:flex;gap:6px;padding:4px;border-radius:12px;background:#E4EAE5">
               <span style="display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:9px;background:#FFFFFF;color:#16201A;font:600 13px/18px 'Figtree','PingFang SC',sans-serif;box-shadow:0 1px 4px rgba(28,50,36,.14)">全部</span>
@@ -135,9 +135,10 @@ a:hover{color:#1F3527}
           </div>
 
           <div style="margin-top:18px;background:#FFFFFF;border-radius:18px;box-shadow:0 2px 10px rgba(28,50,36,.07);overflow:hidden">
-            <div style="display:grid;grid-template-columns:minmax(0,1.1fr) 116px 100px 116px minmax(0,1fr) 240px;gap:14px;padding:11px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
+            <div style="display:grid;grid-template-columns:minmax(0,1.1fr) 112px 92px 96px 112px minmax(0,1fr) 232px;gap:14px;padding:11px 20px;background:#F7FAF7;border-bottom:1px solid #E1EAE2">
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">文件 / 时间</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">状态</div>
+              <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">上传人</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase;text-align:right">交易数量统计</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase;text-align:right">净额</div>
               <div style="font:600 11px/15px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:#5F6A62;text-transform:uppercase">目标账户 / 备注</div>
@@ -145,7 +146,7 @@ a:hover{color:#1F3527}
             </div>
 
             <sc-for list="{{ batches }}" as="b" hint-placeholder-count="4">
-              <div style="display:grid;grid-template-columns:minmax(0,1.1fr) 116px 100px 116px minmax(0,1fr) 240px;gap:14px;padding:14px 20px;border-bottom:1px solid #EDF2ED;align-items:center;background:{{ b.rowBg }}" style-hover="background:#F7FAF7">
+              <div style="display:grid;grid-template-columns:minmax(0,1.1fr) 112px 92px 96px 112px minmax(0,1fr) 232px;gap:14px;padding:14px 20px;border-bottom:1px solid #EDF2ED;align-items:center;background:{{ b.rowBg }}" style-hover="background:#F7FAF7">
                 <div style="min-width:0;display:flex;align-items:center;gap:11px">
                   <span style="width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ b.tint }};color:{{ b.on }}">{{ b.icon }}</span>
                   <span style="min-width:0">
@@ -154,6 +155,10 @@ a:hover{color:#1F3527}
                   </span>
                 </div>
                 <div><span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:8px;font:600 12px/16px 'Figtree','PingFang SC',sans-serif;background:{{ b.tint }};color:{{ b.on }}">{{ b.statusLabel }}</span></div>
+                <div style="min-width:0;display:flex;align-items:center;gap:7px">
+                  <span style="width:24px;height:24px;border-radius:999px;background:#E9F0E9;color:#3E4A42;flex:none;display:flex;align-items:center;justify-content:center;font:600 11px/16px 'Figtree',sans-serif">{{ b.uploaderInitial }}</span>
+                  <span style="min-width:0;font:400 14px/20px 'Figtree','PingFang SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.uploader }}</span>
+                </div>
                 <div style="text-align:right;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ b.count }}</div>
                 <div style="text-align:right;font:450 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:{{ b.netColor }}">{{ b.net }}</div>
                 <div style="min-width:0">
@@ -170,7 +175,7 @@ a:hover{color:#1F3527}
             </sc-for>
           </div>
 
-          <div style="margin-top:16px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">撤销只对整批生效，且只撤这批带进来的交易；批次里被你手动改过的行也会一起撤掉。已撤销的批次保留在列表里，方便对照。</div>
+          <div style="margin-top:16px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">撤销只对整批生效，且只撤这批带进来的交易；批次里被你手动改过的行也会一起撤掉。批次只有待提交、已提交两种状态。</div>
         </div>
       </div>
       <div style="margin-top:12px;width:1000px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">宽屏用表格，操作列按状态换按钮：ready 给「继续确认 / 丢弃」，committed 给「撤销这批 / 查看交易」。待提交那行整行淡琥珀底，一眼能看见还有事没做完。</div>
@@ -220,8 +225,15 @@ a:hover{color:#1F3527}
             <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;background:#F1EDDC">
               <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlertSm }}</span>
               <span style="flex:1;min-width:0">
-                <span style="display:block;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">会有 2 笔退款失去原单</span>
-                <span style="display:block;margin-top:3px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这 2 笔退款是这批带进来的，删掉后它们关联的原支出会重新变成「未退款」，9 月支出会涨回去。</span>
+                <span style="display:block;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">有 2 笔批外退款将失去原单</span>
+                <span style="display:block;margin-top:3px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这 2 笔退款不在本批里，但它们关联的原支出是本批带进来的。</span>
+              </span>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;background:#F1EDDC">
+              <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlertSm }}</span>
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;color:#16201A">批内 1 笔退款删除后，其原支出恢复可退额度</span>
+                <span style="display:block;margin-top:3px;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#6B540D">那笔原支出不在本批里，会重新变成可退。</span>
               </span>
             </div>
           </div>
@@ -298,12 +310,21 @@ a:hover{color:#1F3527}
           </div>
 
           <div style="padding:16px 24px 0">
-            <div style="padding:14px 18px;border-radius:14px;background:#F1EDDC;display:flex;align-items:flex-start;gap:12px">
-              <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
-              <span style="flex:1;min-width:0">
-                <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">会有 2 笔退款失去原单</span>
-                <span style="display:block;margin-top:3px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这 2 笔退款是这批带进来的。删掉后，它们关联的原支出会重新变成「未退款」，9 月支出会涨回 6,842.50 + 199.00 + 320.00。原支出本身不会被删。</span>
-              </span>
+            <div style="display:grid;gap:10px">
+              <div style="padding:14px 18px;border-radius:14px;background:#F1EDDC;display:flex;align-items:flex-start;gap:12px">
+                <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">有 2 笔批外退款将失去原单</span>
+                  <span style="display:block;margin-top:3px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">这 2 笔退款不在本批里，但它们关联的原支出是本批带进来的。撤销后它们会变成没有原单的退款，原支出所在月份的支出统计会涨回去。</span>
+                </span>
+              </div>
+              <div style="padding:14px 18px;border-radius:14px;background:#F1EDDC;display:flex;align-items:flex-start;gap:12px">
+                <span style="color:#6B540D;display:flex;flex:none;margin-top:1px">{{ iconAlert }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font:700 15px/21px 'Figtree','PingFang SC',sans-serif;color:#16201A">批内 1 笔退款删除后，其原支出恢复可退额度</span>
+                  <span style="display:block;margin-top:3px;font:400 13px/20px 'Figtree','PingFang SC',sans-serif;color:#6B540D">那笔原支出不在本批里，不会被删；它的可退余额会加回这笔退款的金额。</span>
+                </span>
+              </div>
             </div>
           </div>
 
@@ -327,7 +348,7 @@ a:hover{color:#1F3527}
           </div>
 
           <div style="margin-top:18px;padding:14px 24px;background:#F7FAF7;display:flex;align-items:center;justify-content:space-between;gap:14px">
-            <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">撤销后这批仍留在历史里，标为「已撤销」。</span>
+            <span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">撤销后这批会从历史里消失，交易一并删除。</span>
             <span style="display:flex;gap:10px;flex:none">
               <button onClick="{{ closeDialog }}" style="height:44px;padding:0 16px;border:none;border-radius:12px;background:#F1F6F1;color:#16201A;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#E9F0E9">不撤销</button>
               <button style="height:44px;padding:0 20px;border:none;border-radius:12px;background:#AC4335;color:#FFF;font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#8A3529">撤销 11 笔</button>
@@ -348,7 +369,6 @@ const R = (x,y,w,h,rx) => React.createElement('rect',{x,y,width:w,height:h,rx,ke
 const ST = {
   ready:     { label:'待提交', tint:'#F1EDDC', on:'#6B540D' },
   committed: { label:'已提交', tint:'#E2EFE5', on:'#1F6A46' },
-  undone:    { label:'已撤销', tint:'#E8EDE8', on:'#454F48' },
 };
 
 class Component extends DCLogic {
@@ -356,17 +376,19 @@ class Component extends DCLogic {
 
   renderVals() {
     const rows = [
-      { file:'cmb-09.csv', time:'09-10 21:14', s:'ready',     count:'10 笔', net:'+18,087.80', account:'招行储蓄卡', note:'3 行待归类', flags:'4 个' },
-      { file:'dbs-09.csv', time:'09-09 08:02', s:'committed', count:'11 笔', net:'−1,204.60',  account:'DBS Multiplier', note:'含 2 笔退款已关联原单', flags:'1 个' },
-      { file:'cmb-08.csv', time:'08-31 22:40', s:'committed', count:'32 笔', net:'+11,420.00', account:'招行储蓄卡', note:'—', flags:'无' },
-      { file:'ccb-08.csv', time:'08-30 19:11', s:'undone',    count:'9 笔',  net:'−3,215.00',  account:'建行信用卡', note:'撤销于 08-31 · 文件列错了', flags:'无' },
+      { file:'cmb-09.csv', time:'09-10 21:14', s:'ready',     uploader:'我',   count:'10 笔', net:'+18,087.80', account:'招行储蓄卡', note:'3 行待归类', flags:'4 个' },
+      { file:'dbs-09.csv', time:'09-09 08:02', s:'committed', uploader:'老婆', count:'11 笔', net:'−1,204.60',  account:'DBS Multiplier', note:'含 2 笔退款已关联原单', flags:'1 个' },
+      { file:'cmb-08.csv', time:'08-31 22:40', s:'committed', uploader:'我',   count:'32 笔', net:'+11,420.00', account:'招行储蓄卡', note:'—', flags:'无' },
+      { file:'ccb-08.csv', time:'08-30 19:11', s:'committed', uploader:'老婆', count:'9 笔',  net:'−3,215.00',  account:'建行信用卡', note:'—', flags:'无' },
     ];
 
     return {
       batches: rows.map(r => ({
         file: r.file,
         time: r.time,
-        meta: r.time + ' · ' + r.account,
+        meta: r.time + ' · ' + r.account + ' · 上传人 ' + r.uploader,
+        uploader: r.uploader,
+        uploaderInitial: r.uploader.slice(0, 1),
         statusLabel: ST[r.s].label,
         tint: ST[r.s].tint,
         on: ST[r.s].on,

@@ -60,19 +60,13 @@ input{font-family:inherit;box-sizing:border-box}
               </div>
 
               <div style="margin-top:14px;display:flex;gap:8px;align-items:stretch">
-                <span style="flex:1;display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
                   <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">成员</span>
-                  <sc-for list="{{ l.memberLines }}" as="m" hint-placeholder-count="2">
-                    <span style="font:450 12px/17px 'Figtree','PingFang SC',sans-serif;color:#16201A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· {{ m.n }}</span>
-                  </sc-for>
+                  <span style="font:500 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.members }}</span>
                 </span>
                 <span style="flex:1;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
                   <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">基准币种</span>
                   <span style="font:500 15px/21px 'IBM Plex Mono',monospace">{{ l.currency }}</span>
-                </span>
-                <span style="flex:1.2;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:{{ l.statBg }}">
-                  <span style="font:400 11px/15px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产</span>
-                  <span style="font:500 15px/21px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.net }}</span>
                 </span>
               </div>
             </div>
@@ -85,7 +79,7 @@ input{font-family:inherit;box-sizing:border-box}
           <div style="padding:0 4px;font:400 12px/18px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">新建的账本你是 owner；用码加入的账本你是成员，改不了基准币种和成员。</div>
         </div>
       </div>
-      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">卡片而不是列表行 —— 账本只有两三本，且每本要带三个数（成员、币种、净资产）。当前那本用淡绿底 + 「当前」Badge + 右侧勾，三重标识，因为选错账本记账是最难发现的错误。</div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">卡片而不是列表行 —— 账本只有两三本。卡片只给名称、成员数、基准币种三样。当前那本用淡绿底 + 「当前」Badge + 右侧勾，三重标识，因为选错账本记账是最难发现的错误。</div>
     </div>
 
     <div>
@@ -133,18 +127,7 @@ input{font-family:inherit;box-sizing:border-box}
 
                 <div style="margin-top:16px;display:grid;gap:0">
                   <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid {{ l.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">成员</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.members }}</span></div>
-                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid {{ l.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">基准币种</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace">{{ l.currency }}</span></div>
-                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid {{ l.line }}"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">净资产</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.net }}</span></div>
-                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">交易</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">{{ l.count }}</span></div>
-                </div>
-
-                <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
-                  <sc-for list="{{ l.memberChips }}" as="m" hint-placeholder-count="2">
-                    <span style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 4px;border-radius:999px;background:{{ l.statBg }}">
-                      <span style="width:22px;height:22px;border-radius:999px;flex:none;display:flex;align-items:center;justify-content:center;font:600 10px/14px 'Figtree','PingFang SC',sans-serif;background:{{ m.avaBg }};color:{{ m.avaFg }}">{{ m.initial }}</span>
-                      <span style="font:500 12px/17px 'Figtree','PingFang SC',sans-serif;color:#3E4A42;white-space:nowrap">{{ m.n }}</span>
-                    </span>
-                  </sc-for>
+                  <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0"><span style="font:400 13px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">基准币种</span><span style="font:450 13px/19px 'IBM Plex Mono',monospace">{{ l.currency }}</span></div>
                 </div>
 
                 <button style="margin-top:14px;width:100%;height:44px;border:none;border-radius:12px;background:{{ l.btnBg }};color:{{ l.btnFg }};font:600 14px/20px 'Figtree','PingFang SC',sans-serif;cursor:pointer">{{ l.btnLabel }}</button>
@@ -213,7 +196,7 @@ input{font-family:inherit;box-sizing:border-box}
     </div>
 
     <div>
-      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · 码有效 / 码失效</div>
+      <div style="font:500 11px/14px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#5F6A62;text-transform:uppercase;margin-bottom:12px">375 · 码填满 / 码失效</div>
       <div style="display:grid;gap:16px">
         <div data-screen-label="加入账本 已验证 375" style="width:375px;background:#F1F6F1;border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(28,50,36,.16)">
           <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font:600 12px/16px 'Figtree',sans-serif"><span>9:41</span><span style="letter-spacing:1px;color:#5F6A62">▮▮▮</span></div>
@@ -229,15 +212,7 @@ input{font-family:inherit;box-sizing:border-box}
                   <span style="width:44px;height:54px;border-radius:12px;display:flex;align-items:center;justify-content:center;font:500 24px/30px 'IBM Plex Mono',monospace;background:#E2EFE5;color:#0F5533">{{ c.ch }}</span>
                 </sc-for>
               </div>
-              <div style="margin-top:14px;padding:14px;border-radius:14px;background:#E2EFE5;display:flex;align-items:center;gap:12px">
-                <span style="width:40px;height:40px;border-radius:12px;background:#FFFFFF;color:#2F4A38;flex:none;display:flex;align-items:center;justify-content:center;font:700 16px/22px 'Figtree','PingFang SC',sans-serif">旅</span>
-                <span style="flex:1;min-width:0">
-                  <span style="display:block;font:700 16px/22px 'Figtree','PingFang SC',sans-serif">旅行账本</span>
-                  <span style="display:block;font:400 12px/17px 'Figtree','PingFang SC',sans-serif;color:#1F6A46">邀请人：老婆 · 基准币种 SGD · 2 名成员</span>
-                </span>
-                <span style="color:#1F6A46;flex:none">{{ iconCheck }}</span>
-              </div>
-              <button style="margin-top:14px;width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">加入「旅行账本」</button>
+              <button style="margin-top:16px;width:100%;height:48px;border:none;border-radius:14px;background:#2F4A38;color:#FFF;font:600 16px/24px 'Figtree','PingFang SC',sans-serif;cursor:pointer" style-hover="background:#253A2C">加入</button>
             </div>
           </div>
         </div>
@@ -268,7 +243,7 @@ input{font-family:inherit;box-sizing:border-box}
           </div>
         </div>
       </div>
-      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">码填满后就地校验：有效时六格转绿并展开账本信息卡（谁邀请的、基准币种、成员数），主按钮写清要加入哪本；失效时六格转红并说明两种可能的原因。</div>
+      <div style="margin-top:12px;width:375px;font:400 12px/19px 'Figtree','PingFang SC',sans-serif;color:#5F6A62">加入只有输入框和「加入」按钮，不在输码阶段预览账本信息 —— 码没提交前不泄露这本账的任何内容。六格填满后转绿，按钮变可点；码失效时六格转红并说明两种可能的原因。</div>
     </div>
 
     <div>
