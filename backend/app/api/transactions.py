@@ -281,9 +281,15 @@ def _filtered_query(
     stmt = select(Transaction).where(Transaction.ledger_id == ctx.ledger.id)
 
     if q:
-        pattern = f"%{q}%"
+        # ``%`` and ``_`` are ordinary characters to whoever typed them into a
+        # search box, so they are escaped instead of acting as wildcards.
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         stmt = stmt.where(
-            or_(Transaction.merchant.ilike(pattern), Transaction.note.ilike(pattern))
+            or_(
+                Transaction.merchant.ilike(pattern, escape="\\"),
+                Transaction.note.ilike(pattern, escape="\\"),
+            )
         )
     if kinds:
         stmt = stmt.where(Transaction.kind.in_(kinds))
@@ -556,7 +562,11 @@ def list_transactions(
     rows = list(db.execute(stmt).scalars().all())
     values = valuation.value_transactions(db, ctx.ledger.base_currency, rows)
 
+    # Rows that could not be valued are dropped by an amount bound below, but
+    # §5.25's "some rows could not be converted" signal must survive that.
+    dropped_missing = 0
     if min_amount is not None or max_amount is not None:
+        dropped_missing = sum(1 for value in values if value is None)
         kept = [
             (row, value)
             for row, value in zip(rows, values, strict=True)
@@ -570,11 +580,12 @@ def list_transactions(
         values = [value for _row, value in kept]
 
     summary = valuation.list_summary(ctx.ledger.base_currency, rows, values)
+    summary["rate_missing_count"] += dropped_missing
     window = slice(page.offset, page.offset + page.limit)
     page_rows, page_values = rows[window], values[window]
     totals = _expense_totals(db, ctx, page_rows)
 
-    return TransactionListResponse(
+    body = TransactionListResponse(
         items=[
             _item(row, value, totals)
             for row, value in zip(page_rows, page_values, strict=True)
@@ -582,6 +593,11 @@ def list_transactions(
         total=len(rows),
         summary=TransactionSummary(**summary),
     )
+    # Converting wrote fresh rows into the rate cache; without this commit they
+    # would be discarded with the session and every render would go upstream
+    # again (§6.3, same reason ``api/rates.py`` commits on GET).
+    db.commit()
+    return body
 
 
 @router.post("", response_model=TransactionItem, status_code=status.HTTP_201_CREATED)
@@ -616,7 +632,7 @@ def get_transaction(
     refunded, refundable = _expense_totals(db, ctx, [tx]).get(tx.id, (None, None))
     refunds = _refund_rows(db, tx.id) if tx.kind == "expense" else []
 
-    return TransactionDetail(
+    body = TransactionDetail(
         **_row_fields(tx),
         **_valuation_fields(_value_one(db, ctx, tx)),
         refunded_total=refunded,
@@ -626,6 +642,9 @@ def get_transaction(
         pair=_pair_ref(db, ctx, tx),
         events=[EventItem.model_validate(row) for row in events.list_for(db, tx.id)],
     )
+    # Keeps the rate rows the conversions above cached (§6.3); see the list.
+    db.commit()
+    return body
 
 
 @router.patch("/{tid}", response_model=TransactionItem)

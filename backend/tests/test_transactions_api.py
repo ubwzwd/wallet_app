@@ -405,6 +405,17 @@ def test_list_filters_by_q_over_merchant_and_note(env, rows):
     assert env.get(q="   ").json()["total"] == 7
 
 
+def test_list_q_treats_like_wildcards_as_literal_text(env, transaction_factory):
+    """``%`` and ``_`` are characters the user typed, not LIKE patterns."""
+    literal = transaction_factory(env.ledger, env.bank, merchant="a%b")
+    transaction_factory(env.ledger, env.bank, merchant="axxb")
+    underscore = transaction_factory(env.ledger, env.bank, merchant="c_d")
+    transaction_factory(env.ledger, env.bank, merchant="cxd")
+
+    assert ids(env.get(q="a%b")) == {str(literal.id)}
+    assert ids(env.get(q="c_d")) == {str(underscore.id)}
+
+
 def test_list_filters_by_repeated_kind(env, rows):
     response = env.client.get(
         env.url(), headers=env.headers, params=[("kind", "income"), ("kind", "refund")]
@@ -501,6 +512,59 @@ def test_list_rejects_min_above_max(env):
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+
+
+@pytest.fixture()
+def jpy_rate_gone(monkeypatch):
+    """Every conversion that touches JPY fails, as an upstream outage would."""
+    from app.core.errors import ApiError, ErrorCode
+    from app.services import fx
+
+    real = fx.convert_many
+
+    def flaky(db, items, to_currency):
+        batch = list(items)
+        if any(currency.upper() == "JPY" for _amount, currency, _on in batch):
+            raise ApiError(503, ErrorCode.FX_UNAVAILABLE, "no rate for JPY")
+        return real(db, batch, to_currency)
+
+    monkeypatch.setattr(fx, "convert_many", flaky)
+
+
+def test_list_renders_an_unconvertible_row_as_three_nulls(env, rows, jpy_rate_gone):
+    """§5.25: the row still comes back, the summary says how many are unvalued."""
+    response = env.get()
+    body = response.json()
+
+    snack = next(
+        item for item in body["items"] if item["id"] == str(rows["jpy_snack"].id)
+    )
+    assert snack["amount_base"] is None
+    assert snack["rate_used"] is None
+    assert snack["rate_date"] is None
+    assert body["total"] == 7
+    assert body["summary"]["rate_missing_count"] == 1
+
+
+def test_list_amount_range_still_counts_the_rows_it_could_not_value(
+    env, rows, jpy_rate_gone
+):
+    """An unvalued row cannot satisfy a bound, but it must not vanish silently."""
+    response = env.get(min_amount="0")
+    body = response.json()
+
+    assert str(rows["jpy_snack"].id) not in ids(response)
+    assert body["total"] == 6
+    assert body["summary"]["rate_missing_count"] == 1
+
+
+def test_detail_of_an_unconvertible_row_is_three_nulls(env, rows, jpy_rate_gone):
+    body = env.get(f"/{rows['jpy_snack'].id}").json()
+
+    assert body["amount"] == "-1000.0000"
+    assert body["amount_base"] is None
+    assert body["rate_used"] is None
+    assert body["rate_date"] is None
 
 
 def test_list_filters_by_import_batch(env, db, rows, transaction_factory):
@@ -845,6 +909,28 @@ def test_patch_with_a_stale_version_conflicts(env):
 
 
 def test_patch_turns_an_expense_into_a_refund(env):
+    """§10.2's PATCH row: the sign has to flip inside the one request."""
+    origin = env.post(expense_body(env)).json()
+    mistake = env.post(expense_body(env, amount="-45.50", merchant="Metro")).json()
+
+    response = env.patch(
+        f"/{mistake['id']}",
+        {
+            "kind": "refund",
+            "amount": "45.50",
+            "refund_of": origin["id"],
+            "updated_at": mistake["updated_at"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["kind"] == "refund"
+    assert body["amount"] == "45.5000"
+    assert body["refund_of"] == origin["id"]
+
+
+def test_patch_turns_an_income_into_a_refund(env):
     origin = env.post(expense_body(env)).json()
     wrong = env.post(
         expense_body(
