@@ -609,11 +609,13 @@ export interface TransactionListParams {
   limit?: number; offset?: number;            // limit 上限 200（决策 §14.44 的 03-14）
 }
 // 交易列表：信封外多一个 summary（决策 §14.52 A14），底部汇总条与「筛空提示」都用它
+// （同步 2026-09-12）字段名与 03 §5.25 的 summary 一致：base_currency / expense / income / net / count / rate_missing_count
 export interface TransactionSummary {
   base_currency: string;
-  expense_total: Money;   // 正数
-  income_total: Money;
+  expense: Money;         // 正数
+  income: Money;
   net: Money;             // income − expense，**不含转账**
+  count: number;          // 给了金额区间时只计能折算的行；没给区间时含全部命中行（与 total 相同）
   rate_missing_count: number;
 }
 export interface TransactionListResponse extends Paged<Transaction> {
