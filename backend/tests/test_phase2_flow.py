@@ -188,11 +188,16 @@ EXPECTED_OPERATIONS = {
 
 
 def test_openapi_route_inventory_is_exactly_phase_two(client):
-    """The whole surface this phase ships — no more, no less.
+    """Every route this phase ships is still there.
 
-    In particular: no leftover ``/auth/me`` alias (decision §14.42, retired
-    alongside the previous version's routes under that prefix) and no
-    ``/import-format`` yet (§5.7 depends on the skill-text work of phase six).
+    This module only exercises the ledger/member/invite flow, so it checks a
+    *subset* rather than exact equality: phase three (``test_phase3_flow.py``)
+    owns the exhaustive "exactly this set" check for the branch's full surface,
+    which is the exact-equality assertion this test used to make back when
+    phase two was the whole application. In particular: no leftover
+    ``/auth/me`` alias (decision §14.42, retired alongside the previous
+    version's routes under that prefix) and no ``/import-format`` yet (§5.7
+    depends on the skill-text work of phase six).
     """
     response = client.get("/openapi.json")
     assert response.status_code == 200
@@ -204,7 +209,7 @@ def test_openapi_route_inventory_is_exactly_phase_two(client):
         for method in operations
     }
 
-    assert actual_operations == EXPECTED_OPERATIONS
+    assert EXPECTED_OPERATIONS <= actual_operations
 
     all_paths = set(paths)
     assert "/api/v1/auth/me" not in all_paths
