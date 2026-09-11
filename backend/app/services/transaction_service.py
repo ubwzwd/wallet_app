@@ -51,6 +51,10 @@ MAX_FUTURE_DAYS = 1
 
 CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
 
+# "the request did not mention this field" — distinct from an explicit ``None``,
+# which is how a PATCH clears ``note``.
+_MISSING = object()
+
 AMOUNT_QUANTUM = Decimal("0.0001")
 
 # The columns a single transaction's PATCH may touch, and the ones a diff is
@@ -238,7 +242,9 @@ def update_single(
             409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived"
         )
 
-    values = _validate_single(db, ledger, source, merged, tx_id=tx.id)
+    values = _validate_single(
+        db, ledger, source, merged, tx_id=tx.id, current_currency=tx.currency
+    )
 
     for field, value in values.items():
         setattr(tx, field, value)
@@ -391,8 +397,11 @@ def update_transfer(
 ) -> tuple[Transaction, Transaction]:
     """Edit a pair as one object (§5.31); returns ``(out, in)``.
 
-    ``occurred_at`` / ``subtype`` / ``note`` are written to **both** legs
-    (decision §14.53a); amounts, currencies and accounts belong to one leg each.
+    ``occurred_at`` / ``subtype`` / ``note`` are written to **both** legs when
+    the request names them (decision §14.53a); a field the request leaves out
+    keeps whatever each leg already had, so a pair whose legs carry different
+    dates or notes survives an edit of something else. Amounts, currencies and
+    accounts belong to one leg each.
     """
     out_leg, in_leg = get_pair(db, ledger, pair_id, for_update=True)
     edits = _clean_changes(changes, TRANSFER_FIELDS)
@@ -418,11 +427,15 @@ def update_transfer(
         )
 
     subtype = _check_subtype(edits.get("subtype", out_leg.transfer_subtype), to_source)
-    occurred_at = edits.get("occurred_at", out_leg.occurred_at)
+    # ``occurred_at`` and ``note`` go to both legs only when the request names
+    # them (decision §14.53a): a pair tied together by :func:`pair` is allowed
+    # to keep one date per leg (swipe day vs posting day) and one note per
+    # statement, and an unrelated PATCH must not flatten that.
+    occurred_at = edits["occurred_at"] if "occurred_at" in edits else _MISSING
     note = (
         _check_text(edits["note"], "note", MAX_NOTE_LENGTH)
         if "note" in edits
-        else out_leg.note
+        else _MISSING
     )
     currency_out = (
         _check_currency(edits["currency_out"])
@@ -453,9 +466,12 @@ def update_transfer(
         leg.source_id = source.id
         leg.amount = amount
         leg.currency = currency
-        leg.occurred_at = occurred_at
+        if occurred_at is not _MISSING:
+            leg.occurred_at = occurred_at
+        # Both legs always carry the same subtype, so it is written outright.
         leg.transfer_subtype = subtype
-        leg.note = note
+        if note is not _MISSING:
+            leg.note = note
         leg.updated_by = actor_id
         leg.updated_at = now
     db.flush()
@@ -586,15 +602,25 @@ def pair(
         leg.updated_at = now
         db.flush()
 
+        # §7.2 asks a ``paired`` event for both values outright ("only fields
+        # that really changed" is the rule for ``updated``), so a leg whose
+        # counterparty was already NULL still shows the key.
         events.record(
             db,
             ledger_id=ledger.id,
             transaction_id=leg.id,
             actor_id=actor_id,
             event="paired",
-            changes=events.diff_changes(
-                before, events.snapshot(leg, ("transfer_pair_id", "counterparty"))
-            ),
+            changes={
+                "transfer_pair_id": {
+                    "before": events.serialize(before["transfer_pair_id"]),
+                    "after": events.serialize(pair_id),
+                },
+                "counterparty": {
+                    "before": events.serialize(before["counterparty"]),
+                    "after": None,
+                },
+            },
             client=client,
         )
         if before_subtype != subtype:
@@ -721,11 +747,14 @@ def _validate_single(
     values: dict[str, object],
     *,
     tx_id: uuid.UUID | None,
+    current_currency: str | None = None,
 ) -> dict[str, object]:
     """Check a whole single row against §5.26 and return normalized columns.
 
     Called with the finished row, both on create and on PATCH: §5.28 judges
-    "the row after the edit", not the edit.
+    "the row after the edit", not the edit. ``current_currency`` is the code the
+    row already carries; it lets a PATCH that never touched the currency go
+    through while Frankfurter is unreachable (:func:`fx.ensure_supported`).
     """
     kind = values["kind"]
     if kind not in KINDS:
@@ -742,7 +771,7 @@ def _validate_single(
     counterparty = _check_text(
         values["counterparty"], "counterparty", MAX_COUNTERPARTY_LENGTH
     )
-    currency = _check_currency(values["currency"])
+    currency = _check_currency(values["currency"], current=current_currency)
 
     if kind == "transfer":
         if role not in TRANSFER_ROLES:
@@ -885,11 +914,15 @@ def _resolve_amount_in(
     return _positive_amount(amount_in, "amount_in")
 
 
-def _check_currency(currency: object) -> str:
-    """Upper-cased three-letter code Frankfurter knows (§5.26, §6)."""
+def _check_currency(currency: object, current: str | None = None) -> str:
+    """Upper-cased three-letter code Frankfurter knows (§5.26, §6).
+
+    ``current`` is the code already stored on the row being edited: an upstream
+    outage must not turn a PATCH of an unrelated field into a 503.
+    """
     if not isinstance(currency, str) or not CURRENCY_RE.match(currency):
         raise _invalid("currency must be three letters")
-    return fx.ensure_supported(currency)
+    return fx.ensure_supported(currency, current)
 
 
 def _check_text(value: object, field: str, limit: int) -> str | None:

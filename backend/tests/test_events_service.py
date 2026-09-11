@@ -152,6 +152,27 @@ def test_record_stores_changes_and_import_batch(db, world):
     assert stored.client is None
 
 
+def test_record_cuts_the_client_name_to_the_column_width(db, world):
+    """``client`` is VARCHAR(16); a longer ``X-Client`` header is truncated.
+
+    03 §4.7 allows 40 characters, 02-database.md §1.9 gives the column 16 —
+    storing the header as-is would be a Postgres ``DataError`` (a 500).
+    """
+    events.record(
+        db,
+        ledger_id=world["ledger"].id,
+        transaction_id=world["tx"].id,
+        actor_id=world["user"].id,
+        event="created",
+        client="x" * 40,
+    )
+    db.flush()
+
+    stored = db.query(TransactionEvent).one()
+    assert stored.client == "x" * events.MAX_CLIENT_LENGTH
+    assert len(stored.client) == 16
+
+
 def test_events_are_deleted_with_their_transaction(db, world):
     events.record(
         db,

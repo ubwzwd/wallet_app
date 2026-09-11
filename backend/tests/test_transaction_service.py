@@ -8,6 +8,7 @@ import datetime as dt
 import uuid
 from decimal import Decimal
 
+import httpx
 import pytest
 
 from app.core.clock import utcnow
@@ -171,6 +172,7 @@ def make_leg(
     currency: str | None = None,
     occurred_at: dt.date = DAY,
     counterparty: str | None = None,
+    note: str | None = None,
 ) -> Transaction:
     """A single-leg transfer inserted straight into the table."""
     now = utcnow()
@@ -184,6 +186,7 @@ def make_leg(
         transfer_role=role,
         transfer_subtype=subtype,
         counterparty=counterparty,
+        note=note,
         created_by=world["user"].id,
         updated_by=world["user"].id,
         created_at=now,
@@ -507,6 +510,28 @@ def test_update_that_changes_nothing_writes_no_event(world):
     assert tx.updated_at > before_stamp
 
 
+def test_update_of_another_field_survives_an_unreachable_upstream(world, monkeypatch):
+    """The currency already in effect is waved through (fx.ensure_supported)."""
+    from app.services import fx
+
+    tx = create(world)
+
+    dead = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+        base_url="https://frankfurter.test/v1",
+    )
+    monkeypatch.setattr(fx, "HTTP_RETRY_ATTEMPTS", 1)
+    fx.reset_state()
+    monkeypatch.setattr(fx, "client_factory", lambda: dead)
+    try:
+        update(world, tx, {"note": "补记"})
+    finally:
+        dead.close()
+        fx.reset_state()
+
+    assert tx.note == "补记"
+
+
 def test_expense_can_become_a_refund_when_the_whole_row_fits(world):
     tx = create(world)
 
@@ -792,6 +817,27 @@ def test_transfer_rejects_an_unknown_subtype(world):
     assert (exc.value.status_code, exc.value.code) == (400, "validation_error")
 
 
+def test_a_failed_transfer_insert_leaves_no_half_pair(world, db, monkeypatch):
+    """§10.2: never one leg on its own — the two rows land or neither does.
+
+    The service only ``flush()``es; the rollback itself belongs to the endpoint
+    session, so the case makes the flush fail and checks that rolling back
+    really clears both legs.
+    """
+    real_flush = db.flush
+
+    def exploding_flush(*args, **kwargs):
+        raise RuntimeError("insert failed halfway")
+
+    monkeypatch.setattr(db, "flush", exploding_flush)
+    with pytest.raises(RuntimeError):
+        create_transfer(world)
+    monkeypatch.setattr(db, "flush", real_flush)
+    db.rollback()
+
+    assert db.query(Transaction).filter_by(kind="transfer").count() == 0
+
+
 # ---------------------------------------------------------------------------
 # get_pair / update_transfer / delete_transfer (§5.31, §5.32)
 # ---------------------------------------------------------------------------
@@ -851,6 +897,45 @@ def test_patch_transfer_touches_only_the_leg_a_field_belongs_to(world):
     assert out_leg.amount == Decimal("-100.0000")
     assert names(world, in_leg) == ["updated", "created"]
     assert names(world, out_leg) == ["created"]
+
+
+def test_patch_transfer_leaves_a_paired_legs_own_date_and_note_alone(world, db):
+    """§14.53a: only the fields a PATCH names are written to both legs.
+
+    A pair tied together by :func:`pair` keeps one date per leg (swipe day vs
+    posting day) and one note per statement; an edit of the amount must not
+    flatten either.
+    """
+    out_leg = make_leg(
+        world,
+        world["checking"],
+        "out",
+        Decimal("-3000"),
+        occurred_at=dt.date(2026, 9, 5),
+        note="还信用卡",
+    )
+    in_leg = make_leg(
+        world,
+        world["credit"],
+        "in",
+        Decimal("3000"),
+        occurred_at=dt.date(2026, 9, 6),
+        note="AUTOPAY",
+    )
+    do_pair(world, out_leg, in_leg)
+
+    patch_pair(
+        world,
+        out_leg.transfer_pair_id,
+        {"amount_in": Decimal("2999")},
+        max(out_leg.updated_at, in_leg.updated_at),
+    )
+
+    assert (out_leg.occurred_at, out_leg.note) == (dt.date(2026, 9, 5), "还信用卡")
+    assert (in_leg.occurred_at, in_leg.note) == (dt.date(2026, 9, 6), "AUTOPAY")
+    assert in_leg.amount == Decimal("2999.0000")
+    assert set(latest_event(world, in_leg).changes) == {"amount"}
+    assert names(world, out_leg) == ["paired"]
 
 
 def test_patch_transfer_can_move_a_leg_to_another_account(world, db):
@@ -1003,6 +1088,22 @@ def test_pair_ties_two_single_legs_together(world):
         "after": str(out_leg.transfer_pair_id),
     }
     assert changes["counterparty"] == {"before": "工资卡", "after": None}
+
+
+def test_paired_event_records_counterparty_even_when_it_was_empty(world):
+    """§7.2 asks ``paired`` for both values, not only for the ones that moved."""
+    out_leg = make_leg(world, world["checking"], "out", Decimal("-500"))
+    in_leg = make_leg(world, world["credit"], "in", Decimal("500"))
+
+    do_pair(world, out_leg, in_leg)
+
+    for leg in (out_leg, in_leg):
+        changes = latest_event(world, leg).changes
+        assert changes["counterparty"] == {"before": None, "after": None}
+        assert changes["transfer_pair_id"] == {
+            "before": None,
+            "after": str(leg.transfer_pair_id),
+        }
 
 
 @pytest.mark.parametrize(

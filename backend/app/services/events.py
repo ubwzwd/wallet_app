@@ -42,6 +42,12 @@ EventName = Literal[
 # Amounts are Numeric(18, 4) everywhere (§4.5).
 _AMOUNT_QUANTUM = Decimal("0.0001")
 
+# ``transaction_events.client`` is VARCHAR(16) (02-database.md §1.9) while the
+# ``X-Client`` header is trimmed to 40 characters upstream (03 §4.7). The two
+# chapters disagree; the column wins here, so a long header name is truncated
+# instead of becoming a Postgres DataError (500) on INSERT.
+MAX_CLIENT_LENGTH = 16
+
 
 def record(
     db: Session,
@@ -60,6 +66,7 @@ def record(
     the event lands exactly when the write it describes does. ``changes`` is
     ``{field: {"before": ..., "after": ...}}`` already serialized by
     :func:`diff_changes`; ``created`` and ``imported`` pass ``None``.
+    ``client`` is cut to the width of its column (:data:`MAX_CLIENT_LENGTH`).
     """
     row = TransactionEvent(
         ledger_id=ledger_id,
@@ -69,7 +76,7 @@ def record(
         event=event,
         changes=changes,
         import_batch_id=import_batch_id,
-        client=client,
+        client=client[:MAX_CLIENT_LENGTH] if client else None,
     )
     db.add(row)
     return row
