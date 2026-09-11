@@ -447,6 +447,63 @@ def test_latest_rates_date_never_overstates_freshness(db, monkeypatch):
     assert calls == []                          # both rows are fresh enough (§6.2)
 
 
+def test_latest_rates_asks_upstream_once_when_it_is_down(db, monkeypatch):
+    """§5.46 allows 0 or 1 upstream calls, a cold cache and a dead one included."""
+    calls = install_upstream(monkeypatch, boom)
+
+    with pytest.raises(ApiError) as excinfo:
+        fx.latest_rates(db, "USD", ["EUR", "GBP", "CNY"])
+
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.code == ErrorCode.FX_UNAVAILABLE
+    assert len(calls) == 1                      # the batch call, not one per symbol
+    assert calls[0].url.path.endswith("/latest")
+    assert set(calls[0].url.params["to"].split(",")) == {"EUR", "GBP", "CNY"}
+
+
+def test_latest_rates_with_stale_rows_falls_back_after_one_failed_call(db, monkeypatch):
+    """Stale rows still serve §6.2 step 4 — and only one call went out."""
+    old = dt.date.today() - dt.timedelta(days=30)
+    fetched = dt.datetime.now(dt.UTC).replace(tzinfo=None) - dt.timedelta(hours=2)
+    seed(db, old, "USD", "EUR", "0.92", fetched)
+    seed(db, old, "USD", "GBP", "0.80", fetched)
+    seed(db, old, "USD", "CNY", "7.245", fetched)
+    calls = install_upstream(monkeypatch, boom)
+
+    rates, rate_date = fx.latest_rates(db, "USD", ["EUR", "GBP", "CNY"])
+
+    assert rates == {
+        "EUR": Decimal("0.92000000"),
+        "GBP": Decimal("0.80000000"),
+        "CNY": Decimal("7.24500000"),
+    }
+    assert rate_date == old
+    assert len(calls) == 1
+
+
+def test_latest_rates_does_not_throttle_the_next_request(db, monkeypatch):
+    """The de-duplication is per call: a later request retries a cold pair."""
+    day = dt.date.today() - dt.timedelta(days=1)
+    state = {"up": False}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        if not state["up"]:
+            return httpx.Response(500, json={"message": "upstream is down"})
+        return httpx.Response(200, json=latest_payload("USD", day, {"EUR": 0.92}))
+
+    calls = install_upstream(monkeypatch, handler)
+
+    with pytest.raises(ApiError):
+        fx.latest_rates(db, "USD", ["EUR"])
+    assert len(calls) == 1
+
+    state["up"] = True
+    rates, rate_date = fx.latest_rates(db, "USD", ["EUR"])
+    assert rates == {"EUR": Decimal("0.92000000")}
+    assert rate_date == day
+    assert len(calls) == 2
+
+
 # ---------------------------------------------------------------------------
 # The upsert on the other dialect (02-database.md §1.10, §8.2)
 # ---------------------------------------------------------------------------

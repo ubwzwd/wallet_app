@@ -145,12 +145,24 @@ def test_latest_rejects_empty_symbols(client, monkeypatch):
 
 
 def test_latest_reports_a_dead_upstream_as_fx_unavailable(client, monkeypatch):
-    install_upstream(monkeypatch, boom)
+    calls = install_upstream(monkeypatch, boom)
 
     response = client.get("/api/v1/rates/latest?base=USD&symbols=CNY")
 
     assert response.status_code == 503
     assert response.json()["code"] == "fx_unavailable"
+    assert len(calls) == 1
+
+
+def test_latest_asks_upstream_once_even_with_several_cold_symbols(client, monkeypatch):
+    """§5.46's "0 or 1 upstream call" holds for a cold cache and a dead upstream."""
+    calls = install_upstream(monkeypatch, boom)
+
+    response = client.get("/api/v1/rates/latest?base=USD&symbols=EUR,GBP,CNY")
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "fx_unavailable"
+    assert len(calls) == 1
 
 
 # ---------------------------------------------------------------------------
