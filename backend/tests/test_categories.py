@@ -167,3 +167,8 @@ def test_render_skill_categories_en_has_desc_en():
     for cat in EXPENSE_CATEGORIES + INCOME_CATEGORIES:
         assert cat.code in text
         assert cat.desc_en in text
+
+
+def test_render_skill_categories_unsupported_lang_raises():
+    with pytest.raises(ValueError, match="unsupported lang"):
+        render_skill_categories("fr")
