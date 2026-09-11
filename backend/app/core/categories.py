@@ -391,6 +391,9 @@ def validate_category(kind: str, l1: str | None, l2: str | None) -> None:
             )
         return
 
+    if kind not in ("expense", "refund", "income"):
+        raise ApiError(400, "category_invalid", f"unknown kind: {kind}")
+
     if l1 is None:
         raise ApiError(400, "category_invalid", f"category_l1 is required for kind={kind}")
 
