@@ -111,3 +111,15 @@ def test_exchange_rate_api_url_default():
     """§2.1: default base URL fixed to frankfurter.dev/v1 (H-03 fix, no more 301 redirect)."""
     s = _settings()
     assert s.EXCHANGE_RATE_API_URL == "https://api.frankfurter.dev/v1"
+
+
+def test_join_qps_must_be_positive():
+    """RATE_LIMIT_JOIN_QPS feeds a division in the join bucket; 0 or negative is rejected."""
+    import pytest
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, SECRET_KEY="x" * 32, RATE_LIMIT_JOIN_QPS=0)
+    assert Settings(_env_file=None, SECRET_KEY="x" * 32, RATE_LIMIT_JOIN_QPS=2.5).RATE_LIMIT_JOIN_QPS == 2.5

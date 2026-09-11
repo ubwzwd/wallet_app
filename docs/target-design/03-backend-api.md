@@ -728,6 +728,8 @@ POST /api/v1/auth/register
 | 403 | `registration_closed` | `REGISTRATION_OPEN=false`（前端本来就该先问 `GET /config`（§5.6）把注册表单藏起来，这里是服务端的兜底） |
 | 409 | `email_exists` | 邮箱已注册（先查一次，并捕获唯一索引 `IntegrityError` 兜底并发） |
 | 429 | `register_rate_limited` | 同 IP 每小时注册超过 `RATE_LIMIT_REGISTER_PER_HOUR`（5）次（§8.2） |
+| 400 | `validation_error` | `base_currency` 不在 Frankfurter 支持列表里（与 §5.4、§5.9 同口径；实现同步 2026-09-12） |
+| 503 | `fx_unavailable` | 校验币种时汇率上游不可用且本进程还没有币种列表缓存（注册时没有"当前币种"可放行，实现同步 2026-09-12） |
 
 副作用（一个事务）：`INSERT users`（`display_name` 为 NULL，用户以后在个人设置里填，决策 §14.40）→ `INSERT ledgers`（名字 `我的账本`、`base_currency` = 用户填的币种、`created_by` = 该用户）→ `INSERT ledger_members`（role=`owner`）。返回令牌，前端随后调 `GET /me`。不建任何默认账户（用户自己去建）。
 

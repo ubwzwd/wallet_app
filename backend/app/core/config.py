@@ -2,7 +2,7 @@
 Application configuration using Pydantic Settings.
 Reads from environment variables and .env file.
 """
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Rate limits (decision §2, §9, §14.35, §14.43)
     RATE_LIMIT_LOGIN_PER_MINUTE: int = 10
     RATE_LIMIT_REGISTER_PER_HOUR: int = 5
-    RATE_LIMIT_JOIN_QPS: float = 1
+    RATE_LIMIT_JOIN_QPS: float = Field(default=1, gt=0)
     RATE_LIMIT_IMPORTS_PER_HOUR: int = 10
 
     # Soft limits (decision §2)
