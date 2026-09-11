@@ -60,12 +60,24 @@ class ErrorCode:
 
 
 class ApiError(Exception):
-    """A domain error carrying an explicit HTTP status, code, and detail."""
+    """A domain error carrying an explicit HTTP status, code, and detail.
 
-    def __init__(self, status_code: int, code: str, detail: str) -> None:
+    ``headers`` carries the few response headers an error has to set — today
+    only ``Retry-After`` on the 429s of §8.1; the handler copies it verbatim
+    onto the response.
+    """
+
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        detail: str,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self.code = code
         self.detail = detail
+        self.headers = headers
         super().__init__(detail)
 
 
@@ -99,6 +111,7 @@ async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "code": exc.code},
+        headers=exc.headers,
     )
 
 
