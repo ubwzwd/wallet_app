@@ -5,13 +5,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api import auth, rates, finance_sources, transactions
+from app.core.errors import install_error_handlers
+from app.api import rates
 
 # Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
-    version="0.1.0",
+    version="3.0.0-dev",
 )
 
 # Configure CORS
@@ -23,11 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+install_error_handlers(app)
+
 # Include routers
-app.include_router(auth.router, prefix="/api/v1")
 app.include_router(rates.router, prefix="/api/v1")
-app.include_router(finance_sources.router, prefix="/api/v1")
-app.include_router(transactions.router, prefix="/api/v1")
 
 
 @app.get("/health")
@@ -36,7 +36,7 @@ def health_check():
     return {
         "status": "healthy",
         "environment": settings.ENVIRONMENT,
-        "version": "0.1.0"
+        "version": "3.0.0-dev"
     }
 
 
@@ -45,7 +45,7 @@ def root():
     """Root endpoint with API information."""
     return {
         "message": "Wallet App API",
-        "version": "0.1.0",
+        "version": "3.0.0-dev",
         "docs": "/docs",
         "health": "/health"
     }
