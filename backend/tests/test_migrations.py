@@ -15,7 +15,7 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, make_url, text
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Base
@@ -63,6 +63,104 @@ def _engine(url: str):
         yield engine
     finally:
         engine.dispose()
+
+
+@contextlib.contextmanager
+def _extra_database(postgres_url: str):
+    """A second throwaway database next to the one ``migrated_db`` hands out.
+
+    The reflection comparison below needs two databases on the same server (one
+    built by ``create_all``, one by the chain) and the fixture only yields one.
+    """
+    db_name = f"wallet_test_{uuid.uuid4().hex[:12]}"
+    admin_engine = create_engine(postgres_url, isolation_level="AUTOCOMMIT")
+    try:
+        with admin_engine.connect() as conn:
+            conn.exec_driver_sql(f'CREATE DATABASE "{db_name}"')
+        try:
+            yield make_url(postgres_url).set(database=db_name).render_as_string(
+                hide_password=False
+            )
+        finally:
+            with admin_engine.connect() as conn:
+                conn.exec_driver_sql(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+    finally:
+        admin_engine.dispose()
+
+
+def _schema_snapshot(engine) -> dict:
+    """Everything ``compare_metadata`` does not look at, read back by reflection.
+
+    Per table: the columns (type string including length and precision,
+    nullability, server default), the primary key, foreign key, unique and
+    CHECK constraint *names*, and the indexes. CHECK bodies are left out on
+    purpose — Postgres reprints them, so only the names can be compared.
+    """
+    insp = inspect(engine)
+    snapshot: dict[str, dict] = {}
+    for table in insp.get_table_names():
+        if table == "alembic_version":
+            continue
+        pk = insp.get_pk_constraint(table)
+        snapshot[table] = {
+            "columns": {
+                col["name"]: (str(col["type"]), bool(col["nullable"]), col.get("default"))
+                for col in insp.get_columns(table)
+            },
+            "primary_key": (pk.get("name"), tuple(pk.get("constrained_columns") or ())),
+            "foreign_keys": {
+                fk["name"]: (
+                    tuple(fk["constrained_columns"]),
+                    fk["referred_table"],
+                    tuple(fk["referred_columns"]),
+                    (fk.get("options") or {}).get("ondelete"),
+                )
+                for fk in insp.get_foreign_keys(table)
+            },
+            "unique_constraints": {
+                uq["name"]: tuple(uq["column_names"])
+                for uq in insp.get_unique_constraints(table)
+            },
+            "check_constraints": sorted(
+                ck["name"] for ck in insp.get_check_constraints(table)
+            ),
+            "indexes": {
+                ix["name"]: (
+                    tuple(ix["column_names"]),
+                    bool(ix["unique"]),
+                    tuple(ix.get("expressions") or ()),
+                )
+                for ix in insp.get_indexes(table)
+            },
+        }
+    return snapshot
+
+
+def _snapshot_differences(created: dict, migrated: dict) -> list[str]:
+    """Readable one-liners for everything the two schemas disagree on."""
+    differences: list[str] = []
+    for table in sorted(set(created) | set(migrated)):
+        if table not in created or table not in migrated:
+            differences.append(
+                f"{table}: only in {'create_all' if table in created else 'migrated'}"
+            )
+            continue
+        for aspect, left in created[table].items():
+            right = migrated[table][aspect]
+            if left == right:
+                continue
+            if isinstance(left, dict):
+                for key in sorted(set(left) | set(right), key=str):
+                    if left.get(key) != right.get(key):
+                        differences.append(
+                            f"{table}.{aspect}[{key}]: create_all={left.get(key)!r} "
+                            f"migrated={right.get(key)!r}"
+                        )
+            else:
+                differences.append(
+                    f"{table}.{aspect}: create_all={left!r} migrated={right!r}"
+                )
+    return differences
 
 
 def _reject(engine, sql: str, params: dict, constraint: str | tuple[str, ...]) -> None:
@@ -592,6 +690,34 @@ def test_schema_matches_the_models(migrated_db):
     assert diff == []
 
 
+@pytest.mark.postgres
+def test_migrated_schema_names_and_types_match_create_all(migrated_db, postgres_url):
+    """What ``compare_metadata`` cannot see: constraint names and column widths.
+
+    Alembic's comparison ignores primary key, foreign key and CHECK constraint
+    names and did not report the unbounded ``finance_sources.name``, so the
+    case above is a green light that proves less than it looks. Here the same
+    schema is built twice on one server — once by ``create_all``, once by the
+    chain — and reflected back, name by name.
+    """
+    _upgrade(migrated_db)
+    with _extra_database(postgres_url) as created_db:
+        with _engine(created_db) as engine:
+            Base.metadata.create_all(engine)
+            created = _schema_snapshot(engine)
+        with _engine(migrated_db) as engine:
+            migrated = _schema_snapshot(engine)
+
+    # the three §1.5 / §1.6 names and types this case was written for
+    assert migrated["finance_sources"]["columns"]["name"][0] == "VARCHAR(100)"
+    assert migrated["finance_sources"]["primary_key"][0] == "pk_finance_sources"
+    assert set(migrated["transactions"]["foreign_keys"]) >= {
+        "fk_transactions_source_id_finance_sources"
+    }
+
+    assert _snapshot_differences(created, migrated) == []
+
+
 # ---------------------------------------------------------------------------
 # what the migrated schema actually enforces
 # ---------------------------------------------------------------------------
@@ -615,6 +741,18 @@ def test_transaction_constraints_are_enforced(head_engine):
         _tx(seed, kind="bogus"),
         ("ck_transactions_kind", "ck_transactions_amount_sign"),
     )
+    # Accepting either name would also pass with no kind CHECK at all, so its
+    # existence is asserted separately (same shape as the §14.48 case below).
+    with head_engine.connect() as conn:
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM pg_constraint WHERE conname = "
+                    "'ck_transactions_kind' AND conrelid = 'transactions'::regclass"
+                )
+            ).scalar_one()
+            == 1
+        )
     _reject(
         head_engine,
         _TX_INSERT,
