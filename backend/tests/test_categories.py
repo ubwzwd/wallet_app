@@ -1,15 +1,5 @@
 """Tests for the frozen category constants (decision §1.3, 03 §1.2/§5.5/§5.7)."""
-import importlib.util
-
 import pytest
-
-# app.core.errors lands with the sibling "skeleton" task; validate_category's
-# error-raising path imports it lazily, so tests exercising that path need it
-# importable. Skip just those tests (not this whole module) until it lands.
-_needs_errors_module = pytest.mark.skipif(
-    importlib.util.find_spec("app.core.errors") is None,
-    reason="app.core.errors lands with the skeleton task",
-)
 
 from app.core.categories import (
     ALL_L1_CODES,
@@ -92,45 +82,38 @@ def test_category_side():
     assert category_side("nonexistent_code") is None
 
 
-@_needs_errors_module
 def test_validate_category_transfer_with_category_rejected():
     with pytest.raises(Exception) as exc_info:
         validate_category("transfer", "food", None)
     assert exc_info.value.code == "category_invalid"
 
 
-@_needs_errors_module
 def test_validate_category_expense_missing_l1_rejected():
     with pytest.raises(Exception) as exc_info:
         validate_category("expense", None, None)
     assert exc_info.value.code == "category_invalid"
 
 
-@_needs_errors_module
 def test_validate_category_l2_not_belonging_to_l1_rejected():
     with pytest.raises(Exception) as exc_info:
         validate_category("expense", "food", "electronics")
     assert exc_info.value.code == "category_invalid"
 
 
-@_needs_errors_module
 def test_validate_category_income_with_expense_category_rejected():
     with pytest.raises(Exception) as exc_info:
         validate_category("income", "food", None)
     assert exc_info.value.code == "category_kind_mismatch"
 
 
-@_needs_errors_module
 def test_validate_category_refund_with_expense_category_passes():
     validate_category("refund", "food", "lunch")  # should not raise
 
 
-@_needs_errors_module
 def test_validate_category_expense_l1_only_passes():
     validate_category("expense", "food", None)  # should not raise
 
 
-@_needs_errors_module
 def test_validate_category_unknown_kind_rejected():
     with pytest.raises(Exception) as exc_info:
         validate_category("foo", "food", None)
