@@ -13,6 +13,7 @@ from app.schemas.ledger import (
     LedgerCounts,
     LedgerCreate,
     LedgerPatch,
+    LedgerDetailResponse,
     LedgerResponse,
     MemberResponse,
     TransferOwnershipRequest,
@@ -269,6 +270,35 @@ def test_ledger_patch_requires_updated_at():
     assert lp.base_currency is None
 
 
+def test_ledger_patch_rejects_explicit_nulls():
+    """Omitting a field means "leave it alone"; ``null`` is a 422 (§5.11)."""
+    stamp = dt.datetime(2026, 9, 3, 5, 51, 45, 600000)
+    with pytest.raises(ValidationError):
+        LedgerPatch(updated_at=stamp, name=None)
+    with pytest.raises(ValidationError):
+        LedgerPatch(updated_at=stamp, base_currency=None)
+    # Omitted stays omitted: not in model_fields_set, so the endpoint skips it.
+    omitted = LedgerPatch(updated_at=stamp)
+    assert omitted.model_fields_set == {"updated_at"}
+    assert set(omitted.model_dump(exclude_unset=True)) == {"updated_at"}
+
+
+def test_ledger_patch_name_bounds_are_measured_after_stripping():
+    stamp = dt.datetime(2026, 9, 3, 5, 51, 45, 600000)
+    # 100 characters wrapped in blanks is a legal name, not a 102 character one.
+    assert LedgerPatch(updated_at=stamp, name="  " + "x" * 100 + "  ").name == "x" * 100
+    with pytest.raises(ValidationError):
+        LedgerPatch(updated_at=stamp, name="x" * 101)
+    with pytest.raises(ValidationError):
+        LedgerPatch(updated_at=stamp, name="   ")
+
+
+def test_ledger_create_name_bounds_are_measured_after_stripping():
+    assert LedgerCreate(name=" " + "x" * 100 + " ").name == "x" * 100
+    with pytest.raises(ValidationError):
+        LedgerCreate(name=" " + "x" * 101 + " ")
+
+
 def test_ledger_patch_optional_fields_validated_when_present():
     lp = LedgerPatch(
         updated_at=dt.datetime(2026, 9, 3, 5, 51, 45, 600000),
@@ -303,20 +333,26 @@ def _sample_ledger_kwargs(**overrides):
     return base
 
 
-def test_ledger_response_counts_defaults_to_none():
+def test_ledger_response_has_no_counts_at_all():
+    """§5.8, §5.9 and §5.11 do not carry the counts, not even as ``null``."""
+    assert "counts" not in LedgerResponse.model_fields
     resp = LedgerResponse(**_sample_ledger_kwargs())
-    assert resp.counts is None
-    assert "counts" not in resp.model_dump(exclude_none=True)
+    assert "counts" not in resp.model_dump()
 
 
-def test_ledger_response_counts_present_for_get_single_and_join():
-    resp = LedgerResponse(
+def test_ledger_detail_response_requires_the_counts():
+    """§5.10 and §5.19 always carry them, so the field is not optional."""
+    with pytest.raises(ValidationError):
+        LedgerDetailResponse(**_sample_ledger_kwargs())
+
+    resp = LedgerDetailResponse(
         **_sample_ledger_kwargs(
             counts=LedgerCounts(transactions=1284, sources=6, import_batches=9)
         )
     )
-    assert resp.counts is not None
     assert resp.counts.transactions == 1284
+    # Everything LedgerResponse says, plus the counts.
+    assert set(LedgerResponse.model_fields) < set(LedgerDetailResponse.model_fields)
 
 
 def test_ledger_response_role_restricted_to_owner_or_member():

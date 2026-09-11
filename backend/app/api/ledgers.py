@@ -10,13 +10,14 @@ Authorization is entirely in ``core/deps.py``: every ``/{id}`` route depends on
 business rules live in ``services/ledger_service.py``, which only ever flushes
 — committing the transaction is this module's job.
 """
-import datetime as dt
 import uuid
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import LedgerContext, get_ledger_member, require_owner
 from app.core.errors import ApiError, ErrorCode
@@ -31,6 +32,7 @@ from app.schemas.ledger import (
     JoinRequest,
     LedgerCounts,
     LedgerCreate,
+    LedgerDetailResponse,
     LedgerPatch,
     LedgerResponse,
     MemberResponse,
@@ -44,49 +46,26 @@ router = APIRouter(prefix="/ledgers", tags=["Ledgers"])
 # code is a global problem (§8.2, decision §14.35).
 JOIN_BUCKET = "join"
 JOIN_BUCKET_KEY = "global"
-JOIN_LIMIT = Limit(capacity=3, refill_seconds=3)
+
+# The burst §8.2 allows; the bucket refills completely in ``JOIN_BURST /
+# RATE_LIMIT_JOIN_QPS`` seconds, so the default QPS of 1 is "3 attempts, and
+# three seconds to fill back up".
+JOIN_BURST = 3
 
 
-def _utcnow() -> dt.datetime:
-    """Naive UTC ``now``, the shape every timestamp column stores (§4.5)."""
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
+def _join_limit() -> Limit:
+    """The global join bucket, sized from ``RATE_LIMIT_JOIN_QPS`` (§8.2).
 
-
-def _checked_currency(code: str, current: str) -> str:
-    """Upper-case ``code`` and require it to be one upstream knows (§5.9, §5.11).
-
-    A code outside the list is 400 ``validation_error``. While Frankfurter is
-    unreachable the list cannot be consulted at all, and then the only code
-    that still goes through is ``current`` — the currency already in effect
-    (the caller's default when creating, the ledger's own when patching). That
-    keeps the ordinary path working through an upstream blip without ever
-    letting an unverified code become a base currency nothing can convert from;
-    anything else surfaces the 503 ``fx_unavailable``.
+    Built per request rather than at import time so the setting is read where
+    it can still be changed (tests, a process restarted with a new env).
     """
-    currency = code.upper()
-    try:
-        supported = fx.supported_currencies()
-    except ApiError as exc:
-        if exc.code != ErrorCode.FX_UNAVAILABLE or currency != current.upper():
-            raise
-        return currency
-
-    if currency not in supported:
-        raise ApiError(
-            400, ErrorCode.VALIDATION_ERROR, f"Currency {currency} is not supported"
-        )
-    return currency
-
-
-def _ledger_response(
-    db: Session, ledger: Ledger, role: str, *, with_counts: bool = False
-) -> LedgerResponse:
-    """Build the shared ledger body; ``counts`` only for §5.10 and §5.19."""
-    counts = (
-        LedgerCounts(**ledger_service.ledger_counts(db, ledger.id))
-        if with_counts
-        else None
+    return Limit(
+        capacity=JOIN_BURST, refill_seconds=JOIN_BURST / settings.RATE_LIMIT_JOIN_QPS
     )
+
+
+def _ledger_body(db: Session, ledger: Ledger, role: str) -> LedgerResponse:
+    """The ledger body §5.8, §5.9 and §5.11 return — no ``counts``."""
     return LedgerResponse(
         id=ledger.id,
         name=ledger.name,
@@ -94,9 +73,18 @@ def _ledger_response(
         role=role,
         member_count=ledger_service.member_count(db, ledger.id),
         created_by=ledger.created_by,
-        counts=counts,
         created_at=ledger.created_at,
         updated_at=ledger.updated_at,
+    )
+
+
+def _ledger_detail(db: Session, ledger: Ledger, role: str) -> LedgerDetailResponse:
+    """The same body plus the three counts, for §5.10 and §5.19."""
+    # ``dict(model)`` hands over the raw field values, so the timestamps are
+    # not serialized to strings and parsed back on the way into the subclass.
+    return LedgerDetailResponse(
+        **dict(_ledger_body(db, ledger, role)),
+        counts=LedgerCounts(**ledger_service.ledger_counts(db, ledger.id)),
     )
 
 
@@ -131,22 +119,31 @@ def _member_list(db: Session, ledger: Ledger, me: User) -> ListResponse[MemberRe
 # ---------------------------------------------------------------------------
 
 
-@router.post("/join", response_model=LedgerResponse)
+@router.post("/join", response_model=LedgerDetailResponse)
 def join_ledger(
     payload: JoinRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> LedgerResponse:
+) -> LedgerDetailResponse:
     """Redeem an invite code and join the ledger behind it (§5.19).
 
     The rate limit is the very first thing that happens, before the code is
     looked at, which is what makes "429 never consumes a code" true (decision
     §2): the code is only deleted by a successful join.
-    """
-    ratelimit_check(JOIN_BUCKET, JOIN_BUCKET_KEY, JOIN_LIMIT)
 
-    ledger = ledger_service.redeem_invite(db, current_user, payload.code)
-    body = _ledger_response(db, ledger, ledger_service.ROLE_MEMBER, with_counts=True)
+    A refused redemption commits too. ``redeem_invite`` sweeps the expired rows
+    carrying this code on its way past (decision §14.29), and rolling that
+    delete back together with the error would leave the dead rows in the table
+    forever — nothing ever looks at them again.
+    """
+    ratelimit_check(JOIN_BUCKET, JOIN_BUCKET_KEY, _join_limit())
+
+    try:
+        ledger = ledger_service.redeem_invite(db, current_user, payload.code)
+    except ApiError:
+        db.commit()
+        raise
+    body = _ledger_detail(db, ledger, ledger_service.ROLE_MEMBER)
     db.commit()
     return body
 
@@ -156,7 +153,7 @@ def join_ledger(
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=ListResponse[LedgerResponse], response_model_exclude_none=True)
+@router.get("", response_model=ListResponse[LedgerResponse])
 def list_ledgers(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -202,12 +199,7 @@ def list_ledgers(
     return ListResponse[LedgerResponse](items=items, total=len(items))
 
 
-@router.post(
-    "",
-    response_model=LedgerResponse,
-    response_model_exclude_none=True,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("", response_model=LedgerResponse, status_code=status.HTTP_201_CREATED)
 def create_ledger(
     payload: LedgerCreate,
     current_user: User = Depends(get_current_user),
@@ -219,12 +211,12 @@ def create_ledger(
     unsupported code is 400 and an eleventh ledger is 409
     ``ledger_limit_reached``.
     """
-    currency = _checked_currency(
+    currency = fx.ensure_supported(
         payload.base_currency or current_user.base_currency, current_user.base_currency
     )
 
     ledger = ledger_service.create_ledger(db, current_user, payload.name, currency)
-    body = _ledger_response(db, ledger, ledger_service.ROLE_OWNER)
+    body = _ledger_body(db, ledger, ledger_service.ROLE_OWNER)
     db.commit()
     return body
 
@@ -234,15 +226,15 @@ def create_ledger(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{id}", response_model=LedgerResponse)
+@router.get("/{id}", response_model=LedgerDetailResponse)
 def get_ledger(
     ctx: LedgerContext = Depends(get_ledger_member), db: Session = Depends(get_db)
-) -> LedgerResponse:
+) -> LedgerDetailResponse:
     """One ledger, with the three counts the delete dialog shows (§5.10)."""
-    return _ledger_response(db, ctx.ledger, ctx.member.role, with_counts=True)
+    return _ledger_detail(db, ctx.ledger, ctx.member.role)
 
 
-@router.patch("/{id}", response_model=LedgerResponse, response_model_exclude_none=True)
+@router.patch("/{id}", response_model=LedgerResponse)
 def update_ledger(
     payload: LedgerPatch,
     ctx: LedgerContext = Depends(require_owner),
@@ -266,7 +258,12 @@ def update_ledger(
         .where(Ledger.id == ctx.ledger.id)
         .with_for_update()
         .execution_options(populate_existing=True)
-    ).scalar_one()
+    ).scalar_one_or_none()
+
+    if ledger is None:
+        # The dependency saw the row and another owner deleted it in between:
+        # the same answer an invisible ledger gets (§3.3).
+        raise ApiError(404, ErrorCode.NOT_FOUND, "Ledger not found")
 
     if payload.updated_at != ledger.updated_at:
         raise ApiError(
@@ -275,18 +272,24 @@ def update_ledger(
             "Ledger was modified by someone else; reload and retry",
         )
 
+    # Every check first, then the writes: a currency the provider does not know
+    # has to leave the row exactly as it was, name included.
     fields = payload.model_dump(exclude_unset=True)
-    if fields.get("name") is not None:
-        ledger.name = fields["name"]
-    if fields.get("base_currency") is not None:
-        ledger.base_currency = _checked_currency(
-            fields["base_currency"], ledger.base_currency
-        )
+    currency = (
+        fx.ensure_supported(fields["base_currency"], ledger.base_currency)
+        if "base_currency" in fields
+        else None
+    )
 
-    ledger.updated_at = _utcnow()
+    if "name" in fields:
+        ledger.name = fields["name"]
+    if currency is not None:
+        ledger.base_currency = currency
+
+    ledger.updated_at = utcnow()
     db.flush()
 
-    body = _ledger_response(db, ledger, ctx.member.role)
+    body = _ledger_body(db, ledger, ctx.member.role)
     db.commit()
     return body
 

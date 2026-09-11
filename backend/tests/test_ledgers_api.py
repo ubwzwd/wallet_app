@@ -10,8 +10,9 @@ from decimal import Decimal
 
 import httpx
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch
@@ -20,17 +21,13 @@ from app.models.transaction import Transaction
 from app.models.transaction_event import TransactionEvent
 
 
-def _naive_utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
-
-
 # ---------------------------------------------------------------------------
 # helpers: rows the ledger endpoints only ever count or cascade-delete
 # ---------------------------------------------------------------------------
 
 
 def make_source(db, ledger, user, name: str = "招行储蓄卡") -> FinanceSource:
-    now = _naive_utcnow()
+    now = utcnow()
     source = FinanceSource(
         ledger_id=ledger.id,
         name=name,
@@ -49,7 +46,7 @@ def make_source(db, ledger, user, name: str = "招行储蓄卡") -> FinanceSourc
 
 
 def make_transaction(db, ledger, source, user, amount: str = "-42.0000") -> Transaction:
-    now = _naive_utcnow()
+    now = utcnow()
     transaction = Transaction(
         ledger_id=ledger.id,
         source_id=source.id,
@@ -73,7 +70,7 @@ def make_event(db, ledger, transaction, user) -> TransactionEvent:
         ledger_id=ledger.id,
         transaction_id=transaction.id,
         actor_id=user.id,
-        at=_naive_utcnow(),
+        at=utcnow(),
         event="created",
     )
     db.add(event)
@@ -82,7 +79,7 @@ def make_event(db, ledger, transaction, user) -> TransactionEvent:
 
 
 def make_batch(db, ledger, source, user) -> ImportBatch:
-    now = _naive_utcnow()
+    now = utcnow()
     batch = ImportBatch(
         ledger_id=ledger.id,
         source_id=source.id,
@@ -378,7 +375,17 @@ def test_patch_renames_and_restamps(client, db, user_factory, auth_headers, ledg
     assert body["name"] == "家用"
     assert body["updated_at"] != before["updated_at"]
     assert body["created_at"] == before["created_at"]
-    assert "counts" not in body
+    # §5.11 hands back the plain ledger body: no counts, not even a null one.
+    assert set(body) == {
+        "id",
+        "name",
+        "base_currency",
+        "role",
+        "member_count",
+        "created_by",
+        "created_at",
+        "updated_at",
+    }
     db.expire_all()
     assert db.get(Ledger, ledger.id).name == "家用"
 
@@ -409,6 +416,96 @@ def test_patch_base_currency_shows_up_and_leaves_transactions_alone(
     kept = db.get(Transaction, transaction_id)
     assert kept.currency == "CNY"
     assert kept.amount == Decimal("-42.0000")
+
+
+@pytest.mark.parametrize("field", ["name", "base_currency"])
+def test_patch_rejects_an_explicitly_null_field(
+    client, db, user_factory, auth_headers, ledger_factory, field
+):
+    """There is no ledger without a name or without a currency (§5.11)."""
+    alice = user_factory()
+    ledger = ledger_factory(alice, name="家庭账本")
+    db.commit()
+    stamp = ledger.updated_at
+
+    response = client.patch(
+        f"/api/v1/ledgers/{ledger.id}",
+        json={"updated_at": stamp.isoformat() + "Z", field: None},
+        headers=auth_headers(alice),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    db.refresh(ledger)
+    assert ledger.name == "家庭账本"
+    assert ledger.updated_at == stamp
+
+
+def test_patch_validates_the_currency_before_touching_the_name(
+    client, db, user_factory, auth_headers, ledger_factory
+):
+    """A refused currency leaves the whole row alone, the new name included."""
+    alice = user_factory()
+    ledger = ledger_factory(alice, name="家庭账本", base_currency="CNY")
+    db.commit()
+    stamp = ledger.updated_at
+
+    response = client.patch(
+        f"/api/v1/ledgers/{ledger.id}",
+        json={
+            "updated_at": stamp.isoformat() + "Z",
+            "name": "旅行账本",
+            "base_currency": "XYZ",
+        },
+        headers=auth_headers(alice),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "validation_error"
+    # The endpoint shares this session, so this is the very object it locked:
+    # assigning the name before validating the currency would show up here.
+    assert ledger.name == "家庭账本"
+    assert ledger.base_currency == "CNY"
+    db.refresh(ledger)
+    assert ledger.name == "家庭账本"
+    assert ledger.base_currency == "CNY"
+    assert ledger.updated_at == stamp
+
+
+def test_patch_of_a_concurrently_deleted_ledger_is_404(
+    client, db, user_factory, auth_headers, ledger_factory
+):
+    """The dependency saw the row, someone deleted it before the lock (§3.3)."""
+    from app.core.deps import LedgerContext, require_owner
+    from app.main import app
+
+    alice = user_factory()
+    ledger = ledger_factory(alice, name="家庭账本")
+    db.commit()
+    ledger_id, stamp = ledger.id, ledger.updated_at
+
+    # The context the dependency built a moment before the row went away; the
+    # objects are detached copies, so nothing here refreshes from the database.
+    stale = LedgerContext(
+        ledger=Ledger(id=ledger_id, name="家庭账本", base_currency="CNY"),
+        member=LedgerMember(ledger_id=ledger_id, user_id=alice.id, role="owner"),
+        user=alice,
+    )
+    db.execute(delete(Ledger).where(Ledger.id == ledger_id))
+    db.commit()
+
+    app.dependency_overrides[require_owner] = lambda: stale
+    try:
+        response = client.patch(
+            f"/api/v1/ledgers/{ledger_id}",
+            json={"updated_at": stamp.isoformat() + "Z", "name": "旅行账本"},
+            headers=auth_headers(alice),
+        )
+    finally:
+        app.dependency_overrides.pop(require_owner, None)
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
 
 
 def test_patch_by_a_plain_member_is_403(

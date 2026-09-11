@@ -6,14 +6,13 @@ is why they are the only two routes that reach for ``core/ratelimit``. The
 ``/me`` is the single entry point (decision §14.42), so this module has exactly
 two routes.
 """
-import datetime as dt
-
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import ratelimit
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import client_ip
@@ -22,7 +21,7 @@ from app.core.ratelimit import Limit
 from app.core.security import authenticate_user, create_access_token, get_password_hash
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
-from app.services import ledger_service
+from app.services import fx, ledger_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -44,11 +43,6 @@ def _login_limit() -> Limit:
     )
 
 
-def _utcnow() -> dt.datetime:
-    """Naive UTC ``now``, matching the naive ``DateTime`` columns (§4.5)."""
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
-
-
 def _email_exists() -> ApiError:
     """The single 409 both the pre-check and the unique index produce (§5.1)."""
     return ApiError(409, ErrorCode.EMAIL_EXISTS, "That email address is already registered")
@@ -65,7 +59,10 @@ def register(
     One transaction writes all three rows — ``users``, ``ledgers`` and the
     ``owner`` row in ``ledger_members`` (decision §2) — so a failure anywhere
     leaves no half-registered account. ``display_name`` starts NULL; the user
-    fills it in later from the profile page (decision §14.40).
+    fills it in later from the profile page (decision §14.40). The chosen
+    ``base_currency`` has to be one the rate provider supports, the same check
+    §5.4 and §5.9 make — the account and its default ledger would otherwise
+    start out in a currency nothing can convert from.
     """
     ratelimit.check("register", ip, _register_limit())
 
@@ -74,20 +71,26 @@ def register(
             403, ErrorCode.REGISTRATION_CLOSED, "Registration is currently closed"
         )
 
+    # The schema already upper-cased the code and checked its shape; whether
+    # anything can convert from it is this check (§5.4, §5.9 use the same one).
+    # There is no currency in effect yet, so an unreachable provider is a 503
+    # rather than a code nobody verified.
+    base_currency = fx.ensure_supported(payload.base_currency)
+
     # The schema already lower-cased the address (§5.1); the unique index is on
     # the stored value, so this probe and the fallback below compare the same
     # string.
-    email = payload.email.lower()
+    email = payload.email
     existing = db.execute(select(User.id).where(User.email == email)).first()
     if existing is not None:
         raise _email_exists()
 
-    now = _utcnow()
+    now = utcnow()
     user = User(
         email=email,
         password_hash=get_password_hash(payload.password),
         display_name=None,
-        base_currency=payload.base_currency,
+        base_currency=base_currency,
         language=payload.language,
         created_at=now,
         updated_at=now,
@@ -123,7 +126,7 @@ def login(
     """
     ratelimit.check("login", ip, _login_limit())
 
-    user = authenticate_user(db, payload.email.lower(), payload.password)
+    user = authenticate_user(db, payload.email, payload.password)
     if user is None:
         raise ApiError(401, ErrorCode.INVALID_CREDENTIALS, "Incorrect email or password")
 

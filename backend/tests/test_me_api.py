@@ -5,10 +5,34 @@ so their absence is asserted here alongside the real endpoint's behaviour.
 """
 import datetime as dt
 
+import httpx
 import pytest
 
 ME_URL = "/api/v1/me"
 AUTH_ME_URL = "/api/v1/auth/me"
+
+
+@pytest.fixture()
+def fx_down(monkeypatch):
+    """Frankfurter answers 503, so the supported currency list is unknowable.
+
+    ``PATCH /me`` then behaves like §5.9/§5.11: the currency already in effect
+    still goes through, anything else is a 503 rather than an unverified code.
+    """
+    from app.services import fx
+
+    monkeypatch.setattr(fx, "HTTP_RETRY_ATTEMPTS", 1)
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+        base_url="https://frankfurter.test/v1",
+    )
+    fx.reset_state()
+    monkeypatch.setattr(fx, "client_factory", lambda: client)
+    try:
+        yield
+    finally:
+        client.close()
+        fx.reset_state()
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +202,34 @@ def test_patch_me_rejects_a_currency_the_provider_does_not_support(
     assert body["code"] == "validation_error"
     # The detail names the offending code (§5.4).
     assert "XYZ" in body["detail"]
+    db.refresh(user)
+    assert user.base_currency == "CNY"
+
+
+def test_patch_me_accepts_the_current_currency_while_fx_is_down(
+    client, db, user_factory, auth_headers, fx_down
+):
+    """Setting the currency already in effect needs no list to be validated."""
+    user = user_factory(base_currency="CNY")
+    db.commit()
+
+    response = client.patch(ME_URL, json={"base_currency": "cny"}, headers=auth_headers(user))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["base_currency"] == "CNY"
+
+
+def test_patch_me_refuses_an_unverifiable_currency_while_fx_is_down(
+    client, db, user_factory, auth_headers, fx_down
+):
+    """An upstream blip must never write a currency nobody checked (§5.4)."""
+    user = user_factory(base_currency="CNY")
+    db.commit()
+
+    response = client.patch(ME_URL, json={"base_currency": "usd"}, headers=auth_headers(user))
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "fx_unavailable"
     db.refresh(user)
     assert user.base_currency == "CNY"
 

@@ -170,7 +170,19 @@ def test_create_ledger_accepts_a_100_character_name(db):
     assert len(ledger.name) == 100
 
 
-@pytest.mark.parametrize("currency", ["", "CN", "CNYY", "12 "])
+@pytest.mark.parametrize(
+    "currency",
+    [
+        "",
+        "CN",
+        "CNYY",
+        "12 ",
+        # Three letters as far as ``str.isalpha`` is concerned, but not three
+        # ASCII letters: only the ``^[A-Za-z]{3}$`` of §4.5 turns these away.
+        "ＣＮＹ",
+        "ЦНЫ",
+    ],
+)
 def test_create_ledger_rejects_malformed_currency(db, currency):
     user = make_user(db)
 

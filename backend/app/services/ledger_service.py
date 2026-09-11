@@ -20,12 +20,14 @@ is everything that needs the database to decide — the soft limits of decision
 §2 and the ordering of the checks in §5.9 and §5.14-§5.19.
 """
 import datetime as dt
+import re
 import secrets
 import uuid
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.core.errors import ApiError, ErrorCode
 from app.models.finance_source import FinanceSource
@@ -33,6 +35,7 @@ from app.models.import_batch import ImportBatch
 from app.models.ledger import Ledger, LedgerInvite, LedgerMember
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.schemas.common import CURRENCY_PATTERN
 
 # Name of the ledger created for every new account (§5.1, decision §2).
 DEFAULT_LEDGER_NAME = "我的账本"
@@ -49,11 +52,6 @@ INVITE_CODE_ATTEMPTS = 5
 
 ROLE_OWNER = "owner"
 ROLE_MEMBER = "member"
-
-
-def _utcnow() -> dt.datetime:
-    """Naive UTC ``now``, matching the naive ``DateTime`` columns (§4.5)."""
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +134,7 @@ def create_ledger(db: Session, user: User, name: str, base_currency: str) -> Led
         )
 
     currency = (base_currency or "").strip().upper()
-    if len(currency) != 3 or not currency.isalpha():
+    if re.fullmatch(CURRENCY_PATTERN, currency) is None:
         raise ApiError(
             400, ErrorCode.VALIDATION_ERROR, "base_currency must be a 3 letter code"
         )
@@ -148,7 +146,7 @@ def create_ledger(db: Session, user: User, name: str, base_currency: str) -> Led
             f"You already belong to {settings.MAX_LEDGERS_PER_USER} ledgers",
         )
 
-    now = _utcnow()
+    now = utcnow()
     ledger = Ledger(
         name=clean_name,
         base_currency=currency,
@@ -197,7 +195,7 @@ def issue_invite(db: Session, ledger: Ledger, actor: User) -> LedgerInvite:
     A full ledger gets 409 ``member_limit_reached`` — there would be nobody
     left to accept the code. Five clashing draws mean 500 ``internal_error``.
     """
-    now = _utcnow()
+    now = utcnow()
 
     # Step 1: lazy sweep of this ledger's expired codes (decision §14.29).
     db.execute(
@@ -278,7 +276,7 @@ def redeem_invite(db: Session, user: User, code: str) -> Ledger:
     409 ``ledger_limit_reached``. None of the three consume the code; only a
     successful join does, in the same transaction as the membership insert.
     """
-    now = _utcnow()
+    now = utcnow()
 
     # `FOR UPDATE` serializes two people redeeming the same code on Postgres;
     # SQLite has no row locks and the dialect renders nothing, which is fine

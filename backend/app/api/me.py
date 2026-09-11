@@ -4,24 +4,17 @@
 carries aliases for it (decision §14.42). The user object does not take part in
 optimistic concurrency — nobody but its owner can change it (§5.4).
 """
-import datetime as dt
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.database import get_db
-from app.core.errors import ApiError, ErrorCode
 from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.user import MePatch, MeResponse
 from app.services import fx, ledger_service
 
 router = APIRouter(prefix="/me", tags=["Me"])
-
-
-def _utcnow() -> dt.datetime:
-    """Naive UTC ``now``, matching the naive ``DateTime`` columns (§4.5)."""
-    return dt.datetime.now(dt.UTC).replace(tzinfo=None)
 
 
 def _profile(db: Session, user: User) -> MeResponse:
@@ -68,15 +61,12 @@ def patch_me(
 
     if "base_currency" in changes:
         # The validator already upper-cased it; it still has to be a currency
-        # the exchange rate provider knows about (§5.4).
-        code = changes["base_currency"]
-        if code not in fx.supported_currencies():
-            raise ApiError(
-                400,
-                ErrorCode.VALIDATION_ERROR,
-                f"base_currency: {code} is not a supported currency",
-            )
-        current_user.base_currency = code
+        # the exchange rate provider knows about (§5.4). Passing the currency
+        # in effect means switching *back* to it still works while upstream is
+        # down — the same rule the ledger endpoints follow.
+        current_user.base_currency = fx.ensure_supported(
+            changes["base_currency"], current_user.base_currency
+        )
 
     if "language" in changes:
         current_user.language = changes["language"]
@@ -86,7 +76,7 @@ def patch_me(
         # "clear it" arrive here as None.
         current_user.display_name = changes["display_name"]
 
-    current_user.updated_at = _utcnow()
+    current_user.updated_at = utcnow()
     db.commit()
 
     return _profile(db, current_user)

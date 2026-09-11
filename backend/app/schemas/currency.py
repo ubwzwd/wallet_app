@@ -4,8 +4,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-# ISO 4217 codes are accepted in either case and upper-cased server side (§4.5).
-CURRENCY_PATTERN = r"^[A-Za-z]{3}$"
+from app.schemas.common import CURRENCY_PATTERN
 
 
 class CurrencyList(BaseModel):
