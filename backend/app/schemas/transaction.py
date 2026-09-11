@@ -8,25 +8,27 @@ enums, and the one date bound (§5.26) that the design calls out as a field
 rule rather than a cross-field rule.
 
 Money fields are ``Decimal`` quantized to 4 decimal places, exchange rates
-to 8 (§4.5); see the ``Amount`` / ``Rate`` annotated types.
+to 8 (§4.5); see the ``Amount`` / ``Rate`` annotated types (defined in
+``app.schemas.common``, the one place they and their quantizing helpers
+live — see that module's docstring).
 """
 from __future__ import annotations
 
 import datetime as dt
 import uuid
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, ConfigDict, Field, field_validator, model_serializer
 
-from app.schemas.common import CURRENCY_PATTERN, ApiModel, ApiRequestModel, UtcDatetime
-
-# Defined once here (rather than in app/schemas/common.py, which is out of
-# scope for this task) and imported by finance_source.py / stats.py so the
-# quantizing behaviour — including the ``InvalidOperation`` guard below —
-# only has to be fixed in one place.
-AMOUNT_QUANTUM = Decimal("0.0001")
-RATE_QUANTUM = Decimal("0.00000001")
+from app.schemas.common import (
+    CURRENCY_PATTERN,
+    Amount,
+    ApiModel,
+    ApiRequestModel,
+    Rate,
+    UtcDatetime,
+)
 
 Kind = Literal["expense", "income", "refund", "transfer"]
 TransferRole = Literal["out", "in"]
@@ -34,28 +36,6 @@ TransferSubtype = Literal["plain", "repayment"]
 EventName = Literal[
     "created", "updated", "imported", "paired", "unpaired", "refund_linked", "refund_unlinked"
 ]
-
-
-def _quantize_amount(value: Decimal) -> Decimal:
-    """Quantize to 4 dp; an out-of-precision value (e.g. ``1e40``) is a 422, not a 500.
-
-    ``Decimal.quantize`` raises ``decimal.InvalidOperation`` when the result
-    would need more digits than the current arithmetic context's precision
-    (28 by default). Pydantic only turns ``ValueError``/``AssertionError``
-    into a validation error, so that has to be caught and re-raised here.
-    """
-    try:
-        return value.quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
-    except InvalidOperation as exc:
-        raise ValueError("amount out of range") from exc
-
-
-def _quantize_rate(value: Decimal) -> Decimal:
-    """Quantize to 8 dp; see ``_quantize_amount`` for why ``InvalidOperation`` is caught."""
-    try:
-        return value.quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
-    except InvalidOperation as exc:
-        raise ValueError("rate out of range") from exc
 
 
 def _require_nonzero(value: Decimal) -> Decimal:
@@ -70,17 +50,12 @@ def _require_positive(value: Decimal) -> Decimal:
     return value
 
 
-# A quantized amount with no sign constraint (list/detail responses, legs).
-Amount = Annotated[Decimal, AfterValidator(_quantize_amount)]
-# A quantized amount that must not be zero (§5.26 ``amount``).
-NonzeroAmount = Annotated[
-    Decimal, AfterValidator(_quantize_amount), AfterValidator(_require_nonzero)
-]
+# A quantized amount that must not be zero (§5.26 ``amount``). ``Annotated``
+# nests flatten (PEP 593), so this is exactly ``Amount`` plus one more
+# ``AfterValidator``, applied after the quantizing one.
+NonzeroAmount = Annotated[Amount, AfterValidator(_require_nonzero)]
 # A quantized amount that must be > 0 (§5.30 ``amount_out`` / ``amount_in``).
-PositiveAmount = Annotated[
-    Decimal, AfterValidator(_quantize_amount), AfterValidator(_require_positive)
-]
-Rate = Annotated[Decimal, AfterValidator(_quantize_rate)]
+PositiveAmount = Annotated[Amount, AfterValidator(_require_positive)]
 
 
 def _reject_none(field_name: str):

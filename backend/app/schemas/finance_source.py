@@ -2,12 +2,12 @@
 
 Money fields are ``Decimal`` quantized to 4 decimal places, exchange rates to
 8 (§4.5) — the ``Amount`` / ``Rate`` annotated types (imported from
-``app.schemas.transaction``, the one place they are defined — see that
-module's docstring) do the quantizing so the JSON output always has the
-right number of digits regardless of how many decimals the caller happened
-to pass in (pydantic v2 serializes ``Decimal`` to a string that mirrors its
-own exponent, so quantizing on the way in is what fixes the digit count on
-the way out).
+``app.schemas.common``, the one place they are defined — see that module's
+docstring) do the quantizing so the JSON output always has the right number
+of digits regardless of how many decimals the caller happened to pass in
+(pydantic v2 serializes ``Decimal`` to a string that mirrors its own
+exponent, so quantizing on the way in is what fixes the digit count on the
+way out).
 """
 from __future__ import annotations
 
@@ -18,8 +18,14 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from app.schemas.common import CURRENCY_PATTERN, ApiModel, ApiRequestModel, UtcDatetime
-from app.schemas.transaction import Amount, Rate
+from app.schemas.common import (
+    CURRENCY_PATTERN,
+    Amount,
+    ApiModel,
+    ApiRequestModel,
+    Rate,
+    UtcDatetime,
+)
 
 SourceType = Literal["checking", "credit", "cash", "other"]
 

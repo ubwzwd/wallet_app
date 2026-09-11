@@ -241,6 +241,35 @@ def test_an_unreachable_upstream_nulls_the_base_figures_but_still_answers_200(
     assert payload["net_worth"] is None
 
 
+def test_a_currency_with_no_rate_at_all_is_excluded_and_counted_once(
+    client, world, source_factory, transaction_factory
+):
+    """One account's row in an unconvertible currency: excluded, counted, isolated (§6.3).
+
+    The fake Frankfurter of ``conftest.py`` (``FAKE_RATES_PER_USD``) does not
+    know AUD, so an AUD row has no rate at all. ``balance`` leaves that row
+    out entirely and ``rate_missing_count`` is exactly the one transaction it
+    belongs to; a second, unrelated account (even one holding only ordinary
+    CNY) is not touched by the other account's missing currency.
+    """
+    checking = source_factory(
+        world.ledger, name="招商 储蓄卡", type="checking", opening_balance=Decimal("1000")
+    )
+    other = source_factory(world.ledger, name="现金", type="cash", opening_balance=Decimal("50"))
+    transaction_factory(world.ledger, checking, amount=Decimal("-100.0000"))
+    transaction_factory(world.ledger, checking, amount=Decimal("-20.0000"), currency="AUD")
+
+    payload = client.get(world.url, headers=world.headers).json()
+
+    row = item_by_name(payload, "招商 储蓄卡")
+    assert row["balance"] == money(Decimal("900"))     # the GBP row is simply left out
+    assert row["rate_missing_count"] == 1
+
+    other_row = item_by_name(payload, "现金")
+    assert other_row["balance"] == money(Decimal("50"))
+    assert other_row["rate_missing_count"] == 0
+
+
 def test_accounts_of_another_ledger_are_not_listed(
     client, world, user_factory, ledger_factory, source_factory
 ):

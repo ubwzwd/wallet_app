@@ -178,6 +178,19 @@ def test_trend_of_twelve_months_is_continuous_and_ends_on_the_given_month(
     assert labels == expected
 
 
+def test_trend_defaults_end_to_the_current_utc_month(client, book, monkeypatch):
+    """No ``end``: the trend's last month follows ``app.core.clock.utcnow``."""
+    ledger, user, source, headers = book
+    import app.api.stats as stats_api
+
+    monkeypatch.setattr(stats_api, "utcnow", lambda: dt.datetime(2026, 9, 15, 3, 0, 0))
+
+    response = client.get(f"/api/v1/ledgers/{ledger.id}/stats/trend?months=1", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["months"] == [{"month": "2026-09", "expense": "0.0000"}]
+
+
 @pytest.mark.parametrize("months,end", [(0, "2026-09"), (37, "2026-09"), (12, "2026-9")])
 def test_trend_rejects_out_of_range_or_malformed_query(client, book, months, end):
     ledger, _user, _source, headers = book

@@ -1,7 +1,7 @@
 """Stats schemas (03-backend-api.md §5.35-§5.36).
 
 Money fields are ``Decimal`` quantized to 4 decimal places (§4.5); see the
-``Amount`` annotated type (imported from ``app.schemas.transaction``, the one
+``Amount`` annotated type (imported from ``app.schemas.common``, the one
 place it is defined — see that module's docstring). ``share`` is a plain
 ``float`` (§5.35: "浮点数保留 4 位") — it is a display ratio, not money, so it
 does not go through the ``Decimal`` quantizing machinery the other two
@@ -9,8 +9,7 @@ schema modules use.
 """
 from __future__ import annotations
 
-from app.schemas.common import ApiModel
-from app.schemas.transaction import Amount
+from app.schemas.common import Amount, ApiModel
 
 
 class SubStat(ApiModel):

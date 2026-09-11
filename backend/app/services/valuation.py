@@ -31,8 +31,9 @@ from app.models.ledger import Ledger
 from app.models.transaction import Transaction
 from app.services import fx
 
-# Money is Numeric(18, 4) everywhere (03 §4.5).
+# Money is Numeric(18, 4), exchange rates Numeric(18, 8) everywhere (03 §4.5).
 AMOUNT_QUANTUM = Decimal("0.0001")
+RATE_QUANTUM = Decimal("0.00000001")
 ZERO = Decimal("0.0000")
 
 # Account types that are debt rather than an asset (decision §14.50).
@@ -70,6 +71,16 @@ class SourceBalance:
 def quantize_amount(value: Decimal) -> Decimal:
     """Round to the 4 decimals every money column and response field uses."""
     return Decimal(value).quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
+
+
+def quantize_rate(value: Decimal) -> Decimal:
+    """Round to the 8 decimals every exchange-rate column and response field uses.
+
+    Public so later callers in this module (and other services) share one
+    rate-quantizing function instead of repeating the ``Decimal.quantize``
+    call, the same way ``quantize_amount`` already does for money.
+    """
+    return Decimal(value).quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
 
 
 def convert_rows(
@@ -315,13 +326,13 @@ def _base_rate(
         return cache[currency]
     if currency == base_currency:
         result: tuple[Decimal, dt.date] | None = (
-            fx.quantize_rate(Decimal("1")),
+            quantize_rate(Decimal("1")),
             dt.datetime.now(dt.UTC).date(),
         )
     else:
         try:
             rate, rate_date = fx.latest_rate(db, currency, base_currency)
-            result = (fx.quantize_rate(rate), rate_date)
+            result = (quantize_rate(rate), rate_date)
         except ApiError as exc:
             if exc.code != ErrorCode.FX_UNAVAILABLE:
                 raise

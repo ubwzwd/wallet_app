@@ -57,19 +57,27 @@ COUNTED_KINDS = ("expense", "income", "refund")
 
 
 @dataclass
+class ChildTotals:
+    """One level-2 subtotal inside a ``_Bucket`` while it is being accumulated."""
+
+    amount: Decimal = ZERO
+    count: int = 0
+
+
+@dataclass
 class _Bucket:
     """One level-1 category while it is being accumulated."""
 
     amount: Decimal = ZERO
     count: int = 0
-    children: dict[str | None, list] = field(default_factory=dict)
+    children: dict[str | None, ChildTotals] = field(default_factory=dict)
 
     def add(self, l2: str | None, amount: Decimal, count: int) -> None:
         self.amount += amount
         self.count += count
-        child = self.children.setdefault(l2, [ZERO, 0])
-        child[0] += amount
-        child[1] += count
+        child = self.children.setdefault(l2, ChildTotals())
+        child.amount += amount
+        child.count += count
 
 
 def summary(db: Session, ledger: Ledger, month: dt.date) -> dict:
@@ -125,10 +133,23 @@ def summary(db: Session, ledger: Ledger, month: dt.date) -> dict:
 def trend(db: Session, ledger: Ledger, months: int, end: dt.date) -> dict:
     """Expense per month for the ``months`` months ending with ``end`` (§5.36).
 
-    Expenses only (decision §14.52 B20), positive, refunds deducted in the
-    month they happened. Months without a single transaction are present with
+    Expenses only (decision §14.52 B20): each expense contributes its
+    absolute value and each refund deducts from the month it actually landed
+    in — the same rule ``summary`` applies per category. A month with a
+    refund of an earlier month's purchase and no expense of its own is
+    therefore reported **negative**, not clamped to ``0.0000`` (the same call
+    as a category refunded past zero — decision §14.44 of 03-10, same
+    reading here). Months without a single transaction are present with
     ``0.0000`` so the front end never has to fill holes.
+
+    Raises ``ValueError`` for a non-positive ``months``: the endpoint already
+    bounds the query parameter to 1..36 (§5.36), but a service function
+    should still fail honestly rather than build an empty or backwards
+    window when called some other way.
     """
+    if months <= 0:
+        raise ValueError("months must be a positive number of months")
+
     base_currency = ledger.base_currency.upper()
     last = end.replace(day=1)
     sequence = [add_months(last, offset) for offset in range(-(months - 1), 1)]
@@ -271,26 +292,39 @@ def _render(buckets: dict[str, _Bucket], total: Decimal) -> list[dict]:
                 "children": _render_children(bucket, names),
             }
         )
-    rows.sort(key=lambda row: row["amount"], reverse=True)
+    _sort_by_amount_then_code(rows)
     return rows
 
 
 def _render_children(bucket: _Bucket, names: dict[str, categories.Category]) -> list[dict]:
     """Level-2 rows of one category; ``code: null`` is the unspecified part."""
     children = []
-    for code, (amount, count) in bucket.children.items():
+    for code, totals in bucket.children.items():
         child = names.get(code) if code is not None else None
         children.append(
             {
                 "code": code,
                 "name_zh": child.name_zh if child else (code or UNSPECIFIED_NAME_ZH),
                 "name_en": child.name_en if child else (code or UNSPECIFIED_NAME_EN),
-                "amount": quantize_amount(amount),
-                "count": count,
+                "amount": quantize_amount(totals.amount),
+                "count": totals.count,
             }
         )
-    children.sort(key=lambda row: row["amount"], reverse=True)
+    _sort_by_amount_then_code(children)
     return children
+
+
+def _sort_by_amount_then_code(rows: list[dict]) -> None:
+    """Amount descending, ``code`` ascending as a tiebreaker, in place.
+
+    Two categories can land on the same amount (most often two all-zero
+    ``0.0000`` rows before they are filtered, or a tie from real data); without
+    a deterministic secondary key the response order would depend on
+    dict-iteration order, which Python does not guarantee across a rebuild of
+    the same aggregation. ``code`` is ``None`` for the level-2 "unspecified"
+    row, which sorts before every real code.
+    """
+    rows.sort(key=lambda row: (-row["amount"], row["code"] or ""))
 
 
 def _share(amount: Decimal, total: Decimal) -> float:
