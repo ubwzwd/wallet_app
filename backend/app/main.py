@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.errors import install_error_handlers
-from app.api import rates
+from app.api import iter_routers
 
 # Create FastAPI app
 app = FastAPI(
@@ -26,8 +26,9 @@ app.add_middleware(
 
 install_error_handlers(app)
 
-# Include routers
-app.include_router(rates.router, prefix="/api/v1")
+# Include routers: every module under app/api that defines a `router` (§1.3)
+for _router in iter_routers():
+    app.include_router(_router, prefix="/api/v1")
 
 
 @app.get("/health")
