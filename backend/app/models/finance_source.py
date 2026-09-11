@@ -1,30 +1,70 @@
-"""FinanceSource model for managing user's payment sources and accounts."""
+"""FinanceSource model (02-database.md §1.5)."""
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Uuid
-from sqlalchemy.orm import relationship
+from sqlalchemy import (
+    CHAR,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Uuid,
+    text,
+)
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 
 class FinanceSource(Base):
-    """FinanceSource table for user's financial accounts and payment sources."""
-    
-    __tablename__ = "finance_sources"
-    
-    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
-    user_id = Column(Uuid(), ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String, nullable=False)  # e.g., "Chase Checking", "Amex Credit"
-    type = Column(String(32), nullable=False)  # checking, savings, credit, other
-    default_currency = Column(String(3), nullable=False)  # ISO 4217 code
-    archived = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    
-    # Relationships
-    user = relationship("User", back_populates="finance_sources", foreign_keys=[user_id])
-    transactions = relationship("Transaction", back_populates="source", cascade="all, delete-orphan")
-    
-    def __repr__(self):
-        return f"<FinanceSource(id={self.id}, name={self.name}, currency={self.default_currency})>"
+    """An account inside a ledger; fully shared with every ledger member."""
 
+    __tablename__ = "finance_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    ledger_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(),
+        ForeignKey(
+            "ledgers.id",
+            ondelete="CASCADE",
+            name="fk_finance_sources_ledger_id_ledgers",
+        ),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    default_currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
+    opening_balance: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), nullable=False, default=Decimal("0"), server_default=text("0")
+    )
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("users.id", name="fk_finance_sources_created_by_users"),
+        nullable=False,
+    )
+    updated_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("users.id", name="fk_finance_sources_updated_by_users"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("type IN ('checking', 'credit', 'cash', 'other')", name="type"),
+        CheckConstraint("default_currency = upper(default_currency)", name="currency_upper"),
+        CheckConstraint("length(trim(name)) > 0", name="name_not_blank"),
+        CheckConstraint("archived = (archived_at IS NOT NULL)", name="archived_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<FinanceSource(id={self.id}, name={self.name}, type={self.type})>"
+
+
+Index("ix_finance_sources_ledger_id", FinanceSource.ledger_id)
