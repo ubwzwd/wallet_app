@@ -367,3 +367,21 @@ def test_index_objects_are_reachable_from_metadata():
     expected = set().union(*EXPECTED_INDEXES.values())
     assert declared == expected
     assert all(isinstance(i, Index) for t in Base.metadata.tables.values() for i in t.indexes)
+
+
+def test_alembic_config_targets_the_given_url(tmp_path):
+    """The helper must migrate the URL it is handed, not settings.DATABASE_URL.
+
+    migrations/env.py falls back to settings only when an alembic.ini is in
+    play, so a programmatic Config() keeps the URL the caller set.
+    """
+    from alembic import command
+
+    from tests.conftest import alembic_config
+
+    url = f"sqlite:///{tmp_path}/probe.db"
+    cfg = alembic_config(url)
+    command.stamp(cfg, "head")
+
+    assert (tmp_path / "probe.db").exists()
+    assert cfg.get_main_option("sqlalchemy.url") == url

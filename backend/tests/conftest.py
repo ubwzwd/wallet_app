@@ -71,23 +71,6 @@ def db():
         Base.metadata.drop_all(bind=_test_engine)
 
 
-@pytest.fixture()
-def client(db):
-    """FastAPI TestClient with get_db overridden to use the test session."""
-    from fastapi.testclient import TestClient
-
-    from app.core.database import get_db
-    from app.main import app
-
-    def override_get_db():
-        yield db
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
-
-
 # ---------------------------------------------------------------------------
 # Migration fixtures (02-database.md §8.2)
 # ---------------------------------------------------------------------------

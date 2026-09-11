@@ -521,6 +521,44 @@ def test_user_constraints(db):
     )
 
 
+def test_ledger_name_must_not_be_blank(db, world):
+    _reject(
+        db,
+        Ledger(
+            name="   ",
+            base_currency="SGD",
+            created_by=world.user.id,
+            created_at=NOW,
+            updated_at=NOW,
+        ),
+        "ck_ledgers_name_not_blank",
+    )
+
+
+def test_ledger_base_currency_must_be_upper(db, world):
+    _reject(
+        db,
+        Ledger(
+            name="Home",
+            base_currency="sgd",
+            created_by=world.user.id,
+            created_at=NOW,
+            updated_at=NOW,
+        ),
+        "ck_ledgers_base_currency_upper",
+    )
+    _accept(
+        db,
+        Ledger(
+            name="Home",
+            base_currency="SGD",
+            created_by=world.user.id,
+            created_at=NOW,
+            updated_at=NOW,
+        ),
+    )
+
+
 def test_member_role_is_owner_or_member(db, world):
     _reject(
         db,
