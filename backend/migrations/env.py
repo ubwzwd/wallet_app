@@ -18,8 +18,11 @@ from app.models import Base  # This imports all models
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override sqlalchemy.url with our DATABASE_URL from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# The alembic CLI runs from alembic.ini, whose sqlalchemy.url is a placeholder;
+# tests build a Config() programmatically and set the URL themselves, so only
+# fall back to settings when an ini is in play.
+if config.config_file_name is not None:
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -54,6 +57,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -75,7 +80,10 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            render_as_batch=True,
+            compare_type=True,
         )
 
         with context.begin_transaction():
