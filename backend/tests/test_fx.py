@@ -9,7 +9,8 @@ from decimal import Decimal
 
 import httpx
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import create_engine, func, select, update
+from sqlalchemy.orm import Session as SaSession
 
 from app.core.errors import ApiError, ErrorCode
 from app.models.exchange_rate import ExchangeRate
@@ -26,19 +27,20 @@ def _fx_state(monkeypatch):
 
 
 def install_upstream(monkeypatch, handler) -> list[httpx.Request]:
-    """Point ``fx.client_factory`` at ``handler``; returns the captured requests."""
+    """Point ``fx.client_factory`` at ``handler``; returns the captured requests.
+
+    One client, handed out on every call, the way the real factory pools it.
+    """
     calls: list[httpx.Request] = []
 
-    def factory() -> httpx.Client:
-        def record(request: httpx.Request) -> httpx.Response:
-            calls.append(request)
-            return handler(request)
+    def record(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return handler(request)
 
-        return httpx.Client(
-            transport=httpx.MockTransport(record), base_url="https://fx.test/v1"
-        )
-
-    monkeypatch.setattr(fx, "client_factory", factory)
+    client = httpx.Client(
+        transport=httpx.MockTransport(record), base_url="https://fx.test/v1"
+    )
+    monkeypatch.setattr(fx, "client_factory", lambda: client)
     return calls
 
 
@@ -174,6 +176,11 @@ def test_beyond_the_backfill_window_uses_the_latest_rate(db, monkeypatch):
 
 
 def test_cached_row_older_than_the_window_still_beats_a_dead_upstream(db, monkeypatch):
+    """§6.2 step 4: outside the window the answer is whatever ``latest_rate`` has.
+
+    ``convert`` does not reach for an old row of its own; the row below is used
+    because it is the pair's latest cached quotation and upstream is down.
+    """
     old_day = dt.date(2026, 1, 5)
     on = dt.date(2026, 9, 8)          # 246 days later: far outside the window
     seed(db, old_day, "USD", "CNY", "7.0", fetched_at=dt.datetime(2026, 1, 5, 12, 0))
@@ -285,6 +292,39 @@ def test_fresh_cached_row_needs_no_request(db, monkeypatch):
     assert calls == []
 
 
+def test_a_failed_attempt_does_not_throttle_an_empty_cache(db, monkeypatch):
+    """One blip must not pin a pair to 503 for an hour (02-database.md §6.8)."""
+    day = dt.date.today() - dt.timedelta(days=1)
+    state = {"up": False}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        if not state["up"]:
+            return httpx.Response(500, json={"message": "upstream is down"})
+        return httpx.Response(200, json=latest_payload("USD", day, {"CNY": 7.3}))
+
+    calls = install_upstream(monkeypatch, handler)
+
+    with pytest.raises(ApiError):
+        fx.latest_rate(db, "USD", "CNY")
+    assert len(calls) == 1
+
+    # Upstream recovers seconds later: the next call must actually ask again.
+    state["up"] = True
+    assert fx.latest_rate(db, "USD", "CNY") == (Decimal("7.30000000"), day)
+    assert len(calls) == 2
+
+
+def test_a_non_json_body_is_reported_as_fx_unavailable(db, monkeypatch):
+    """A proxy's HTML behind a 200 is an upstream problem, not a 500 (§5.47)."""
+    install_upstream(monkeypatch, lambda _request: httpx.Response(200, text="<html>"))
+
+    with pytest.raises(ApiError) as excinfo:
+        fx.latest_rate(db, "USD", "CNY")
+
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.code == ErrorCode.FX_UNAVAILABLE
+
+
 def test_latest_rate_without_cache_and_with_dead_upstream_raises(db, monkeypatch):
     install_upstream(monkeypatch, boom)
 
@@ -370,3 +410,73 @@ def test_warm_cache_fills_gaps_and_leaves_existing_rows_alone(db, monkeypatch):
     assert kept.rate == Decimal("8.00000000")           # published history is not rewritten
     assert kept.fetched_at == dt.datetime(2026, 9, 7, 6, 0)
     assert row_count(db) == 2
+
+
+# ---------------------------------------------------------------------------
+# latest_rates (the batch behind GET /rates/latest)
+# ---------------------------------------------------------------------------
+
+
+def test_latest_rates_date_ignores_the_base_itself(db, monkeypatch):
+    """§5.46's single ``date`` is a quotation day; base -> base is not one."""
+    quotation_day = dt.date.today() - dt.timedelta(days=3)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=latest_payload("USD", quotation_day, {"EUR": 0.92}))
+
+    install_upstream(monkeypatch, handler)
+
+    rates, rate_date = fx.latest_rates(db, "USD", ["USD", "EUR"])
+
+    assert rates == {"USD": Decimal("1.00000000"), "EUR": Decimal("0.92000000")}
+    assert rate_date == quotation_day          # not today, which USD -> USD returns
+
+
+def test_latest_rates_date_never_overstates_freshness(db, monkeypatch):
+    """Two symbols quoted on different days: the response claims the older one."""
+    older = dt.date.today() - dt.timedelta(days=5)
+    newer = dt.date.today() - dt.timedelta(days=1)
+    seed(db, older, "USD", "JPY", "150.0")
+    seed(db, newer, "USD", "EUR", "0.92")
+    calls = install_upstream(monkeypatch, boom)
+
+    rates, rate_date = fx.latest_rates(db, "USD", ["EUR", "JPY"])
+
+    assert set(rates) == {"EUR", "JPY"}
+    assert rate_date == older
+    assert calls == []                          # both rows are fresh enough (§6.2)
+
+
+# ---------------------------------------------------------------------------
+# The upsert on the other dialect (02-database.md §1.10, §8.2)
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_on_postgres_keeps_then_refreshes_the_row(migrated_db):
+    """The ``pg_insert`` branch of ``_upsert``, on a real Postgres database."""
+    engine = create_engine(migrated_db)
+    day = dt.date(2026, 9, 8)
+    try:
+        ExchangeRate.__table__.create(bind=engine)
+        with SaSession(engine) as session:
+            fx._upsert(session, [(day, "USD", "CNY", Decimal("7.0"))], refresh=False)
+            session.commit()
+            first = session.execute(
+                select(ExchangeRate.rate, ExchangeRate.fetched_at)
+            ).one()
+
+            # DO NOTHING: the published rate stays, fetched_at is not touched.
+            fx._upsert(session, [(day, "USD", "CNY", Decimal("9.9"))], refresh=False)
+            session.commit()
+            kept = session.execute(select(ExchangeRate.rate, ExchangeRate.fetched_at)).one()
+            assert kept == first
+
+            # DO UPDATE: rate and fetched_at both move (§1.10's write form).
+            fx._upsert(session, [(day, "USD", "CNY", Decimal("7.9"))], refresh=True)
+            session.commit()
+            rows = session.execute(select(ExchangeRate.rate, ExchangeRate.fetched_at)).all()
+            assert len(rows) == 1
+            assert rows[0].rate == Decimal("7.90000000")
+            assert rows[0].fetched_at > first.fetched_at
+    finally:
+        engine.dispose()

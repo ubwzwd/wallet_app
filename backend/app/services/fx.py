@@ -6,7 +6,29 @@ come from Frankfurter and are cached in ``exchange_rates`` keyed by
 
 Every public function takes the ``Session`` as its first argument and never
 commits — the caller owns the transaction. The HTTP client is built by the
-module level ``client_factory`` so tests can inject ``httpx.MockTransport``.
+module level ``client_factory`` so tests can inject ``httpx.MockTransport``;
+the real factory hands out one pooled ``httpx.Client`` for the process.
+
+Two rules this module had to pin down, since the docs leave them to it:
+
+* **Degrading to a stale cache.** ``convert`` follows §6.2 literally: cache ->
+  range fetch -> ``/latest`` -> ``ApiError(503, fx_unavailable)``. It never
+  reaches around ``latest_rate`` for an old row of its own, so a pair with
+  nothing cached fails loudly instead of quietly using a months-old rate. What
+  ``latest_rate`` does return when upstream is down is the newest cached row
+  whatever its age — that *is* step 4's "use the latest rate", and its
+  ``rate_date`` is returned to every caller, so a consumer that cares about
+  staleness (stats' ``rate_missing_count``, §6.3) can judge it. 02-database.md
+  §6.8 leaves this choice to this file on purpose.
+* **Upsert conflict action.** Backfills driven by ``convert`` /
+  ``convert_many`` use ``DO UPDATE SET rate, fetched_at``, the write form
+  02-database.md §1.10 specifies (published rates do not move, so in practice
+  it only refreshes ``fetched_at``). ``warm_cache`` alone uses
+  ``DO NOTHING``, because §1.2 says warming leaves existing rows untouched.
+* **Throttling.** The one hour throttle (decision §14.1) only suppresses a
+  request when the pair already has a cached row to serve — 02-database.md
+  §6.8 words it as "库里有，但……"; an empty cache always retries, so one
+  transient upstream blip cannot pin a pair to 503 for an hour.
 """
 import datetime as dt
 import time
@@ -47,23 +69,37 @@ class FxUpstreamError(Exception):
     """Frankfurter could not be reached or answered with an error."""
 
 
+_CLIENT: httpx.Client | None = None
+
+
 def _default_client() -> httpx.Client:
-    """The real Frankfurter client; replaced wholesale in tests."""
-    return httpx.Client(
-        base_url=settings.EXCHANGE_RATE_API_URL,
-        timeout=settings.FX_HTTP_TIMEOUT_SECONDS,
-    )
+    """The real Frankfurter client: one pooled instance, built on first use.
+
+    Kept open for the life of the process so retries and successive requests
+    reuse the connection and the TLS session. Replaced wholesale in tests.
+    """
+    global _CLIENT
+
+    if _CLIENT is None or _CLIENT.is_closed:
+        _CLIENT = httpx.Client(
+            base_url=settings.EXCHANGE_RATE_API_URL,
+            timeout=settings.FX_HTTP_TIMEOUT_SECONDS,
+        )
+    return _CLIENT
 
 
 client_factory: Callable[[], httpx.Client] = _default_client
 
 
 def reset_state() -> None:
-    """Drop the process level throttle and currency caches (tests use this)."""
-    global _CURRENCIES
+    """Drop the process level throttle, currency and client caches (tests)."""
+    global _CURRENCIES, _CLIENT
 
     _LAST_FETCH.clear()
     _CURRENCIES = None
+    if _CLIENT is not None:
+        _CLIENT.close()
+        _CLIENT = None
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +125,14 @@ def convert(
         return _apply(amount, cached.rate, cached.date)
 
     try:
-        _fetch_range(db, base, [symbol], on - dt.timedelta(days=FX_MAX_BACKFILL_DAYS), on)
+        _fetch_range(
+            db,
+            base,
+            [symbol],
+            on - dt.timedelta(days=FX_MAX_BACKFILL_DAYS),
+            on,
+            refresh=True,
+        )
     except FxUpstreamError:
         pass
     else:
@@ -97,14 +140,9 @@ def convert(
         if _within_window(fetched, on):
             return _apply(amount, fetched.rate, fetched.date)
 
-    # Nothing inside the backfill window: fall back to the latest rate.
-    try:
-        rate, rate_date = latest_rate(db, base, symbol)
-    except ApiError:
-        if cached is None:
-            raise
-        # Upstream is down but the cache still holds something usable (§6.8).
-        return _apply(amount, cached.rate, cached.date)
+    # Nothing inside the backfill window: step 4, the latest rate; when that
+    # has nothing either it raises fx_unavailable, which is §6.2 step 5.
+    rate, rate_date = latest_rate(db, base, symbol)
     return _apply(amount, rate, rate_date)
 
 
@@ -138,7 +176,10 @@ def latest_rates(
 ) -> tuple[dict[str, Decimal], dt.date]:
     """Batch ``latest_rate`` for ``GET /rates/latest`` (§5.46): one upstream call.
 
-    Returns the rate per symbol plus the newest quotation day among them.
+    Returns the rate per symbol plus the quotation day the response may claim:
+    the oldest day among the real quotations, so the single ``date`` field never
+    overstates how fresh any rate in the map is. ``base`` itself, if asked for,
+    contributes a rate of 1 but no day — it is not a quotation (§5.46).
     """
     base = currency.upper()
     symbols = [code.upper() for code in to_currencies]
@@ -159,9 +200,10 @@ def latest_rates(
     days: list[dt.date] = []
     for symbol in symbols:
         rate, rate_date = latest_rate(db, base, symbol)
-        rates[symbol] = rate
-        days.append(rate_date)
-    return rates, max(days)
+        rates[symbol] = quantize_rate(rate)     # §5.46 renders 8 decimals
+        if symbol != base:
+            days.append(rate_date)
+    return rates, min(days) if days else _today()
 
 
 def convert_many(
@@ -192,7 +234,9 @@ def convert_many(
         wanted = [on for _amount, code, on in foreign if code == currency]
         if any(_pick(table.get(currency, ()), on) is None for on in wanted):
             try:
-                _fetch_range(db, currency, [base_currency], window_start, end)
+                _fetch_range(
+                    db, currency, [base_currency], window_start, end, refresh=True
+                )
             except FxUpstreamError:
                 continue
             table[currency] = _load_rates(
@@ -228,7 +272,8 @@ def warm_cache(
         if currency == target:
             continue
         try:
-            _fetch_range(db, currency, [target], start, end)
+            # refresh=False: warming never rewrites a row that is already here.
+            _fetch_range(db, currency, [target], start, end, refresh=False)
         except FxUpstreamError:
             continue
 
@@ -321,8 +366,16 @@ def _is_fresh(row) -> bool:
     return row is not None and (_today() - row.date).days <= FX_STALE_DAYS
 
 
-def _throttled(base: str, symbol: str, row=None) -> bool:
-    """True when this pair was fetched less than an hour ago (decision §14.1)."""
+def _throttled(base: str, symbol: str, row) -> bool:
+    """True when this pair was fetched less than an hour ago (decision §14.1).
+
+    Only a pair that already has a cached row can be throttled: 02-database.md
+    §6.8 words the rule as "库里有，但…… `fetched_at` 距今 ≥ 1 小时". With an
+    empty cache there is nothing to serve instead, so the request always goes
+    out and a failed attempt cannot pin the pair to 503 for an hour.
+    """
+    if row is None:
+        return False
     stamps = [
         stamp
         for stamp in (_LAST_FETCH.get((base, symbol)), getattr(row, "fetched_at", None))
@@ -344,14 +397,19 @@ def _get(path: str, params: dict[str, str]) -> dict:
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
-            with client_factory() as client:
-                response = client.get(path, params=params)
+            client = client_factory()
+            response = client.get(path, params=params)
             if response.status_code >= 500:
                 response.raise_for_status()
             if response.is_error:
                 # 4xx (an unknown currency, say) will not get better on a retry.
                 raise FxUpstreamError(f"{path} returned {response.status_code}")
-            return response.json()
+            try:
+                return response.json()
+            except ValueError as exc:
+                # A 200 carrying HTML (a proxy or captive portal) is an upstream
+                # problem, not a bug: §5.46/§5.47 want 503, not 500.
+                raise FxUpstreamError(f"{path} returned a non-JSON body") from exc
         except httpx.HTTPError as exc:
             last_error = exc
             if attempt + 1 < attempts:
@@ -360,12 +418,21 @@ def _get(path: str, params: dict[str, str]) -> dict:
 
 
 def _fetch_range(
-    db: Session, base: str, symbols: Sequence[str], start: dt.date, end: dt.date
+    db: Session,
+    base: str,
+    symbols: Sequence[str],
+    start: dt.date,
+    end: dt.date,
+    *,
+    refresh: bool,
 ) -> None:
-    """Fetch a whole date range in one call and upsert it, keeping existing rows.
+    """Fetch a whole date range in one call and upsert it.
 
     Frankfurter's range endpoint only returns days that have a quotation, so
     "fall back to the last trading day" needs no calendar of its own (§6.2).
+    ``refresh`` picks the conflict action: ``True`` is 02-database.md §1.10's
+    ``DO UPDATE SET rate, fetched_at`` (backfills), ``False`` leaves existing
+    rows alone (``warm_cache``, §1.2).
     """
     payload = _get(
         f"/{start.isoformat()}..{end.isoformat()}",
@@ -376,11 +443,14 @@ def _fetch_range(
         quotation_day = dt.date.fromisoformat(day)
         for symbol, value in (quotes or {}).items():
             rows.append((quotation_day, base, symbol.upper(), Decimal(str(value))))
-    _upsert(db, rows, refresh=False)
+    _upsert(db, rows, refresh=refresh)
 
 
 def _fetch_latest(db: Session, base: str, symbols: Sequence[str]) -> None:
     """Fetch the latest published day for ``base -> symbols`` and refresh the cache."""
+    # The attempt is stamped before the call, so a pair that already has a row
+    # to serve is not asked again for an hour; ``_throttled`` ignores the stamp
+    # when the cache is empty, so a failure here never suppresses a retry.
     now = _utcnow()
     for symbol in symbols:
         _LAST_FETCH[(base, symbol.upper())] = now

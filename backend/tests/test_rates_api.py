@@ -104,6 +104,26 @@ def test_latest_uses_the_upstream_quotation_day_and_caches_it(client, db, monkey
     assert len(calls) == 1
 
 
+def test_latest_reports_the_quotation_day_even_when_base_is_asked_for(client, monkeypatch):
+    """§5.46: ``date`` is the upstream quotation day; base -> base is not a quote."""
+    quotation_day = dt.date.today() - dt.timedelta(days=2)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=latest_payload("USD", quotation_day, {"EUR": 0.92}))
+
+    calls = install_upstream(monkeypatch, handler)
+
+    response = client.get("/api/v1/rates/latest?base=USD&symbols=USD,EUR")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "base": "USD",
+        "date": quotation_day.isoformat(),
+        "rates": {"USD": "1.00000000", "EUR": "0.92000000"},
+    }
+    assert len(calls) == 1
+
+
 def test_latest_rejects_a_malformed_base(client, monkeypatch):
     calls = install_upstream(monkeypatch, boom)
 
