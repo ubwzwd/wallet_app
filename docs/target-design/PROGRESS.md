@@ -6,15 +6,16 @@
 |---|---|---|---|
 | 1 地基 | 十张表的模型与约束、六步迁移链、`core/categories.py`、`services/fx.py`、配置项（03 §2）、错误体（03 §4.1）、删除旧接口层 | `v3/phase-1-foundation` → 已合回 `main`（52b966d） | **完成（2026-09-12）** |
 | 2 账本 | 账本 / 成员 / 邀请码接口（03 §5.8–5.19）、注册自动建账本、`core/deps.py`、限流 | `v3/phase-2-ledgers` → 已合回 `main`（656cfb7） | **完成（2026-09-12）** |
-| 3 账户与交易 | 账户接口（余额与三个合计）、交易 CRUD、两腿转账、配对 / 拆开、`transaction_events`、统计 summary / trend | `v3/phase-3-transactions` | 进行中（2026-09-12） |
+| 3 账户与交易 | 账户接口（余额与三个合计）、交易 CRUD、两腿转账、配对 / 拆开、`transaction_events`、统计 summary / trend | `v3/phase-3-transactions` → 已合回 `main`（666c4ed） | **完成（2026-09-12）** |
 | 4 统计 | 并入第三阶段 | — | — |
-| 5 前端骨架 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 账户各页 | | 未开始 |
+| 5 前端骨架 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 账户各页 | `v3/phase-5-frontend`（5a 地基与骨架 → 5b 各页） | 进行中（2026-09-12） |
 | 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | | 未开始 |
 | 7 视觉 | `theme/tokens.ts`、组件按 04 §6 换色、浅色 / 深色 WCAG 验收 | | 未开始 |
 | 8 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
 
 ## 环境备忘
 
+- 前端：`cd frontend && npm ci`（Node 24；`frontend/node_modules` 不入库）；`npx tsc --noEmit`、`npx jest`（jest-expo 预设，能真实渲染组件）、`npm run build:web`（`expo export -p web` 约 1 分钟 + workbox）。编排工作流的每个 worktree 要先 `ln -sfn /home/ubwzwd/Code/wallet_app/frontend/node_modules <worktree>/frontend/node_modules`（已被 .gitignore 忽略）。
 - 后端测试用系统 Python（3.12，已装 fastapi / sqlalchemy 2.0.49 / alembic 1.18.4 / psycopg2）：`cd backend && DEBUG=false SECRET_KEY=test-secret python3 -m pytest -q`。仓库里没有 poetry。
 - Postgres 迁移测试用本机 docker 里的 `wallet_db` 容器（`postgresql://wallet_user:wallet_password@localhost:5432/wallet_db`，超级用户，可 `CREATE DATABASE`），通过环境变量 `TEST_POSTGRES_URL` 传入；不设则自动跳过。
 - 注意：本机 `wallet_db` 库里的 `alembic_version` 是 `9ebe856ac106`，不在仓库的迁移链里（链头是 `8a4f4d66d893`）。它只是开发库，第一阶段的迁移测试都在临时新建的库上跑；正式在这个库上升级前需要先把它重置或 `alembic stamp 8a4f4d66d893`。
@@ -31,3 +32,10 @@
   - 注册要求 `base_currency` 在 Frankfurter 支持列表里（03 §5.1 已补两行）；登录 / 注册 / 加入账本三处限流共用一个进程内令牌桶，`RATE_LIMIT_JOIN_QPS` 必须为正。
   - 留档未做：`client_ip` 信任 `X-Forwarded-For` 首段（03 §8.1 原文，部署阶段与 Caddy 一起定）；`pagination` 的 500 上限（导入端点自带）；`GET /categories` 的 response_model；`GET /import-format` 等第六阶段。
   - 统计端点并入第三阶段一起做（原第四阶段取消）。
+- 2026-09-12：第三阶段完成并合回 `main`（666c4ed）。两轮工作流（8 个任务 + 3 个收口任务），后端 826 个测试通过（含 Postgres 迁移用例 841）。产出：`services/{events,valuation,stats,transaction_service}.py`、`schemas/{common(Amount / Rate),finance_source,transaction,stats}.py`、`api/{finance_sources,transactions,stats}.py`（03 §5.20–§5.36 全部端点）、conftest 的 `source_factory` / `transaction_factory` / `pair_factory`、端到端流程测试。要点：
+  - 配对按 §14.53a 统一子类型，只有值真变了的那条腿写 `updated` 事件；同一操作的全部事件与交易的 `created_at` / `updated_at` 同一时刻（02 §1.9），`events.list_for` 按 `(at DESC, id DESC)`。
+  - `GET /transactions` 没给金额区间时走快路径（`COUNT(*)` + 只折算当页），`summary` 用 `(kind, currency, occurred_at)` 分组小计折算（03 §5.25 已加注，与逐行折算只差第 4 位小数的舍入）；给了区间时全量折算且 `count == total` 只计能折算的行（03 §5.25 已加注）。
+  - 金额整数位超过 14 位（NUMERIC(18,4)）在服务层就回 400；X-Client 统一 ≤ 16 字符（03 §4.7、§1.2 已同步）；03 §5.30 / §5.33 响应补顶层 `updated_at`，§5.27 `other_refunds` 补 `source_id`，04 `TransactionSummary` 字段名改成与 03 一致（同步 2026-09-12）。
+  - 留档未做（不阻塞）：`transaction_events.id` 是随机 UUID，同一时刻两条事件的次序在语义上不确定（只影响时间线里同一操作两条的先后）；`_amount` 量化后跨越上限那一条分支没有直接测试；`fx.py` 与 `valuation.py` 仍各有一份 `quantize_amount` 风格的写法（rate 已统一到 `fx.quantize_rate`）。
+- 2026-09-12：第五阶段（前端）启动。wave 0 已提交在 `v3/phase-5-frontend`：Expo Router v6 入口与 SDK 54 依赖（expo-router / expo-localization / react-native-svg / expo-font + Figtree & IBM Plex Mono / lucide 图标 / i18next），jest 换 jest-expo 预设（真实组件渲染、`renderRouter`、i18next 都已验证），删除全部 v2 页面 / 组件 / API 模块 / 测试，新增 `src/api/types.ts`（04 §3.3 逐字）、`src/constants/config.ts`（`EXPO_PUBLIC_API_BASE_URL`，04 §7.2）、`src/utils/prefs.ts`、`scripts/gen-tokens.mjs` → `src/theme/tokens.ts`。**实现与文档的偏差（待同步进 04 §3.7）**：后端 422 的 `detail` 是字符串（`"body.email: …; body.password: Field required"`，03 §4.1 的实现），不是 04 §3.7 假设的数组；前端按字符串解析出字段级错误，同时兼容数组形态。计划分两段：5a 地基与骨架（API 层 / i18n / 主题与组件库 / 领域纯函数 / Query 层 / AuthContext / 路由守卫与导航壳 / 登录注册账本页），5b 首页 / 交易 / 记一笔 / 详情 / 账户 / 设置与构建。
+
