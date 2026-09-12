@@ -2169,6 +2169,16 @@ X-Client: web
 
 副作用（**一个事务**）：生成一个新的 `pair_id`（服务端生成，客户端不能指定），插入两行 `transactions`，`kind='transfer'`、`transfer_pair_id = pair_id`、`transfer_role` 分别为 `out` / `in`、`transfer_subtype = subtype`、`category_l1/l2` 与 `merchant` 与 `counterparty` 全为 NULL，再给两条各写一条 `transaction_events(event='created')`（决策 §14.51）。数据库唯一约束 `UNIQUE (transfer_pair_id, transfer_role)`（决策 §10）保证一个 pair 最多两腿。任一腿失败整个事务回滚——这正是现状 H-01"前端发两次 POST、第二次失败要靠客户端补偿删除"的问题所修复的地方。
 
+### 5.30a `GET /api/v1/ledgers/{id}/transactions/transfer/{pair_id}`（同步 2026-09-12）
+
+鉴权：成员。第五阶段前端实现时补上：[04 §1.2](./04-frontend.md#12-路由表) 的两腿详情 / 编辑路由只带 `pair_id`（深链接、刷新、分享都只有它），而两腿详情之前只能经由某一条腿的 §5.27 详情里的 `pair` 引用再读两次，页面拿不到腿 id 时无路可走。响应形状与 §5.30 **逐字段一致**（顶层取转出腿，`updated_at` 取两腿较大者）。
+
+| 状态 | code | 何时 |
+|---|---|---|
+| 200 | — | 正常 |
+| 404 | `not_found` | 账本不可见；`pair_id` 不在本账本 |
+| 409 | `transfer_pair_incomplete` | 该 pair 下不是恰好两条腿 |
+
 ### 5.31 `PATCH /api/v1/ledgers/{id}/transactions/transfer/{pair_id}`
 
 鉴权：成员。决策 §1.2（"有 `transfer_pair_id` 的两腿只能通过…一起修改"）。带乐观并发。

@@ -123,6 +123,13 @@ export const ledgerDataCases: Case[] = [
       }),
   },
   {
+    name: 'txApi.getTransfer',
+    method: 'get',
+    path: `/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`,
+    reply: makeTransferPair(),
+    call: () => txApi.getTransfer(LEDGER_ID, PAIR_ID),
+  },
+  {
     name: 'txApi.updateTransfer',
     method: 'patch',
     path: `/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`,

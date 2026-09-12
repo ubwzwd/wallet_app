@@ -273,6 +273,27 @@ def test_create_transfer_leaves_nothing_behind_when_a_write_fails(
 # ---------------------------------------------------------------------------
 
 
+def test_get_transfer_reads_the_pair_as_one_object(env):
+    created = env.post("/transfer", transfer_body(env)).json()
+
+    response = env.get(f"/transfer/{created['pair_id']}")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["pair_id"] == created["pair_id"]
+    assert body["out"]["id"] == created["out"]["id"]
+    assert body["in"]["id"] == created["in"]["id"]
+    assert body["updated_at"] == created["updated_at"]
+    assert body["subtype"] == "plain"
+
+
+def test_get_transfer_of_an_unknown_pair_is_not_found(env):
+    response = env.get(f"/transfer/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
 def test_patch_transfer_edits_both_legs_as_one_object(env, db):
     created = env.post(
         "/transfer",

@@ -405,6 +405,7 @@ NEW_TRANSACTION_OPERATIONS = {
     ("PATCH", "/api/v1/ledgers/{id}/transactions/{tid}"),
     ("DELETE", "/api/v1/ledgers/{id}/transactions/{tid}"),
     ("POST", "/api/v1/ledgers/{id}/transactions/transfer"),
+    ("GET", "/api/v1/ledgers/{id}/transactions/transfer/{pair_id}"),
     ("PATCH", "/api/v1/ledgers/{id}/transactions/transfer/{pair_id}"),
     ("DELETE", "/api/v1/ledgers/{id}/transactions/transfer/{pair_id}"),
     ("POST", "/api/v1/ledgers/{id}/transactions/transfer/{pair_id}/unpair"),
@@ -440,7 +441,7 @@ def test_openapi_route_inventory_is_exactly_phase_three(client):
     }
 
     assert len(PHASE_TWO_OPERATIONS) == 23
-    assert len(EXPECTED_OPERATIONS) == 23 + 17
+    assert len(EXPECTED_OPERATIONS) == 23 + 18  # +1: GET transfer/{pair_id} (03 §5.30a)
     assert actual_operations == EXPECTED_OPERATIONS
 
     all_paths = set(paths)

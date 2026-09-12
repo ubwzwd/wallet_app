@@ -43,6 +43,12 @@ export const txApi = {
       .post<TransferPair>(`/ledgers/${l}/transactions/transfer`, b)
       .then((r) => r.data),
 
+  /** Read a pair as one object (03 §5.30a; the transfer routes carry only the pair id). */
+  getTransfer: (l: Uuid, pairId: Uuid): Promise<TransferPair> =>
+    apiClient
+      .get<TransferPair>(`/ledgers/${l}/transactions/transfer/${pairId}`)
+      .then((r) => r.data),
+
   updateTransfer: (l: Uuid, pairId: Uuid, b: TransferUpdate): Promise<TransferPair> =>
     apiClient
       .patch<TransferPair>(`/ledgers/${l}/transactions/transfer/${pairId}`, b)

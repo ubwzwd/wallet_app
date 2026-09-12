@@ -575,6 +575,22 @@ def create_transfer(
     return body
 
 
+@router.get("/transfer/{pair_id}", response_model=TransferResponse)
+def get_transfer(
+    pair_id: uuid.UUID = Path(..., description="Transfer pair id"),
+    ctx: LedgerContext = Depends(get_ledger_member),
+    db: Session = Depends(get_db),
+) -> TransferResponse:
+    """Read a pair as one object (§5.30a, added 2026-09-12 for the frontend's
+    ``/l/:ledgerId/transfers/:pairId`` route, 04 §1.2).
+
+    Same shape as §5.30 / §5.31 / §5.33; a pair with one leg is a 409
+    ``transfer_pair_incomplete``, an unknown or foreign pair a 404.
+    """
+    legs = transaction_service.get_pair(db, ctx.ledger, pair_id)
+    return _transfer_body(db, ctx, legs)
+
+
 @router.patch("/transfer/{pair_id}", response_model=TransferResponse)
 def update_transfer(
     payload: TransferPatch,
