@@ -1,0 +1,51 @@
+{
+  "button": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "retry": "Retry",
+    "close": "Close",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "download": "Download",
+    "back": "Back",
+    "loading": "Loading",
+    "refresh": "Refresh"
+  },
+  "nav": {
+    "home": "Home",
+    "transactions": "Transactions",
+    "add": "Add",
+    "sources": "Accounts",
+    "imports": "Import",
+    "me": "Me",
+    "ledger_settings": "Ledger settings",
+    "settings": "Settings",
+    "switch_ledger": "Switch ledger",
+    "logout": "Log out"
+  },
+  "status": {
+    "all": "All",
+    "none": "None",
+    "archived": "Archived",
+    "update_available": "A new version is available. Refresh to use it."
+  },
+  "unsaved_changes": {
+    "title": "You have unsaved changes",
+    "body": "Leaving this page will discard what you entered.",
+    "leave": "Discard and leave",
+    "stay": "Keep editing"
+  },
+  "not_found": {
+    "title": "Page not found",
+    "body": "The address you visited doesn't exist, or it's been moved.",
+    "action": "Back to my ledgers"
+  },
+  "ledger_unavailable": {
+    "title": "This ledger doesn't exist, or you're not a member of it",
+    "body": "It may have been deleted, or you may have been removed from it.",
+    "switch_last": "Switch to {{name}}",
+    "view_ledgers": "View my ledgers"
+  }
+}

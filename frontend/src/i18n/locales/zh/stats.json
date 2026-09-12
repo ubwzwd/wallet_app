@@ -1,0 +1,21 @@
+{
+  "home": {
+    "assets": "资产",
+    "liabilities": "负债",
+    "net_worth": "净资产",
+    "excluded_archived_other": "不含 {{count}} 个已归档账户",
+    "no_rate_hint_other": "有 {{count}} 个账户暂时无法折算",
+    "balances_title": "账户余额",
+    "balances_empty": "先添加一个账户",
+    "month_summary_title": "本月汇总",
+    "month_prev": "上个月",
+    "month_next": "下个月",
+    "expense": "支出",
+    "income": "收入",
+    "category_other_n": "其他 {{count}} 项",
+    "month_empty": "这个月还没有记账",
+    "add_transaction": "记一笔",
+    "trend_title": "12 个月支出趋势",
+    "refresh": "刷新"
+  }
+}

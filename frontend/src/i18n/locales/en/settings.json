@@ -1,0 +1,26 @@
+{
+  "title": "Settings",
+  "email_label": "Email",
+  "created_at_label": "Joined",
+  "display_name_label": "Display name",
+  "display_name_hint": "Shown in the member list, as the recorder of an entry, and in the activity log; leave it blank to show the part of your email before @ ({{fallback}})",
+  "base_currency_label": "Default currency",
+  "base_currency_hint": "Only affects the default when you create a new ledger; an existing ledger's base currency is changed in its own settings",
+  "language_label": "Language",
+  "language": {
+    "system": "Follow system",
+    "zh": "中文",
+    "en": "English"
+  },
+  "appearance_label": "Appearance",
+  "appearance": {
+    "system": "Follow system",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "entry": {
+    "ledger_settings": "Ledger settings",
+    "switch_ledger": "Switch ledger",
+    "logout": "Log out"
+  }
+}

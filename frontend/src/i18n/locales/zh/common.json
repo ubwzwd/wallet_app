@@ -1,0 +1,51 @@
+{
+  "button": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "retry": "重试",
+    "close": "关闭",
+    "confirm": "确认",
+    "copy": "复制",
+    "download": "下载",
+    "back": "返回",
+    "loading": "加载中",
+    "refresh": "刷新"
+  },
+  "nav": {
+    "home": "首页",
+    "transactions": "交易",
+    "add": "记一笔",
+    "sources": "账户",
+    "imports": "导入",
+    "me": "我的",
+    "ledger_settings": "账本设置",
+    "settings": "个人设置",
+    "switch_ledger": "切换账本",
+    "logout": "登出"
+  },
+  "status": {
+    "all": "全部",
+    "none": "无",
+    "archived": "已归档",
+    "update_available": "已更新到新版本，刷新以使用"
+  },
+  "unsaved_changes": {
+    "title": "有未保存的改动",
+    "body": "离开这个页面会丢失你填写的内容。",
+    "leave": "不保存并离开",
+    "stay": "继续编辑"
+  },
+  "not_found": {
+    "title": "页面不存在",
+    "body": "你访问的地址不存在，或者已经被移动。",
+    "action": "回到我的账本"
+  },
+  "ledger_unavailable": {
+    "title": "这个账本不存在，或者你不在它的成员里",
+    "body": "它可能已被删除，或者你被移出了这个账本。",
+    "switch_last": "切到 {{name}}",
+    "view_ledgers": "看我的账本"
+  }
+}

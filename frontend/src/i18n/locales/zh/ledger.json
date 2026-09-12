@@ -1,0 +1,67 @@
+{
+  "list": {
+    "title": "我的账本",
+    "card": {
+      "member_count_other": "{{count}} 位成员",
+      "role_owner": "创建者",
+      "role_member": "成员",
+      "updated_at": "最近更新 {{time}}"
+    },
+    "empty": {
+      "title": "你还没有账本",
+      "create_button": "新建账本",
+      "join_button": "加入别人的账本"
+    },
+    "error_retry": "加载失败，请重试"
+  },
+  "create": {
+    "title": "新建账本",
+    "name_label": "账本名",
+    "base_currency_label": "基准币种",
+    "submit": "创建",
+    "limit_reached": "你的账本数已达上限（10 本）"
+  },
+  "join": {
+    "title": "加入账本",
+    "code_hint": "输入 6 位邀请码",
+    "rate_limited_countdown": "现在人太多，{{seconds}} 秒后自动重试",
+    "success_toast": "已加入《{{name}}》"
+  },
+  "settings": {
+    "title": "账本设置",
+    "basic": {
+      "name_label": "账本名",
+      "base_currency_label": "基准币种",
+      "base_currency_warning": "改成 {{currency}} 之后，首页统计和所有折算金额都会按 {{currency}} 显示。折算用的是每笔交易各自发生日的汇率，原始金额和币种不变，改回原币种数字也会回来。将重新折算 {{count}} 笔交易。"
+    },
+    "members": {
+      "title": "成员",
+      "role_owner": "创建者",
+      "role_member": "成员",
+      "permission_hint": "只有创建者可以生成 / 作废邀请码、移除成员、改账本名与基准币种、转让创建者、删除账本；成员可以记账、改账、管理账户、导入、撤销导入。",
+      "remove_confirm": "移出 {{name}}？他记的账会保留在账本里。",
+      "remove_action": "移出",
+      "transfer_ownership": "转让创建者",
+      "transfer_confirm": "把创建者转让给 {{name}}？转让后你会变成成员。",
+      "leave_action": "退出这个账本",
+      "leave_disabled_hint": "你是这个账本的创建者，请先把创建者转让给别人再退出"
+    },
+    "invite": {
+      "title": "邀请码",
+      "generate": "生成邀请码",
+      "expires_in": "{{time}} 后过期",
+      "hint": "把这 6 位码线下告诉对方，让他在「加入账本」里输入。用掉就失效，一个码只能加入一个人。",
+      "revoke": "作废",
+      "regenerate": "重新生成",
+      "revoke_confirm": "作废后这个码立刻失效，对方就用不了了。",
+      "used_by": "已被 {{name}} 使用",
+      "limit_reached": "这个账本成员已满（10 人）"
+    },
+    "danger": {
+      "delete_title": "删除账本",
+      "delete_confirm_body": "这会永久删除《{{name}}》里的 {{transactions}} 条交易、{{sources}} 个账户、{{imports}} 批导入记录，所有成员都会失去访问，无法恢复。",
+      "delete_confirm_label": "请输入账本名以确认：",
+      "delete_action": "删除账本"
+    }
+  }
+}

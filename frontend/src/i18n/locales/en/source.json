@@ -1,0 +1,40 @@
+{
+  "type": {
+    "checking": "Checking",
+    "credit": "Credit card",
+    "cash": "Cash",
+    "other": "Other"
+  },
+  "list": {
+    "title": "Accounts",
+    "group_subtotal": "Subtotal {{amount}}",
+    "balance_debt": "Owes {{amount}}",
+    "archived_section": "Archived ({{count}})",
+    "archived_hint": "Not counted in net worth",
+    "archived_at": "Archived {{date}}",
+    "empty": {
+      "title": "No accounts yet — add one to start recording"
+    },
+    "archive_action": "Archive",
+    "unarchive_action": "Unarchive",
+    "archive_confirm": "Once archived, you can't record transactions on it or use it as an import target, but its history is kept. Its balance of {{balance}} will be removed from net worth.",
+    "delete_action": "Delete",
+    "delete_disabled_hint": "This account has transactions — archive it instead",
+    "no_rate_hint": "{{count}} accounts can't be converted right now"
+  },
+  "form": {
+    "new_title": "New account",
+    "edit_title": "Edit account",
+    "name_label": "Name",
+    "name_duplicate_hint": "There's already an account with this name — they're still tracked separately",
+    "type_label": "Type",
+    "currency_label": "Currency",
+    "currency_locked_hint": "An account's currency can't be changed after it's created — changing it would muddle past transactions. To switch currency, create a new account and archive this one.",
+    "opening_balance_label": "Opening balance",
+    "opening_balance_hint": "Balance = opening balance + the sum of every transaction on this account. The opening balance lives on the account, not as a transaction — it won't show up in the transaction list.",
+    "credit_debt_label": "Current balance owed",
+    "credit_debt_hint": "Enter how much you currently owe the bank — it's stored as a negative number",
+    "opening_balance_change_confirm": "This immediately affects all historical balances and net worth. Save anyway?",
+    "archived_toggle": "Archived"
+  }
+}

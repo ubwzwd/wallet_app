@@ -1,0 +1,26 @@
+{
+  "title": "个人设置",
+  "email_label": "邮箱",
+  "created_at_label": "注册时间",
+  "display_name_label": "显示名",
+  "display_name_hint": "账本成员列表、记账人、操作记录里显示它；留空就显示你邮箱 @ 前面的部分（{{fallback}}）",
+  "base_currency_label": "默认币种",
+  "base_currency_hint": "只影响新建账本时的默认值；已有账本的基准币种在各自的账本设置里改",
+  "language_label": "语言",
+  "language": {
+    "system": "跟随系统",
+    "zh": "中文",
+    "en": "English"
+  },
+  "appearance_label": "外观",
+  "appearance": {
+    "system": "跟随系统",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "entry": {
+    "ledger_settings": "账本设置",
+    "switch_ledger": "切换账本",
+    "logout": "登出"
+  }
+}

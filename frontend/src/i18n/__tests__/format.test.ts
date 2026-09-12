@@ -1,0 +1,161 @@
+/**
+ * Pure formatter tests (04 §5.4, §8.1): unicode minus, zero-decimal currencies,
+ * timezone-safe date parsing, relative-day wording, month/day-time formatting.
+ */
+import {
+  formatMoney,
+  formatConverted,
+  formatAmountPlain,
+  parseLocalDate,
+  todayLocalIso,
+  formatDate,
+  formatRelativeDay,
+  formatMonth,
+  formatDateTime,
+  formatCountdown,
+  formatBytes,
+} from '../format';
+
+describe('formatMoney', () => {
+  test('uses U+2212 for negative amounts, never a hyphen', () => {
+    const out = formatMoney('-1299.0000', 'CNY', 'zh');
+    expect(out).toContain('−');
+    expect(out).not.toContain('-');
+  });
+
+  test('never wraps a negative amount in parentheses', () => {
+    const out = formatMoney('-1299.0000', 'CNY', 'zh');
+    expect(out).not.toContain('(');
+    expect(out).not.toContain(')');
+  });
+
+  test('JPY and KRW show zero decimal places', () => {
+    expect(formatMoney('1000', 'JPY', 'en')).not.toContain('.');
+    expect(formatMoney('1000', 'KRW', 'en')).not.toContain('.');
+  });
+
+  test('other currencies show two decimal places', () => {
+    expect(formatMoney('720', 'EUR', 'zh')).toMatch(/\.00/);
+  });
+
+  test('signDisplay "never" drops the sign', () => {
+    const out = formatMoney('-38.00', 'CNY', 'zh', { signDisplay: 'never' });
+    expect(out).not.toContain('−');
+  });
+
+  test('signDisplay "always" prefixes a positive amount with +', () => {
+    const out = formatMoney('38.00', 'CNY', 'en', { signDisplay: 'always' });
+    expect(out.startsWith('+')).toBe(true);
+  });
+
+  test('accepts a plain number as well as a Money string', () => {
+    expect(formatMoney(-1299, 'CNY', 'zh')).toContain('−');
+  });
+});
+
+test('formatConverted prefixes the base-currency amount with ≈', () => {
+  expect(formatConverted('-1299.0000', 'CNY', '165.32', 'USD', 'en')).toBe('≈ $165.32');
+});
+
+describe('formatAmountPlain', () => {
+  test('has no currency symbol but keeps thousands separators', () => {
+    const out = formatAmountPlain('1299.5', 'CNY');
+    expect(out).not.toMatch(/[¥$€]/);
+    expect(out).toContain(',');
+  });
+
+  test('respects zero-decimal currencies', () => {
+    expect(formatAmountPlain('1000', 'JPY')).not.toContain('.');
+  });
+});
+
+describe('local-date parsing is timezone-safe (04 §5.4, §8.1)', () => {
+  const originalTz = process.env.TZ;
+  afterEach(() => {
+    process.env.TZ = originalTz;
+  });
+
+  test.each(['Asia/Shanghai', 'America/Los_Angeles', 'UTC'])(
+    'parseLocalDate + formatDate show the 14th under %s, not the 13th or 15th',
+    (tz) => {
+      process.env.TZ = tz;
+      const date = parseLocalDate('2026-08-14');
+      expect(date.getDate()).toBe(14);
+      expect(date.getMonth()).toBe(7); // August, 0-indexed
+      expect(date.getFullYear()).toBe(2026);
+    },
+  );
+
+  test.each(['Asia/Shanghai', 'America/Los_Angeles'])(
+    'formatDate never shifts a day under %s',
+    (tz) => {
+      process.env.TZ = tz;
+      expect(formatDate('2026-08-14', 'zh')).toContain('14');
+      expect(formatDate('2026-08-14', 'en')).toContain('14');
+    },
+  );
+});
+
+describe('formatDate', () => {
+  test('this year: no year shown', () => {
+    const thisYear = new Date().getFullYear();
+    expect(formatDate(`${thisYear}-08-14`, 'zh')).toBe('8月14日');
+    expect(formatDate(`${thisYear}-08-14`, 'en')).toBe('Aug 14');
+  });
+
+  test('a past year includes the year', () => {
+    expect(formatDate('2019-08-14', 'zh')).toBe('2019年8月14日');
+    expect(formatDate('2019-08-14', 'en')).toBe('Aug 14, 2019');
+  });
+});
+
+describe('formatRelativeDay', () => {
+  test('today and yesterday are localized words, local calendar day', () => {
+    const today = todayLocalIso();
+    const yesterday = toLocalIso(addDays(parseLocalDate(today), -1));
+    expect(formatRelativeDay(today, 'zh')).toBe('今天');
+    expect(formatRelativeDay(today, 'en')).toBe('Today');
+    expect(formatRelativeDay(yesterday, 'zh')).toBe('昨天');
+    expect(formatRelativeDay(yesterday, 'en')).toBe('Yesterday');
+  });
+
+  test('falls back to formatDate for anything else', () => {
+    expect(formatRelativeDay('2019-08-14', 'en')).toBe(formatDate('2019-08-14', 'en'));
+  });
+});
+
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+function toLocalIso(d: Date): string {
+  const pad = (x: number) => (x < 10 ? `0${x}` : String(x));
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+describe('formatMonth', () => {
+  test('zh and en', () => {
+    expect(formatMonth('2026-08', 'zh')).toBe('2026 年 8 月');
+    expect(formatMonth('2026-08', 'en')).toBe('August 2026');
+  });
+});
+
+test('formatDateTime renders local YYYY-MM-DD HH:mm', () => {
+  const out = formatDateTime('2026-08-14T09:12:00.000000Z', 'en');
+  expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+});
+
+describe('formatCountdown', () => {
+  test('formats seconds as MM:SS', () => {
+    expect(formatCountdown(581)).toBe('09:41');
+    expect(formatCountdown(0)).toBe('00:00');
+    expect(formatCountdown(600)).toBe('10:00');
+  });
+});
+
+describe('formatBytes', () => {
+  test('formats sizes in the expected units', () => {
+    expect(formatBytes(500)).toBe('500 B');
+    expect(formatBytes(1024)).toBe('1 KB');
+    expect(formatBytes(2 * 1024 * 1024)).toBe('2 MB');
+  });
+});

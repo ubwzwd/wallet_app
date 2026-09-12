@@ -1,0 +1,40 @@
+{
+  "type": {
+    "checking": "储蓄卡",
+    "credit": "信用卡",
+    "cash": "现金",
+    "other": "其他"
+  },
+  "list": {
+    "title": "账户",
+    "group_subtotal": "小计 {{amount}}",
+    "balance_debt": "欠 {{amount}}",
+    "archived_section": "已归档（{{count}}）",
+    "archived_hint": "余额不计入净资产",
+    "archived_at": "归档于 {{date}}",
+    "empty": {
+      "title": "还没有账户，添加一个开始记账"
+    },
+    "archive_action": "归档",
+    "unarchive_action": "取消归档",
+    "archive_confirm": "归档后不能再记账、也不能作为导入目标，历史记录保留。该账户余额 {{balance}} 将从净资产中移除。",
+    "delete_action": "删除",
+    "delete_disabled_hint": "这个账户下有交易，只能归档",
+    "no_rate_hint": "有 {{count}} 个账户暂时无法折算"
+  },
+  "form": {
+    "new_title": "新建账户",
+    "edit_title": "编辑账户",
+    "name_label": "名称",
+    "name_duplicate_hint": "已有同名账户，仍会按账户区分",
+    "type_label": "类型",
+    "currency_label": "币种",
+    "currency_locked_hint": "币种创建后不能改，改了历史交易的含义会乱；如果要换币种，请新建一个账户并把旧的归档",
+    "opening_balance_label": "期初余额",
+    "opening_balance_hint": "余额 = 期初余额 + 这个账户下所有交易金额之和。期初余额记在账户上，不是一笔交易，它不会出现在交易列表里。",
+    "credit_debt_label": "当前欠款",
+    "credit_debt_hint": "填你现在欠银行多少，会存成负数",
+    "opening_balance_change_confirm": "这会立刻影响所有历史余额与净资产，确定要保存吗？",
+    "archived_toggle": "已归档"
+  }
+}
