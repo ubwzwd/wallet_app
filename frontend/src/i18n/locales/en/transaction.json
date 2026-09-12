@@ -4,7 +4,12 @@
     "title_refund_origin": "Choose the original expense",
     "refunded_out": "Fully refunded",
     "linked_title": "Linked",
-    "unlink": "Unlink"
+    "unlink": "Unlink",
+    "search_placeholder": "Search merchant or note",
+    "date_from": "From",
+    "date_to": "To",
+    "empty": "No transaction matches these conditions",
+    "fixed_kind": "{{kinds}} only"
   },
   "list": {
     "title": "Transactions",
@@ -104,6 +109,11 @@
   },
   "transfer": {
     "subtype": { "plain": "Regular transfer", "repayment": "Card repayment" },
+    "subtype_label": "Subtype",
+    "direction_label": "Direction",
+    "from_source": "From account",
+    "to_source": "To account",
+    "amount_in": "Amount received",
     "role": { "in": "In", "out": "Out" },
     "counterparty_toggle": "The other side isn't in this app",
     "counterparty_label": "Counterparty",
@@ -116,6 +126,7 @@
     "counterparty_currency_locked_hint": "There's only one leg, so the currency follows the selected account"
   },
   "form": {
+    "kind_label": "Type",
     "amount": "Amount",
     "date": "Date",
     "merchant": "Merchant",
@@ -134,6 +145,7 @@
     "no_sources_action": "Create an account",
     "recent_merchants": "Recent merchants",
     "save_and_next": "Save and add another",
+    "saved_toast": "Saved",
     "saved_count_toast": "Saved (#{{count}})",
     "refund_of": "Link original expense",
     "refund_of_clear": "Unlink",
@@ -142,9 +154,28 @@
     "refund_over_hint": "This refund would push the total refunded past the original amount (original {{original}}, refunded so far {{refunded}}, this one {{current}})",
     "refund_target_currency_hint": "Refunding to a different account — each account's balance changes on its own; stats aren't affected",
     "refund_only_refundable_toggle": "Only show rows with a refundable balance",
-    "refund_kind_fixed_hint": "Expenses only",
     "impact_preview": "{{label}} {{before}} → {{after}}",
-    "leave_confirm_hint": "You have unsaved changes. Leave anyway?",
+    "impact_this_month": "{{category}} this month",
+    "from_import": "This one came from import #{{batch}}",
+    "archived_source_hint": "This account is archived: the entry can still be edited, but it can't be moved to another archived account",
+    "unlink_refund_first": "Unlink the original expense first, then the type can change",
+    "conflict_title": "Someone just changed this entry — these fields differ from your edits",
+    "conflict_server_value": "On the server it now says: {{value}}",
+    "conflict_use_server": "Use the server's",
+    "field": {
+      "amount": "Amount",
+      "currency": "Currency",
+      "occurred_at": "Date",
+      "source_id": "Account",
+      "merchant": "Merchant",
+      "note": "Note",
+      "category_l1": "Category",
+      "category_l2": "Subcategory",
+      "amount_in": "Amount received",
+      "currency_in": "Currency received",
+      "to_source_id": "To account",
+      "subtype": "Subtype"
+    },
     "keyboard_hint_title": "Keyboard shortcuts",
     "keyboard_hint": {
       "save": "Save",
