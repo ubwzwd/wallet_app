@@ -15,7 +15,6 @@ export {
   uploadClient,
   clearAuthToken,
   getAuthToken,
-  resetAuthTokenCache,
   setAuthToken,
   setOnUnauthorized,
 } from './client';

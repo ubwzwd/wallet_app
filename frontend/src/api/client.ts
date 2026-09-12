@@ -54,6 +54,8 @@ export async function getAuthToken(): Promise<string | null> {
 export async function setAuthToken(token: string): Promise<void> {
   cachedToken = token;
   tokenLoaded = true;
+  unauthorizedInFlight = false; // a new session can be expired again
+
   await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
 }
 
@@ -64,7 +66,10 @@ export async function clearAuthToken(): Promise<void> {
   await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
-/** Test seam: forget the in-memory copy so the next read hits storage again. */
+/**
+ * Test seam: forget the in-memory copy so the next read hits storage again.
+ * For `src/test` only — do not import it from `@/api`.
+ */
 export function resetAuthTokenCache(): void {
   cachedToken = null;
   tokenLoaded = false;
@@ -78,6 +83,10 @@ let unauthorizedInFlight = false;
 /**
  * Register the callback the interceptor fires on a 401. Registering also re-arms
  * the one-shot guard, so a session that signs in again can be expired again.
+ *
+ * The guard is re-armed only here and in `setAuthToken()` — never on a successful
+ * response, because a 200 from a public endpoint (/config, /categories) interleaved
+ * with concurrent 401s would otherwise fire the callback twice.
  */
 export function setOnUnauthorized(cb: (() => void) | null): void {
   onUnauthorized = cb;
@@ -102,8 +111,6 @@ async function attachHeaders(
 }
 
 function onFulfilled(response: AxiosResponse): AxiosResponse {
-  // A successful round trip means the session works again: re-arm the 401 guard.
-  unauthorizedInFlight = false;
   return response;
 }
 

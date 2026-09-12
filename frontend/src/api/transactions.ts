@@ -53,10 +53,18 @@ export const txApi = {
       .delete<void>(`/ledgers/${l}/transactions/transfer/${pairId}`)
       .then(() => undefined),
 
-  /** Merge two single-leg transfers into one pair (decision §14.34). */
+  /**
+   * Merge two single-leg transfers into one pair (decision §14.34).
+   *
+   * `types.ts` names the field `counterpart_transaction_id` (04 §3.3), but the wire
+   * field is `other_transaction_id` per 03 §5.33 and the backend `PairRequest`
+   * (`extra='forbid'`), so the body is mapped here while the signature stays as §3.4.
+   */
   pair: (l: Uuid, tid: Uuid, b: TransactionPairRequest): Promise<TransferPair> =>
     apiClient
-      .post<TransferPair>(`/ledgers/${l}/transactions/${tid}/pair`, b)
+      .post<TransferPair>(`/ledgers/${l}/transactions/${tid}/pair`, {
+        other_transaction_id: b.counterpart_transaction_id,
+      })
       .then((r) => r.data),
 
   /** Split a pair back into two single legs; no request body. */

@@ -98,14 +98,28 @@ describe('api client', () => {
       expect(await AsyncStorage.getItem(AUTH_TOKEN_KEY)).toBe('jwt-abc');
     });
 
-    it('re-arms after a successful response so a later expiry is reported again', async () => {
+    it('stays quiet when a public 200 is interleaved with concurrent 401s', async () => {
       const cb = jest.fn();
       setOnUnauthorized(cb);
       api.mockGet('/me', { detail: 'Not authenticated', code: 'unauthorized' }, 401);
       api.mockGet('/config', { registration_open: true });
+      api.mockGet('/ledgers', { detail: 'Not authenticated', code: 'unauthorized' }, 401);
+
+      await Promise.allSettled([
+        apiClient.get('/me'),
+        apiClient.get('/config'),
+        apiClient.get('/ledgers'),
+      ]);
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-arms once a new token is stored so a later expiry is reported again', async () => {
+      const cb = jest.fn();
+      setOnUnauthorized(cb);
+      api.mockGet('/me', { detail: 'Not authenticated', code: 'unauthorized' }, 401);
 
       await expectApiError(apiClient.get('/me'));
-      await apiClient.get('/config');
+      await setAuthToken('jwt-fresh');
       await expectApiError(apiClient.get('/me'));
       expect(cb).toHaveBeenCalledTimes(2);
     });
