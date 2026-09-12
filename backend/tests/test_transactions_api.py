@@ -311,6 +311,17 @@ def test_create_rejects_a_date_two_days_ahead(env):
     assert response.json()["code"] == "validation_error"
 
 
+def test_create_rejects_an_amount_wider_than_the_column(env):
+    """NUMERIC(18, 4) stops at 14 integer digits — a 400, never a database 500."""
+    response = env.post(expense_body(env, amount="-" + "9" * 15))
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "validation_error"
+
+    # One digit fewer is a perfectly ordinary (if unlikely) expense.
+    assert env.post(expense_body(env, amount="-" + "9" * 14)).status_code == 201
+
+
 def test_create_on_a_foreign_account_is_not_found(
     env, user_factory, ledger_factory, source_factory
 ):
@@ -658,6 +669,108 @@ def test_list_summary_covers_the_whole_result_and_survives_paging(env, rows):
     assert filtered["count"] == 3
 
 
+def test_list_pages_do_not_overlap_and_carry_one_summary(env, rows):
+    """The fast path pages in SQL; two pages must tile the result, not repeat it."""
+    first = env.get(limit=4, offset=0)
+    second = env.get(limit=4, offset=4)
+
+    assert ids(first) and ids(first).isdisjoint(ids(second))
+    assert ids(first) | ids(second) == ids(env.get(limit=200))
+    assert len(first.json()["items"]) == 4
+    assert len(second.json()["items"]) == 3
+    assert first.json()["total"] == second.json()["total"] == 7
+    assert first.json()["summary"] == second.json()["summary"]
+
+
+@pytest.fixture()
+def valued_batches(monkeypatch) -> list[list[str]]:
+    """Records the rows handed to ``valuation.value_transactions``, per call."""
+    from app.services import valuation
+
+    real = valuation.value_transactions
+    batches: list[list[str]] = []
+
+    def spy(db, base_currency, batch):
+        rows = list(batch)
+        batches.append([str(row.id) for row in rows])
+        return real(db, base_currency, rows)
+
+    monkeypatch.setattr(valuation, "value_transactions", spy)
+    return batches
+
+
+def test_list_without_an_amount_bound_values_only_the_current_page(
+    env, rows, valued_batches
+):
+    """§5.25's fast path: SQL filters and pages, conversion sees one page.
+
+    The summary still covers all seven rows — it is computed from grouped
+    subtotals, not from the rows the response carries.
+    """
+    body = env.get(limit=2, offset=2).json()
+
+    assert valued_batches == [[item["id"] for item in body["items"]]]
+    assert body["total"] == 7
+    assert body["summary"] == {
+        "base_currency": "CNY",
+        "expense": "234.5217",
+        "income": "5000.0000",
+        "net": "4777.4783",
+        "count": 7,
+        "rate_missing_count": 0,
+    }
+
+
+def test_list_with_an_amount_bound_still_values_the_whole_result(
+    env, rows, valued_batches
+):
+    """Decision §14.49 compares base-currency amounts, which SQL cannot do."""
+    body = env.get(limit=2, min_amount="0").json()
+
+    assert len(body["items"]) == 2
+    assert body["total"] == 7
+    assert [len(batch) for batch in valued_batches] == [7]
+
+
+def test_list_summary_is_the_same_on_both_paths(env, rows):
+    """A bound that excludes nothing must not move a single figure."""
+    fast = env.get(limit=1).json()
+    bounded = env.get(limit=1, min_amount="0").json()
+
+    assert fast["summary"] == bounded["summary"]
+    assert fast["total"] == bounded["total"]
+
+
+def test_list_summary_agrees_on_both_paths_with_several_rows_per_group(
+    env, transaction_factory
+):
+    """Same day, same currency, several rows — the two paths must still agree.
+
+    The fast path converts one subtotal per ``(kind, currency, day)`` group, so
+    if the bound path converted row by row instead, a group of foreign-currency
+    rows whose fractions round differently together than apart would make the
+    same selection report two different expenses. These four EUR amounts do
+    exactly that.
+    """
+    for amount in ("-40.1400", "-36.5100", "-52.4800", "-63.3100"):
+        transaction_factory(
+            env.ledger,
+            env.euro,
+            amount=Decimal(amount),
+            currency="EUR",
+            occurred_at=SEP4,
+            category_l1="food",
+            category_l2="dinner",
+        )
+
+    fast = env.get(limit=200).json()
+    bounded = env.get(limit=200, min_amount="0").json()
+
+    assert fast["summary"] == bounded["summary"]
+    assert fast["total"] == bounded["total"]
+    assert ids(env.get(limit=200)) == ids(env.get(limit=200, min_amount="0"))
+
+
 def test_list_returns_both_legs_of_a_transfer(env, rows):
     items = env.get(kind="transfer").json()["items"]
 
@@ -760,6 +873,45 @@ def test_detail_expense_lists_its_refunds_oldest_first(env, transaction_factory)
     assert body["pair"] is None
     assert body["rate_used"] == "1.00000000"    # CNY on a CNY ledger (A24)
     assert body["rate_date"] == SEP1.isoformat()
+
+
+def test_detail_refunds_are_scoped_to_this_ledger(
+    env, user_factory, ledger_factory, source_factory, transaction_factory
+):
+    """``refunds[]`` reads this ledger only (§3.3), like every other query here.
+
+    The API can never write a cross-ledger ``refund_of`` — the row below goes
+    straight into the database — but the read does not lean on that.
+    """
+    origin = transaction_factory(
+        env.ledger, env.bank, amount=Decimal("-45.5000"), occurred_at=SEP1
+    )
+    mine = transaction_factory(
+        env.ledger,
+        env.bank,
+        kind="refund",
+        amount=Decimal("10.0000"),
+        occurred_at=SEP4,
+        refund_of=origin.id,
+    )
+    outsider = user_factory()
+    other_ledger = ledger_factory(outsider, base_currency="CNY")
+    transaction_factory(
+        other_ledger,
+        source_factory(other_ledger, name="别人的卡", type="checking", currency="CNY"),
+        kind="refund",
+        amount=Decimal("7.0000"),
+        occurred_at=SEP6,
+        refund_of=origin.id,
+    )
+
+    body = env.get(f"/{origin.id}").json()
+
+    assert [refund["id"] for refund in body["refunds"]] == [str(mine.id)]
+    # The two totals describe that same list, so the foreign row is out of
+    # them too: 45.50 - 10.00, not 45.50 - 17.00 (§5.27).
+    assert body["refunded_total"] == "10.0000"
+    assert body["refundable"] == "35.5000"
 
 
 def test_detail_refund_expands_the_original_without_itself(env, transaction_factory):

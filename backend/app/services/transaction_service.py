@@ -22,7 +22,7 @@ import datetime as dt
 import re
 import uuid
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation
 from typing import Sequence
 
 from sqlalchemy import and_, select
@@ -35,6 +35,7 @@ from app.models.finance_source import FinanceSource
 from app.models.ledger import Ledger
 from app.models.transaction import Transaction
 from app.services import events, fx
+from app.services.valuation import quantize_amount
 
 KINDS = ("expense", "income", "refund", "transfer")
 TRANSFER_ROLES = ("out", "in")
@@ -55,7 +56,11 @@ CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
 # which is how a PATCH clears ``note``.
 _MISSING = object()
 
-AMOUNT_QUANTUM = Decimal("0.0001")
+# Money columns are NUMERIC(18, 4) (02-database.md §1.6), which leaves 14
+# digits before the point. Checked here so a mistyped 20-digit amount is a 400
+# ``validation_error`` and not a Postgres "numeric field overflow" (a 500).
+MAX_AMOUNT_INTEGER_DIGITS = 14
+MAX_AMOUNT = Decimal(10) ** MAX_AMOUNT_INTEGER_DIGITS
 
 # The columns a single transaction's PATCH may touch, and the ones a diff is
 # taken over (§5.28: "id, ledger_id, transfer_pair_id, import_batch_id,
@@ -170,6 +175,7 @@ def create_single(
     db.add(tx)
     db.flush()
 
+    # The event carries the row's own stamp: one operation, one instant (§1.9).
     events.record(
         db,
         ledger_id=ledger.id,
@@ -177,6 +183,7 @@ def create_single(
         actor_id=actor_id,
         event="created",
         client=client,
+        at=now,
     )
     db.flush()
     return tx
@@ -246,16 +253,19 @@ def update_single(
         db, ledger, source, merged, tx_id=tx.id, current_currency=tx.currency
     )
 
+    now = utcnow()
     for field, value in values.items():
         setattr(tx, field, value)
     tx.updated_by = actor_id
-    tx.updated_at = utcnow()
+    tx.updated_at = now
     db.flush()
 
     diff = events.diff_changes(before, values)
     refund_event = _refund_event(before["refund_of"], values["refund_of"])
     # A link / unlink is told by its own event, so it is not repeated inside
-    # the `updated` one; at most two events per PATCH (§5.28, §7.2).
+    # the `updated` one; at most two events per PATCH (§5.28, §7.2). Both carry
+    # the row's new ``updated_at``, which is what ties them to this one edit
+    # (§1.9); ``events.list_for`` orders the tie by id.
     updated_changes = {
         field: change
         for field, change in diff.items()
@@ -270,6 +280,7 @@ def update_single(
             event="updated",
             changes=updated_changes,
             client=client,
+            at=now,
         )
     if refund_event is not None:
         events.record(
@@ -280,6 +291,7 @@ def update_single(
             event=refund_event,
             changes={"refund_of": diff["refund_of"]},
             client=client,
+            at=now,
         )
     db.flush()
     return tx
@@ -381,6 +393,7 @@ def create_transfer(
             actor_id=actor_id,
             event="created",
             client=client,
+            at=now,
         )
     db.flush()
     return legs[0], legs[1]
@@ -487,6 +500,7 @@ def update_transfer(
                 event="updated",
                 changes=diff,
                 client=client,
+                at=now,
             )
     db.flush()
     return out_leg, in_leg
@@ -622,6 +636,7 @@ def pair(
                 },
             },
             client=client,
+            at=now,
         )
         if before_subtype != subtype:
             events.record(
@@ -635,6 +650,7 @@ def pair(
                     {"transfer_subtype": subtype},
                 ),
                 client=client,
+                at=now,
             )
     db.flush()
     return out_leg, in_leg
@@ -675,6 +691,7 @@ def unpair(
                 before, events.snapshot(leg, ("transfer_pair_id",))
             ),
             client=client,
+            at=now,
         )
     db.flush()
     return ordered
@@ -710,7 +727,14 @@ def refund_totals(
         )
         .join(
             refund,
-            and_(refund.refund_of == Transaction.id, refund.kind == "refund"),
+            and_(
+                refund.refund_of == Transaction.id,
+                refund.kind == "refund",
+                # Same ledger as the expense: the detail page's ``refunds[]``
+                # is ledger-scoped (§3.3), and these two totals describe that
+                # same list, so they must not count a row it never shows.
+                refund.ledger_id == ledger.id,
+            ),
             isouter=True,
         )
         .where(
@@ -731,7 +755,7 @@ def refund_totals(
 
     for expense_id, amount in amounts.items():
         total = refunded[expense_id]
-        totals[expense_id] = (total, _quantize(abs(amount) - total))
+        totals[expense_id] = (total, quantize_amount(abs(amount) - total))
     return totals
 
 
@@ -948,21 +972,39 @@ def _positive_amount(value: object, field: str) -> Decimal:
 
 
 def _amount(value: object) -> Decimal:
-    """Any numeric input as a four-decimal ``Decimal`` (§4.5)."""
-    if isinstance(value, Decimal):
-        return _quantize(value)
+    """Any numeric input as a four-decimal ``Decimal`` that fits the column (§4.5).
+
+    The range check is the same rule as :data:`MAX_MERCHANT_LENGTH` and friends:
+    NUMERIC(18, 4) holds 14 digits before the point, so a bigger number is
+    answered with 400 ``validation_error`` here instead of travelling down to
+    Postgres and coming back as a 500.
+    """
     try:
-        return _quantize(Decimal(str(value)))
+        raw = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
         raise _invalid("amount must be a number") from None
+    if not raw.is_finite():
+        raise _invalid("amount must be a number")
+    # Checked before quantizing as well: ``Decimal.quantize`` itself raises on a
+    # value too large for the arithmetic context (e.g. 1e40).
+    if abs(raw) >= MAX_AMOUNT:
+        raise _too_large()
+
+    amount = quantize_amount(raw)
+    if abs(amount) >= MAX_AMOUNT:    # rounded up across the boundary
+        raise _too_large()
+    return amount
 
 
-def _quantize(value: Decimal) -> Decimal:
-    return value.quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
+def _too_large() -> ApiError:
+    return _invalid(
+        "amount must have at most "
+        f"{MAX_AMOUNT_INTEGER_DIGITS} digits before the decimal point"
+    )
 
 
 def _zero() -> Decimal:
-    return _quantize(Decimal("0"))
+    return quantize_amount(Decimal("0"))
 
 
 def _invalid(detail: str) -> ApiError:

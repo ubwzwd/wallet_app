@@ -21,8 +21,11 @@ from app.models.ledger import Ledger, LedgerMember
 from app.models.user import User
 
 # X-Client is free text from the client, stored verbatim on transaction events
-# (§4.7), so it is clamped on both length and character set.
-CLIENT_NAME_MAX_LENGTH = 40
+# (§4.7), so it is clamped on both length and character set. 16 is the width of
+# ``transaction_events.client`` (02-database.md §1.9, and 03 §4.7 since the
+# 2026-09-12 sync) — the same number as ``services.events.MAX_CLIENT_LENGTH``,
+# so the header is cut once here rather than silently again on INSERT.
+CLIENT_NAME_MAX_LENGTH = 16
 
 
 @dataclass(frozen=True)
@@ -90,9 +93,10 @@ def client_name(
 ) -> Optional[str]:
     """The ``X-Client`` header, sanitized for ``transaction_events.client`` (§4.7).
 
-    Printable ASCII only, at most 40 characters, truncated rather than
-    rejected. A missing header — or one left empty by the filtering — is
-    ``None``; the header never affects authentication or authorization.
+    Printable ASCII only, at most :data:`CLIENT_NAME_MAX_LENGTH` characters,
+    truncated rather than rejected. A missing header — or one left empty by the
+    filtering — is ``None``; the header never affects authentication or
+    authorization.
     """
     if x_client is None:
         return None

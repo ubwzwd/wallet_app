@@ -152,11 +152,47 @@ def test_record_stores_changes_and_import_batch(db, world):
     assert stored.client is None
 
 
+def test_record_defaults_at_to_now_and_takes_a_given_stamp(db, world):
+    """``at`` is the operation's instant (§1.9); callers that stamp a row pass it."""
+    before = utcnow()
+    default = events.record(
+        db,
+        ledger_id=world["ledger"].id,
+        transaction_id=world["tx"].id,
+        actor_id=world["user"].id,
+        event="created",
+    )
+    db.flush()
+    assert before <= default.at <= utcnow()
+
+    stamp = dt.datetime(2026, 9, 1, 18, 20, 0, 123456)
+    given = events.record(
+        db,
+        ledger_id=world["ledger"].id,
+        transaction_id=world["tx"].id,
+        actor_id=world["user"].id,
+        event="updated",
+        changes={"note": {"before": None, "after": "改了"}},
+        at=stamp,
+    )
+    db.flush()
+    db.expire(given)
+    assert given.at == stamp
+
+
+def test_client_length_is_the_same_number_on_both_sides():
+    """The header clamp and the column width are one rule, not two (§4.7, §1.9)."""
+    from app.core.deps import CLIENT_NAME_MAX_LENGTH
+
+    assert CLIENT_NAME_MAX_LENGTH == events.MAX_CLIENT_LENGTH == 16
+
+
 def test_record_cuts_the_client_name_to_the_column_width(db, world):
     """``client`` is VARCHAR(16); a longer ``X-Client`` header is truncated.
 
-    03 §4.7 allows 40 characters, 02-database.md §1.9 gives the column 16 —
-    storing the header as-is would be a Postgres ``DataError`` (a 500).
+    03 §4.7 and 02-database.md §1.9 both say 16 and ``core/deps.client_name``
+    already cuts the header to it; this is the last line of defence, because
+    storing a longer value would be a Postgres ``DataError`` (a 500).
     """
     events.record(
         db,
@@ -214,6 +250,32 @@ def test_list_for_returns_newest_first(db, world):
 
     listed = events.list_for(db, world["tx"].id)
     assert [row.event for row in listed] == ["paired", "updated", "created"]
+
+
+def test_list_for_breaks_a_tie_on_the_same_instant_by_id(db, world):
+    """Two events of one operation share ``at`` (§1.9); ``id DESC`` settles them."""
+    stamp = dt.datetime(2026, 9, 10, 8, 31, 0)
+    for name in ("updated", "refund_linked"):
+        row = events.record(
+            db,
+            ledger_id=world["ledger"].id,
+            transaction_id=world["tx"].id,
+            actor_id=world["user"].id,
+            event=name,
+            at=stamp,
+        )
+        row.at = stamp
+    db.flush()
+
+    listed = events.list_for(db, world["tx"].id)
+    assert [row.at for row in listed] == [stamp, stamp]
+    assert [row.id for row in listed] == sorted(
+        (row.id for row in listed), reverse=True
+    )
+    # Stable: asking twice gives the same order.
+    assert [row.id for row in events.list_for(db, world["tx"].id)] == [
+        row.id for row in listed
+    ]
 
 
 def test_list_for_only_sees_its_own_transaction(db, world):

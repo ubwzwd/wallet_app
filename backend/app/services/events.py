@@ -19,7 +19,7 @@ are the same amount, not an edit) and serializes only the survivors.
 """
 import datetime as dt
 import uuid
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Literal, Sequence
 
 from sqlalchemy import select
@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import utcnow
 from app.models.transaction_event import TransactionEvent
+from app.services.valuation import quantize_amount
 
 # The seven event names of decision §14.51 — no more, no fewer.
 EventName = Literal[
@@ -39,13 +40,11 @@ EventName = Literal[
     "refund_unlinked",
 ]
 
-# Amounts are Numeric(18, 4) everywhere (§4.5).
-_AMOUNT_QUANTUM = Decimal("0.0001")
-
-# ``transaction_events.client`` is VARCHAR(16) (02-database.md §1.9) while the
-# ``X-Client`` header is trimmed to 40 characters upstream (03 §4.7). The two
-# chapters disagree; the column wins here, so a long header name is truncated
-# instead of becoming a Postgres DataError (500) on INSERT.
+# ``transaction_events.client`` is VARCHAR(16) (02-database.md §1.9) and 03
+# §4.7 says the same width since the 2026-09-12 sync;
+# ``core/deps.CLIENT_NAME_MAX_LENGTH`` cuts the header to it upstream and this
+# is the last line of defence, so an over-long name can never become a Postgres
+# DataError (500) on INSERT.
 MAX_CLIENT_LENGTH = 16
 
 
@@ -59,6 +58,7 @@ def record(
     changes: dict[str, dict] | None = None,
     import_batch_id: uuid.UUID | None = None,
     client: str | None = None,
+    at: dt.datetime | None = None,
 ) -> TransactionEvent:
     """Append one event to the caller's session (§7.3 rule 1).
 
@@ -67,12 +67,17 @@ def record(
     ``{field: {"before": ..., "after": ...}}`` already serialized by
     :func:`diff_changes`; ``created`` and ``imported`` pass ``None``.
     ``client`` is cut to the width of its column (:data:`MAX_CLIENT_LENGTH`).
+
+    ``at`` defaults to "right now"; a caller that also stamps the row hands in
+    the very value it wrote to ``transactions.updated_at``, because 02-database
+    §1.9 asks for one instant per operation — the two events one PATCH may
+    write then carry the same ``at`` as the row they describe.
     """
     row = TransactionEvent(
         ledger_id=ledger_id,
         transaction_id=transaction_id,
         actor_id=actor_id,
-        at=utcnow(),
+        at=utcnow() if at is None else at,
         event=event,
         changes=changes,
         import_batch_id=import_batch_id,
@@ -85,6 +90,8 @@ def record(
 def list_for(db: Session, transaction_id: uuid.UUID) -> list[TransactionEvent]:
     """Every event of one transaction, newest first (§5.27's ``events[]``).
 
+    ``id`` breaks the tie: the two events one operation may write share its
+    timestamp (§1.9), so ``at`` alone would leave their order to the database.
     Not paged on purpose: a transaction normally carries a handful of events
     (§7.3 rule 5).
     """
@@ -92,7 +99,7 @@ def list_for(db: Session, transaction_id: uuid.UUID) -> list[TransactionEvent]:
         db.execute(
             select(TransactionEvent)
             .where(TransactionEvent.transaction_id == transaction_id)
-            .order_by(TransactionEvent.at.desc())
+            .order_by(TransactionEvent.at.desc(), TransactionEvent.id.desc())
         )
         .scalars()
         .all()
@@ -134,7 +141,7 @@ def serialize(value: object) -> object:
     if isinstance(value, bool):
         return value
     if isinstance(value, Decimal):
-        return format(value.quantize(_AMOUNT_QUANTUM, rounding=ROUND_HALF_UP), "f")
+        return format(quantize_amount(value), "f")
     if isinstance(value, dt.datetime):
         return value.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
     if isinstance(value, dt.date):

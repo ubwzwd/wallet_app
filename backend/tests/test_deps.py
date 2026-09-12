@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.core.database import get_db
 from app.core.deps import (
+    CLIENT_NAME_MAX_LENGTH,
     LedgerContext,
     Pagination,
     client_ip,
@@ -210,10 +211,16 @@ def test_client_name_passes_a_plain_value_through(deps_client):
     assert deps_client.get("/whoami", headers={"X-Client": "web"}).json() == {"client": "web"}
 
 
-def test_client_name_truncates_at_40_characters(deps_client):
+def test_client_name_truncates_at_16_characters(deps_client):
+    """16 is the width of ``transaction_events.client`` (§4.7, 02 §1.9)."""
+    from app.services import events
+
     response = deps_client.get("/whoami", headers={"X-Client": "w" * 100})
 
-    assert response.json() == {"client": "w" * 40}
+    assert response.json() == {"client": "w" * 16}
+    # One rule, one number: the header clamp and the column width agree, so a
+    # truncated name is never truncated a second time on INSERT.
+    assert CLIENT_NAME_MAX_LENGTH == events.MAX_CLIENT_LENGTH == 16
 
 
 def test_client_name_drops_non_ascii_and_control_characters(deps_client):
