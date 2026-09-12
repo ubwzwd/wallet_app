@@ -25,9 +25,12 @@ function roundDivBigInt(num: bigint, den: bigint): bigint {
 function parseDecimalScaled(numStr: string): bigint {
   if (numStr === '' || numStr === '.') throw new Error('bad number literal');
   const [ip = '', fp = ''] = numStr.split('.');
-  if (fp.length > 8) throw new Error('too precise');
+  // More than eight fractional digits is beyond the evaluator's working scale — and beyond
+  // anything `Money` (four digits) can carry. Truncating is friendlier than refusing the
+  // whole expression: the extra digits could not have survived the result either way.
+  const fraction = fp.slice(0, 8);
   const intPart = ip === '' ? '0' : ip;
-  return BigInt(intPart) * INNER_SCALE + BigInt(fp.padEnd(8, '0') || '0');
+  return BigInt(intPart) * INNER_SCALE + BigInt(fraction.padEnd(8, '0') || '0');
 }
 
 type Token =

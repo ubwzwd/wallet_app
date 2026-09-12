@@ -31,6 +31,12 @@ describe('routes table matches 04 §1.2 verbatim', () => {
     expect(l.transactionNew({ kind: 'refund', refund_of: 'tx1', next: '/l/x/transactions' })).toBe(
       `/l/${LID}/transactions/new?kind=refund&refund_of=tx1&next=%2Fl%2Fx%2Ftransactions`
     );
+    expect(l.transactionNew({ copy_of: 'tx1' })).toBe(
+      `/l/${LID}/transactions/new?copy_of=tx1`
+    );
+    expect(l.transactionNew({ kind: 'expense', copy_of: 'tx1', next: '/l/x' })).toBe(
+      `/l/${LID}/transactions/new?kind=expense&copy_of=tx1&next=%2Fl%2Fx`
+    );
     expect(l.transaction('tx1')).toBe(`/l/${LID}/transactions/tx1`);
     expect(l.transactionEdit('tx1')).toBe(`/l/${LID}/transactions/tx1/edit`);
     expect(l.transfer('pair1')).toBe(`/l/${LID}/transfers/pair1`);
@@ -60,6 +66,22 @@ describe('safeNext (04 §1.5 rule 1)', () => {
     expect(safeNext(undefined)).toBeNull();
     expect(safeNext('')).toBeNull();
     expect(safeNext('relative/path')).toBeNull(); // must start with '/'
+  });
+
+  test('rejects every ASCII control character, not just CR/LF', () => {
+    expect(safeNext('/ok\u0000evil')).toBeNull();
+    expect(safeNext('/ok\tevil')).toBeNull();
+    expect(safeNext('/ok\u001bevil')).toBeNull();
+    expect(safeNext('/ok\u007fevil')).toBeNull();
+    expect(safeNext('/ok\revil')).toBeNull();
+  });
+
+  test('rejects `..` path segments', () => {
+    expect(safeNext('/../admin')).toBeNull();
+    expect(safeNext('/l/abc/../../admin')).toBeNull();
+    expect(safeNext('/l/abc/..')).toBeNull();
+    // A dotted name that is not a traversal segment is fine.
+    expect(safeNext('/l/abc/a..b')).toBe('/l/abc/a..b');
   });
 
   test('accepts a plain site-relative path, with or without query', () => {

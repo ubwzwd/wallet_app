@@ -63,6 +63,27 @@ describe('parseTxFilters / serializeTxFilters round-trip', () => {
     expect(parseTxFilters({ offset: 'abc' })).toEqual({});
   });
 
+  test('only plain decimal digits count as a number', () => {
+    for (const raw of ['', '   ', '0x10', '1e3', 'Infinity', '-Infinity', '+5', '5.', '.5']) {
+      expect(parseTxFilters({ min_amount: raw, max_amount: raw, offset: raw })).toEqual({});
+    }
+    // offset=0 is the default; it is never written to the URL, so it is not read back either.
+    expect(parseTxFilters({ offset: '0' })).toEqual({});
+    expect(parseTxFilters({ min_amount: '-20.5', max_amount: '500', offset: '50' })).toEqual({
+      min_amount: -20.5,
+      max_amount: 500,
+      offset: 50,
+    });
+  });
+
+  test('parse -> serialize -> parse is idempotent for every numeric shape', () => {
+    for (const raw of ['', '  ', '0x10', '1e3', 'Infinity', '20.50', '0', '-3']) {
+      const once = parseTxFilters({ min_amount: raw, max_amount: raw, offset: raw });
+      const twice = parseTxFilters(serializeTxFilters(once));
+      expect(twice).toEqual(once);
+    }
+  });
+
   test('an invalid date is dropped', () => {
     expect(parseTxFilters({ from: '2026-13-40', to: '2026-08-31' })).toEqual({
       to: '2026-08-31',

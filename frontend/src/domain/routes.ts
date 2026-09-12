@@ -47,12 +47,15 @@ export const routes = {
       kind?: TxKind;
       source_id?: Uuid;
       refund_of?: Uuid;
+      /** "Copy this transaction": the form opens prefilled from `copy_of` (04 §4.7). */
+      copy_of?: Uuid;
       next?: string;
     }) =>
       `/l/${ledgerId}/transactions/new${buildQuery({
         kind: opts?.kind,
         source_id: opts?.source_id,
         refund_of: opts?.refund_of,
+        copy_of: opts?.copy_of,
         next: opts?.next,
       })}`,
     transaction: (txId: Uuid) => `/l/${ledgerId}/transactions/${txId}`,
@@ -73,10 +76,15 @@ export const routes = {
   }),
 };
 
+/** Any ASCII control character, not just CR/LF: NUL, tab and the C0/DEL range can all
+ *  smuggle a second line or a hidden segment past a naive check. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
+
 /**
  * Validate a `?next=` value: only a single-`/`-leading, same-site relative path is accepted.
  * Rejects `//host/...` (protocol-relative), any scheme (`javascript:`, `https:`, ...),
- * backslashes, and embedded newlines/carriage returns (04 §1.5 rule 1).
+ * backslashes, every ASCII control character, and `..` path segments (04 §1.5 rule 1).
  */
 export function safeNext(raw: string | string[] | undefined): string | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -84,8 +92,10 @@ export function safeNext(raw: string | string[] | undefined): string | null {
   if (!value.startsWith('/')) return null;
   if (value.startsWith('//')) return null;
   if (value.includes('\\')) return null;
-  if (/[\r\n]/.test(value)) return null;
+  if (CONTROL_CHARS.test(value)) return null;
   if (value.includes(':')) return null;
+  const [path] = value.split('?');
+  if (path.split('/').some((segment) => segment === '..')) return null;
   return value;
 }
 
