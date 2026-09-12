@@ -121,6 +121,55 @@ describe('EventTimeline', () => {
     expect(row).toHaveTextContent(/二级分类 午餐 → 无/);
   });
 
+  test('fields outside the event_field block still read as words, never as i18n keys', () => {
+    renderThemed(
+      <EventTimeline
+        events={[
+          makeEvent({
+            id: 'a',
+            event: 'updated',
+            changes: {
+              kind: { before: 'expense', after: 'refund' },
+              currency: { before: 'CNY', after: 'USD' },
+              counterparty: { before: null, after: '老王' },
+            },
+          }),
+        ]}
+        names={{}}
+        meId={ME}
+        lang="zh"
+        currency="CNY"
+        testID="ev"
+      />,
+    );
+    const row = screen.getByTestId('ev-row-a');
+    // The kind values are named too, not left as `expense` / `refund`.
+    expect(row).toHaveTextContent(/类型 支出 → 退款/);
+    expect(row).toHaveTextContent(/币种 CNY → USD/);
+    expect(row).toHaveTextContent(/对方 无 → 老王/);
+    expect(row).not.toHaveTextContent(/transaction:/);
+  });
+
+  test('a field the language pack has never heard of degrades to its own name', () => {
+    renderThemed(
+      <EventTimeline
+        events={[
+          makeEvent({
+            id: 'a',
+            event: 'updated',
+            changes: { something_new: { before: 'a', after: 'b' } },
+          }),
+        ]}
+        names={{}}
+        meId={ME}
+        lang="zh"
+        testID="ev"
+      />,
+    );
+    expect(screen.getByTestId('ev-row-a')).toHaveTextContent(/something_new a → b/);
+    expect(screen.getByTestId('ev-row-a')).not.toHaveTextContent(/detail\.event_field/);
+  });
+
   test('more than three changed fields fold up until asked', () => {
     renderThemed(
       <EventTimeline

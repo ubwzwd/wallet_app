@@ -124,7 +124,8 @@ describe('TrendChart', () => {
       expect(screen.getByTestId(`trend-value-${point.month}`)).toBeTruthy();
       expect(screen.getByTestId(`trend-month-${point.month}`)).toBeTruthy();
     }
-    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent(/12,000/);
+    // Exact, so a change in how the label is formatted cannot slip past the test.
+    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent('¥12,000.00');
   });
 
   test('tapping a month reports it', () => {

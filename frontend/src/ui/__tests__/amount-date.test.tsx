@@ -141,9 +141,9 @@ describe('AmountField', () => {
   });
 });
 
-function DateHarness({ initial, max }: { initial: IsoDate; max?: IsoDate }) {
+function DateHarness({ initial, max, min }: { initial: IsoDate; max?: IsoDate; min?: IsoDate }) {
   const [value, setValue] = React.useState(initial);
-  return <DateField value={value} onChange={setValue} max={max} testID="date" />;
+  return <DateField value={value} onChange={setValue} max={max} min={min} testID="date" />;
 }
 
 describe('DateField', () => {
@@ -160,10 +160,18 @@ describe('DateField', () => {
     expect(screen.queryByText('日期不能晚于明天')).toBeNull();
   });
 
-  test('a malformed day is reported too', () => {
+  test('a malformed day is reported too, and not as "required"', () => {
     renderThemed(<DateHarness initial="2026-08-14" />);
     fireEvent.changeText(screen.getByTestId('date'), '2026-02-31');
-    expect(screen.getByText('这是必填项')).toBeTruthy();
+    expect(screen.getByText('有几项填得不对，请检查标红的字段')).toBeTruthy();
+    expect(screen.queryByText('这是必填项')).toBeNull();
+  });
+
+  test('a day before `min` never borrows the "not later than tomorrow" wording', () => {
+    renderThemed(<DateHarness initial="2026-08-14" min="2026-08-01" max="2026-09-11" />);
+    fireEvent.changeText(screen.getByTestId('date'), '2026-07-20');
+    expect(screen.queryByText('日期不能晚于明天')).toBeNull();
+    expect(screen.getByText('有几项填得不对，请检查标红的字段')).toBeTruthy();
   });
 
   test('the range check itself is pure', () => {
@@ -172,7 +180,12 @@ describe('DateField', () => {
     expect(dateFieldErrorKey('', '2026-09-11')).toBeNull();
     expect(dateFieldErrorKey('14/08/2026')).toEqual([
       'validation:date_invalid',
-      'validation:required',
+      'errors:validation_error',
+    ]);
+    // `min` gets its own key chain: "太早" and "不能晚于明天" are opposite complaints.
+    expect(dateFieldErrorKey('2026-07-20', '2026-09-11', '2026-08-01')).toEqual([
+      'validation:date_too_early',
+      'errors:validation_error',
     ]);
   });
 });

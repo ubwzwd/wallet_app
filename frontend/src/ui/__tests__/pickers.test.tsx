@@ -103,6 +103,39 @@ describe('CategoryPicker', () => {
     expect(screen.queryByTestId('cat-l1-food')).toBeNull();
   });
 
+  test('changing kind moves the panel too, instead of stranding the other tree', () => {
+    const index = buildCategoryIndex(makeCategoryTree());
+    const view = renderThemed(
+      <CategoryPicker
+        index={index}
+        kind="expense"
+        value={{ l1: 'food', l2: null }}
+        onChange={() => undefined}
+        lang="zh"
+        testID="cat"
+      />,
+    );
+    fireEvent.press(screen.getByTestId('cat-trigger'));
+    fireEvent.press(screen.getByTestId('cat-l1-food'));
+    expect(screen.getByTestId('cat-l2-lunch')).toBeTruthy();
+
+    view.rerender(
+      <ThemeProvider initialPref="light">
+        <CategoryPicker
+          index={index}
+          kind="income"
+          value={{ l1: null, l2: null }}
+          onChange={() => undefined}
+          lang="zh"
+          testID="cat"
+        />
+      </ThemeProvider>,
+    );
+    // Back on the level-1 column, and it is the income tree — 午餐 belongs to expense.
+    expect(screen.queryByTestId('cat-l2-lunch')).toBeNull();
+    expect(screen.getByTestId('cat-l1-salary')).toBeTruthy();
+  });
+
   test('a transfer has no categories at all, so the control is disabled', () => {
     const index = buildCategoryIndex(makeCategoryTree());
     renderThemed(

@@ -38,8 +38,6 @@ export interface TrendChartProps {
   /** The month the summary block is showing; drawn with a larger dot. */
   selected?: string;
   onPressMonth?(month: string): void;
-  /** Round the value labels to whole units so 12 of them fit (default `true`). */
-  compact?: boolean;
   height?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -84,7 +82,6 @@ export function TrendChart({
   lang,
   selected,
   onPressMonth,
-  compact = true,
   height = 160,
   style,
   testID,
@@ -141,7 +138,11 @@ export function TrendChart({
 
         <View style={[StyleSheet.absoluteFill, styles.columns]} pointerEvents="box-none">
           {months.map((m, i) => {
-            const label = formatMoney(compact ? Math.round(values[i]) : m.expense, currency, l);
+            // Twelve two-decimal labels are too wide to sit side by side; the compact form
+            // has to come from `formatMoney` itself (a `compact` / `maximumFractionDigits`
+            // option) rather than from a private number formatter here, so this call site
+            // stays plain until `src/i18n/format.ts` grows one.
+            const label = formatMoney(m.expense, currency, l);
             const topRatio = peak === 0 ? 1 : 1 - values[i] / peak;
             return (
               <Pressable

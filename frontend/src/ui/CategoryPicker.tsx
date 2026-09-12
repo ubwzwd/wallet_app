@@ -99,6 +99,17 @@ export function CategoryPicker({
   const [stage, setStage] = React.useState<'l1' | 'l2'>('l1');
   const [expandedDesc, setExpandedDesc] = React.useState<string | null>(null);
 
+  // The parent owns the value: switching kind (expense → income) or resetting the form has
+  // to move the panel with it, or the level-2 column would keep listing another tree's
+  // children. Stage goes back to the first column whenever the tree itself changes.
+  React.useEffect(() => {
+    setActiveL1(value.l1);
+  }, [value.l1, kind]);
+  React.useEffect(() => {
+    setStage('l1');
+    setQuery('');
+  }, [kind]);
+
   // Transfers have no category at all (decision §1.3) — the control stays visible but dead.
   const isDisabled = disabled || kind === 'transfer';
   const hasError = typeof error === 'string' && error.length > 0;

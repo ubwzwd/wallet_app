@@ -45,11 +45,14 @@ export function dateFieldErrorKey(
   min?: IsoDate,
 ): string[] | null {
   if (value === '') return null;
-  // `validation:date_invalid` does not exist in the language pack yet; the chain falls
-  // through to `required`, which is what an unparseable day amounts to.
-  if (!isValidIsoDate(value)) return ['validation:date_invalid', 'validation:required'];
+  // `validation:date_invalid` / `date_too_early` are not in the language pack yet; each
+  // chain ends in a key that does exist, and the mask below says what a day should look
+  // like — "太早" must never borrow the "不能晚于明天" wording, which says the opposite.
+  if (!isValidIsoDate(value)) return ['validation:date_invalid', 'errors:validation_error'];
   if (max !== undefined && value > max) return ['validation:date_not_future'];
-  if (min !== undefined && value < min) return ['validation:date_not_future'];
+  if (min !== undefined && value < min) {
+    return ['validation:date_too_early', 'errors:validation_error'];
+  }
   return null;
 }
 

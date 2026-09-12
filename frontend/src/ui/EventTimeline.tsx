@@ -26,6 +26,19 @@ export function shortId(id: Uuid): string {
   return id.slice(0, 8);
 }
 
+/**
+ * The backend can report a change on any of its `SINGLE_FIELDS`, which is wider than the
+ * `transaction:detail.event_field.*` block. For the fields the language pack names under
+ * another key we reuse that name; anything still missing degrades to the bare field name,
+ * so a namespaced i18n key can never reach the screen.
+ */
+export const EVENT_FIELD_ALIASES: Readonly<Record<string, string>> = {
+  kind: 'transaction:list.filter.kind_label',
+  currency: 'transaction:form.currency',
+  counterparty: 'transaction:transfer.counterparty_label',
+  refund_of: 'transaction:form.refund_of',
+};
+
 export interface EventTimelineProps {
   events: readonly TransactionEvent[];
   /** `actor_id → display name` (caller falls back to the email prefix, 04 §4.7). */
@@ -44,7 +57,10 @@ export interface EventTimelineProps {
 }
 
 interface ChangeLine {
+  /** Raw field name, used as the React key. */
   field: string;
+  /** Translated field name shown to the reader. */
+  name: string;
   before: string;
   after: string;
 }
@@ -96,15 +112,32 @@ export function EventTimeline({
         return sourceNames?.[text] ?? text;
       case 'transfer_subtype':
         return t(`transaction:transfer.subtype.${text}`);
+      case 'transfer_role':
+        return t(`transaction:transfer.role.${text}`);
+      case 'kind':
+        // Changing kind between the three non-transfer kinds is a supported edit
+        // (04 §4.6.6), so the old/new value must read as 支出 / 退款, not as a code.
+        return t(`transaction:kind.${text}`);
+      case 'refund_of':
+        return shortId(text);
       default:
         return text;
     }
   }
 
+  /** Never returns a raw i18n key: unknown fields fall back to their own name. */
+  function fieldName(field: string): string {
+    const keys = [`transaction:detail.event_field.${field}`];
+    const alias = EVENT_FIELD_ALIASES[field];
+    if (alias !== undefined) keys.push(alias);
+    return t(keys, { defaultValue: field });
+  }
+
   function changeLines(event: TransactionEvent): ChangeLine[] {
     if (!event.changes) return [];
     return Object.entries(event.changes).map(([field, delta]) => ({
-      field: t(`transaction:detail.event_field.${field}`),
+      field,
+      name: fieldName(field),
       before: renderValue(field, delta.before),
       after: renderValue(field, delta.after),
     }));
@@ -137,7 +170,7 @@ export function EventTimeline({
 
             {visible.map((line) => (
               <Text key={line.field} variant="caption" tone="secondary">
-                {`${line.field} ${line.before} → ${line.after}`}
+                {`${line.name} ${line.before} → ${line.after}`}
               </Text>
             ))}
 

@@ -48,7 +48,13 @@ export function FilterChips({
           key={`${chip.key}:${chip.value}`}
           label={chip.label}
           onRemove={() => onRemove(chip.key, chip.value)}
-          removeLabel={chip.label}
+          // The × needs an accessible name that says what pressing it *does*; repeating the
+          // chip's own text tells a screen reader nothing. `filter.remove_filter` is not in
+          // the language pack yet, so until it lands the action word comes from `common`.
+          removeLabel={t('transaction:list.filter.remove_filter', {
+            label: chip.label,
+            defaultValue: `${t('common:button.close')} ${chip.label}`,
+          })}
           testID={`${id}-${chip.key}-${chip.value}`}
         />
       ))}
