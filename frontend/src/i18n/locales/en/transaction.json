@@ -9,9 +9,16 @@
   "list": {
     "title": "Transactions",
     "filter": {
+      "open": "Filters",
+      "title": "Filters",
+      "done": "Done",
       "search_placeholder": "Search merchant or note",
       "kind_label": "Type",
+      "kind_hint": "None selected = all",
       "source_label": "Account",
+      "source_placeholder": "All accounts",
+      "source_selected_one": "{{count}} account selected",
+      "source_selected_other": "{{count}} accounts selected",
       "date_range_label": "Date",
       "date_preset": {
         "this_month": "This month",
@@ -20,21 +27,49 @@
         "this_year": "This year",
         "custom": "Custom"
       },
+      "date_from": "From",
+      "date_to": "To",
       "category_label": "Category",
+      "category_l1_placeholder": "All categories",
+      "category_l2_placeholder": "All subcategories",
       "amount_range_label": "Amount range",
+      "amount_min_placeholder": "Min",
+      "amount_max_placeholder": "Max",
       "amount_range_hint": "Compared in {{currency}}; cross-currency transactions are converted at their own date's rate",
       "currency_label": "Currency",
+      "currency_placeholder": "All currencies",
       "clear_filters": "Clear filters",
-      "remove_filter": "Remove this filter",
-      "drop_filter_hint": "Dropping \"{{label}}\" would give you {{count}}"
+      "remove_filter": "Remove “{{label}}”",
+      "drop_filter_hint_one": "Dropping “{{label}}” would leave {{count}} transaction",
+      "drop_filter_hint_other": "Dropping “{{label}}” would leave {{count}} transactions"
     },
     "chip": {
-      "from_batch": "From import #{{batch}}"
+      "from_batch": "From import #{{batch}}",
+      "q": "Search: {{value}}",
+      "kind": "Type: {{value}}",
+      "source": "Account: {{value}}",
+      "category": "Category: {{value}}",
+      "from": "From {{value}}",
+      "to": "To {{value}}",
+      "currency": "Currency: {{value}}",
+      "min_amount": "Amount ≥ {{value}}",
+      "max_amount": "Amount ≤ {{value}}",
+      "date_range": "{{from}} → {{to}}",
+      "amount_range": "Amount {{min}} → {{max}}",
+      "unbounded": "any"
     },
     "empty_no_data": "This ledger doesn't have any transactions yet",
+    "empty_no_data_action": "Add a transaction",
     "empty_filtered": "No transactions match these filters",
+    "error_title": "Couldn't load transactions",
     "day_total": "Expense {{expense}} · Income {{income}}",
     "summary": "Expense {{expense}} · Income {{income}} · Net {{net}}",
+    "summary_label": {
+      "expense": "Expense",
+      "income": "Income",
+      "net": "Net"
+    },
+    "summary_net_hint": "transfers excluded",
     "summary_rate_missing_one": "{{count}} transaction has no exchange rate yet and isn't included",
     "summary_rate_missing_other": "{{count}} transactions have no exchange rate yet and aren't included",
     "count_one": "{{count}} transaction",
@@ -46,9 +81,26 @@
       "imported": "Imported"
     },
     "load_more": "Load more",
+    "loading_more": "Loading more",
     "another_half_hint": "The other half is on another page",
     "delete_confirm": "Delete this transaction?",
-    "delete_transfer_confirm": "This is a paired transfer — deleting it removes both sides."
+    "delete_transfer_confirm": "This is a paired transfer — deleting it removes both sides.",
+    "deleted_toast": "Transaction deleted",
+    "row": {
+      "arrow": "→",
+      "counterparty": "Counterparty: {{name}}",
+      "transfer_pair": "{{from}} → {{to}}",
+      "menu_title": "This transaction",
+      "open_menu": "More actions",
+      "imported_action": "View this import batch",
+      "refund_origin_action": "View the original expense",
+      "uncategorized": "Uncategorized"
+    },
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next",
+      "page": "Page {{page}} of {{pages}}"
+    }
   },
   "transfer": {
     "subtype": { "plain": "Regular transfer", "repayment": "Card repayment" },
