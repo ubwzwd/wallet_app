@@ -1,5 +1,11 @@
 {
   "kind": { "expense": "Expense", "income": "Income", "refund": "Refund", "transfer": "Transfer" },
+  "picker": {
+    "title_refund_origin": "Choose the original expense",
+    "refunded_out": "Fully refunded",
+    "linked_title": "Linked",
+    "unlink": "Unlink"
+  },
   "list": {
     "title": "Transactions",
     "filter": {
@@ -19,6 +25,7 @@
       "amount_range_hint": "Compared in {{currency}}; cross-currency transactions are converted at their own date's rate",
       "currency_label": "Currency",
       "clear_filters": "Clear filters",
+      "remove_filter": "Remove this filter",
       "drop_filter_hint": "Dropping \"{{label}}\" would give you {{count}}"
     },
     "chip": {
@@ -70,6 +77,9 @@
     "quick_add": "Quick add",
     "quick_multiply": "×2",
     "calculator_hint": "Supports expressions, e.g. 12.5+8.8*2",
+    "category_search_placeholder": "Search a category name or what it covers, e.g. \"used up and gone\"",
+    "no_sources": "Create an account first",
+    "no_sources_action": "Create an account",
     "recent_merchants": "Recent merchants",
     "save_and_next": "Save and add another",
     "saved_count_toast": "Saved (#{{count}})",

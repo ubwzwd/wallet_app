@@ -11,6 +11,7 @@ import {
   formatDate,
   formatRelativeDay,
   formatMonth,
+  formatMonthShort,
   formatDateTime,
   formatCountdown,
   formatBytes,
@@ -53,8 +54,44 @@ describe('formatMoney', () => {
   });
 });
 
-test('formatConverted prefixes the base-currency amount with ≈', () => {
-  expect(formatConverted('-1299.0000', 'CNY', '165.32', 'USD', 'en')).toBe('≈ $165.32');
+describe('formatConverted (04 §5.4)', () => {
+  test('prefixes the base-currency amount with ≈ and drops the sign', () => {
+    expect(formatConverted('-1299.0000', 'CNY', '-165.32', 'USD', 'en')).toBe('≈ $165.32');
+    expect(formatConverted('1299.0000', 'CNY', '165.32', 'USD', 'en')).toBe('≈ $165.32');
+  });
+
+  test('nothing to convert: a zero amount or the same currency give an empty string', () => {
+    expect(formatConverted('0.0000', 'CNY', '0.00', 'USD', 'en')).toBe('');
+    expect(formatConverted('-1299.0000', 'CNY', '-1299.0000', 'cny', 'zh')).toBe('');
+  });
+});
+
+describe('formatMoney compact', () => {
+  test('zh uses 万, en uses K, and the minus stays U+2212', () => {
+    expect(formatMoney('12000', 'CNY', 'zh', { compact: true })).toContain('万');
+    expect(formatMoney('12000', 'CNY', 'en', { compact: true })).toContain('K');
+    const negative = formatMoney('-12000', 'CNY', 'zh', { compact: true });
+    expect(negative).toContain('−');
+    expect(negative).not.toContain('-');
+  });
+
+  test('a compact label is much shorter than the full one', () => {
+    const full = formatMoney('12000', 'CNY', 'zh');
+    const compact = formatMoney('12000', 'CNY', 'zh', { compact: true });
+    expect(compact.length).toBeLessThan(full.length);
+  });
+});
+
+describe('formatMonthShort', () => {
+  test("'2026-08' reads as 8月 / Aug", () => {
+    expect(formatMonthShort('2026-08', 'zh')).toBe('8月');
+    expect(formatMonthShort('2026-08', 'en')).toBe('Aug');
+  });
+
+  test('a malformed month is passed through rather than rendered as NaN', () => {
+    expect(formatMonthShort('nonsense', 'en')).toBe('nonsense');
+    expect(formatMonthShort('2026-13', 'zh')).toBe('2026-13');
+  });
 });
 
 describe('formatAmountPlain', () => {

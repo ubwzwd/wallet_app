@@ -31,6 +31,9 @@ export interface FormatMoneyOptions {
   /** Mirrors `Intl.NumberFormat`'s `signDisplay`, but applied to our own U+2212 sign
    *  rather than Intl's (which would use a plain hyphen and/or parentheses). */
   signDisplay?: 'auto' | 'never' | 'always';
+  /** Short form for tight spots such as the twelve trend labels: `¥1.2万` / `¥12K`
+   *  (`Intl`'s compact notation, one fractional digit at most). */
+  compact?: boolean;
 }
 
 /** `Intl.NumberFormat` currency style; negative sign is always U+2212, never
@@ -44,19 +47,36 @@ export function formatMoney(
   const value = toNumber(amount);
   const signDisplay = opts?.signDisplay ?? 'auto';
   const digits = fractionDigitsFor(currency);
-  const formatter = new Intl.NumberFormat(LOCALE_TAG[lang], {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  const formatter = new Intl.NumberFormat(
+    LOCALE_TAG[lang],
+    opts?.compact === true
+      ? {
+          style: 'currency',
+          currency,
+          notation: 'compact',
+          compactDisplay: 'short',
+          maximumFractionDigits: 1,
+        }
+      : {
+          style: 'currency',
+          currency,
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits,
+        },
+  );
   const formattedAbs = formatter.format(Math.abs(value));
   if (value < 0 && signDisplay !== 'never') return MINUS + formattedAbs;
   if (value > 0 && signDisplay === 'always') return '+' + formattedAbs;
   return formattedAbs;
 }
 
-/** A converted (secondary) amount, e.g. under a transaction row: '≈ $165.32'. */
+/**
+ * A converted (secondary) amount shown under the original one, e.g. '≈ $165.32' (04 §5.4).
+ *
+ * The sign is deliberately dropped: the line right above already carries it, and a second
+ * minus reads as a second amount. Returns an empty string when there is nothing to convert
+ * — a zero original amount, or a base currency identical to the original one.
+ */
 export function formatConverted(
   amount: Money | number,
   currency: string,
@@ -64,7 +84,9 @@ export function formatConverted(
   baseCurrency: string,
   lang: Lang,
 ): string {
-  return `≈ ${formatMoney(amountBase, baseCurrency, lang)}`;
+  if (toNumber(amount) === 0) return '';
+  if (currency.toUpperCase() === baseCurrency.toUpperCase()) return '';
+  return `≈ ${formatMoney(amountBase, baseCurrency, lang, { signDisplay: 'never' })}`;
 }
 
 /** Plain digits + thousands separator, no currency symbol — for `AmountField`,
@@ -140,6 +162,13 @@ export function formatMonth(month: string, lang: Lang): string {
   const y = parseInt(yStr, 10);
   const m = parseInt(mStr, 10);
   return lang === 'zh' ? `${y} 年 ${m} 月` : `${EN_MONTHS_FULL[m - 1]} ${y}`;
+}
+
+/** `'2026-08'` → '8月' / 'Aug' — the trend chart's axis labels (04 §4.4). */
+export function formatMonthShort(month: string, lang: Lang): string {
+  const m = parseInt(month.split('-')[1] ?? '', 10);
+  if (!Number.isInteger(m) || m < 1 || m > 12) return month;
+  return lang === 'zh' ? `${m}月` : EN_MONTHS_SHORT[m - 1];
 }
 
 /** UTC ISO datetime → local `'YYYY-MM-DD HH:mm'` (24h, locale-invariant — used in the

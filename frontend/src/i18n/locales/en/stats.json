@@ -16,6 +16,7 @@
     "income": "Income",
     "category_other_n": "{{count}} more",
     "month_empty": "No transactions recorded this month yet",
+    "trend_empty": "No expenses recorded in the past year",
     "add_transaction": "Add a transaction",
     "trend_title": "12-month expense trend",
     "refresh": "Refresh"
