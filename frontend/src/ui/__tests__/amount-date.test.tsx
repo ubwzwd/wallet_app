@@ -102,6 +102,27 @@ describe('AmountField', () => {
     expect(onChange).toHaveBeenLastCalledWith('296');
   });
 
+  test('quick add evaluates an expression in the box before adding to it', () => {
+    const onChange = jest.fn();
+    renderThemed(
+      <AmountHarness initial="12.5+8.8" onChange={onChange} quickAdd allowExpression />,
+    );
+    fireEvent.press(screen.getByTestId('amt-plus-10'));
+    expect(onChange).toHaveBeenLastCalledWith('31.3');
+
+    fireEvent.press(screen.getByTestId('amt-double'));
+    expect(onChange).toHaveBeenLastCalledWith('62.6');
+  });
+
+  test('quick add leaves a box that cannot be evaluated untouched', () => {
+    const onChange = jest.fn();
+    renderThemed(<AmountHarness initial="12+" onChange={onChange} quickAdd allowExpression />);
+    fireEvent.press(screen.getByTestId('amt-plus-10'));
+    fireEvent.press(screen.getByTestId('amt-double'));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId('amt').props.value).toBe('12+');
+  });
+
   test('quick add starts from zero when the box is empty', () => {
     const onChange = jest.fn();
     renderThemed(<AmountHarness initial="" onChange={onChange} quickAdd />);
@@ -163,7 +184,7 @@ describe('DateField', () => {
   test('a malformed day is reported too, and not as "required"', () => {
     renderThemed(<DateHarness initial="2026-08-14" />);
     fireEvent.changeText(screen.getByTestId('date'), '2026-02-31');
-    expect(screen.getByText('有几项填得不对，请检查标红的字段')).toBeTruthy();
+    expect(screen.getByText('日期格式不对')).toBeTruthy();
     expect(screen.queryByText('这是必填项')).toBeNull();
   });
 
@@ -171,21 +192,17 @@ describe('DateField', () => {
     renderThemed(<DateHarness initial="2026-08-14" min="2026-08-01" max="2026-09-11" />);
     fireEvent.changeText(screen.getByTestId('date'), '2026-07-20');
     expect(screen.queryByText('日期不能晚于明天')).toBeNull();
-    expect(screen.getByText('有几项填得不对，请检查标红的字段')).toBeTruthy();
+    expect(screen.getByText('日期太早了')).toBeTruthy();
   });
 
   test('the range check itself is pure', () => {
     expect(dateFieldErrorKey('2026-08-14', '2026-09-11')).toBeNull();
     expect(dateFieldErrorKey('2026-09-12', '2026-09-11')).toEqual(['validation:date_not_future']);
     expect(dateFieldErrorKey('', '2026-09-11')).toBeNull();
-    expect(dateFieldErrorKey('14/08/2026')).toEqual([
-      'validation:date_invalid',
-      'errors:validation_error',
-    ]);
-    // `min` gets its own key chain: "太早" and "不能晚于明天" are opposite complaints.
+    expect(dateFieldErrorKey('14/08/2026')).toEqual(['validation:date_invalid']);
+    // `min` gets its own key: "太早" and "不能晚于明天" are opposite complaints.
     expect(dateFieldErrorKey('2026-07-20', '2026-09-11', '2026-08-01')).toEqual([
       'validation:date_too_early',
-      'errors:validation_error',
     ]);
   });
 });

@@ -3,9 +3,10 @@
  * "N more" row, each bar coloured from `chart.series[0..7]` — never from the four kind
  * colours, so 餐饮 can't end up looking like income.
  *
- * The label carries the category's `categoryDesc()` as a tooltip (hover on the web, long
- * press elsewhere): the stats endpoint doesn't send it, the caller reads it from the
- * category cache (decision §14.21).
+ * The label can carry the category's `categoryDesc()`: the stats endpoint doesn't send it,
+ * the caller reads it from the category cache (decision §14.21). It is revealed under the
+ * label on hover (react-native-web maps `onHoverIn` onto mouseenter) or on a long press —
+ * a DOM `title` attribute would be dropped by react-native-web, so there is no tooltip.
  */
 import React from 'react';
 import { Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
@@ -16,7 +17,6 @@ import { type Lang, useLang } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
 import { chartSeries, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { hoverTitle } from './CategoryPicker';
 import { Icon } from './Icon';
 import { Text } from './Text';
 
@@ -64,6 +64,7 @@ export function BarList({
   const activeLang = useLang();
   const l = lang ?? activeLang;
   const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [hovered, setHovered] = React.useState<string | null>(null);
   const id = testID ?? 'bar-list';
 
   const series = chartSeries(colors);
@@ -88,6 +89,8 @@ export function BarList({
                 if (hasChildren) setExpanded(open ? null : item.code);
                 onPress?.(item.code);
               }}
+              onHoverIn={() => setHovered(item.code)}
+              onHoverOut={() => setHovered((cur) => (cur === item.code ? null : cur))}
               onLongPress={() => setExpanded(open ? null : item.code)}
               testID={`${id}-row-${item.code}`}
               style={({ pressed }) => [
@@ -96,12 +99,7 @@ export function BarList({
               ]}
             >
               <View style={styles.header}>
-                <Text
-                  variant="body"
-                  numberOfLines={1}
-                  style={styles.label}
-                  {...hoverTitle(item.desc)}
-                >
+                <Text variant="body" numberOfLines={1} style={styles.label}>
                   {item.label}
                 </Text>
                 <Text variant="body" mono testID={`${id}-amount-${item.code}`}>
@@ -115,6 +113,11 @@ export function BarList({
                   />
                 ) : null}
               </View>
+              {item.desc && (hovered === item.code || open) ? (
+                <Text variant="caption" tone="muted" testID={`${id}-desc-${item.code}`}>
+                  {item.desc}
+                </Text>
+              ) : null}
               <View style={[styles.track, { backgroundColor: colors['bg.subtle'] }]}>
                 <View
                   testID={`${id}-bar-${item.code}`}

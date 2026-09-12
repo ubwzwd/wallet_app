@@ -61,20 +61,24 @@ export function ThemeProvider({ children, initialPref }: ThemeProviderProps): Re
   const [pref, setPrefState] = React.useState<ThemePref>(
     () => initialPref ?? parseThemePref(getPrefSync(PREF_NAMES.theme)),
   );
-  const [hydrated, setHydrated] = React.useState(initialPref !== undefined);
+  // Native's first read is asynchronous; if the user flips the switch while it is in
+  // flight, the value coming back from storage is already stale and must not win.
+  const chosenByUser = React.useRef(false);
 
   React.useEffect(() => {
-    if (hydrated) return;
+    if (initialPref !== undefined) return;
     let cancelled = false;
     void getPref(PREF_NAMES.theme).then((raw) => {
-      if (cancelled) return;
+      if (cancelled || chosenByUser.current) return;
       setPrefState(parseThemePref(raw));
-      setHydrated(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [hydrated]);
+    // Mount-only: the stored value is read exactly once, and never again after the user
+    // has made a choice of their own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const systemScheme = useSystemScheme();
   const scheme: ColorScheme = pref === 'system' ? systemScheme : pref;
@@ -85,8 +89,8 @@ export function ThemeProvider({ children, initialPref }: ThemeProviderProps): Re
       colors: palettes[scheme],
       pref,
       async setPref(next: ThemePref) {
+        chosenByUser.current = true;
         setPrefState(next);
-        setHydrated(true);
         await setPref(PREF_NAMES.theme, next);
       },
     }),

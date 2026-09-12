@@ -6,7 +6,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { ThemeProvider } from '@/theme/ThemeProvider';
-import { controls, darkColors, lightColors, radius, type } from '@/theme/tokens';
+import { controls, darkColors, icons, lightColors, radius, type } from '@/theme/tokens';
 import { Badge } from '@/ui/Badge';
 import { Card } from '@/ui/Card';
 import { Button } from '@/ui/Button';
@@ -22,6 +22,15 @@ import { Skeleton } from '@/ui/Skeleton';
 import { StatTile } from '@/ui/StatTile';
 import { Text } from '@/ui/Text';
 import { TextField } from '@/ui/TextField';
+
+/** The jest runtime reports a 750pt window, i.e. the narrow layout. Flip this to exercise
+ *  the wide one (sidebar / inline dropdown panels) without faking `Dimensions`. */
+let mockWideViewport = false;
+
+jest.mock('@/theme/useBreakpoint', () => {
+  const actual = jest.requireActual('@/theme/useBreakpoint') as typeof import('@/theme/useBreakpoint');
+  return { ...actual, useIsWide: () => mockWideViewport };
+});
 
 function renderThemed(node: React.ReactElement, pref: 'light' | 'dark' = 'light') {
   return render(<ThemeProvider initialPref={pref}>{node}</ThemeProvider>);
@@ -91,10 +100,17 @@ describe('Button', () => {
     expect(screen.getByTestId('b-primary').props.accessibilityRole).toBe('button');
   });
 
-  test('a small button still clears the 44px touch target through hit slop', () => {
-    renderThemed(<Button label="sm" size="sm" testID="b" />);
-    const slop = screen.getByTestId('b').props.hitSlop as { top: number; bottom: number };
+  test('a small icon-only button clears 44×44 on both axes through hit slop', () => {
+    renderThemed(<Button icon="pencil" iconOnly accessibilityLabel="编辑" size="sm" testID="b" />);
+    const slop = screen.getByTestId('b').props.hitSlop as {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+    };
+    // An icon-only button is square, so width == height == the `sm` height.
     expect(controls.button.heights.sm + slop.top + slop.bottom).toBeGreaterThanOrEqual(44);
+    expect(controls.button.heights.sm + slop.left + slop.right).toBeGreaterThanOrEqual(44);
   });
 
   test('loading marks the button busy and swallows presses', () => {
@@ -171,6 +187,26 @@ describe('TextField', () => {
     fireEvent.press(screen.getByLabelText('显示口令'));
     expect(screen.getByTestId('pw').props.secureTextEntry).toBe(false);
     expect(screen.getByLabelText('隐藏口令')).toBeTruthy();
+  });
+
+  test('the in-field icon button clears 44×44 through hit slop', () => {
+    renderThemed(
+      <TextField
+        label="口令"
+        secureToggle
+        secureShowLabel="显示口令"
+        value="hunter2"
+        onChangeText={() => undefined}
+      />,
+    );
+    const slop = screen.getByTestId('secure-toggle').props.hitSlop as {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+    };
+    expect(icons.grid + slop.top + slop.bottom).toBeGreaterThanOrEqual(44);
+    expect(icons.grid + slop.left + slop.right).toBeGreaterThanOrEqual(44);
   });
 
   test('the counter shows the used length against the limit', () => {
@@ -299,6 +335,57 @@ describe('Select', () => {
     fireEvent.press(trigger);
     expect(screen.getByTestId('src-trigger').props.accessibilityState).toMatchObject({
       expanded: true,
+    });
+  });
+
+  test('renderOption replaces the row body but keeps the row pressable', () => {
+    const onChange = jest.fn();
+    renderThemed(
+      <Select
+        label="账户"
+        value={null}
+        onChange={onChange}
+        options={options}
+        renderOption={(option, selected) => (
+          <Text testID={`custom-${option.value}`}>
+            {`${option.label}${selected ? ' ✓' : ''} · 余额`}
+          </Text>
+        )}
+        testID="src"
+      />,
+    );
+    fireEvent.press(screen.getByTestId('src-trigger'));
+    expect(screen.getByTestId('custom-cash')).toHaveTextContent('现金 · 余额');
+    fireEvent.press(screen.getByTestId('src-option-cash'));
+    expect(onChange).toHaveBeenCalledWith('cash');
+  });
+
+  describe('wide layout', () => {
+    beforeEach(() => {
+      mockWideViewport = true;
+    });
+    afterEach(() => {
+      mockWideViewport = false;
+    });
+
+    test('the overlay is an inline panel, and a click outside closes it', () => {
+      renderThemed(
+        <Select
+          label="账户"
+          value={null}
+          onChange={() => undefined}
+          options={options}
+          closeLabel="关闭"
+          testID="src"
+        />,
+      );
+      expect(screen.queryByTestId('src-sheet')).toBeNull();
+      fireEvent.press(screen.getByTestId('src-trigger'));
+      expect(screen.getByTestId('src-panel')).toBeTruthy();
+
+      fireEvent.press(screen.getByTestId('src-backdrop'));
+      expect(screen.queryByTestId('src-panel')).toBeNull();
+      expect(screen.queryByTestId('src-option-cash')).toBeNull();
     });
   });
 

@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import type { Money } from '@/api/types';
 import { type Lang, useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
+import { formatMonthShort, formatMoney } from '@/i18n/format';
 import { chartSeries, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { EmptyState } from './EmptyState';
@@ -46,12 +46,10 @@ export interface TrendChartProps {
 const PAD_Y = 18;
 const PAD_X = 10;
 
-/** `'2026-08'` → `'8月'` / `'Aug'`. */
+/** `'2026-08'` → `'8月'` / `'Aug'` — the shared formatter, so the axis reads the same here
+ *  as anywhere else a short month is printed (04 §5.4). */
 export function monthAbbrev(month: string, lang: Lang): string {
-  const [y, m] = month.split('-').map(Number);
-  return new Intl.DateTimeFormat(lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'short' }).format(
-    new Date(y, m - 1, 1),
-  );
+  return formatMonthShort(month, lang);
 }
 
 /** Y position of each point in a `height`-tall box; the scale always starts at 0. */
@@ -98,7 +96,7 @@ export function TrendChart({
       <EmptyState
         testID={`${id}-empty`}
         icon="info"
-        title={t('stats:home.month_empty')}
+        title={t('stats:home.trend_empty')}
         style={style}
       />
     );
@@ -138,11 +136,9 @@ export function TrendChart({
 
         <View style={[StyleSheet.absoluteFill, styles.columns]} pointerEvents="box-none">
           {months.map((m, i) => {
-            // Twelve two-decimal labels are too wide to sit side by side; the compact form
-            // has to come from `formatMoney` itself (a `compact` / `maximumFractionDigits`
-            // option) rather than from a private number formatter here, so this call site
-            // stays plain until `src/i18n/format.ts` grows one.
-            const label = formatMoney(m.expense, currency, l);
+            // Twelve two-decimal labels would never fit side by side, so each one uses
+            // `formatMoney`'s own compact notation ('¥1.2万' / '¥12K').
+            const label = formatMoney(m.expense, currency, l, { compact: true });
             const topRatio = peak === 0 ? 1 : 1 - values[i] / peak;
             return (
               <Pressable

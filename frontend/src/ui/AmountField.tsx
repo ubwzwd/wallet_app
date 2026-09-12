@@ -102,14 +102,29 @@ export function AmountField({
     onChange(trimMoney(evaluated));
   }
 
+  /**
+   * What the box is worth right now: a plain amount, or the value of the expression in it
+   * (`12.5+8.8` then `+10` must be 31.3, not 10). `null` means "nothing usable" — an empty
+   * box (the caller substitutes 0) or an expression that does not evaluate.
+   */
+  function currentAmount(): Money | null {
+    const raw = value.trim();
+    if (raw === '') return null;
+    const normalized = normalizeAmountInput(raw);
+    if (normalized !== null) return normalized;
+    return isExpression(raw) ? evaluateExpression(raw) : null;
+  }
+
   function applyDelta(delta: number): void {
-    const base = normalizeAmountInput(value) ?? '0';
-    onChange(trimMoney(addMoney(base, String(delta))));
+    const base = currentAmount();
+    // A box that holds neither an amount nor a working expression is left exactly as it is.
+    if (base === null && value.trim() !== '') return;
+    onChange(trimMoney(addMoney(base ?? '0', String(delta))));
     setExpression(null);
   }
 
   function applyDouble(): void {
-    const base = normalizeAmountInput(value);
+    const base = currentAmount();
     if (base === null) return;
     const doubled = evaluateExpression(`${base}*2`);
     if (doubled === null) return;

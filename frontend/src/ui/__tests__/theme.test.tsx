@@ -15,6 +15,7 @@ import {
   SANS_BY_WEIGHT,
   fontFamilyFor,
 } from '@/theme/fonts';
+import * as prefs from '@/utils/prefs';
 import { PREF_NAMES, prefKey } from '@/utils/prefs';
 
 function Probe(): React.JSX.Element {
@@ -117,6 +118,33 @@ describe('ThemeProvider', () => {
     act(() => notify?.({ colorScheme: 'light' }));
     expect(screen.getByTestId('scheme')).toHaveTextContent('light');
     expect(screen.getByTestId('canvas')).toHaveTextContent(lightColors['bg.canvas']);
+  });
+
+  test('a choice made while the stored value is still loading is not overwritten', async () => {
+    // Native storage is asynchronous: hold the read open, flip the switch, then let the
+    // (now stale) stored value arrive.
+    let release: ((raw: string | null) => void) | undefined;
+    jest.spyOn(prefs, 'getPref').mockImplementation(
+      () =>
+        new Promise<string | null>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    fireEvent.press(screen.getByTestId('to-dark'));
+    await waitFor(() => expect(screen.getByTestId('pref')).toHaveTextContent('dark'));
+
+    await act(async () => {
+      release?.('light');
+    });
+
+    expect(screen.getByTestId('pref')).toHaveTextContent('dark');
+    expect(screen.getByTestId('canvas')).toHaveTextContent(darkColors['bg.canvas']);
   });
 
   test('an unknown stored value falls back to "system"', () => {

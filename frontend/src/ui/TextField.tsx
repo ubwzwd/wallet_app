@@ -14,11 +14,22 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { controls, radius, space, type } from '@/theme/tokens';
+import { controls, icons, radius, space, type } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { fontFamilyFor } from '@/theme/fonts';
 import { Icon } from './Icon';
 import { Text } from './Text';
+
+/** An in-field icon button (reveal password, clear, ...) is only as big as its glyph, so it
+ *  needs hit slop on all four sides to reach the 44×44 minimum touch target (04 §6.4). */
+const ICON_HIT_SLOP = Math.ceil((44 - icons.grid) / 2);
+
+export const iconButtonHitSlop = {
+  top: ICON_HIT_SLOP,
+  bottom: ICON_HIT_SLOP,
+  left: ICON_HIT_SLOP,
+  right: ICON_HIT_SLOP,
+} as const;
 
 export interface TextFieldProps
   extends Omit<TextInputProps, 'style' | 'placeholderTextColor' | 'editable'> {
@@ -26,6 +37,8 @@ export interface TextFieldProps
   hint?: string;
   /** Any non-empty string switches the field into the error state and renders below it. */
   error?: string | null;
+  /** Leading / trailing adornment. A pressable one should carry `iconButtonHitSlop`, the
+   *  same slop the built-in reveal toggle uses. */
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
   /** Renders an eye toggle that flips `secureTextEntry`. */
@@ -138,7 +151,7 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
             accessibilityState={{ selected: revealed }}
             onPress={() => setRevealed((v) => !v)}
             testID="secure-toggle"
-            hitSlop={space['2']}
+            hitSlop={iconButtonHitSlop}
           >
             <Icon name={revealed ? 'eye-off' : 'eye'} color={colors['fg.muted']} />
           </Pressable>

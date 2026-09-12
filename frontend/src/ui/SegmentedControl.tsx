@@ -46,8 +46,8 @@ export function SegmentedControl<T extends string = string>({
           height: controls.button.heights.md,
           flexDirection: 'row',
           alignItems: 'stretch',
-          padding: 3,
-          gap: 2,
+          padding: space['1'],
+          gap: space['1'],
           borderRadius: radius.md,
           backgroundColor: colors['bg.subtle'],
         },
@@ -76,7 +76,9 @@ export function SegmentedControl<T extends string = string>({
               alignItems: 'center',
               justifyContent: 'center',
               gap: space['1'],
-              borderRadius: radius.md - 3,
+              // The inner pill sits inside the track's padding, so its radius is the
+              // track's minus that padding — still a token value, not a magic number.
+              borderRadius: radius.md - space['1'],
               backgroundColor: selected
                 ? colors['bg.raised']
                 : pressed

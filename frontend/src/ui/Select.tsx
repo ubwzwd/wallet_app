@@ -40,8 +40,12 @@ interface CommonProps {
   searchPlaceholder?: string;
   /** Shown when the search filter matches nothing. */
   emptyLabel?: string;
-  /** Accessible name of the sheet's × button; falls back to `label`. */
+  /** Accessible name of the sheet's × button (and of the wide-layout backdrop); falls back
+   *  to `label`. */
   closeLabel?: string;
+  /** Replace an option's body (the two-line default) with custom content — a balance, a
+   *  badge, a swatch. The row itself (press handling, selected state) stays ours. */
+  renderOption?(option: SelectOption, selected: boolean): React.ReactNode;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -80,6 +84,7 @@ export function Select(props: SelectProps | MultiSelectProps): React.JSX.Element
     searchPlaceholder,
     emptyLabel,
     closeLabel,
+    renderOption,
     style,
     testID,
   } = props;
@@ -178,23 +183,29 @@ export function Select(props: SelectProps | MultiSelectProps): React.JSX.Element
                 },
               ]}
             >
-              {option.icon ? (
-                <Icon name={option.icon} size={18} color={colors['fg.secondary']} />
-              ) : null}
-              <View style={styles.optionText}>
-                <Text
-                  variant="body"
-                  tone={option.disabled ? 'muted' : 'primary'}
-                  numberOfLines={1}
-                >
-                  {option.label}
-                </Text>
-                {option.hint !== undefined ? (
-                  <Text variant="caption" tone="muted" numberOfLines={1}>
-                    {option.hint}
-                  </Text>
-                ) : null}
-              </View>
+              {renderOption ? (
+                <View style={styles.optionText}>{renderOption(option, isSelected)}</View>
+              ) : (
+                <>
+                  {option.icon ? (
+                    <Icon name={option.icon} size={18} color={colors['fg.secondary']} />
+                  ) : null}
+                  <View style={styles.optionText}>
+                    <Text
+                      variant="body"
+                      tone={option.disabled ? 'muted' : 'primary'}
+                      numberOfLines={1}
+                    >
+                      {option.label}
+                    </Text>
+                    {option.hint !== undefined ? (
+                      <Text variant="caption" tone="muted" numberOfLines={1}>
+                        {option.hint}
+                      </Text>
+                    ) : null}
+                  </View>
+                </>
+              )}
               {isSelected ? <Icon name="check" size={18} color={colors['accent.solid']} /> : null}
             </Pressable>
           );
@@ -252,20 +263,32 @@ export function Select(props: SelectProps | MultiSelectProps): React.JSX.Element
         </Pressable>
 
         {open && wide ? (
-          <View
-            testID={testID ? `${testID}-panel` : 'select-panel'}
-            style={[
-              styles.panel,
-              {
-                zIndex: z.dropdown,
-                backgroundColor: colors['bg.raised'],
-                borderColor: colors['border.default'],
-                shadowColor: colors['fg.primary'],
-              },
-            ]}
-          >
-            {list}
-          </View>
+          <>
+            {/* Clicking anywhere outside the panel closes it — on the web there is no
+                modal above the page to catch that, so the panel brings its own invisible
+                full-bleed backdrop. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={closeLabel ?? label ?? placeholder}
+              onPress={close}
+              testID={testID ? `${testID}-backdrop` : 'select-backdrop'}
+              style={[styles.backdrop, { zIndex: z.dropdown - 1 }]}
+            />
+            <View
+              testID={testID ? `${testID}-panel` : 'select-panel'}
+              style={[
+                styles.panel,
+                {
+                  zIndex: z.dropdown,
+                  backgroundColor: colors['bg.raised'],
+                  borderColor: colors['border.default'],
+                  shadowColor: colors['fg.primary'],
+                },
+              ]}
+            >
+              {list}
+            </View>
+          </>
         ) : null}
       </View>
 
@@ -302,6 +325,9 @@ const styles = StyleSheet.create({
   wrap: { gap: space['1'], alignSelf: 'stretch' },
   anchor: { position: 'relative' },
   triggerText: { flex: 1 },
+  // Far enough in every direction to cover any viewport: the anchor is `position:
+  // relative`, so these offsets are relative to the trigger, not to the page.
+  backdrop: { position: 'absolute', top: -2000, bottom: -2000, left: -2000, right: -2000 },
   panel: {
     position: 'absolute',
     top: controls.textField.height + 4,
