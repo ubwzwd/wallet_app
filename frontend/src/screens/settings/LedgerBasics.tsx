@@ -34,7 +34,9 @@ export function LedgerBasics({ ledgerId, detail, canEdit }: LedgerBasicsProps): 
   const { t } = useTranslation();
   const lang = useLang();
   const currencies = useCurrencies();
-  const update = useUpdateLedger(ledgerId, { silent: true });
+  // Not `{ silent: true }`: this card renders no server error of its own, so a failed
+  // rename or currency change has to reach the user through the global error Toast.
+  const update = useUpdateLedger(ledgerId);
 
   const serverName = detail?.name ?? '';
   const [name, setName] = React.useState(serverName);

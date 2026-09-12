@@ -79,7 +79,6 @@
       "revoke_confirm": "Once revoked, this code stops working immediately.",
       "used_by": "Used by {{name}}",
       "limit_reached": "This ledger already has 10 members",
-      "expires_hint": "A code is valid for 10 minutes and can be used once.",
       "retry_hint": "The code can be entered as often as needed while it is valid - a typo locks nothing.",
       "expired": "This code has expired - generate a new one",
       "revoke_title": "Revoke invite code",

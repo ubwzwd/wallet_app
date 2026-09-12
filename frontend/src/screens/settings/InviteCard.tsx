@@ -39,9 +39,15 @@ function clipboard(): { writeText(text: string): Promise<void> } | null {
 export interface InviteCardProps {
   ledgerId: Uuid;
   members: readonly LedgerMember[];
+  /** `false` while `GET /ledgers/{id}/members` is still in flight. */
+  membersLoaded: boolean;
 }
 
-export function InviteCard({ ledgerId, members }: InviteCardProps): React.JSX.Element {
+export function InviteCard({
+  ledgerId,
+  members,
+  membersLoaded,
+}: InviteCardProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   const create = useCreateInvite(ledgerId);
@@ -51,7 +57,16 @@ export function InviteCard({ ledgerId, members }: InviteCardProps): React.JSX.El
   const [usedBy, setUsedBy] = React.useState<string | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
   // Who was in the ledger when the current code was handed out, so a newcomer stands out.
+  // The baseline is only meaningful once it was taken from a loaded member list: taking
+  // it from an empty, still-pending list would make every member look like a newcomer and
+  // throw the one-shot code away.
   const knownIds = React.useRef<readonly Uuid[]>([]);
+  const baselineReady = React.useRef(false);
+  // The latest list, so the baseline is taken when the code actually arrives.
+  const membersRef = React.useRef(members);
+  membersRef.current = members;
+  const loadedRef = React.useRef(membersLoaded);
+  loadedRef.current = membersLoaded;
 
   const secondsLeft = invite ? secondsUntil(invite.expires_at, now) : 0;
   const expired = invite !== null && secondsLeft === 0;
@@ -63,10 +78,18 @@ export function InviteCard({ ledgerId, members }: InviteCardProps): React.JSX.El
     return () => clearInterval(id);
   }, [invite, expired]);
 
+  // A code that arrived before the member list did still gets a baseline, from the first
+  // list that lands — the code is kept, only the "used by" comparison starts later.
+  React.useEffect(() => {
+    if (invite === null || baselineReady.current || !membersLoaded) return;
+    knownIds.current = members.map((m) => m.user_id);
+    baselineReady.current = true;
+  }, [invite, members, membersLoaded]);
+
   // Decision §14.29: joining deletes the code server-side. A member who was not there
   // when the code was issued is the person who used it.
   React.useEffect(() => {
-    if (invite === null) return;
+    if (invite === null || !baselineReady.current) return;
     const newcomer = members.find((m) => !knownIds.current.includes(m.user_id));
     if (!newcomer) return;
     setUsedBy(memberLabel(newcomer));
@@ -74,12 +97,18 @@ export function InviteCard({ ledgerId, members }: InviteCardProps): React.JSX.El
   }, [invite, members]);
 
   const atLimit = members.length >= MAX_MEMBERS;
+  // Without a loaded member list there is no baseline to compare a newcomer against.
+  const canGenerate = membersLoaded && !atLimit;
 
   const generate = (): void => {
-    knownIds.current = members.map((m) => m.user_id);
+    baselineReady.current = false;
     setUsedBy(null);
     create.mutate(undefined, {
       onSuccess: (next) => {
+        // Taken here, from the list as it stands when the code lands, so a member list
+        // that resolved during the request is part of the baseline rather than a newcomer.
+        knownIds.current = membersRef.current.map((m) => m.user_id);
+        baselineReady.current = loadedRef.current;
         setInvite(next);
         setNow(Date.now());
       },
@@ -135,7 +164,7 @@ export function InviteCard({ ledgerId, members }: InviteCardProps): React.JSX.El
             size="sm"
             onPress={generate}
             loading={create.isPending}
-            disabled={atLimit}
+            disabled={!canGenerate}
           />
           {atLimit ? (
             <Text variant="caption" tone="warning" testID="invite-limit">
@@ -196,7 +225,7 @@ export function InviteCard({ ledgerId, members }: InviteCardProps): React.JSX.El
               size="sm"
               onPress={generate}
               loading={create.isPending}
-              disabled={atLimit}
+              disabled={!canGenerate}
             />
           </View>
         </View>

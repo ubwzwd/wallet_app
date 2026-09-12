@@ -44,7 +44,13 @@ export default function LedgerSettingsScreen(): React.JSX.Element {
         isOwner={isOwner}
       />
 
-      {isOwner ? <InviteCard ledgerId={ledgerId} members={members} /> : null}
+      {isOwner ? (
+        <InviteCard
+          ledgerId={ledgerId}
+          members={members}
+          membersLoaded={!membersQuery.isPending}
+        />
+      ) : null}
 
       {isOwner && detail.data ? <DangerZone detail={detail.data} /> : null}
     </Page>

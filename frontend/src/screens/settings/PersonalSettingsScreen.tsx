@@ -99,6 +99,8 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
 
   const changeLanguage = (choice: LanguageChoice): void => {
     const value: Lang | null = choice === 'system' ? null : choice;
+    // Re-picking what is already selected is a no-op, like the other two fields.
+    if (!user || value === user.language) return;
     void applyLanguage(value);
     update.mutate({ language: value }, { onSuccess: (u) => setUser(u) });
   };

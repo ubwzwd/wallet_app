@@ -11,6 +11,7 @@ import { LedgerProvider } from '@/store';
 import {
   LEDGER_ID,
   USER_ID,
+  apiUrl,
   makeLedger,
   makeUser,
   mockApi,
@@ -297,4 +298,55 @@ test('renaming the ledger sends the name and the version it was read at', async 
     name: '家用',
     updated_at: '2026-09-01T12:00:00.000000Z',
   });
+});
+
+test('a slow member list cannot swallow a freshly generated code', async () => {
+  // The members request is held open, so the card has no baseline to compare against.
+  let resolveMembers: () => void = () => undefined;
+  const members = [makeMember()];
+  mockGet(`/ledgers/${LEDGER_ID}`, makeDetail());
+  api.mock.onGet(apiUrl(`/ledgers/${LEDGER_ID}/members`)).reply(
+    () =>
+      new Promise((resolve) => {
+        resolveMembers = () => resolve([200, { items: members, total: members.length }]);
+      }),
+  );
+  await renderWithProviders(
+    <LedgerProvider ledgerId={LEDGER_ID} ledgers={[makeLedger({ role: 'owner' })]}>
+      <LedgerSettingsScreen />
+    </LedgerProvider>,
+    { auth: { status: 'authenticated', user: makeUser() } },
+  );
+
+  // Generating is off the table until the baseline can be taken.
+  const button = await screen.findByTestId('invite-generate');
+  expect(button.props.accessibilityState?.disabled).toBe(true);
+  fireEvent.press(button);
+  expect(api.mock.history.post).toHaveLength(0);
+
+  // The code itself lands after the list does: the list is the baseline, not a newcomer.
+  mockPost(`/ledgers/${LEDGER_ID}/invites`, makeInvite());
+  await act(async () => {
+    resolveMembers();
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId('invite-generate').props.accessibilityState?.disabled).toBeFalsy(),
+  );
+  fireEvent.press(screen.getByTestId('invite-generate'));
+
+  expect(await screen.findByTestId('invite-code')).toHaveTextContent(/472903/);
+  expect(screen.queryByTestId('invite-used-by')).toBeNull();
+});
+
+test('a failed rename is visible even though the card renders no error of its own', async () => {
+  // The card renders no inline server error, so the mutation must not be `silent`:
+  // the failure has to reach the global error chain (04 §3.9).
+  const { handlers } = await renderSettings('owner', [makeMember(), BOB]);
+  mockPatch(`/ledgers/${LEDGER_ID}`, { code: 'internal_error', message: 'boom' }, 500);
+
+  fireEvent.changeText(await screen.findByTestId('ledger-name-input'), '家用');
+  fireEvent.press(screen.getByTestId('ledger-name-save'));
+
+  await waitFor(() => expect(handlers.notify).toHaveBeenCalled());
+  expect(handlers.notify.mock.calls[0]?.[0]).toBe('error');
 });

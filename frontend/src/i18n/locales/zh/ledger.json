@@ -78,7 +78,6 @@
       "revoke_confirm": "作废后这个码立刻失效，对方就用不了了。",
       "used_by": "已被 {{name}} 使用",
       "limit_reached": "这个账本成员已满（10 人）",
-      "expires_hint": "码有效 10 分钟，只能用一次。",
       "retry_hint": "码在有效期内可以反复输入，输错不会锁定。",
       "expired": "这个码已经过期了，重新生成一个吧",
       "revoke_title": "作废邀请码",

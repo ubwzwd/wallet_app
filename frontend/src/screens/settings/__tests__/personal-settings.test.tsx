@@ -164,3 +164,13 @@ test('logging out clears the session and lands on /login', async () => {
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/login'));
 });
+
+test('re-picking the language already in use sends nothing', async () => {
+  await renderSettings(makeUser({ language: 'zh' }));
+
+  await act(async () => {
+    fireEvent.press(within(screen.getByTestId('settings-language')).getByText('中文'));
+  });
+
+  expect(patchBodies()).toEqual([]);
+});
