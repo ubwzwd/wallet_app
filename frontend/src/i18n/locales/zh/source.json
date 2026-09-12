@@ -7,24 +7,43 @@
   },
   "list": {
     "title": "账户",
+    "assets": "资产",
+    "liabilities": "负债",
+    "net_worth": "净资产",
+    "new_button": "新建账户",
+    "error_retry": "加载失败，请重试",
     "group_subtotal": "小计 {{amount}}",
     "balance_debt": "欠 {{amount}}",
+    "rate_date": "汇率日期 {{date}}",
     "archived_section": "已归档（{{count}}）",
+    "excluded_archived": "不含 {{count}} 个已归档账户",
+    "archived_expand": "展开已归档账户",
+    "archived_collapse": "收起已归档账户",
     "archived_hint": "余额不计入净资产",
     "archived_at": "归档于 {{date}}",
     "empty": {
-      "title": "还没有账户，添加一个开始记账"
+      "title": "还没有账户，添加一个开始记账",
+      "button": "新建账户"
     },
     "archive_action": "归档",
     "unarchive_action": "取消归档",
+    "archive_confirm_title": "归档这个账户？",
     "archive_confirm": "归档后不能再记账、也不能作为导入目标，历史记录保留。该账户余额 {{balance}} 将从净资产中移除。",
+    "unarchive_confirm_title": "取消归档？",
+    "unarchive_confirm": "取消归档后可以继续记账，该账户余额 {{balance}} 会重新计入净资产。",
+    "archived_toast": "已归档「{{name}}」",
+    "unarchived_toast": "已取消归档「{{name}}」",
     "delete_action": "删除",
+    "delete_confirm_title": "删除这个账户？",
+    "delete_confirm": "删除后不可恢复。只有没有交易的账户才能删除。",
+    "deleted_toast": "已删除「{{name}}」",
     "delete_disabled_hint": "这个账户下有交易，只能归档",
     "no_rate_hint": "有 {{count}} 个账户暂时无法折算"
   },
   "form": {
     "new_title": "新建账户",
     "edit_title": "编辑账户",
+    "load_error": "加载失败，请重试",
     "name_label": "名称",
     "name_duplicate_hint": "已有同名账户，仍会按账户区分",
     "type_label": "类型",
@@ -32,9 +51,17 @@
     "currency_locked_hint": "币种创建后不能改，改了历史交易的含义会乱；如果要换币种，请新建一个账户并把旧的归档",
     "opening_balance_label": "期初余额",
     "opening_balance_hint": "余额 = 期初余额 + 这个账户下所有交易金额之和。期初余额记在账户上，不是一笔交易，它不会出现在交易列表里。",
+    "opening_balance_invalid": "金额格式不对，最多 4 位小数",
     "credit_debt_label": "当前欠款",
     "credit_debt_hint": "填你现在欠银行多少，会存成负数",
+    "type_change_converted": "已按新类型换算期初余额：{{amount}}",
+    "opening_balance_change_title": "修改期初余额",
+    "net_worth_preview": "净资产 {{from}} → {{to}}",
     "opening_balance_change_confirm": "这会立刻影响所有历史余额与净资产，确定要保存吗？",
-    "archived_toggle": "已归档"
+    "archived_toggle": "已归档",
+    "submit_create": "创建账户",
+    "submit_save": "保存",
+    "created_toast": "已创建「{{name}}」",
+    "saved_toast": "已保存「{{name}}」"
   }
 }
