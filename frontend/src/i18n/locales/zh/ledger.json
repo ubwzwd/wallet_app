@@ -33,7 +33,16 @@
     "basic": {
       "name_label": "账本名",
       "base_currency_label": "基准币种",
-      "base_currency_warning": "改成 {{currency}} 之后，首页统计和所有折算金额都会按 {{currency}} 显示。折算用的是每笔交易各自发生日的汇率，原始金额和币种不变，改回原币种数字也会回来。将重新折算 {{count}} 笔交易。"
+      "base_currency_warning": "改成 {{currency}} 之后，首页统计和所有折算金额都会按 {{currency}} 显示。折算用的是每笔交易各自发生日的汇率，原始金额和币种不变，改回原币种数字也会回来。将重新折算 {{count}} 笔交易。",
+      "title": "基本信息",
+      "created_at": "建于 {{date}}",
+      "save": "保存",
+      "name_saved_toast": "账本名已更新",
+      "currency_change_title": "改基准币种会重算全部历史",
+      "currency_change_confirm": "仍要改成 {{currency}}",
+      "currency_change_cancel": "先不改",
+      "currency_saved_toast": "基准币种已改为 {{currency}}",
+      "read_only_hint": "只有创建者可以改账本名和基准币种"
     },
     "members": {
       "title": "成员",
@@ -45,7 +54,19 @@
       "transfer_ownership": "转让创建者",
       "transfer_confirm": "把创建者转让给 {{name}}？转让后你会变成成员。",
       "leave_action": "退出这个账本",
-      "leave_disabled_hint": "你是这个账本的创建者，请先把创建者转让给别人再退出"
+      "leave_disabled_hint": "你是这个账本的创建者，请先把创建者转让给别人再退出",
+      "count": "{{count}} / 10",
+      "joined_at": "加入于 {{date}}",
+      "remove_title": "移出成员",
+      "removed_toast": "已移出 {{name}}",
+      "transfer_title": "转让创建者",
+      "transfer_select_label": "转让给",
+      "transfer_placeholder": "选一位成员",
+      "transfer_submit": "转让",
+      "transferred_toast": "已把创建者转让给 {{name}}",
+      "leave_title": "退出账本",
+      "leave_confirm": "退出《{{name}}》？你记的账会保留在账本里，想再进来需要新的邀请码。",
+      "left_toast": "已退出《{{name}}》"
     },
     "invite": {
       "title": "邀请码",
@@ -56,13 +77,21 @@
       "regenerate": "重新生成",
       "revoke_confirm": "作废后这个码立刻失效，对方就用不了了。",
       "used_by": "已被 {{name}} 使用",
-      "limit_reached": "这个账本成员已满（10 人）"
+      "limit_reached": "这个账本成员已满（10 人）",
+      "retry_hint": "码在有效期内可以反复输入，输错不会锁定。",
+      "expired": "这个码已经过期了，重新生成一个吧",
+      "revoke_title": "作废邀请码",
+      "revoked_toast": "邀请码已作废",
+      "copied_toast": "邀请码已复制",
+      "code_label": "邀请码 {{code}}"
     },
     "danger": {
       "delete_title": "删除账本",
       "delete_confirm_body": "这会永久删除《{{name}}》里的 {{transactions}} 条交易、{{sources}} 个账户、{{imports}} 批导入记录，所有成员都会失去访问，无法恢复。",
       "delete_confirm_label": "请输入账本名以确认：",
-      "delete_action": "删除账本"
+      "delete_action": "删除账本",
+      "title": "危险操作",
+      "deleted_toast": "已删除《{{name}}》"
     }
   }
 }

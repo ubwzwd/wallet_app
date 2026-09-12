@@ -22,5 +22,13 @@
     "ledger_settings": "账本设置",
     "switch_ledger": "切换账本",
     "logout": "登出"
-  }
+  },
+  "section": {
+    "profile": "关于我",
+    "device": "这台设备",
+    "entries": "入口"
+  },
+  "save": "保存",
+  "display_name_saved_toast": "显示名已更新",
+  "base_currency_saved_toast": "默认币种已更新"
 }
