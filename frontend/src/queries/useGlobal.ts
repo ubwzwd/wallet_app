@@ -3,7 +3,7 @@
  * and `/import-format`. All of them are anonymous-readable and change rarely.
  */
 import React from 'react';
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
 import { categoriesApi } from '@/api/categories';
 import { configApi } from '@/api/config';
@@ -41,9 +41,11 @@ export type CategoriesResult = UseQueryResult<CategoryTree> & {
  * native), then the background request replaces it whenever `version` differs.
  */
 export function useCategories(): CategoriesResult {
-  const syncCached = React.useRef<CategoryTree | null>(
+  // Lazy initialiser: the synchronous preference is read exactly once per mount, not on
+  // every render.
+  const [syncCached] = React.useState<CategoryTree | null>(() =>
     getJsonPrefSync<CategoryTree>(PREF_NAMES.categories),
-  ).current;
+  );
   const [asyncCached, setAsyncCached] = React.useState<CategoryTree | null>(null);
 
   React.useEffect(() => {
@@ -64,11 +66,24 @@ export function useCategories(): CategoriesResult {
     gcTime: Infinity,
     networkMode: 'offlineFirst',
     refetchOnWindowFocus: false,
-    // `updatedAt: 0` keeps the seeded copy stale, so the background request still runs.
+    // The persisted copy seeds the cache so an offline start still has names; `updatedAt: 0`
+    // marks it as never-fetched for the one-shot revalidation below (`staleTime: Infinity`
+    // means staleness alone would never trigger it).
     initialData: syncCached ?? undefined,
     initialDataUpdatedAt: syncCached ? 0 : undefined,
     placeholderData: asyncCached ?? undefined,
   });
+
+  // 04 §2.3: the seeded tree must still be checked against the server once, so a new
+  // `version` replaces it. Exactly once per cache entry — `dataUpdatedAt` stops being 0
+  // as soon as the request lands.
+  const qc = useQueryClient();
+  React.useEffect(() => {
+    const state = qc.getQueryState<CategoryTree>(qk.global.categories());
+    if (state?.data && state.dataUpdatedAt === 0 && state.fetchStatus === 'idle') {
+      void qc.refetchQueries({ queryKey: qk.global.categories() });
+    }
+  }, [qc]);
 
   const persistedVersion = React.useRef<string | null>(syncCached?.version ?? null);
   const data = query.data;

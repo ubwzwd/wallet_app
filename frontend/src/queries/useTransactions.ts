@@ -61,7 +61,10 @@ export function useInfiniteTransactions(
   l: Uuid | undefined,
   params: TransactionListParams,
 ): UseInfiniteQueryResult<InfiniteData<TransactionListResponse, number>> {
-  const pageParams: TransactionListParams = { ...params, limit: TX_PAGE_SIZE };
+  // The paging fields belong to this hook, not to the caller: dropping any `offset` the
+  // caller carried over from `useTransactions` keeps identical filters on one cache entry.
+  const { offset: _ignored, ...filters } = params;
+  const pageParams: TransactionListParams = { ...filters, limit: TX_PAGE_SIZE };
   return useInfiniteQuery({
     queryKey: [...qk.ledger(l ?? '').txList(pageParams), 'infinite'] as const,
     queryFn: ({ pageParam }) =>
@@ -93,8 +96,9 @@ export function useTransaction(
  * There is no `GET .../transfer/{pair_id}` endpoint (03 §5.30–§5.34 only has POST / PATCH /
  * DELETE / unpair), so the pair is read through one of its legs: `GET /transactions/{tid}`
  * carries the whole `pair` (04 §3.3, §4.7). `legTxId` is the leg the caller came from; the
- * write hooks below seed the same key with the `TransferPair` they get back, so a page
- * reached straight from a mutation already has it. Without a leg id the query stays idle.
+ * create / update transfer hooks below seed this key with the `TransferPair` they get back,
+ * so a page reached straight from a mutation already has it. Without a leg id and without a
+ * seeded pair the query stays idle.
  */
 export function useTransfer(
   l: Uuid | undefined,
@@ -170,7 +174,10 @@ export function useCreateTransfer(
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransferCreate) => txApi.createTransfer(l, b),
-    onSuccess: (pair) => invalidateTransfer(qc, l, pair.pair_id),
+    onSuccess: (pair) => {
+      qc.setQueryData(qk.ledger(l).transfer(pair.pair_id), pair);
+      invalidateTransfer(qc, l, pair.pair_id);
+    },
   });
 }
 
@@ -182,7 +189,10 @@ export function useUpdateTransfer(
   return useMutation({
     mutationFn: (b: TransferUpdate) => txApi.updateTransfer(l, pairId, b),
     meta: { detailKey: qk.ledger(l).transfer(pairId) },
-    onSuccess: () => invalidateTransfer(qc, l, pairId),
+    onSuccess: (pair) => {
+      qc.setQueryData(qk.ledger(l).transfer(pairId), pair);
+      invalidateTransfer(qc, l, pairId);
+    },
   });
 }
 

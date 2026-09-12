@@ -30,7 +30,10 @@ function makeClient(): QueryClient {
   return new QueryClient({
     // `gcTime: Infinity` skips query-core's garbage-collection timers, which would
     // otherwise keep the jest worker alive for five minutes after the last test.
-    defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: 0 } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { retry: 0, gcTime: Infinity },
+    },
   });
 }
 

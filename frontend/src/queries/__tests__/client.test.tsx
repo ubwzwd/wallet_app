@@ -29,7 +29,7 @@ async function runMutation(
     meta?: { detailKey?: readonly unknown[]; silent?: boolean };
   },
 ): Promise<void> {
-  const mutation = qc.getMutationCache().build(qc, { ...options, retry: 0 });
+  const mutation = qc.getMutationCache().build(qc, { ...options, retry: 0, gcTime: Infinity });
   await mutation.execute(undefined).catch(() => undefined);
 }
 
@@ -73,6 +73,7 @@ describe('QueryCache.onError', () => {
         queryKey: qk.global.me(),
         queryFn: () => Promise.reject(err(401, 'unauthorized', 'Not authenticated')),
         retry: false,
+        gcTime: Infinity,
       })
       .catch(() => undefined);
     expect(deps.onUnauthorized).toHaveBeenCalledTimes(1);
@@ -87,6 +88,7 @@ describe('QueryCache.onError', () => {
         queryKey: qk.ledger(L).detail(),
         queryFn: () => Promise.reject(err(404, 'not_found')),
         retry: false,
+        gcTime: Infinity,
       })
       .catch(() => undefined);
     expect(deps.onLedgerGone).toHaveBeenCalledWith(L);
@@ -100,6 +102,7 @@ describe('QueryCache.onError', () => {
         queryKey: qk.ledger(L).tx('t1'),
         queryFn: () => Promise.reject(err(404, 'not_found')),
         retry: false,
+        gcTime: Infinity,
       })
       .catch(() => undefined);
     expect(deps.onLedgerGone).not.toHaveBeenCalled();

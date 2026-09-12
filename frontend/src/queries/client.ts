@@ -77,7 +77,7 @@ export function createQueryClient(deps: QueryHandlers): QueryClient {
   });
 
   const mutationCache = new MutationCache({
-    onError: (
+    onError: async (
       error: Error,
       _variables: unknown,
       _context: unknown,
@@ -92,8 +92,10 @@ export function createQueryClient(deps: QueryHandlers): QueryClient {
 
       // 04 §3.8: 409 `stale_update` is handled in exactly one place.
       if (e.status === 409 && e.code === 'stale_update') {
+        // §3.8 step 1: await the refetch so the form's own `onError` (step 3) merges
+        // against fresh server values; query-core awaits this callback.
         const detailKey = mutation.meta?.detailKey;
-        if (detailKey) void client?.invalidateQueries({ queryKey: detailKey });
+        if (detailKey) await client?.invalidateQueries({ queryKey: detailKey });
         deps.notify('warning', translate(e));
         return;
       }

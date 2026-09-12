@@ -14,12 +14,21 @@ import {
   makeTransaction,
 } from '@/test/fixtures';
 import { apiUrl, mockApi, mockGet, mockPost, type MockApi } from '@/test/mockApi';
-import { PREF_NAMES, getJsonPref, setJsonPref } from '@/utils/prefs';
+import { PREF_NAMES, getJsonPref, getJsonPrefSync, setJsonPref } from '@/utils/prefs';
 
 import { useCategories, useCurrencies } from '../useGlobal';
 import { useMemberNames } from '../useLedgers';
 import { useCreateTransaction, useInfiniteTransactions } from '../useTransactions';
 import { useStatsTrend } from '../useStats';
+
+// jest-expo runs as native, where `getJsonPrefSync` always returns null; mocking it lets
+// the web branch (synchronous `initialData`) be exercised too.
+jest.mock('@/utils/prefs', () => ({
+  ...jest.requireActual('@/utils/prefs'),
+  getJsonPrefSync: jest.fn(() => null),
+}));
+
+const syncPref = jest.mocked(getJsonPrefSync);
 
 const L = LEDGER_ID;
 
@@ -27,7 +36,10 @@ function makeClient(): QueryClient {
   return new QueryClient({
     // `gcTime: Infinity` skips query-core's garbage-collection timers, which would
     // otherwise keep the jest worker alive for five minutes after the last test.
-    defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: 0 } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { retry: 0, gcTime: Infinity },
+    },
   });
 }
 
@@ -69,6 +81,7 @@ describe('query hooks', () => {
 
   beforeEach(async () => {
     await AsyncStorage.clear();
+    syncPref.mockReturnValue(null);
     api = mockApi();
     qc = makeClient();
   });
@@ -98,6 +111,28 @@ describe('query hooks', () => {
     expect(result.current.index?.byL1['food']).toBeTruthy();
     expect(result.current.isPlaceholderData).toBe(true);
 
+    await waitFor(() => expect(result.current.tree?.version).toBe(CATEGORY_VERSION));
+    await waitFor(async () =>
+      expect((await getJsonPref<{ version: string }>(PREF_NAMES.categories))?.version).toBe(
+        CATEGORY_VERSION,
+      ),
+    );
+  });
+
+  test('useCategories paints from the web preference on the very first render', async () => {
+    const stored = makeCategoryTree({ version: '2026-01-01' });
+    const fresh = makeCategoryTree({ version: CATEGORY_VERSION });
+    syncPref.mockReturnValue(stored);
+    mockGet('/categories', fresh);
+
+    const { result } = renderHook(() => useCategories(), { wrapper: wrapper(qc) });
+
+    // No `waitFor`: the stored tree is `initialData`, so it is there before the first paint.
+    expect(result.current.tree?.version).toBe('2026-01-01');
+    expect(result.current.index?.byL1['food']).toBeTruthy();
+    expect(result.current.isPlaceholderData).toBe(false);
+
+    // `initialDataUpdatedAt: 0` keeps it stale, so the background request still replaces it.
     await waitFor(() => expect(result.current.tree?.version).toBe(CATEGORY_VERSION));
     await waitFor(async () =>
       expect((await getJsonPref<{ version: string }>(PREF_NAMES.categories))?.version).toBe(
