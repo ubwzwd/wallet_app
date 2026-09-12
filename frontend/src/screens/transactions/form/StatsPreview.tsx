@@ -75,7 +75,11 @@ export function StatsPreview({
   const delta = deltaFor(kind, magnitude);
   if (delta === null) return null;
 
-  const after = addMoney(subMoney(before, baseline ?? '0'), delta);
+  // The baseline is what this very entry already puts into the total, so it comes out the
+  // same way it went in: a refund contributes a *negative* delta, and removing it as a
+  // positive magnitude would move the line by twice the refund.
+  const base = baseline == null ? '0' : (deltaFor(kind, baseline) ?? '0');
+  const after = addMoney(subMoney(before, base), delta);
   const category = index?.byCode[categoryL1];
   const name = category ? categoryName(category, lang) : categoryL1;
   // "本月餐饮" only reads right for the month we are actually in; any other month is

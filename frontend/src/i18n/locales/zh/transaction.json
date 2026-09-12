@@ -100,7 +100,6 @@
     "refund_over_hint": "这笔退款会让累计退款超过原单金额（原单 {{original}}，已退 {{refunded}}，本次 {{current}}）",
     "refund_target_currency_hint": "退到了另一个账户，账户余额会各自变化，统计不受影响",
     "refund_only_refundable_toggle": "只看还有可退余额",
-    "refund_kind_fixed_hint": "仅支出",
     "impact_preview": "{{label}} {{before}} → {{after}}",
     "impact_this_month": "本月{{category}}",
     "from_import": "这条来自导入 #{{batch}}",
@@ -109,7 +108,6 @@
     "conflict_title": "这条记录刚被别人改过，下面这些地方和你的改动不一样",
     "conflict_server_value": "服务器上现在是：{{value}}",
     "conflict_use_server": "用服务器的",
-    "leave_confirm_hint": "有未保存的改动，确定要离开吗？",
     "keyboard_hint_title": "快捷键",
     "keyboard_hint": {
       "save": "保存",

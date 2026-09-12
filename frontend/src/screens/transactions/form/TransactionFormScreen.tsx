@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { isApiClientError } from '@/api/errors';
 import type { Money, Transaction, TxKind } from '@/api/types';
+import { evaluateExpression, isExpression } from '@/domain/calc';
 import { KINDS } from '@/domain/kinds';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
@@ -29,6 +30,7 @@ import {
   Skeleton,
   Text,
   toast,
+  trimMoney,
   type Shortcut,
 } from '@/ui';
 
@@ -36,7 +38,7 @@ import { RefundFields, RefundOverWarning, useRefundOrigin } from './RefundFields
 import { SingleFields } from './SingleFields';
 import { StatsPreview } from './StatsPreview';
 import { TransferFields } from './TransferFields';
-import type { TxFormValues } from './schemas';
+import { rawMessage, type TxFormValues } from './schemas';
 import { useFormShortcuts } from './useFormShortcuts';
 import { useLeaveGuard } from './useLeaveGuard';
 import {
@@ -83,6 +85,12 @@ export interface TransactionFormProps {
   onSwitchToIncome?(): void;
   /** Editing a two-leg transfer: no tabs, no single-leg checkbox. */
   lockShape?: boolean;
+  /**
+   * Editing a single-leg transfer: the tabs stay (expense ⇄ income is still allowed for
+   * other kinds), but one leg can never become two here — decision §1.2 has no conversion,
+   * and `PATCH .../transactions/{id}` carries no second account.
+   */
+  lockLegs?: boolean;
   /** Remount key — bumping it puts the cursor back in the amount box. */
   focusKey?: number;
   testID?: string;
@@ -102,6 +110,7 @@ export function TransactionForm({
   statsBaseline,
   onSwitchToIncome,
   lockShape = false,
+  lockLegs = false,
   focusKey = 0,
   testID,
 }: TransactionFormProps): React.JSX.Element {
@@ -113,6 +122,13 @@ export function TransactionForm({
   const [helpOpen, setHelpOpen] = React.useState(false);
 
   const submit = (again: boolean): void => {
+    // `AmountField` only evaluates `12.5+8.8*2` when it loses focus, so ⌘S with the caret
+    // still in the box would otherwise submit the expression itself (04 §4.6, §14.52 A19).
+    const raw = form.getValues('amount');
+    if (isExpression(raw)) {
+      const evaluated = evaluateExpression(raw);
+      if (evaluated !== null) form.setValue('amount', trimMoney(evaluated), { shouldDirty: true });
+    }
     void form.handleSubmit((v) => onSubmit(v, { again }))();
   };
 
@@ -127,7 +143,9 @@ export function TransactionForm({
           setKind(next);
         },
     onHelp: () => setHelpOpen(true),
-    enabled: !submitting,
+    // An overlay owns the keyboard while it is up: `Esc` there means "close me", and the
+    // digits belong to whatever it is showing — not to the tab row behind it.
+    enabled: !submitting && !helpOpen && !refund.pickerOpen,
   });
 
   const shortcuts: Shortcut[] = [
@@ -193,6 +211,7 @@ export function TransactionForm({
             ctrl={ctrl}
             onSwitchToIncome={onSwitchToIncome}
             lockShape={lockShape}
+            lockLegs={lockLegs}
             disabled={submitting}
             autoFocusAmount={focusKey > 0}
           />
@@ -286,7 +305,10 @@ export function applyFieldErrors(
   for (const [name, message] of Object.entries(error.fields)) {
     const field = SERVER_FIELDS.find((f) => f === name);
     if (!field) continue;
-    ctrl.form.setError(field, { type: 'server', message });
+    // Every control renders its error through `txValidationMessage`, which resolves a
+    // `validation` key — so the server's own prose has to be marked as finished copy,
+    // otherwise it would be looked up and come out as 「这是必填项」.
+    ctrl.form.setError(field, { type: 'server', message: rawMessage(message) });
     placed = true;
   }
   if (!placed) fallback();

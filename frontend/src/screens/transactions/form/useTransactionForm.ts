@@ -26,7 +26,7 @@ import type {
 } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { kindOfCategoryTree } from '@/domain/kinds';
-import { normalizeAmountInput } from '@/domain/money';
+import { cmpMoney, normalizeAmountInput } from '@/domain/money';
 import { useLang, type Lang } from '@/i18n';
 import { todayLocalIso } from '@/i18n/format';
 import { useCategories, useCurrencies, useSources, type CurrenciesResult } from '@/queries';
@@ -213,9 +213,12 @@ export function useTransactionForm(opts: UseTransactionFormOptions): TxFormContr
         setValue('category_l1', null);
         setValue('category_l2', null);
       }
-      if (next !== 'refund') setValue('refund_of', null);
+      // While creating, leaving the refund tab simply drops the link. While editing it is
+      // kept on purpose: decision §14.3 wants the user to unlink an existing original
+      // explicitly, and `EditTransactionScreen` reads this value to say so.
+      if (next !== 'refund' && mode === 'create') setValue('refund_of', null);
     },
-    [getValues, setValue],
+    [getValues, mode, setValue],
   );
 
   const remember = React.useCallback(
@@ -331,12 +334,19 @@ export function toTransactionUpdate(
 
   if (!sameValue(next.source_id, original.source_id)) patch.source_id = next.source_id;
   if (!sameValue(next.kind, original.kind)) patch.kind = next.kind;
-  if (Number(next.amount) !== Number(original.amount)) patch.amount = next.amount;
+  // Money is compared as money, never through a float (`src/domain/money.ts` exists for
+  // exactly this): `cmpMoney` sees `-38.5` and `-38.5000` as the same amount.
+  if (cmpMoney(next.amount, original.amount) !== 0) patch.amount = next.amount;
   if (!sameValue(next.currency, original.currency)) patch.currency = next.currency;
   if (!sameValue(next.occurred_at, original.occurred_at)) patch.occurred_at = next.occurred_at;
   if (!sameValue(next.note, original.note)) patch.note = next.note;
 
   if (v.kind === 'transfer') {
+    // The leg's direction and the sign of its amount are one fact (backend
+    // `_validate_single` / the `transfer_role` CHECK): flipping 转出 ⇄ 转入 has to send both.
+    if (!sameValue(next.transfer_role, original.transfer_role)) {
+      patch.transfer_role = next.transfer_role;
+    }
     if (!sameValue(next.transfer_subtype, original.transfer_subtype)) {
       patch.transfer_subtype = next.transfer_subtype;
     }

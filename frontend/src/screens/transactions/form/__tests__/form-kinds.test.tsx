@@ -4,6 +4,7 @@
 import React from 'react';
 import { Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook } from '@testing-library/react-native';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,6 +33,7 @@ import {
 } from '@/test';
 
 import TransactionFormScreen from '../TransactionFormScreen';
+import { useFormShortcuts } from '../useFormShortcuts';
 
 let queryClient: QueryClient;
 let api: MockApi;
@@ -351,4 +353,137 @@ test('"保存并再记一笔" clears the amount, keeps account and category, and
 
   // Still on the form — a second entry can go straight in.
   expect(screen.getByTestId('tx-submit-again')).toBeTruthy();
+});
+
+test('「复制一笔」 copies account / merchant / category / amount and moves the date to today', async () => {
+  const ORIGINAL = makeTransaction({
+    id: 'tx-to-copy',
+    source_id: CREDIT.id,
+    kind: 'expense',
+    amount: '-88.0000',
+    currency: 'CNY',
+    occurred_at: '2026-07-01',
+    merchant: '山姆',
+    note: '囤货',
+    category_l1: 'groceries',
+    category_l2: null,
+  });
+  mockGet(`/ledgers/${LEDGER_ID}/transactions/tx-to-copy`, ORIGINAL);
+
+  renderRouter(ROUTES, { initialUrl: `${NEW_URL}?copy_of=tx-to-copy`, wrapper: Wrapper });
+
+  await waitFor(() => expect(screen.getByTestId('tx-amount').props.value).toBe('88.00'));
+  expect(screen.getByTestId('tx-merchant').props.value).toBe('山姆');
+  expect(screen.getByTestId('tx-note').props.value).toBe('囤货');
+  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name);
+  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('生活购物');
+  // A copy is a new entry made today, not a second copy of an old day (04 §4.7).
+  expect(screen.getByTestId('tx-date').props.value).toBe(todayLocalIso());
+  expect(screen.getByTestId('tx-date').props.value).not.toBe(ORIGINAL.occurred_at);
+});
+
+test('⌘S saves the *value* of an expression still sitting in the amount box', async () => {
+  renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=expense`, wrapper: Wrapper });
+
+  // No blur: `AmountField` has not evaluated anything yet, the raw text is what the form
+  // holds — pressing 保存 must still save 30.10, not fail on 「金额只能是数字」.
+  fireEvent.changeText(await screen.findByTestId('tx-amount'), '12.5+8.8*2');
+  await pickFood();
+  fireEvent.press(screen.getByTestId('tx-submit'));
+
+  await waitFor(() => expect(postedTransactions()).toHaveLength(1));
+  expect(postedTransactions()[0].amount).toBe('-30.1000');
+});
+
+// ------------------------------------------------ keyboard shortcuts (decision §14.52 A19)
+
+interface FakeKeyEvent {
+  key: string;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  target?: unknown;
+  preventDefault(): void;
+}
+
+function keyEvent(over: Partial<FakeKeyEvent> & { key: string }): FakeKeyEvent {
+  return {
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    target: null,
+    preventDefault: jest.fn(),
+    ...over,
+  };
+}
+
+/** A stand-in for `document` — the hook only ever touches add/removeEventListener. */
+function stubDocument(): {
+  press(event: FakeKeyEvent): void;
+  listeners(): number;
+  restore(): void;
+} {
+  const registered = new Set<(event: FakeKeyEvent) => void>();
+  const host = globalThis as unknown as { document?: unknown };
+  const previous = host.document;
+  const had = 'document' in host;
+  host.document = {
+    addEventListener: (_type: string, fn: (event: FakeKeyEvent) => void) => {
+      registered.add(fn);
+    },
+    removeEventListener: (_type: string, fn: (event: FakeKeyEvent) => void) => {
+      registered.delete(fn);
+    },
+  };
+  return {
+    press: (event) => registered.forEach((fn) => fn(event)),
+    listeners: () => registered.size,
+    restore: () => {
+      if (had) host.document = previous;
+      else delete host.document;
+    },
+  };
+}
+
+test('useFormShortcuts maps every key, ignores text boxes and unhooks when disabled', () => {
+  const doc = stubDocument();
+  const handlers = {
+    onSave: jest.fn(),
+    onSaveAndNext: jest.fn(),
+    onDiscard: jest.fn(),
+    onKind: jest.fn(),
+    onHelp: jest.fn(),
+  };
+  try {
+    const { rerender, unmount } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useFormShortcuts({ ...handlers, enabled }),
+      { initialProps: { enabled: true } },
+    );
+
+    doc.press(keyEvent({ key: 's', metaKey: true }));
+    expect(handlers.onSave).toHaveBeenCalledTimes(1);
+    doc.press(keyEvent({ key: 'Enter', ctrlKey: true }));
+    expect(handlers.onSaveAndNext).toHaveBeenCalledTimes(1);
+    doc.press(keyEvent({ key: 'Escape' }));
+    expect(handlers.onDiscard).toHaveBeenCalledTimes(1);
+    doc.press(keyEvent({ key: '3' }));
+    expect(handlers.onKind).toHaveBeenCalledWith('refund');
+    doc.press(keyEvent({ key: '?' }));
+    expect(handlers.onHelp).toHaveBeenCalledTimes(1);
+
+    // A digit typed into a field is a digit — the tab row keeps its hands off.
+    doc.press(keyEvent({ key: '2', target: { tagName: 'INPUT' } }));
+    expect(handlers.onKind).toHaveBeenCalledTimes(1);
+
+    // Disabled means nothing is listening at all (an overlay owns the keyboard).
+    rerender({ enabled: false });
+    expect(doc.listeners()).toBe(0);
+    doc.press(keyEvent({ key: 'Escape' }));
+    expect(handlers.onDiscard).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(doc.listeners()).toBe(0);
+  } finally {
+    doc.restore();
+  }
 });

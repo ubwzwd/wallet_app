@@ -93,6 +93,13 @@ export default function EditTransactionScreen(): React.JSX.Element {
     else router.replace(routes.l(ledgerId).transaction(txId) as Href);
   }, [ledgerId, next, router, txId]);
 
+  // A leg of a two-leg transfer is never edited on its own (04 §4.7, decision §1.2): the
+  // pair screen owns both sides and the single PATCH that keeps them consistent.
+  const pairId = tx?.transfer_pair_id ?? null;
+  React.useEffect(() => {
+    if (pairId !== null) router.replace(routes.l(ledgerId).transferEdit(pairId) as Href);
+  }, [ledgerId, pairId, router]);
+
   const onConflict = React.useCallback((): void => {
     // The global 409 handler (04 §3.8) has already invalidated and awaited the refetch,
     // so the cache holds the server's current version by now.
@@ -145,7 +152,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
     });
   }, [goBack, leave]);
 
-  if (query.isPending || !tx) {
+  if (query.isPending || !tx || tx.transfer_pair_id !== null) {
     return (
       <Page testID="tx-edit">
         <Skeleton variant="table" rows={6} testID="tx-edit-skeleton" />
@@ -157,7 +164,10 @@ export default function EditTransactionScreen(): React.JSX.Element {
   const disabledKinds: TxKind[] =
     tx.kind === 'transfer' ? ['expense', 'income', 'refund'] : ['transfer'];
 
-  const mustUnlinkRefund = tx.refund_of !== null && ctrl.values.kind !== 'refund';
+  // Decision §14.3: a linked refund has to be unlinked before it stops being a refund. The
+  // gate follows the *form* value — that is the link that still exists — and the banner
+  // carries the button that clears it, so the instruction can be followed where it is read.
+  const mustUnlinkRefund = ctrl.values.refund_of !== null && ctrl.values.kind !== 'refund';
   const source = ctrl.sourceById(ctrl.values.source_id);
 
   function conflictLabel(field: MergeableField, value: string | null): string {
@@ -185,9 +195,18 @@ export default function EditTransactionScreen(): React.JSX.Element {
         </Text>
       ) : null}
       {mustUnlinkRefund ? (
-        <Text variant="caption" tone="warning" testID="tx-edit-refund-lock">
-          {t('transaction:form.unlink_refund_first')}
-        </Text>
+        <View style={styles.conflictRow}>
+          <Text variant="caption" tone="warning" testID="tx-edit-refund-lock">
+            {t('transaction:form.unlink_refund_first')}
+          </Text>
+          <Button
+            testID="tx-edit-refund-unlink"
+            variant="ghost"
+            size="sm"
+            label={t('transaction:form.refund_of_clear')}
+            onPress={() => ctrl.form.setValue('refund_of', null, { shouldDirty: true })}
+          />
+        </View>
       ) : null}
       {conflicts.length > 0 ? (
         <Card variant="outlined" testID="tx-edit-conflict">
@@ -234,6 +253,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
       onSubmit={onSubmit}
       onCancel={onCancel}
       submitLabel={t('common:button.save')}
+      lockLegs={tx.kind === 'transfer'}
       statsBaseline={sameCategory ? absMoney(tx.amount) : null}
       testID="tx-edit"
     />

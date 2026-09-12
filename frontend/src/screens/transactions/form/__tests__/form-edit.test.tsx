@@ -223,3 +223,109 @@ test('editing a two-leg transfer sends exactly one PATCH to the pair endpoint', 
     updated_at: pair.updated_at,
   });
 });
+
+// ----------------------------------------------------- single-leg transfer (decision §1.2)
+
+const SINGLE_LEG = makeTransaction({
+  id: TX_ID,
+  source_id: CHECKING.id,
+  kind: 'transfer',
+  amount: '-500.0000',
+  currency: 'CNY',
+  occurred_at: '2026-08-03',
+  merchant: null,
+  note: null,
+  category_l1: null,
+  category_l2: null,
+  transfer_role: 'out',
+  transfer_subtype: 'plain',
+  transfer_pair_id: null,
+  counterparty: '老婆',
+  updated_at: '2026-08-03T11:00:00.000000Z',
+});
+
+test('one leg cannot grow a second one here: no 对方不在应用里 checkbox, no 转入账户', async () => {
+  mockGet(TX_PATH, SINGLE_LEG);
+  renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
+
+  // The direction is still a real choice; turning the entry into a two-leg transfer is not
+  // (there is no second account on `PATCH .../transactions/{id}`).
+  expect(await screen.findByTestId('transfer-direction')).toBeTruthy();
+  expect(screen.queryByTestId('transfer-external')).toBeNull();
+  expect(screen.queryByTestId('transfer-to-trigger')).toBeNull();
+});
+
+test('flipping the direction PATCHes transfer_role together with the flipped sign', async () => {
+  mockGet(TX_PATH, SINGLE_LEG);
+  mockPatch(TX_PATH, { ...SINGLE_LEG, amount: '500.0000', transfer_role: 'in' });
+  renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('transfer-direction-in'));
+  fireEvent.press(screen.getByTestId('tx-submit'));
+
+  await waitFor(() => expect(patches(TX_PATH)).toHaveLength(1));
+  // The sign and the role are one fact — sending only the amount would fail the backend's
+  // `transfer_role` check with a 400 the user could not act on.
+  expect(patches(TX_PATH)[0]).toEqual({
+    updated_at: SINGLE_LEG.updated_at,
+    amount: '500.0000',
+    transfer_role: 'in',
+  });
+});
+
+// ------------------------------------------------ leaving the refund tab (decision §14.3)
+
+const ORIGIN_ID = 'origin-under-edit';
+const LINKED_REFUND = makeTransaction({
+  id: TX_ID,
+  source_id: CHECKING.id,
+  kind: 'refund',
+  amount: '128.5000',
+  currency: 'CNY',
+  occurred_at: '2026-08-03',
+  merchant: '京东',
+  note: null,
+  category_l1: 'shopping',
+  category_l2: 'electronics',
+  refund_of: ORIGIN_ID,
+  updated_at: '2026-08-03T11:00:00.000000Z',
+});
+
+test('a linked refund asks to be unlinked before it stops being one — on the same screen', async () => {
+  mockGet(TX_PATH, LINKED_REFUND);
+  mockGet(`/ledgers/${LEDGER_ID}/transactions/${ORIGIN_ID}`, makeTransaction({ id: ORIGIN_ID }));
+  mockPatch(TX_PATH, { ...LINKED_REFUND, kind: 'expense', refund_of: null });
+  renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('tx-kind-expense'));
+
+  // The block names an action, and that action is right next to it.
+  expect(await screen.findByTestId('tx-edit-refund-lock')).toBeTruthy();
+  expect(screen.getByTestId('tx-submit').props.accessibilityState.disabled).toBe(true);
+
+  fireEvent.press(screen.getByTestId('tx-edit-refund-unlink'));
+  await waitFor(() => expect(screen.queryByTestId('tx-edit-refund-lock')).toBeNull());
+  expect(screen.getByTestId('tx-submit').props.accessibilityState.disabled).toBe(false);
+
+  fireEvent.press(screen.getByTestId('tx-submit'));
+  await waitFor(() => expect(patches(TX_PATH)).toHaveLength(1));
+  expect(patches(TX_PATH)[0]).toEqual({
+    updated_at: LINKED_REFUND.updated_at,
+    kind: 'expense',
+    amount: '-128.5000',
+    refund_of: null,
+  });
+});
+
+test('a 422 shows the server’s own wording on the field, not a validation key', async () => {
+  mockGet(TX_PATH, EXISTING);
+  mockPatch(TX_PATH, { detail: 'body.merchant: 商户名最多 200 个字符' }, 422);
+  renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
+
+  fireEvent.changeText(await screen.findByTestId('tx-merchant'), '太长的商户名');
+  fireEvent.press(screen.getByTestId('tx-submit'));
+
+  expect(await screen.findByText('商户名最多 200 个字符')).toBeTruthy();
+  // Not the generic 「这是必填项」 the key channel would have produced.
+  expect(screen.queryByText('这是必填项')).toBeNull();
+});

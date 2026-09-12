@@ -102,7 +102,6 @@
     "refund_over_hint": "This refund would push the total refunded past the original amount (original {{original}}, refunded so far {{refunded}}, this one {{current}})",
     "refund_target_currency_hint": "Refunding to a different account — each account's balance changes on its own; stats aren't affected",
     "refund_only_refundable_toggle": "Only show rows with a refundable balance",
-    "refund_kind_fixed_hint": "Expenses only",
     "impact_preview": "{{label}} {{before}} → {{after}}",
     "impact_this_month": "{{category}} this month",
     "from_import": "This one came from import #{{batch}}",
@@ -111,7 +110,6 @@
     "conflict_title": "Someone just changed this entry — these fields differ from your edits",
     "conflict_server_value": "On the server it now says: {{value}}",
     "conflict_use_server": "Use the server's",
-    "leave_confirm_hint": "You have unsaved changes. Leave anyway?",
     "keyboard_hint_title": "Keyboard shortcuts",
     "keyboard_hint": {
       "save": "Save",

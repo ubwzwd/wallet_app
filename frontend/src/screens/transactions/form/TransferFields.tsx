@@ -42,6 +42,12 @@ export interface TransferFieldsProps {
   onSwitchToIncome?(): void;
   /** Editing a pair: the shape is fixed, so the single-leg checkbox is not offered. */
   lockShape?: boolean;
+  /**
+   * Editing a single leg: the checkbox is gone as well, because untying it would ask
+   * `PATCH .../transactions/{id}` to grow a second leg — a conversion decision §1.2 does
+   * not have. The direction stays editable (the PATCH sends `transfer_role` with it).
+   */
+  lockLegs?: boolean;
   /** "保存并再记一笔" puts the cursor straight back into the amount box (04 §4.6.5). */
   autoFocusAmount?: boolean;
   disabled?: boolean;
@@ -63,6 +69,7 @@ export function TransferFields({
   ctrl,
   onSwitchToIncome,
   lockShape = false,
+  lockLegs = false,
   autoFocusAmount = false,
   disabled = false,
 }: TransferFieldsProps): React.JSX.Element {
@@ -156,7 +163,7 @@ export function TransferFields({
         )}
       />
 
-      {lockShape ? null : (
+      {lockShape || lockLegs ? null : (
         <Checkbox
           testID="transfer-external"
           checked={values.external}

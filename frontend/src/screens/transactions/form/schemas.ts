@@ -166,11 +166,24 @@ export const txFormSchema = z
   });
 
 /**
+ * The prefix `applyFieldErrors` puts in front of a message that is already copy — a 422's
+ * own prose from the server, which must never be looked up as a `validation` key.
+ */
+export const RAW_MESSAGE_PREFIX = 'raw:';
+
+/** Mark server-authored copy so `txValidationMessage` shows it verbatim. */
+export function rawMessage(text: string): string {
+  return `${RAW_MESSAGE_PREFIX}${text}`;
+}
+
+/**
  * Turn a schema `message` into copy. Unknown keys fall back to `validation:required`
- * rather than leaking a raw key onto the screen.
+ * rather than leaking a raw key onto the screen; a `raw:`-prefixed message is copy already
+ * (the server said it) and is shown as it stands.
  */
 export function txValidationMessage(t: TFunction, key: string | undefined): string | null {
   if (!key) return null;
+  if (key.startsWith(RAW_MESSAGE_PREFIX)) return key.slice(RAW_MESSAGE_PREFIX.length);
   return t([`validation:${key}`, 'validation:required'], {
     note: NOTE_MAX_LENGTH,
     merchant: MERCHANT_MAX_LENGTH,
