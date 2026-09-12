@@ -4,7 +4,12 @@
     "title_refund_origin": "选择原支出",
     "refunded_out": "已退完",
     "linked_title": "已关联",
-    "unlink": "取消关联"
+    "unlink": "取消关联",
+    "search_placeholder": "搜索商户或备注",
+    "date_from": "从",
+    "date_to": "到",
+    "empty": "没有符合条件的交易",
+    "fixed_kind": "只看{{kinds}}"
   },
   "list": {
     "title": "交易",
@@ -50,6 +55,11 @@
   },
   "transfer": {
     "subtype": { "plain": "普通转账", "repayment": "信用卡还款" },
+    "subtype_label": "子类型",
+    "direction_label": "方向",
+    "from_source": "转出账户",
+    "to_source": "转入账户",
+    "amount_in": "转入金额",
     "role": { "in": "转入", "out": "转出" },
     "counterparty_toggle": "对方不在这个应用里",
     "counterparty_label": "对方",
@@ -62,6 +72,7 @@
     "counterparty_currency_locked_hint": "只有一条腿，币种跟随所选账户"
   },
   "form": {
+    "kind_label": "类型",
     "amount": "金额",
     "date": "日期",
     "merchant": "商户",
@@ -80,6 +91,7 @@
     "no_sources_action": "去建账户",
     "recent_merchants": "最近商户",
     "save_and_next": "保存并再记一笔",
+    "saved_toast": "已保存",
     "saved_count_toast": "已保存（第 {{count}} 笔）",
     "refund_of": "关联原支出",
     "refund_of_clear": "取消关联",
@@ -90,6 +102,13 @@
     "refund_only_refundable_toggle": "只看还有可退余额",
     "refund_kind_fixed_hint": "仅支出",
     "impact_preview": "{{label}} {{before}} → {{after}}",
+    "impact_this_month": "本月{{category}}",
+    "from_import": "这条来自导入 #{{batch}}",
+    "archived_source_hint": "这个账户已归档：这条历史交易还能改，但不能改选到别的归档账户",
+    "unlink_refund_first": "先取消关联原支出，才能把它改成别的类型",
+    "conflict_title": "这条记录刚被别人改过，下面这些地方和你的改动不一样",
+    "conflict_server_value": "服务器上现在是：{{value}}",
+    "conflict_use_server": "用服务器的",
     "leave_confirm_hint": "有未保存的改动，确定要离开吗？",
     "keyboard_hint_title": "快捷键",
     "keyboard_hint": {
