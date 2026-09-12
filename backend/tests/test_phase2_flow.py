@@ -187,7 +187,7 @@ EXPECTED_OPERATIONS = {
 }
 
 
-def test_openapi_route_inventory_is_exactly_phase_two(client):
+def test_openapi_route_inventory_still_contains_phase_two(client):
     """Every route this phase ships is still there.
 
     This module only exercises the ledger/member/invite flow, so it checks a

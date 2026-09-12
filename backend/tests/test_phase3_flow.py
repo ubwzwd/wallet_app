@@ -48,9 +48,15 @@ def test_accounts_and_transactions_end_to_end(client):
     def url(suffix: str = "") -> str:
         return f"/api/v1/ledgers/{ledger_id}{suffix}"
 
-    def post(path: str, body: dict[str, Any]) -> Any:
+    def post(path: str, body: dict[str, Any], expect: int = 201) -> Any:
+        """POST one step of the story; ``expect`` is spelled out at each call.
+
+        Creating a resource answers 201 (§5.21, §5.26, §5.30) and an action on
+        an existing one answers 200 (§5.33, §5.34) — accepting either would let
+        a regression swap them unnoticed.
+        """
         response = client.post(url(path), json=body, headers=headers)
-        assert response.status_code in (200, 201), response.text
+        assert response.status_code == expect, response.text
         return response.json()
 
     def patch(path: str, body: dict[str, Any]) -> Any:
@@ -278,6 +284,7 @@ def test_accounts_and_transactions_end_to_end(client):
     paired = post(
         f"/transactions/{single_in['id']}/pair",
         {"other_transaction_id": single_out["id"]},
+        expect=200,
     )
     pair_id_2 = paired["pair_id"]
     assert {paired["out"]["id"], paired["in"]["id"]} == {single_in["id"], single_out["id"]}
@@ -294,7 +301,7 @@ def test_accounts_and_transactions_end_to_end(client):
     assert events_by_name == ["paired", "created"]       # at DESC (§7)
     assert detail_paired["events"][1]["client"] == "web"
 
-    unpaired = post(f"/transactions/transfer/{pair_id_2}/unpair", {})
+    unpaired = post(f"/transactions/transfer/{pair_id_2}/unpair", {}, expect=200)
     assert unpaired["pair_id"] == pair_id_2
     assert {leg["transfer_pair_id"] for leg in unpaired["unpaired"]} == {None}
 

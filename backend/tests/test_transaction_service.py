@@ -630,10 +630,71 @@ def test_linking_and_unlinking_a_refund_writes_its_own_event(world):
     update(world, refund, {"refund_of": None, "note": "解除关联"})
     assert refund.refund_of is None
     # At most two events per PATCH: the plain fields, plus the unlink (§7.2).
-    assert names(world, refund)[:2] == ["refund_unlinked", "updated"]
-    assert events.list_for(world["db"], refund.id)[1].changes == {
-        "note": {"before": None, "after": "解除关联"}
-    }
+    # One PATCH is one instant, so both carry the row's new stamp (§1.9).
+    trail = events.list_for(world["db"], refund.id)
+    assert {row.event for row in trail[:2]} == {"refund_unlinked", "updated"}
+    assert trail[0].at == trail[1].at == refund.updated_at
+    plain_fields = next(row for row in trail if row.event == "updated")
+    assert plain_fields.changes == {"note": {"before": None, "after": "解除关联"}}
+
+
+def test_the_created_event_is_stamped_with_the_rows_own_created_at(world):
+    """02-database.md §1.9: one operation, one instant — event and row agree."""
+    tx = create(world)
+
+    event = latest_event(world, tx)
+    assert event.at == tx.created_at == tx.updated_at
+
+
+def test_one_patch_stamps_both_of_its_events_with_the_rows_updated_at(world):
+    """A PATCH that links a refund writes ``updated`` + ``refund_linked`` (§7.2).
+
+    Both belong to the same operation, so both carry the stamp the row itself
+    got; ``list_for`` then orders the tie by id, which is what makes the
+    detail page's ``events[]`` stable instead of database dependent.
+    """
+    expense = create(world)
+    refund = create(
+        world, kind="refund", amount=Decimal("10.00"), category_l1="groceries",
+        category_l2=None,
+    )
+
+    update(world, refund, {"refund_of": expense.id, "note": "一起改"})
+
+    trail = events.list_for(world["db"], refund.id)
+    assert [row.event for row in trail[2:]] == ["created"]
+    assert {row.event for row in trail[:2]} == {"updated", "refund_linked"}
+    assert trail[0].at == trail[1].at == refund.updated_at
+    # Deterministic: the same query twice gives the same order, and it is the
+    # one the (at DESC, id DESC) ordering names.
+    assert [row.id for row in events.list_for(world["db"], refund.id)] == [
+        row.id for row in trail
+    ]
+    assert trail[0].id > trail[1].id
+
+
+def test_an_amount_wider_than_the_column_is_rejected(world):
+    """NUMERIC(18, 4) holds 14 integer digits; 15 is a 400, not a 500 (§1.6)."""
+    with pytest.raises(ApiError) as exc:
+        create(world, amount=Decimal("-1" + "0" * 14))
+    assert (exc.value.status_code, exc.value.code) == (400, "validation_error")
+
+    # The widest amount the column does hold goes through untouched.
+    tx = create(world, amount=Decimal("-99999999999999.9999"))
+    assert tx.amount == Decimal("-99999999999999.9999")
+
+
+def test_a_transfer_leg_amount_wider_than_the_column_is_rejected(world):
+    with pytest.raises(ApiError) as exc:
+        create_transfer(world, amount_in=Decimal("1" + "0" * 20))
+    assert (exc.value.status_code, exc.value.code) == (400, "validation_error")
+
+
+def test_an_amount_out_of_the_decimal_context_is_rejected_too(world):
+    """``1e40`` cannot even be quantized; it must still be a 400, not a 500."""
+    with pytest.raises(ApiError) as exc:
+        create(world, amount=Decimal("-1e40"))
+    assert (exc.value.status_code, exc.value.code) == (400, "validation_error")
 
 
 def test_update_can_move_a_row_but_not_onto_an_archived_account(world):
@@ -1134,8 +1195,14 @@ def test_pairing_unifies_the_subtype(
     ]
     assert len(changed) == updated_legs
     for leg in changed:
-        assert names(world, leg)[:2] == ["updated", "paired"]
-        assert set(latest_event(world, leg).changes) == {"transfer_subtype"}
+        trail = events.list_for(world["db"], leg.id)
+        # ``paired`` and the subtype ``updated`` come out of the same operation,
+        # so they share its stamp (§1.9) and only their pair — not their order —
+        # is meaningful; ``created`` stays below them.
+        assert {row.event for row in trail[:2]} == {"updated", "paired"}
+        assert trail[0].at == trail[1].at == leg.updated_at
+        subtype_event = next(row for row in trail if row.event == "updated")
+        assert set(subtype_event.changes) == {"transfer_subtype"}
 
 
 def test_pair_does_not_reject_a_repayment_onto_a_plain_account(world, db):

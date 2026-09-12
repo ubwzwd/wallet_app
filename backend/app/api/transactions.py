@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core import categories
@@ -314,6 +314,66 @@ def _filtered_query(
     )
 
 
+def _grouped_summary(
+    db: Session, ctx: LedgerContext, stmt: Select, total: int
+) -> dict:
+    """§5.25's ``summary`` over the whole filtered set, without loading it.
+
+    One ``GROUP BY (kind, currency, occurred_at)`` gives the subtotals, and one
+    conversion per group turns them into the base currency — the same shape
+    ``valuation.source_balances`` uses for balances (§5.20), so the number of
+    rows converted depends on how many (kind, currency, day) combinations the
+    filter hit, never on how many transactions did.
+
+    The arithmetic is §5.25's to the letter: expenses are all negative, so the
+    absolute value of a group's subtotal is the sum of the row absolutes;
+    transfer legs take no part in the three amounts but a group that could not
+    be valued still contributes its rows to ``rate_missing_count``.
+    """
+    rows = stmt.order_by(None).subquery()
+    groups = [
+        (kind, currency.upper(), occurred_at, Decimal(str(subtotal)), int(count))
+        for kind, currency, occurred_at, subtotal, count in db.execute(
+            select(
+                rows.c.kind,
+                rows.c.currency,
+                rows.c.occurred_at,
+                func.sum(rows.c.amount),
+                func.count(),
+            ).group_by(rows.c.kind, rows.c.currency, rows.c.occurred_at)
+        )
+    ]
+    converted = valuation.convert_rows(
+        db,
+        [(subtotal, currency, on) for _kind, currency, on, subtotal, _n in groups],
+        ctx.ledger.base_currency,
+    )
+
+    totals = {"expense": valuation.ZERO, "income": valuation.ZERO, "refund": valuation.ZERO}
+    rate_missing_count = 0
+    for (kind, _currency, _on, _subtotal, count), value in zip(
+        groups, converted, strict=True
+    ):
+        if value is None:
+            rate_missing_count += count
+            continue
+        if kind not in totals:
+            continue    # transfer legs, deliberately (decision §14.52 A14)
+        amount_base = valuation.quantize_amount(value[0])
+        totals[kind] += abs(amount_base) if kind == "expense" else amount_base
+
+    return {
+        "base_currency": ctx.ledger.base_currency.upper(),
+        "expense": valuation.quantize_amount(totals["expense"]),
+        "income": valuation.quantize_amount(totals["income"]),
+        "net": valuation.quantize_amount(
+            totals["income"] - totals["expense"] + totals["refund"]
+        ),
+        "count": total,
+        "rate_missing_count": rate_missing_count,
+    }
+
+
 def _load_transaction(db: Session, ctx: LedgerContext, tid: uuid.UUID) -> Transaction:
     """One transaction of this ledger, or 404 — a foreign one is invisible (§3.3)."""
     tx = db.get(Transaction, tid)
@@ -322,12 +382,24 @@ def _load_transaction(db: Session, ctx: LedgerContext, tid: uuid.UUID) -> Transa
     return tx
 
 
-def _refund_rows(db: Session, origin_id: uuid.UUID) -> list[Transaction]:
-    """Refund rows pointing at one expense, oldest first (§5.27)."""
+def _refund_rows(
+    db: Session, ctx: LedgerContext, origin_id: uuid.UUID
+) -> list[Transaction]:
+    """Refund rows pointing at one expense, oldest first (§5.27).
+
+    Scoped to the ledger like every other read here (§3.3). ``refund_of`` is
+    only ever written within one ledger, so on healthy data the predicate
+    changes no answer; it is there so the read does not *depend* on that
+    invariant. ``ix_transactions_refund_of`` still drives the lookup.
+    """
     return list(
         db.execute(
             select(Transaction)
-            .where(Transaction.refund_of == origin_id, Transaction.kind == "refund")
+            .where(
+                Transaction.ledger_id == ctx.ledger.id,
+                Transaction.refund_of == origin_id,
+                Transaction.kind == "refund",
+            )
             .order_by(Transaction.occurred_at.asc(), Transaction.created_at.asc())
         )
         .scalars()
@@ -378,7 +450,9 @@ def _refund_origin(
         # "Have I already refunded this twice?" — this row itself is not part
         # of the answer (decision §14.52 A25).
         other_refunds=[
-            _refund_ref(row) for row in _refund_rows(db, origin.id) if row.id != tx.id
+            _refund_ref(row)
+            for row in _refund_rows(db, ctx, origin.id)
+            if row.id != tx.id
         ],
     )
 
@@ -531,12 +605,22 @@ def list_transactions(
 ) -> TransactionListResponse:
     """The filtered, paged transaction list with its summary block (§5.25).
 
-    The order of operations is §5.25's: SQL does everything it can, every
-    surviving row is converted on its own ``occurred_at``, the base-currency
-    amount range is applied on top of that (decision §14.49), and only then is
-    the page cut out. ``summary`` is computed over the **whole** filtered set,
-    which is why it does not change while paging (decision §14.52 A14) — and
-    why the conversion covers the whole set rather than one page.
+    §5.25's implementation order has two paths, and which one runs depends on
+    whether the request named an amount bound:
+
+    * **No bound — the fast path.** SQL alone decides what matches, so ``total``
+      is a ``COUNT(*)``, one page of rows comes back, and only those rows are
+      converted. ``summary`` still covers the whole filtered set, as one
+      ``GROUP BY (kind, currency, occurred_at)`` aggregate (:func:`_grouped_summary`).
+    * **``min_amount`` / ``max_amount`` given.** The bound compares
+      base-currency amounts (decision §14.49), which SQL cannot do, so every
+      matching row is converted, filtered in Python, counted and only then cut
+      into a page. A row without a rate cannot satisfy a bound and drops out,
+      so here ``count == total`` counts only the rows that could be valued
+      (§5.25, sync 2026-09-12).
+
+    Either way ``summary`` is computed over the **whole** filtered set, which is
+    why it does not change while paging (decision §14.52 A14).
     """
     if min_amount is not None and max_amount is not None and min_amount > max_amount:
         raise ApiError(
@@ -559,13 +643,23 @@ def list_transactions(
         currency=currency,
         import_batch_id=import_batch_id,
     )
-    rows = list(db.execute(stmt).scalars().all())
-    values = valuation.value_transactions(db, ctx.ledger.base_currency, rows)
+    if min_amount is None and max_amount is None:
+        total = db.execute(
+            select(func.count()).select_from(stmt.order_by(None).subquery())
+        ).scalar_one()
+        page_rows = list(
+            db.execute(stmt.limit(page.limit).offset(page.offset)).scalars().all()
+        )
+        page_values = valuation.value_transactions(
+            db, ctx.ledger.base_currency, page_rows
+        )
+        summary = _grouped_summary(db, ctx, stmt, total)
+    else:
+        rows = list(db.execute(stmt).scalars().all())
+        values = valuation.value_transactions(db, ctx.ledger.base_currency, rows)
 
-    # Rows that could not be valued are dropped by an amount bound below, but
-    # §5.25's "some rows could not be converted" signal must survive that.
-    dropped_missing = 0
-    if min_amount is not None or max_amount is not None:
+        # Rows that could not be valued are dropped by the amount bound, but
+        # §5.25's "some rows could not be converted" signal must survive that.
         dropped_missing = sum(1 for value in values if value is None)
         kept = [
             (row, value)
@@ -579,10 +673,12 @@ def list_transactions(
         rows = [row for row, _value in kept]
         values = [value for _row, value in kept]
 
-    summary = valuation.list_summary(ctx.ledger.base_currency, rows, values)
-    summary["rate_missing_count"] += dropped_missing
-    window = slice(page.offset, page.offset + page.limit)
-    page_rows, page_values = rows[window], values[window]
+        summary = valuation.list_summary(ctx.ledger.base_currency, rows, values)
+        summary["rate_missing_count"] += dropped_missing
+        total = len(rows)
+        window = slice(page.offset, page.offset + page.limit)
+        page_rows, page_values = rows[window], values[window]
+
     totals = _expense_totals(db, ctx, page_rows)
 
     body = TransactionListResponse(
@@ -590,7 +686,7 @@ def list_transactions(
             _item(row, value, totals)
             for row, value in zip(page_rows, page_values, strict=True)
         ],
-        total=len(rows),
+        total=total,
         summary=TransactionSummary(**summary),
     )
     # Converting wrote fresh rows into the rate cache; without this commit they
@@ -630,7 +726,7 @@ def get_transaction(
     tx = _load_transaction(db, ctx, tid)
     # Both are None on every kind but expense, which drops them from the body.
     refunded, refundable = _expense_totals(db, ctx, [tx]).get(tx.id, (None, None))
-    refunds = _refund_rows(db, tx.id) if tx.kind == "expense" else []
+    refunds = _refund_rows(db, ctx, tx.id) if tx.kind == "expense" else []
 
     body = TransactionDetail(
         **_row_fields(tx),
