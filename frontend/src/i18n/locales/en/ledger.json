@@ -34,7 +34,16 @@
     "basic": {
       "name_label": "Ledger name",
       "base_currency_label": "Base currency",
-      "base_currency_warning": "Once changed to {{currency}}, the home dashboard and every converted amount will show in {{currency}}. Conversion uses each transaction's own exchange rate on its date — original amounts and currencies never change, so switching back brings the numbers back too. This will re-convert {{count}} transactions."
+      "base_currency_warning": "Once changed to {{currency}}, the home dashboard and every converted amount will show in {{currency}}. Conversion uses each transaction's own exchange rate on its date — original amounts and currencies never change, so switching back brings the numbers back too. This will re-convert {{count}} transactions.",
+      "title": "Basics",
+      "created_at": "Created {{date}}",
+      "save": "Save",
+      "name_saved_toast": "Ledger name updated",
+      "currency_change_title": "Changing the base currency re-converts all history",
+      "currency_change_confirm": "Change to {{currency}} anyway",
+      "currency_change_cancel": "Keep it as it is",
+      "currency_saved_toast": "Base currency changed to {{currency}}",
+      "read_only_hint": "Only the owner can rename the ledger or change its base currency"
     },
     "members": {
       "title": "Members",
@@ -46,7 +55,19 @@
       "transfer_ownership": "Transfer ownership",
       "transfer_confirm": "Transfer ownership to {{name}}? You'll become a member afterward.",
       "leave_action": "Leave this ledger",
-      "leave_disabled_hint": "You're the owner of this ledger — transfer ownership to someone else before you leave"
+      "leave_disabled_hint": "You're the owner of this ledger — transfer ownership to someone else before you leave",
+      "count": "{{count}} / 10",
+      "joined_at": "Joined {{date}}",
+      "remove_title": "Remove member",
+      "removed_toast": "Removed {{name}}",
+      "transfer_title": "Transfer ownership",
+      "transfer_select_label": "Transfer to",
+      "transfer_placeholder": "Pick a member",
+      "transfer_submit": "Transfer",
+      "transferred_toast": "{{name}} is the owner now",
+      "leave_title": "Leave ledger",
+      "leave_confirm": "Leave \"{{name}}\"? Your entries stay in the ledger, and you'll need a new invite code to come back.",
+      "left_toast": "Left \"{{name}}\""
     },
     "invite": {
       "title": "Invite code",
@@ -57,13 +78,22 @@
       "regenerate": "Regenerate",
       "revoke_confirm": "Once revoked, this code stops working immediately.",
       "used_by": "Used by {{name}}",
-      "limit_reached": "This ledger already has 10 members"
+      "limit_reached": "This ledger already has 10 members",
+      "expires_hint": "A code is valid for 10 minutes and can be used once.",
+      "retry_hint": "The code can be entered as often as needed while it is valid - a typo locks nothing.",
+      "expired": "This code has expired - generate a new one",
+      "revoke_title": "Revoke invite code",
+      "revoked_toast": "Invite code revoked",
+      "copied_toast": "Invite code copied",
+      "code_label": "Invite code {{code}}"
     },
     "danger": {
       "delete_title": "Delete ledger",
       "delete_confirm_body": "This will permanently delete {{transactions}} transactions, {{sources}} accounts and {{imports}} import batches in \"{{name}}\". Every member will lose access. This can't be undone.",
       "delete_confirm_label": "Type the ledger name to confirm:",
-      "delete_action": "Delete ledger"
+      "delete_action": "Delete ledger",
+      "title": "Danger zone",
+      "deleted_toast": "Deleted \"{{name}}\""
     }
   }
 }

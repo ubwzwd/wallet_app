@@ -22,5 +22,13 @@
     "ledger_settings": "Ledger settings",
     "switch_ledger": "Switch ledger",
     "logout": "Log out"
-  }
+  },
+  "section": {
+    "profile": "About me",
+    "device": "This device",
+    "entries": "Go to"
+  },
+  "save": "Save",
+  "display_name_saved_toast": "Display name updated",
+  "base_currency_saved_toast": "Default currency updated"
 }
