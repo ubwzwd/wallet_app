@@ -473,10 +473,15 @@ def test_pair_unifies_the_subtype_onto_a_credit_card(env, db):
     assert body["out"]["transfer_subtype"] == "repayment"
     assert body["in"]["transfer_subtype"] == "repayment"
 
-    # Only the leg that really moved gets the extra ``updated`` event
+    # Only the leg that really moved gets the extra ``updated`` event. It and
+    # the ``paired`` event come out of one operation, so they share its stamp
+    # (02-database.md §1.9) and their relative order carries no meaning.
     out_events = events_of(db, uuid.UUID(out_leg["id"]))
-    assert [event.event for event in out_events] == ["created", "paired", "updated"]
-    assert out_events[-1].changes == {
+    assert out_events[0].event == "created"
+    assert {event.event for event in out_events[1:]} == {"paired", "updated"}
+    assert out_events[1].at == out_events[2].at
+    subtype_event = next(event for event in out_events if event.event == "updated")
+    assert subtype_event.changes == {
         "transfer_subtype": {"before": "plain", "after": "repayment"}
     }
     assert [event.event for event in events_of(db, uuid.UUID(in_leg["id"]))] == [
@@ -498,11 +503,10 @@ def test_pair_falls_back_to_plain_when_the_target_is_not_a_credit_card(env, db):
 
     assert body["subtype"] == "plain"
     assert body["out"]["transfer_subtype"] == body["in"]["transfer_subtype"] == "plain"
-    assert [event.event for event in events_of(db, uuid.UUID(out_leg["id"]))] == [
-        "created",
-        "paired",
-        "updated",
-    ]
+    out_events = events_of(db, uuid.UUID(out_leg["id"]))
+    assert out_events[0].event == "created"
+    # Same instant, so ``paired`` and ``updated`` come back in either order.
+    assert {event.event for event in out_events[1:]} == {"paired", "updated"}
 
 
 def test_pair_refuses_a_leg_that_is_already_paired(env):
