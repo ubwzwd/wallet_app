@@ -13,7 +13,7 @@ import { z } from 'zod';
 import type { IsoDate, Money, TransferRole, TransferSubtype, TxKind } from '@/api/types';
 import { isValidIsoDate, maxAllowedDate } from '@/domain/dates';
 import { applySign } from '@/domain/kinds';
-import { decimalPlaces, isPositiveMoney, normalizeAmountInput } from '@/domain/money';
+import { cmpMoney, decimalPlaces, isPositiveMoney, normalizeAmountInput } from '@/domain/money';
 
 /** Server-side limits (decisions §1.4, §10). */
 export const NOTE_MAX_LENGTH = 500;
@@ -153,9 +153,9 @@ export const txFormSchema = z
       else if (v.to_source_id === v.source_id) {
         addIssue(ctx, 'to_source_id', 'transfer_same_source');
       }
-      // Same currency on both sides means one amount box; the second one is only filled
-      // in (and only validated) once the currencies diverge (decision §14.52 A11).
-      if (v.currency_in !== v.currency) {
+      // One amount box means one amount: the second group is only filled in — and only
+      // validated — while it is actually on screen (decision §14.52 A11).
+      if (showsSecondLeg(v)) {
         if (!CURRENCY_PATTERN.test(v.currency_in)) {
           addIssue(ctx, 'currency_in', 'currency_invalid');
         }
@@ -204,7 +204,18 @@ export function orNull(text: string): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
-/** Whether the second amount/currency group is open (04 §4.6.4). */
-export function isCrossCurrency(values: TxFormValues): boolean {
-  return values.kind === 'transfer' && !values.external && values.currency_in !== values.currency;
+/**
+ * Whether the second amount / currency group is open (04 §4.6.4).
+ *
+ * Two legs share one amount box only while they really are the same amount in the same
+ * currency. A pair built by `POST .../pair` compares neither (decision §14.53a), so an
+ * existing 1000 → 995 CNY pair has to keep both boxes: collapsing it would mirror the
+ * out leg onto the in leg the first time anyone pressed 保存.
+ */
+export function showsSecondLeg(values: TxFormValues): boolean {
+  if (values.kind !== 'transfer' || values.external) return false;
+  if (values.currency_in !== '' && values.currency_in !== values.currency) return true;
+  const out = normalizeAmountInput(values.amount);
+  const into = normalizeAmountInput(values.amount_in);
+  return out !== null && into !== null && cmpMoney(out, into) !== 0;
 }

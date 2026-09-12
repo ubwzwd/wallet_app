@@ -32,6 +32,7 @@ import {
 import {
   COUNTERPARTY_MAX_LENGTH,
   NOTE_MAX_LENGTH,
+  showsSecondLeg,
   txValidationMessage,
 } from './schemas';
 import type { TxFormController } from './useTransactionForm';
@@ -87,7 +88,8 @@ export function TransferFields({
   } = ctrl;
   const { errors } = formState;
   const external = values.external && !lockShape;
-  const crossCurrency = !external && values.currency_in !== '' && values.currency_in !== values.currency;
+  // One shared predicate with the submit path, so what is on screen is what is sent.
+  const crossCurrency = showsSecondLeg({ ...values, external });
   const [repaymentHint, setRepaymentHint] = React.useState(false);
 
   // Choosing an account answers the hint: leaving it under the picker would go on

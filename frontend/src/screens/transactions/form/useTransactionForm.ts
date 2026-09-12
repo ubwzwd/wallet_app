@@ -20,13 +20,14 @@ import type {
   TransactionCreate,
   TransactionUpdate,
   TransferCreate,
+  TransferPair,
   TransferUpdate,
   TxKind,
   Uuid,
 } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { kindOfCategoryTree } from '@/domain/kinds';
-import { cmpMoney, normalizeAmountInput } from '@/domain/money';
+import { absMoney, cmpMoney, normalizeAmountInput } from '@/domain/money';
 import { useLang, type Lang } from '@/i18n';
 import { todayLocalIso } from '@/i18n/format';
 import { useCategories, useCurrencies, useSources, type CurrenciesResult } from '@/queries';
@@ -35,6 +36,7 @@ import { PREF_NAMES, getJsonPref, setJsonPref, setPref, getPref } from '@/utils/
 import {
   emptyTxFormValues,
   orNull,
+  showsSecondLeg,
   signedAmount,
   txFormSchema,
   type TxFormValues,
@@ -308,14 +310,16 @@ export function toTransactionCreate(v: TxFormValues): TransactionCreate {
  *  `transfer_subtype`, and both magnitudes positive. */
 export function toTransferCreate(v: TxFormValues): TransferCreate {
   const amountOut = normalizeAmountInput(v.amount) ?? '0.0000';
-  const sameCurrency = v.currency_in === '' || v.currency_in === v.currency;
+  // While the second group is collapsed there is one amount box, so both legs take it;
+  // once it is open (different currency **or** different amount) each leg keeps its own.
+  const secondLeg = showsSecondLeg(v);
   return {
     from_source_id: v.source_id,
     to_source_id: v.to_source_id,
     amount_out: amountOut,
     currency_out: v.currency,
-    amount_in: sameCurrency ? amountOut : (normalizeAmountInput(v.amount_in) ?? amountOut),
-    currency_in: sameCurrency ? v.currency : v.currency_in,
+    amount_in: secondLeg ? (normalizeAmountInput(v.amount_in) ?? amountOut) : amountOut,
+    currency_in: secondLeg && v.currency_in !== '' ? v.currency_in : v.currency,
     occurred_at: v.occurred_at,
     subtype: v.subtype,
     note: orNull(v.note),
@@ -372,9 +376,38 @@ export function toTransactionUpdate(
   return patch;
 }
 
-/** 04 §4.7: one `PATCH .../transactions/transfer/{pair_id}` for both legs. */
-export function toTransferUpdate(v: TxFormValues, updatedAt: IsoDateTime): TransferUpdate {
-  return { ...toTransferCreate(v), updated_at: updatedAt };
+/**
+ * 04 §4.7: one `PATCH .../transactions/transfer/{pair_id}` for both legs — and, like
+ * `toTransactionUpdate`, **only the fields that actually changed**.
+ *
+ * This is not just politeness towards a concurrent editor: 03 §5.31 writes `occurred_at`
+ * / `subtype` / `note` to *both* legs whenever the request names them, so a pair that
+ * `POST .../pair` built out of two legs with their own dates and notes (decision §14.53a)
+ * would be flattened by a save that only touched the amount.
+ */
+export function toTransferUpdate(
+  v: TxFormValues,
+  original: TransferPair,
+  updatedAt: IsoDateTime,
+): TransferUpdate {
+  const next = toTransferCreate(v);
+  const patch: TransferUpdate = { updated_at: updatedAt };
+
+  if (!sameValue(next.from_source_id, original.out.source_id)) {
+    patch.from_source_id = next.from_source_id;
+  }
+  if (!sameValue(next.to_source_id, original.in.source_id)) patch.to_source_id = next.to_source_id;
+  // The legs are stored signed; the form holds magnitudes (decision §1.2).
+  if (cmpMoney(next.amount_out, absMoney(original.out.amount)) !== 0) {
+    patch.amount_out = next.amount_out;
+  }
+  if (!sameValue(next.currency_out, original.out.currency)) patch.currency_out = next.currency_out;
+  if (cmpMoney(next.amount_in, absMoney(original.in.amount)) !== 0) patch.amount_in = next.amount_in;
+  if (!sameValue(next.currency_in, original.in.currency)) patch.currency_in = next.currency_in;
+  if (!sameValue(next.occurred_at, original.occurred_at)) patch.occurred_at = next.occurred_at;
+  if (!sameValue(next.subtype, original.subtype)) patch.subtype = next.subtype;
+  if (!sameValue(next.note, original.note)) patch.note = next.note;
+  return patch;
 }
 
 /** The form values that show an existing single transaction (04 §4.7 prefill). */

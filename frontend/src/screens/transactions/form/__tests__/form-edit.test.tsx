@@ -214,17 +214,45 @@ test('editing a two-leg transfer sends exactly one PATCH to the pair endpoint', 
   fireEvent.changeText(screen.getByTestId('transfer-note'), '还 8 月账单（改）');
   fireEvent.press(screen.getByTestId('tx-submit'));
 
+  // 03 §5.31 writes `occurred_at` / `subtype` / `note` to both legs *when the request
+  // names them*, so a note-only save must name nothing else — otherwise it would flatten
+  // a pair whose legs carry their own dates (decision §14.53a).
   await waitFor(() => expect(patches(pairPath)).toHaveLength(1));
   expect(patches(pairPath)[0]).toEqual({
-    from_source_id: pair.out.source_id,
-    to_source_id: pair.in.source_id,
-    amount_out: '1000.0000',
-    currency_out: 'CNY',
-    amount_in: '1000.0000',
-    currency_in: 'CNY',
-    occurred_at: pair.occurred_at,
-    subtype: 'plain',
     note: '还 8 月账单（改）',
+    updated_at: pair.updated_at,
+  });
+});
+
+test('a pair whose legs hold different amounts keeps both boxes and both amounts', async () => {
+  // `POST .../pair` compares neither amounts nor dates (decision §14.53a), so a pair can
+  // legitimately be 1000 out / 995 in in one currency.
+  const base = makeTransferPair({ pair_id: PAIR_ID, note: '转给自己' });
+  const pair = {
+    ...base,
+    in: { ...base.in, amount: '995.0000' },
+  };
+  const pairPath = `/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`;
+  mockGet(pairPath, pair);
+  mockPatch(pairPath, pair);
+
+  renderRouter(ROUTES, {
+    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    wrapper: Wrapper,
+  });
+
+  // Same currency, different amounts: the second group is open, not collapsed.
+  expect(await screen.findByTestId('transfer-amount')).toBeTruthy();
+  expect(screen.getByTestId('transfer-amount-in')).toBeTruthy();
+  expect(screen.getByTestId('transfer-amount-in').props.value).toBe('995.00');
+
+  fireEvent.changeText(screen.getByTestId('transfer-note'), '转给自己（改）');
+  fireEvent.press(screen.getByTestId('tx-submit'));
+
+  // The receiving leg is not rewritten to the sending leg's 1000.
+  await waitFor(() => expect(patches(pairPath)).toHaveLength(1));
+  expect(patches(pairPath)[0]).toEqual({
+    note: '转给自己（改）',
     updated_at: pair.updated_at,
   });
 });

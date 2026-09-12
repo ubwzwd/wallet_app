@@ -105,7 +105,7 @@ export default function EditTransferScreen(): React.JSX.Element {
   const onSubmit = React.useCallback(
     (values: TxFormValues): void => {
       if (!pair) return;
-      update.mutate(toTransferUpdate(values, pairUpdatedAt(pair)), {
+      update.mutate(toTransferUpdate(values, pair, pairUpdatedAt(pair)), {
         onSuccess: () => {
           setConflicts([]);
           toast.success(t('transaction:form.saved_toast'));
