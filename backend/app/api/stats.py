@@ -14,6 +14,7 @@ import datetime as dt
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.database import get_db
 from app.core.deps import LedgerContext, get_ledger_member
 from app.schemas.stats import SummaryResponse, TrendResponse
@@ -27,7 +28,7 @@ MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
 
 def _current_month() -> dt.date:
     """The first day of the current UTC month, used as the default for both params."""
-    today = dt.datetime.now(dt.UTC).date()
+    today = utcnow().date()
     return today.replace(day=1)
 
 
