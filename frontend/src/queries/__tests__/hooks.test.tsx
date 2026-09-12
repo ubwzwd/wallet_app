@@ -67,9 +67,10 @@ function listPage(items: Transaction[], total: number): TransactionListResponse 
     total,
     summary: {
       base_currency: 'CNY',
-      expense_total: '0.0000',
-      income_total: '0.0000',
+      expense: '0.0000',
+      income: '0.0000',
       net: '0.0000',
+      count: total,
       rate_missing_count: 0,
     },
   };

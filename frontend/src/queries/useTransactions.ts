@@ -216,7 +216,7 @@ export function usePairTransaction(
   return useMutation({
     mutationFn: (b: TransactionPairRequest) => txApi.pair(l, tid, b),
     onSuccess: (_pair, variables) =>
-      invalidatePair(qc, l, tid, variables.counterpart_transaction_id),
+      invalidatePair(qc, l, tid, variables.other_transaction_id),
   });
 }
 

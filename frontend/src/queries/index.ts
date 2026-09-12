@@ -38,6 +38,7 @@ export {
 export { useMe, useUpdateMe } from './useMe';
 export {
   memberLabel,
+  type MutationOpts,
   useCreateInvite,
   useCreateLedger,
   useDeleteLedger,

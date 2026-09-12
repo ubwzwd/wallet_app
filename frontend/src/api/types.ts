@@ -212,7 +212,7 @@ export interface TransferPair {
 }
 // 配对 / 拆开（决策 §14.34）
 // POST /ledgers/{id}/transactions/{tid}/pair：把两条单腿转账合成一笔
-export interface TransactionPairRequest { counterpart_transaction_id: Uuid; }
+export interface TransactionPairRequest { other_transaction_id: Uuid; }   // 03 §5.33 的字段名
 // 响应是合成后的 TransferPair；unpair 无请求体，响应是拆开后的两条 Transaction
 export interface UnpairResult { out: Transaction; in: Transaction; }
 
@@ -226,9 +226,10 @@ export interface TransactionListParams {
 // 交易列表：信封外多一个 summary（决策 §14.52 A14），底部汇总条与「筛空提示」都用它
 export interface TransactionSummary {
   base_currency: string;
-  expense_total: Money;   // 正数
-  income_total: Money;
+  expense: Money;         // 正数
+  income: Money;
   net: Money;             // income − expense，**不含转账**
+  count: number;          // 给了金额区间时只计能折算的行；没给区间时含全部命中行（与 total 相同）
   rate_missing_count: number;
 }
 export interface TransactionListResponse extends Paged<Transaction> {
@@ -348,7 +349,7 @@ export interface ImportRow {
   transaction_id: Uuid | null;              // 提交后回填
 }
 export interface ImportRowListParams {
-  status?: ImportRowStatus[]; flag?: ImportFlag[]; uncategorized?: boolean;
+  status?: ImportRowStatus[]; flag?: ImportFlag[]; flagged?: boolean; uncategorized?: boolean;
   limit?: number;   // 上限 500（决策 §14.44 的 03-14）
   offset?: number;
 }

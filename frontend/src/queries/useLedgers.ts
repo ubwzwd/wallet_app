@@ -78,10 +78,19 @@ export function useMemberNames(l: Uuid | undefined): Record<Uuid, string> {
 
 // ------------------------------------------------------------------ mutations
 
-export function useCreateLedger(): UseMutationResult<Ledger, Error, LedgerCreate> {
+/** Options shared by the mutation hooks whose callers render the error themselves. */
+export interface MutationOpts {
+  /** `true` keeps the global error toast quiet (04 §3.9): the page shows the error inline. */
+  silent?: boolean;
+}
+
+export function useCreateLedger(
+  opts?: MutationOpts,
+): UseMutationResult<Ledger, Error, LedgerCreate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: LedgerCreate) => ledgersApi.create(b),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateLedgers(qc),
   });
 }
@@ -105,10 +114,13 @@ export function useDeleteLedger(l: Uuid): UseMutationResult<void, Error, void> {
   });
 }
 
-export function useJoinLedger(): UseMutationResult<Ledger, Error, JoinLedgerRequest> {
+export function useJoinLedger(
+  opts?: MutationOpts,
+): UseMutationResult<Ledger, Error, JoinLedgerRequest> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: JoinLedgerRequest) => ledgersApi.join(b),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateLedgers(qc),
   });
 }

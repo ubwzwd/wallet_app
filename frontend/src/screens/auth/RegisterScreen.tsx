@@ -24,7 +24,7 @@ import { routes } from '@/domain/routes';
 import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
 import { Button, Skeleton, Text, TextField, toast } from '@/ui';
-import { CurrencyPicker } from '@/ui/index2';
+import { CurrencyPicker } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import { AuthLayout, useRetryCountdown } from './AuthLayout';

@@ -27,7 +27,7 @@ const DEFAULT_RETRY_AFTER = 5;
 export default function JoinLedgerScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
-  const { mutate, isPending } = useJoinLedger();
+  const { mutate, isPending } = useJoinLedger({ silent: true });
 
   const [code, setCode] = React.useState('');
   const [message, setMessage] = React.useState<string | null>(null);

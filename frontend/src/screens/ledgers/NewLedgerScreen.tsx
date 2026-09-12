@@ -24,7 +24,7 @@ import {
 import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
 import { Button, Page, Text, TextField, toast } from '@/ui';
-import { CurrencyPicker } from '@/ui/index2';
+import { CurrencyPicker } from '@/ui';
 
 import { MAX_LEDGERS } from './LedgersScreen';
 
@@ -34,7 +34,7 @@ export default function NewLedgerScreen(): React.JSX.Element {
   const { user } = useAuth();
   const currencies = useCurrencies();
   const ledgers = useLedgers();
-  const create = useCreateLedger();
+  const create = useCreateLedger({ silent: true });
 
   const {
     control,

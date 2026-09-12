@@ -28,9 +28,10 @@ export const ledgerDataCases: Case[] = [
       total: 1,
       summary: {
         base_currency: 'CNY',
-        expense_total: '128.5000',
-        income_total: '0.0000',
+        expense: '128.5000',
+        income: '0.0000',
         net: '-128.5000',
+        count: 1,
         rate_missing_count: 0,
       },
     },
@@ -141,12 +142,11 @@ export const ledgerDataCases: Case[] = [
     name: 'txApi.pair',
     method: 'post',
     path: `/ledgers/${LEDGER_ID}/transactions/${TX_ID}/pair`,
-    // 03 §5.33 wire field name; the call still uses types.ts' `counterpart_transaction_id`.
     body: { other_transaction_id: 'bbbb2222-7777-4888-8999-000011112222' },
     reply: makeTransferPair(),
     call: () =>
       txApi.pair(LEDGER_ID, TX_ID, {
-        counterpart_transaction_id: 'bbbb2222-7777-4888-8999-000011112222',
+        other_transaction_id: 'bbbb2222-7777-4888-8999-000011112222',
       }),
   },
   {
