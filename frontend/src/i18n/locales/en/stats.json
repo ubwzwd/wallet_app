@@ -1,0 +1,23 @@
+{
+  "home": {
+    "assets": "Assets",
+    "liabilities": "Liabilities",
+    "net_worth": "Net worth",
+    "excluded_archived_one": "Not counting {{count}} archived account",
+    "excluded_archived_other": "Not counting {{count}} archived accounts",
+    "no_rate_hint_one": "{{count}} account can't be converted right now",
+    "no_rate_hint_other": "{{count}} accounts can't be converted right now",
+    "balances_title": "Account balances",
+    "balances_empty": "Add an account to get started",
+    "month_summary_title": "This month",
+    "month_prev": "Previous month",
+    "month_next": "Next month",
+    "expense": "Expense",
+    "income": "Income",
+    "category_other_n": "{{count}} more",
+    "month_empty": "No transactions recorded this month yet",
+    "add_transaction": "Add a transaction",
+    "trend_title": "12-month expense trend",
+    "refresh": "Refresh"
+  }
+}

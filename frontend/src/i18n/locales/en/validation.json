@@ -1,0 +1,14 @@
+{
+  "required": "This field is required",
+  "email_invalid": "That doesn't look like a valid email address",
+  "password_min_length": "Password must be at least 8 characters",
+  "password_mismatch": "The two passwords don't match",
+  "currency_invalid": "That currency isn't valid",
+  "amount_positive": "Amount must be greater than 0",
+  "amount_decimal_max": "At most 4 decimal places",
+  "date_not_future": "Date can't be later than tomorrow",
+  "max_length": "At most {{max}} characters",
+  "category_l1_required": "Choose a category",
+  "category_l2_mismatch": "The subcategory must belong to the selected category",
+  "transfer_same_source": "The two sides of a transfer must be different accounts"
+}

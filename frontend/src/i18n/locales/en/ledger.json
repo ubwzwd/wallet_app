@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "My ledgers",
+    "card": {
+      "member_count_one": "{{count}} member",
+      "member_count_other": "{{count}} members",
+      "role_owner": "Owner",
+      "role_member": "Member",
+      "updated_at": "Updated {{time}}"
+    },
+    "empty": {
+      "title": "You don't have any ledgers yet",
+      "create_button": "Create a ledger",
+      "join_button": "Join someone else's ledger"
+    },
+    "error_retry": "Couldn't load. Retry."
+  },
+  "create": {
+    "title": "New ledger",
+    "name_label": "Ledger name",
+    "base_currency_label": "Base currency",
+    "submit": "Create",
+    "limit_reached": "You've reached the limit of 10 ledgers"
+  },
+  "join": {
+    "title": "Join a ledger",
+    "code_hint": "Enter the 6-digit invite code",
+    "rate_limited_countdown": "Too busy right now — retrying in {{seconds}}s",
+    "success_toast": "Joined \"{{name}}\""
+  },
+  "settings": {
+    "title": "Ledger settings",
+    "basic": {
+      "name_label": "Ledger name",
+      "base_currency_label": "Base currency",
+      "base_currency_warning": "Once changed to {{currency}}, the home dashboard and every converted amount will show in {{currency}}. Conversion uses each transaction's own exchange rate on its date — original amounts and currencies never change, so switching back brings the numbers back too. This will re-convert {{count}} transactions."
+    },
+    "members": {
+      "title": "Members",
+      "role_owner": "Owner",
+      "role_member": "Member",
+      "permission_hint": "Only the owner can generate/revoke invite codes, remove members, rename the ledger or change its base currency, transfer ownership, or delete the ledger; members can record and edit transactions, manage accounts, import, and undo imports.",
+      "remove_confirm": "Remove {{name}}? Their entries will stay in the ledger.",
+      "remove_action": "Remove",
+      "transfer_ownership": "Transfer ownership",
+      "transfer_confirm": "Transfer ownership to {{name}}? You'll become a member afterward.",
+      "leave_action": "Leave this ledger",
+      "leave_disabled_hint": "You're the owner of this ledger — transfer ownership to someone else before you leave"
+    },
+    "invite": {
+      "title": "Invite code",
+      "generate": "Generate invite code",
+      "expires_in": "Expires in {{time}}",
+      "hint": "Tell the other person this 6-digit code so they can enter it under \"Join a ledger.\" It's used up after one person joins.",
+      "revoke": "Revoke",
+      "regenerate": "Regenerate",
+      "revoke_confirm": "Once revoked, this code stops working immediately.",
+      "used_by": "Used by {{name}}",
+      "limit_reached": "This ledger already has 10 members"
+    },
+    "danger": {
+      "delete_title": "Delete ledger",
+      "delete_confirm_body": "This will permanently delete {{transactions}} transactions, {{sources}} accounts and {{imports}} import batches in \"{{name}}\". Every member will lose access. This can't be undone.",
+      "delete_confirm_label": "Type the ledger name to confirm:",
+      "delete_action": "Delete ledger"
+    }
+  }
+}
