@@ -9,9 +9,15 @@
   "list": {
     "title": "交易",
     "filter": {
+      "open": "筛选",
+      "title": "筛选",
+      "done": "完成",
       "search_placeholder": "搜索商户或备注",
       "kind_label": "类型",
+      "kind_hint": "不选 = 全部",
       "source_label": "账户",
+      "source_placeholder": "全部账户",
+      "source_selected_other": "已选 {{count}} 个账户",
       "date_range_label": "日期",
       "date_preset": {
         "this_month": "本月",
@@ -20,23 +26,50 @@
         "this_year": "今年",
         "custom": "自定义"
       },
+      "date_from": "从",
+      "date_to": "到",
       "category_label": "分类",
+      "category_l1_placeholder": "全部一级分类",
+      "category_l2_placeholder": "全部二级分类",
       "amount_range_label": "金额区间",
+      "amount_min_placeholder": "最小",
+      "amount_max_placeholder": "最大",
       "amount_range_hint": "按 {{currency}} 比较，跨币种交易按发生日汇率折算",
       "currency_label": "币种",
+      "currency_placeholder": "全部币种",
       "clear_filters": "清空筛选",
-      "remove_filter": "去掉这个条件",
-      "drop_filter_hint": "去掉「{{label}}」会有 {{count}} 笔"
+      "remove_filter": "去掉「{{label}}」",
+      "drop_filter_hint_other": "去掉「{{label}}」会有 {{count}} 笔"
     },
     "chip": {
-      "from_batch": "来自导入 #{{batch}}"
+      "from_batch": "来自导入 #{{batch}}",
+      "q": "关键词：{{value}}",
+      "kind": "类型：{{value}}",
+      "source": "账户：{{value}}",
+      "category": "分类：{{value}}",
+      "from": "从 {{value}}",
+      "to": "到 {{value}}",
+      "currency": "币种：{{value}}",
+      "min_amount": "金额 ≥ {{value}}",
+      "max_amount": "金额 ≤ {{value}}",
+      "date_range": "{{from}} → {{to}}",
+      "amount_range": "金额 {{min}} → {{max}}",
+      "unbounded": "不限"
     },
     "empty_no_data": "这个账本还没有交易",
+    "empty_no_data_action": "记一笔",
     "empty_filtered": "没有符合筛选条件的交易",
+    "error_title": "交易加载失败",
     "day_total": "当日支出 {{expense}} · 收入 {{income}}",
     "summary": "支出 {{expense}} · 收入 {{income}} · 净额 {{net}}",
+    "summary_label": {
+      "expense": "支出",
+      "income": "收入",
+      "net": "净额"
+    },
+    "summary_net_hint": "不含转账",
     "summary_rate_missing_other": "{{count}} 笔因暂无汇率未计入",
-    "count_other": "{{count}} 笔交易",
+    "count_other": "共 {{count}} 笔",
     "rate_missing": "暂无汇率",
     "badge": {
       "repayment": "还款",
@@ -44,9 +77,26 @@
       "imported": "导入"
     },
     "load_more": "加载更多",
+    "loading_more": "正在加载更多",
     "another_half_hint": "另一半在其它页",
     "delete_confirm": "确定删除这条交易吗？",
-    "delete_transfer_confirm": "这是一笔两腿转账，删除会同时删除两腿。"
+    "delete_transfer_confirm": "这是一笔两腿转账，删除会同时删除两腿。",
+    "deleted_toast": "已删除这条交易",
+    "row": {
+      "arrow": "→",
+      "counterparty": "对方：{{name}}",
+      "transfer_pair": "{{from}} → {{to}}",
+      "menu_title": "这条交易",
+      "open_menu": "更多操作",
+      "imported_action": "查看这批导入",
+      "refund_origin_action": "看原支出",
+      "uncategorized": "未归类"
+    },
+    "pagination": {
+      "prev": "上一页",
+      "next": "下一页",
+      "page": "第 {{page}} / {{pages}} 页"
+    }
   },
   "transfer": {
     "subtype": { "plain": "普通转账", "repayment": "信用卡还款" },
