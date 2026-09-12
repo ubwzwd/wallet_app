@@ -19,12 +19,31 @@ import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
 import { qk, useTransfer, useUpdateTransfer } from '@/queries';
 import { useLedgerContext } from '@/store';
-import { Page, Skeleton, toast } from '@/ui';
+import { EmptyState, Page, Skeleton, toast } from '@/ui';
 
-import { TransactionForm, applyFieldErrors } from './TransactionFormScreen';
+import {
+  ConflictBanner,
+  TransactionForm,
+  applyFieldErrors,
+  findConflicts,
+  type FormConflict,
+} from './TransactionFormScreen';
 import type { TxFormValues } from './schemas';
 import { useLeaveGuard } from './useLeaveGuard';
 import { toTransferUpdate, useTransactionForm } from './useTransactionForm';
+
+/** Both legs' fields a 409 can disagree about, in the order they are shown (04 §3.8). */
+const MERGEABLE_FIELDS: readonly (keyof TxFormValues)[] = [
+  'amount',
+  'currency',
+  'source_id',
+  'amount_in',
+  'currency_in',
+  'to_source_id',
+  'occurred_at',
+  'note',
+  'subtype',
+];
 
 /** The pair's `updated_at`, or the newer of the two legs (decision §14.40 01-11). */
 export function pairUpdatedAt(pair: TransferPair): IsoDateTime {
@@ -68,6 +87,7 @@ export default function EditTransferScreen(): React.JSX.Element {
     initial: { kind: 'transfer' },
   });
   const update = useUpdateTransfer(ledgerId, pairId, { silent: true });
+  const [conflicts, setConflicts] = React.useState<FormConflict[]>([]);
   const leave = useLeaveGuard(ctrl.form.formState.isDirty && !update.isPending);
 
   const prefilled = React.useRef(false);
@@ -87,6 +107,7 @@ export default function EditTransferScreen(): React.JSX.Element {
       if (!pair) return;
       update.mutate(toTransferUpdate(values, pairUpdatedAt(pair)), {
         onSuccess: () => {
+          setConflicts([]);
           toast.success(t('transaction:form.saved_toast'));
           leave.allowLeave();
           goBack();
@@ -94,11 +115,14 @@ export default function EditTransferScreen(): React.JSX.Element {
         onError: (error) => {
           if (isApiClientError(error) && error.status === 409 && error.code === 'stale_update') {
             // 04 §3.8: the global handler refetched already — take the server's values as
-            // the new baseline and keep whatever the user had changed.
+            // the new baseline, keep whatever the user had changed, and say field by field
+            // where the two now disagree (step 4). Nothing is re-sent.
             const fresh = qc.getQueryData<TransferPair>(qk.ledger(ledgerId).transfer(pairId));
             if (fresh) {
+              const server = valuesFromPair(fresh);
+              setConflicts(findConflicts(MERGEABLE_FIELDS, server, ctrl));
               ctrl.form.reset(
-                { ...ctrl.form.getValues(), ...valuesFromPair(fresh) },
+                { ...ctrl.form.getValues(), ...server },
                 { keepDirtyValues: true },
               );
             }
@@ -113,9 +137,35 @@ export default function EditTransferScreen(): React.JSX.Element {
 
   const onCancel = React.useCallback((): void => {
     void leave.confirmLeave().then((ok) => {
-      if (ok) goBack();
+      if (!ok) return;
+      // The guard has just asked; the navigation it is about to make is the answer, not a
+      // new exit to challenge — without this the `beforeRemove` listener asks again.
+      leave.allowLeave();
+      goBack();
     });
   }, [goBack, leave]);
+
+  if (query.isError) {
+    // The pair may be gone (someone deleted it, this session cannot read the ledger) —
+    // a skeleton that never resolves would leave nothing to press.
+    return (
+      <Page testID="transfer-edit">
+        <EmptyState
+          testID="transfer-edit-error"
+          icon="alert-triangle"
+          title={errorMessage(t, query.error)}
+          primaryAction={{
+            label: t('common:button.retry'),
+            onPress: () => void query.refetch(),
+          }}
+          secondaryAction={{
+            label: t('transaction:list.title'),
+            onPress: () => router.replace(routes.l(ledgerId).transactions() as Href),
+          }}
+        />
+      </Page>
+    );
+  }
 
   if (query.isPending || !pair) {
     return (
@@ -128,6 +178,14 @@ export default function EditTransferScreen(): React.JSX.Element {
   return (
     <TransactionForm
       ctrl={ctrl}
+      banner={
+        <ConflictBanner
+          ctrl={ctrl}
+          conflicts={conflicts}
+          idPrefix="transfer-edit"
+          onResolve={(field) => setConflicts((list) => list.filter((c) => c.field !== field))}
+        />
+      }
       submitting={update.isPending}
       onSubmit={onSubmit}
       onCancel={onCancel}

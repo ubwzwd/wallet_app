@@ -5,7 +5,8 @@ import React from 'react';
 import { Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react-native';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { router as appRouter } from 'expo-router';
 import i18next from 'i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -283,6 +284,80 @@ test('a fully refunded original is greyed out but still selectable (decision §1
 
   await waitFor(() => expect(postedTransactions()).toHaveLength(1));
   expect(postedTransactions()[0].refund_of).toBe(USED_UP.id);
+});
+
+test('?refund_of= alone prefills the original’s category and account, both still editable', async () => {
+  // 「登记退款」 on the detail page links straight here: the URL can carry the id, never the
+  // category — so the form has to fetch the original and inherit it (04 §4.6.3 / §4.7).
+  mockGet(`/ledgers/${LEDGER_ID}/transactions/${ORIGIN.id}`, ORIGIN);
+  renderRouter(ROUTES, { initialUrl: `${NEW_URL}?refund_of=${ORIGIN.id}`, wrapper: Wrapper });
+
+  expect(await screen.findByTestId('refund-origin-card')).toBeTruthy();
+  await waitFor(() =>
+    expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('消费购物 · 数码'),
+  );
+  // The original sits on the credit card, not on the default (first) account.
+  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name);
+
+  // Both are prefills, not decisions: the user can still change either one.
+  await pickFood();
+  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('餐饮');
+  fireEvent.press(screen.getByTestId('tx-source-trigger'));
+  fireEvent.press(await screen.findByTestId(`tx-source-option-${CHECKING.id}`));
+  expect(await screen.findByTestId('refund-other-source-hint')).toBeTruthy();
+});
+
+// ------------------------------------------------------- 离开确认 (04 §4.6.5)
+
+test('the cancel button asks exactly once and then really leaves', async () => {
+  const router = renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=expense`, wrapper: Wrapper });
+
+  fireEvent.changeText(await screen.findByTestId('tx-amount'), '38');
+  fireEvent.press(screen.getByTestId('tx-cancel'));
+
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('confirm-accept'));
+  });
+
+  // The navigation the guard itself makes is the answer, not a second exit to challenge.
+  await waitFor(() =>
+    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`),
+  );
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+});
+
+test('a route change away from a dirty form is intercepted, and staying works', async () => {
+  const router = renderRouter(ROUTES, {
+    initialUrl: `/l/${LEDGER_ID}/transactions`,
+    wrapper: Wrapper,
+  });
+  act(() => {
+    appRouter.push(`${NEW_URL}?kind=expense` as never);
+  });
+
+  fireEvent.changeText(await screen.findByTestId('tx-amount'), '38');
+
+  // Nobody pressed 取消 — this is the browser's back button / a nav control.
+  await act(async () => {
+    appRouter.back();
+  });
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('confirm-cancel'));
+  });
+  expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
+  expect(router.getPathname()).toBe(`${NEW_URL}`);
+
+  // Answering "leave" lets the very same navigation through.
+  await act(async () => {
+    appRouter.back();
+  });
+  await act(async () => {
+    fireEvent.press(await screen.findByTestId('confirm-accept'));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`));
 });
 
 test('the stats preview reads the cached monthly summary and adds the new amount locally', async () => {

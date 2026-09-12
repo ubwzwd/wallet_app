@@ -90,6 +90,13 @@ export function TransferFields({
   const crossCurrency = !external && values.currency_in !== '' && values.currency_in !== values.currency;
   const [repaymentHint, setRepaymentHint] = React.useState(false);
 
+  // Choosing an account answers the hint: leaving it under the picker would go on
+  // pointing at a choice the user has already corrected.
+  function chooseToSource(id: string | null): void {
+    setRepaymentHint(false);
+    selectToSource(id);
+  }
+
   function changeSubtype(next: TransferSubtype): void {
     form.setValue('subtype', next, { shouldDirty: true });
     if (next !== 'repayment') {
@@ -140,6 +147,13 @@ export function TransferFields({
           />
         )}
       />
+      {errors.subtype ? (
+        // Only a server-side 422 can land here (the schema has no rule of its own), and a
+        // message with nowhere to show would be a message the user never sees.
+        <Text variant="caption" tone="danger" testID="transfer-subtype-error">
+          {txValidationMessage(t, errors.subtype.message)}
+        </Text>
+      ) : null}
 
       <Controller
         control={control}
@@ -221,7 +235,7 @@ export function TransferFields({
               label={t('transaction:transfer.to_source')}
               sources={sources}
               value={field.value === '' ? null : field.value}
-              onChange={selectToSource}
+              onChange={chooseToSource}
               filter={
                 values.subtype === 'repayment' ? (source) => source.type === 'credit' : undefined
               }

@@ -172,6 +172,9 @@ test('a 409 merges the server values in, keeps my edit and never re-sends', asyn
   renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
 
   fireEvent.changeText(await screen.findByTestId('tx-merchant'), '我改的商户');
+  // A second field, to prove every conflicting one is named in the user's own language.
+  fireEvent.press(screen.getByTestId('tx-amount-currency-trigger'));
+  fireEvent.press(await screen.findByTestId('tx-amount-currency-option-USD'));
   fireEvent.press(screen.getByTestId('tx-submit'));
 
   // 04 §3.8: warning toast from the one global handler, the detail key re-read…
@@ -182,6 +185,8 @@ test('a 409 merges the server values in, keeps my edit and never re-sends', asyn
   // …my own edit survives, the server's value is offered next to it, nothing is re-sent.
   expect(screen.getByTestId('tx-merchant').props.value).toBe('我改的商户');
   expect(screen.getByText(`商户 · 服务器上现在是：${server.merchant}`)).toBeTruthy();
+  // Every field name comes from the language pack, the currency included.
+  expect(screen.getByText(`币种 · 服务器上现在是：${server.currency}`)).toBeTruthy();
   expect(patches(TX_PATH)).toHaveLength(1);
 
   // Taking the server's value is explicit, and still not an automatic re-send.
@@ -222,6 +227,56 @@ test('editing a two-leg transfer sends exactly one PATCH to the pair endpoint', 
     note: '还 8 月账单（改）',
     updated_at: pair.updated_at,
   });
+});
+
+test('a 409 on the two-leg pair names the fields that differ, and re-sends nothing', async () => {
+  const pair = makeTransferPair({ pair_id: PAIR_ID, note: '还 8 月账单' });
+  const fresh = { ...pair, note: '别人改的备注', updated_at: '2026-08-04T09:00:00.000000Z' };
+  const pairPath = `/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`;
+  api.mock.onGet(apiUrl(pairPath)).replyOnce(200, pair);
+  api.mock.onGet(apiUrl(pairPath)).reply(200, fresh);
+  mockPatch(pairPath, { detail: '这条记录刚被改过', code: 'stale_update' }, 409);
+
+  renderRouter(ROUTES, {
+    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    wrapper: Wrapper,
+  });
+
+  fireEvent.changeText(await screen.findByTestId('transfer-note'), '我改的备注');
+  fireEvent.press(screen.getByTestId('tx-submit'));
+
+  await waitFor(() => expect(screen.queryByTestId('transfer-edit-conflict')).not.toBeNull());
+  expect(handlers.notify).toHaveBeenCalledWith('warning', expect.any(String));
+  expect(screen.getByText(`备注 · 服务器上现在是：${fresh.note}`)).toBeTruthy();
+  // The user's own edit stands, and nothing went out a second time (04 §3.8 step 5).
+  expect(screen.getByTestId('transfer-note').props.value).toBe('我改的备注');
+  expect(patches(pairPath)).toHaveLength(1);
+
+  fireEvent.press(screen.getByTestId('transfer-edit-use-server-note'));
+  expect(screen.getByTestId('transfer-note').props.value).toBe(fresh.note);
+  expect(patches(pairPath)).toHaveLength(1);
+});
+
+test('a transfer detail that cannot be read offers a way out instead of a skeleton', async () => {
+  const pairPath = `/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`;
+  api.mock.onGet(apiUrl(pairPath)).reply(500, { detail: 'boom' });
+
+  renderRouter(ROUTES, {
+    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    wrapper: Wrapper,
+  });
+
+  expect(await screen.findByTestId('transfer-edit-error')).toBeTruthy();
+  expect(screen.queryByTestId('transfer-edit-skeleton')).toBeNull();
+});
+
+test('a single entry that cannot be read offers a way out instead of a skeleton', async () => {
+  api.mock.onGet(apiUrl(TX_PATH)).reply(500, { detail: 'boom' });
+
+  renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
+
+  expect(await screen.findByTestId('tx-edit-error')).toBeTruthy();
+  expect(screen.queryByTestId('tx-edit-skeleton')).toBeNull();
 });
 
 // ----------------------------------------------------- single-leg transfer (decision §1.2)

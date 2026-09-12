@@ -19,15 +19,19 @@ import { isApiClientError } from '@/api/errors';
 import type { Transaction, TxKind } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
-import { categoryName } from '@/i18n/category';
 import { errorMessage } from '@/i18n/errorCodes';
-import { formatDate, formatMoney } from '@/i18n/format';
-import { qk, useCategories, useTransaction, useUpdateTransaction } from '@/queries';
+import { qk, useTransaction, useUpdateTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
-import { Button, Card, Page, Skeleton, Text, toast } from '@/ui';
+import { Button, EmptyState, Page, Skeleton, Text, toast } from '@/ui';
 
-import { TransactionForm, applyFieldErrors } from './TransactionFormScreen';
+import {
+  ConflictBanner,
+  TransactionForm,
+  applyFieldErrors,
+  findConflicts,
+  type FormConflict,
+} from './TransactionFormScreen';
 import type { TxFormValues } from './schemas';
 import { useLeaveGuard } from './useLeaveGuard';
 import {
@@ -37,7 +41,7 @@ import {
 } from './useTransactionForm';
 
 /** The fields a 409 can disagree about, in the order they are shown. */
-const MERGEABLE_FIELDS = [
+const MERGEABLE_FIELDS: readonly (keyof TxFormValues)[] = [
   'amount',
   'currency',
   'occurred_at',
@@ -46,15 +50,7 @@ const MERGEABLE_FIELDS = [
   'note',
   'category_l1',
   'category_l2',
-] as const;
-
-type MergeableField = (typeof MERGEABLE_FIELDS)[number];
-
-interface Conflict {
-  field: MergeableField;
-  /** The server's value, already in form shape. */
-  value: string | null;
-}
+];
 
 export default function EditTransactionScreen(): React.JSX.Element {
   const { t } = useTranslation();
@@ -67,7 +63,6 @@ export default function EditTransactionScreen(): React.JSX.Element {
 
   const query = useTransaction(ledgerId, txId === '' ? undefined : txId);
   const tx = query.data;
-  const { index } = useCategories();
 
   const ctrl = useTransactionForm({
     ledgerId,
@@ -76,7 +71,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
     allowArchivedId: tx?.source_id ?? null,
   });
   const update = useUpdateTransaction(ledgerId, txId, { silent: true });
-  const [conflicts, setConflicts] = React.useState<Conflict[]>([]);
+  const [conflicts, setConflicts] = React.useState<FormConflict[]>([]);
   const leave = useLeaveGuard(ctrl.form.formState.isDirty && !update.isPending);
 
   // Prefill once: later refetches must not throw away what the user is typing (the 409
@@ -106,20 +101,9 @@ export default function EditTransactionScreen(): React.JSX.Element {
     const fresh = qc.getQueryData<Transaction>(qk.ledger(ledgerId).tx(txId));
     if (!fresh) return;
     const server = valuesFromTransaction(fresh);
-    const current = ctrl.form.getValues();
-    const dirty = ctrl.form.formState.dirtyFields;
-
-    const found: Conflict[] = [];
-    for (const field of MERGEABLE_FIELDS) {
-      const serverValue = (server[field] ?? null) as string | null;
-      const mine = (current[field] ?? null) as string | null;
-      if (dirty[field] !== true) continue;
-      if (serverValue === mine) continue;
-      found.push({ field, value: serverValue });
-    }
-    setConflicts(found);
+    setConflicts(findConflicts(MERGEABLE_FIELDS, server, ctrl));
     // New baseline, user edits preserved, nothing re-sent (04 §3.8 steps 3–5).
-    ctrl.form.reset({ ...current, ...server }, { keepDirtyValues: true });
+    ctrl.form.reset({ ...ctrl.form.getValues(), ...server }, { keepDirtyValues: true });
   }, [ctrl.form, ledgerId, qc, txId]);
 
   const onSubmit = React.useCallback(
@@ -148,9 +132,35 @@ export default function EditTransactionScreen(): React.JSX.Element {
 
   const onCancel = React.useCallback((): void => {
     void leave.confirmLeave().then((ok) => {
-      if (ok) goBack();
+      if (!ok) return;
+      // The guard has just asked; the navigation it is about to make is the answer, not a
+      // new exit to challenge — without this the `beforeRemove` listener asks again.
+      leave.allowLeave();
+      goBack();
     });
   }, [goBack, leave]);
+
+  if (query.isError) {
+    // Deleted while the link sat in someone's chat, a ledger this session may not read, a
+    // dropped connection: a permanent skeleton would be a dead end with nothing to press.
+    return (
+      <Page testID="tx-edit">
+        <EmptyState
+          testID="tx-edit-error"
+          icon="alert-triangle"
+          title={errorMessage(t, query.error)}
+          primaryAction={{
+            label: t('common:button.retry'),
+            onPress: () => void query.refetch(),
+          }}
+          secondaryAction={{
+            label: t('transaction:list.title'),
+            onPress: () => router.replace(routes.l(ledgerId).transactions() as Href),
+          }}
+        />
+      </Page>
+    );
+  }
 
   if (query.isPending || !tx || tx.transfer_pair_id !== null) {
     return (
@@ -169,18 +179,6 @@ export default function EditTransactionScreen(): React.JSX.Element {
   // carries the button that clears it, so the instruction can be followed where it is read.
   const mustUnlinkRefund = ctrl.values.refund_of !== null && ctrl.values.kind !== 'refund';
   const source = ctrl.sourceById(ctrl.values.source_id);
-
-  function conflictLabel(field: MergeableField, value: string | null): string {
-    if (value === null || value === '') return t('common:status.none');
-    if (field === 'amount') return formatMoney(value, ctrl.values.currency, ctrl.lang);
-    if (field === 'occurred_at') return formatDate(value, ctrl.lang);
-    if (field === 'source_id') return ctrl.sourceById(value)?.name ?? value;
-    if (field === 'category_l1' || field === 'category_l2') {
-      const category = index?.byCode[value];
-      return category ? categoryName(category, ctrl.lang) : value;
-    }
-    return value;
-  }
 
   const banner = (
     <View style={styles.banner}>
@@ -208,35 +206,11 @@ export default function EditTransactionScreen(): React.JSX.Element {
           />
         </View>
       ) : null}
-      {conflicts.length > 0 ? (
-        <Card variant="outlined" testID="tx-edit-conflict">
-          <Text variant="caption" tone="warning">
-            {t('transaction:form.conflict_title')}
-          </Text>
-          {conflicts.map((conflict) => (
-            <View key={conflict.field} style={styles.conflictRow}>
-              <Text variant="caption" tone="secondary">
-                {`${t(`transaction:detail.event_field.${conflict.field}`)} · ${t(
-                  'transaction:form.conflict_server_value',
-                  { value: conflictLabel(conflict.field, conflict.value) },
-                )}`}
-              </Text>
-              <Button
-                testID={`tx-edit-use-server-${conflict.field}`}
-                variant="ghost"
-                size="sm"
-                label={t('transaction:form.conflict_use_server')}
-                onPress={() => {
-                  ctrl.form.setValue(conflict.field, conflict.value as never, {
-                    shouldDirty: false,
-                  });
-                  setConflicts((list) => list.filter((c) => c.field !== conflict.field));
-                }}
-              />
-            </View>
-          ))}
-        </Card>
-      ) : null}
+      <ConflictBanner
+        ctrl={ctrl}
+        conflicts={conflicts}
+        onResolve={(field) => setConflicts((list) => list.filter((c) => c.field !== field))}
+      />
     </View>
   );
 

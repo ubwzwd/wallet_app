@@ -110,6 +110,20 @@
     "conflict_title": "Someone just changed this entry — these fields differ from your edits",
     "conflict_server_value": "On the server it now says: {{value}}",
     "conflict_use_server": "Use the server's",
+    "field": {
+      "amount": "Amount",
+      "currency": "Currency",
+      "occurred_at": "Date",
+      "source_id": "Account",
+      "merchant": "Merchant",
+      "note": "Note",
+      "category_l1": "Category",
+      "category_l2": "Subcategory",
+      "amount_in": "Amount received",
+      "currency_in": "Currency received",
+      "to_source_id": "To account",
+      "subtype": "Subtype"
+    },
     "keyboard_hint_title": "Keyboard shortcuts",
     "keyboard_hint": {
       "save": "Save",

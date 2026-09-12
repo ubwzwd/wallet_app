@@ -61,11 +61,13 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 const onSelect = jest.fn<void, [Transaction]>();
 const onClose = jest.fn<void, []>();
 let filterRows: ((tx: Transaction) => boolean) | undefined;
+/** The picker is mounted by its caller whether or not it is showing (see the last test). */
+let pickerOpen = true;
 
 function Harness(): React.JSX.Element {
   return (
     <TransactionPicker
-      open
+      open={pickerOpen}
       onClose={onClose}
       onSelect={onSelect}
       title="选择原支出"
@@ -95,6 +97,7 @@ beforeEach(async () => {
   onSelect.mockClear();
   onClose.mockClear();
   filterRows = undefined;
+  pickerOpen = true;
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -169,4 +172,15 @@ test('the editable filters go into the request; the fixed one stays put', async 
     expect(withQuery).toHaveLength(1);
     expect(withQuery[0].params).toMatchObject({ kind: ['expense'] });
   });
+});
+
+test('a picker that is only mounted, not shown, asks the server for nothing', async () => {
+  // The refund tab keeps it mounted the whole time it is open; a closed overlay must not
+  // cost a list request, nor a second `GET /sources` under a key the form does not share.
+  pickerOpen = false;
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+
+  await waitFor(() => expect(api.mock.history.get.length).toBeGreaterThan(0));
+  expect(listRequest()).toBeUndefined();
+  expect(api.mock.history.get.filter((r) => (r.url ?? '').endsWith('/sources'))).toHaveLength(0);
 });

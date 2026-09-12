@@ -16,13 +16,20 @@ import type { Money, Transaction, TxKind } from '@/api/types';
 import { evaluateExpression, isExpression } from '@/domain/calc';
 import { KINDS } from '@/domain/kinds';
 import { routes, safeNext } from '@/domain/routes';
+import { categoryName } from '@/i18n/category';
 import { errorMessage } from '@/i18n/errorCodes';
-import { todayLocalIso } from '@/i18n/format';
-import { useCreateTransaction, useCreateTransfer, useTransaction } from '@/queries';
+import { formatDate, formatMoney, todayLocalIso } from '@/i18n/format';
+import {
+  useCategories,
+  useCreateTransaction,
+  useCreateTransfer,
+  useTransaction,
+} from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import {
   Button,
+  Card,
   EmptyState,
   KeyboardHint,
   Page,
@@ -48,22 +55,32 @@ import {
   type TxFormController,
 } from './useTransactionForm';
 
-/** The form field a server-side 422 `fields` entry belongs to, if any. */
-const SERVER_FIELDS: readonly (keyof TxFormValues)[] = [
-  'source_id',
-  'amount',
-  'currency',
-  'occurred_at',
-  'merchant',
-  'note',
-  'category_l1',
-  'category_l2',
-  'refund_of',
-  'counterparty',
-  'to_source_id',
-  'amount_in',
-  'currency_in',
-];
+/**
+ * Server field name → the control that shows it.
+ *
+ * The two-leg transfer endpoint names the same three boxes differently (04 §4.6.4:
+ * `from_source_id` / `amount_out` / `currency_out`), so its aliases map onto the same
+ * controls; anything missing here has no box to sit next to and goes to the toast instead.
+ */
+const SERVER_FIELDS: Readonly<Record<string, keyof TxFormValues>> = {
+  source_id: 'source_id',
+  amount: 'amount',
+  currency: 'currency',
+  occurred_at: 'occurred_at',
+  merchant: 'merchant',
+  note: 'note',
+  category_l1: 'category_l1',
+  category_l2: 'category_l2',
+  refund_of: 'refund_of',
+  counterparty: 'counterparty',
+  to_source_id: 'to_source_id',
+  amount_in: 'amount_in',
+  currency_in: 'currency_in',
+  from_source_id: 'source_id',
+  amount_out: 'amount',
+  currency_out: 'currency',
+  subtype: 'subtype',
+};
 
 export interface TransactionFormProps {
   ctrl: TxFormController;
@@ -301,17 +318,121 @@ export function applyFieldErrors(
     fallback();
     return;
   }
-  let placed = false;
+  let unplaced = Object.keys(error.fields).length === 0;
   for (const [name, message] of Object.entries(error.fields)) {
-    const field = SERVER_FIELDS.find((f) => f === name);
-    if (!field) continue;
+    const field = SERVER_FIELDS[name];
+    if (!field) {
+      // A field with no box of its own must not disappear just because another one
+      // happened to match — the toast is where it is still readable.
+      unplaced = true;
+      continue;
+    }
     // Every control renders its error through `txValidationMessage`, which resolves a
     // `validation` key — so the server's own prose has to be marked as finished copy,
     // otherwise it would be looked up and come out as 「这是必填项」.
     ctrl.form.setError(field, { type: 'server', message: rawMessage(message) });
-    placed = true;
   }
-  if (!placed) fallback();
+  if (unplaced) fallback();
+}
+
+// --------------------------------------------------------- the 409 merge (04 §3.8)
+
+/** One field the server disagrees about after a 409 (04 §3.8 step 4). */
+export interface FormConflict {
+  field: keyof TxFormValues;
+  /** The server's value, already in form shape. */
+  value: string | null;
+}
+
+/**
+ * The fields the user changed that the server now says something else about. Fields the
+ * user never touched are not conflicts: they are simply taken over.
+ */
+export function findConflicts(
+  fields: readonly (keyof TxFormValues)[],
+  server: Partial<TxFormValues>,
+  ctrl: TxFormController,
+): FormConflict[] {
+  const current = ctrl.form.getValues();
+  const dirty = ctrl.form.formState.dirtyFields as Partial<
+    Record<keyof TxFormValues, boolean>
+  >;
+  const found: FormConflict[] = [];
+  for (const field of fields) {
+    if (dirty[field] !== true) continue;
+    const serverValue = (server[field] ?? null) as string | null;
+    const mine = (current[field] ?? null) as string | null;
+    if (serverValue === mine) continue;
+    found.push({ field, value: serverValue });
+  }
+  return found;
+}
+
+/** 「服务器上现在是：X」 + [用服务器的], per conflicting field (04 §3.8 step 4). */
+export function ConflictBanner({
+  ctrl,
+  conflicts,
+  onResolve,
+  idPrefix = 'tx-edit',
+}: {
+  ctrl: TxFormController;
+  conflicts: readonly FormConflict[];
+  /** Called after the server's value has been written into the form. */
+  onResolve(field: keyof TxFormValues): void;
+  /** Which screen is showing it — `tx-edit` or `transfer-edit`. */
+  idPrefix?: string;
+}): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const { index } = useCategories();
+  if (conflicts.length === 0) return null;
+
+  function label(field: keyof TxFormValues, value: string | null): string {
+    if (value === null || value === '') return t('common:status.none');
+    if (field === 'amount' || field === 'amount_in') {
+      const currency = field === 'amount' ? ctrl.values.currency : ctrl.values.currency_in;
+      return formatMoney(value, currency, ctrl.lang);
+    }
+    if (field === 'occurred_at') return formatDate(value, ctrl.lang);
+    if (field === 'source_id' || field === 'to_source_id') {
+      return ctrl.sourceById(value)?.name ?? value;
+    }
+    if (field === 'category_l1' || field === 'category_l2') {
+      const category = index?.byCode[value];
+      return category ? categoryName(category, ctrl.lang) : value;
+    }
+    if (field === 'subtype') return t(`transaction:transfer.subtype.${value}`);
+    return value;
+  }
+
+  return (
+    <Card variant="outlined" testID={`${idPrefix}-conflict`}>
+      <Text variant="caption" tone="warning">
+        {t('transaction:form.conflict_title')}
+      </Text>
+      {conflicts.map((conflict) => (
+        <View key={conflict.field} style={styles.conflictRow}>
+          <Text variant="caption" tone="secondary">
+            {`${t(`transaction:form.field.${conflict.field}`)} · ${t(
+              'transaction:form.conflict_server_value',
+              { value: label(conflict.field, conflict.value) },
+            )}`}
+          </Text>
+          <Button
+            testID={`${idPrefix}-use-server-${conflict.field}`}
+            variant="ghost"
+            size="sm"
+            label={t('transaction:form.conflict_use_server')}
+            onPress={() => {
+              ctrl.form.setValue(conflict.field, conflict.value as never, {
+                shouldDirty: false,
+              });
+              onResolve(conflict.field);
+            }}
+          />
+        </View>
+      ))}
+    </Card>
+  );
 }
 
 export default function TransactionFormScreen(): React.JSX.Element {
@@ -358,9 +479,14 @@ export default function TransactionFormScreen(): React.JSX.Element {
   React.useEffect(() => {
     if (copied.current || !copyData) return;
     copied.current = true;
+    // One leg of a two-leg transfer carries no trace of the other side (its account, its
+    // amount, its currency all live on the sibling leg), so there is nothing here to copy
+    // into a two-leg form. The blank form stands instead of a half-filled one.
+    if (copyData.kind === 'transfer' && copyData.transfer_pair_id !== null) return;
     const magnitude = copyData.amount.startsWith('-')
       ? copyData.amount.slice(1)
       : copyData.amount;
+    const isSingleLeg = copyData.kind === 'transfer';
     ctrl.form.reset({
       ...ctrl.form.getValues(),
       kind: copyData.kind,
@@ -372,9 +498,18 @@ export default function TransactionFormScreen(): React.JSX.Element {
       category_l1: copyData.category_l1,
       category_l2: copyData.category_l2,
       occurred_at: todayLocalIso(),
+      // A copied single-leg transfer keeps its shape too, or the transfer tab would open
+      // on a two-leg form with no receiving account (04 §4.6.4).
+      external: isSingleLeg,
+      direction: copyData.transfer_role ?? 'out',
+      subtype: copyData.transfer_subtype ?? 'plain',
+      counterparty: copyData.counterparty ?? '',
+      currency_in: isSingleLeg ? copyData.currency : '',
     });
+    // The tab follows the copy, so the URL has to as well — browser back/forward reads it.
+    router.setParams({ kind: copyData.kind });
     setFocusKey((n) => n + 1);
-  }, [copyData, ctrl.form]);
+  }, [copyData, ctrl.form, router]);
 
   const goBack = React.useCallback((): void => {
     if (next) {
@@ -460,7 +595,11 @@ export default function TransactionFormScreen(): React.JSX.Element {
 
   const onCancel = React.useCallback((): void => {
     void leave.confirmLeave().then((ok) => {
-      if (ok) goBack();
+      if (!ok) return;
+      // The guard has just asked; the navigation it is about to make is the answer, not a
+      // new exit to challenge — without this the `beforeRemove` listener asks again.
+      leave.allowLeave();
+      goBack();
     });
   }, [goBack, leave]);
 
@@ -489,4 +628,11 @@ export default function TransactionFormScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   fields: { gap: space['3'], alignSelf: 'stretch' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space['2'] },
+  conflictRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space['2'],
+  },
 });

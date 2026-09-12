@@ -72,6 +72,24 @@ export function useRefundOrigin(ctrl: TxFormController): RefundOriginState {
     form.setValue('refund_of', null, { shouldDirty: true });
   }, [form]);
 
+  // Arriving through 「登记退款」 (`?refund_of=<id>`) has to prefill exactly what picking the
+  // original in the picker prefills — the URL can carry an id, never a category (04 §4.6.3,
+  // §4.7). It happens once: a later refetch must not overwrite what the user chose since.
+  const inherited = React.useRef(false);
+  const fetched = query.data;
+  React.useEffect(() => {
+    if (inherited.current || alreadyHave || ctrl.mode !== 'create') return;
+    if (!fetched || fetched.id !== refundOf) return;
+    inherited.current = true;
+    // Only into an empty category box: a tab switch may already have carried one along.
+    if (form.getValues('category_l1') === null) {
+      form.setValue('category_l1', fetched.category_l1);
+      form.setValue('category_l2', fetched.category_l2);
+    }
+    // An explicit `?source_id=` is the caller's own instruction and outranks the original.
+    if (!ctrl.sourcePinned) ctrl.selectSource(fetched.source_id);
+  }, [alreadyHave, ctrl, fetched, form, refundOf]);
+
   return {
     origin,
     pickerOpen,

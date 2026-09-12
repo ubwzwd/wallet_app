@@ -101,6 +101,11 @@ export interface TxFormController {
   recentMerchants: RecentMerchant[];
   allowArchivedId: Uuid | null;
   mode: 'create' | 'edit';
+  /**
+   * The account came from the caller (`?source_id=`), not from the "last used" default —
+   * so nothing may quietly replace it (04 §4.6.3's refund prefill checks this).
+   */
+  sourcePinned: boolean;
   /** Persist the per-device memory after a successful save. */
   remember(values: TxFormValues): void;
 }
@@ -265,6 +270,7 @@ export function useTransactionForm(opts: UseTransactionFormOptions): TxFormContr
     recentMerchants,
     allowArchivedId,
     mode,
+    sourcePinned: typeof initial?.source_id === 'string' && initial.source_id !== '',
     remember,
   };
 }

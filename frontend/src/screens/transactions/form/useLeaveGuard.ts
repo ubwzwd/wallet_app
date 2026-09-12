@@ -68,8 +68,10 @@ export function useLeaveGuard(dirty: boolean): LeaveGuard {
         });
       });
     } catch {
-      // Layouts that are not a navigator (a bare `Slot`) have no such event; the
-      // in-page cancel button still goes through `confirmLeave()`.
+      // expo-router's `Slot` is a navigator and does emit `beforeRemove` (pinned by
+      // form-kinds.test.tsx), but a host that does not would throw here rather than take
+      // the whole screen down; the in-page cancel button still goes through
+      // `confirmLeave()` either way.
     }
     return unsubscribe;
   }, [confirmLeave, dirty, navigation]);

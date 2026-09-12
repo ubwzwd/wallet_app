@@ -108,6 +108,20 @@
     "conflict_title": "这条记录刚被别人改过，下面这些地方和你的改动不一样",
     "conflict_server_value": "服务器上现在是：{{value}}",
     "conflict_use_server": "用服务器的",
+    "field": {
+      "amount": "金额",
+      "currency": "币种",
+      "occurred_at": "日期",
+      "source_id": "账户",
+      "merchant": "商户",
+      "note": "备注",
+      "category_l1": "一级分类",
+      "category_l2": "二级分类",
+      "amount_in": "转入金额",
+      "currency_in": "转入币种",
+      "to_source_id": "转入账户",
+      "subtype": "子类型"
+    },
     "keyboard_hint_title": "快捷键",
     "keyboard_hint": {
       "save": "保存",
