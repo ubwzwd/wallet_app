@@ -7,24 +7,43 @@
   },
   "list": {
     "title": "Accounts",
+    "assets": "Assets",
+    "liabilities": "Liabilities",
+    "net_worth": "Net worth",
+    "new_button": "New account",
+    "error_retry": "Couldn't load. Try again.",
     "group_subtotal": "Subtotal {{amount}}",
     "balance_debt": "Owes {{amount}}",
+    "rate_date": "Rate from {{date}}",
     "archived_section": "Archived ({{count}})",
+    "excluded_archived": "Excluding {{count}} archived accounts",
+    "archived_expand": "Show archived accounts",
+    "archived_collapse": "Hide archived accounts",
     "archived_hint": "Not counted in net worth",
     "archived_at": "Archived {{date}}",
     "empty": {
-      "title": "No accounts yet — add one to start recording"
+      "title": "No accounts yet — add one to start recording",
+      "button": "New account"
     },
     "archive_action": "Archive",
     "unarchive_action": "Unarchive",
+    "archive_confirm_title": "Archive this account?",
     "archive_confirm": "Once archived, you can't record transactions on it or use it as an import target, but its history is kept. Its balance of {{balance}} will be removed from net worth.",
+    "unarchive_confirm_title": "Unarchive this account?",
+    "unarchive_confirm": "You'll be able to record on it again, and its balance of {{balance}} will count towards net worth once more.",
+    "archived_toast": "Archived “{{name}}”",
+    "unarchived_toast": "Unarchived “{{name}}”",
     "delete_action": "Delete",
+    "delete_confirm_title": "Delete this account?",
+    "delete_confirm": "This can't be undone. Only an account with no transactions can be deleted.",
+    "deleted_toast": "Deleted “{{name}}”",
     "delete_disabled_hint": "This account has transactions — archive it instead",
     "no_rate_hint": "{{count}} accounts can't be converted right now"
   },
   "form": {
     "new_title": "New account",
     "edit_title": "Edit account",
+    "load_error": "Couldn't load. Try again.",
     "name_label": "Name",
     "name_duplicate_hint": "There's already an account with this name — they're still tracked separately",
     "type_label": "Type",
@@ -32,9 +51,17 @@
     "currency_locked_hint": "An account's currency can't be changed after it's created — changing it would muddle past transactions. To switch currency, create a new account and archive this one.",
     "opening_balance_label": "Opening balance",
     "opening_balance_hint": "Balance = opening balance + the sum of every transaction on this account. The opening balance lives on the account, not as a transaction — it won't show up in the transaction list.",
+    "opening_balance_invalid": "That's not a valid amount — 4 decimal places at most",
     "credit_debt_label": "Current balance owed",
     "credit_debt_hint": "Enter how much you currently owe the bank — it's stored as a negative number",
+    "type_change_converted": "Opening balance converted for the new type: {{amount}}",
+    "opening_balance_change_title": "Change the opening balance",
+    "net_worth_preview": "Net worth {{from}} → {{to}}",
     "opening_balance_change_confirm": "This immediately affects all historical balances and net worth. Save anyway?",
-    "archived_toggle": "Archived"
+    "archived_toggle": "Archived",
+    "submit_create": "Create account",
+    "submit_save": "Save",
+    "created_toast": "Created “{{name}}”",
+    "saved_toast": "Saved “{{name}}”"
   }
 }
