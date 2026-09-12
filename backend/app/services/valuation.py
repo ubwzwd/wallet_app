@@ -25,6 +25,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.errors import ApiError, ErrorCode
 from app.models.finance_source import FinanceSource
 from app.models.ledger import Ledger
@@ -327,7 +328,7 @@ def _base_rate(
     if currency == base_currency:
         result: tuple[Decimal, dt.date] | None = (
             quantize_rate(Decimal("1")),
-            dt.datetime.now(dt.UTC).date(),
+            utcnow().date(),
         )
     else:
         try:

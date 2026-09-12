@@ -183,12 +183,14 @@ def test_trend_defaults_end_to_the_current_utc_month(client, book, monkeypatch):
     ledger, user, source, headers = book
     import app.api.stats as stats_api
 
-    monkeypatch.setattr(stats_api, "utcnow", lambda: dt.datetime(2026, 9, 15, 3, 0, 0))
+    monkeypatch.setattr(
+        stats_api, "utcnow", lambda: dt.datetime(2031, 4, 15, 3, 0, 0, tzinfo=dt.UTC)
+    )
 
     response = client.get(f"/api/v1/ledgers/{ledger.id}/stats/trend?months=1", headers=headers)
 
     assert response.status_code == 200
-    assert response.json()["months"] == [{"month": "2026-09", "expense": "0.0000"}]
+    assert response.json()["months"] == [{"month": "2031-04", "expense": "0.0000"}]
 
 
 @pytest.mark.parametrize("months,end", [(0, "2026-09"), (37, "2026-09"), (12, "2026-9")])

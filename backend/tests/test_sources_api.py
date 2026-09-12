@@ -262,7 +262,7 @@ def test_a_currency_with_no_rate_at_all_is_excluded_and_counted_once(
     payload = client.get(world.url, headers=world.headers).json()
 
     row = item_by_name(payload, "招商 储蓄卡")
-    assert row["balance"] == money(Decimal("900"))     # the GBP row is simply left out
+    assert row["balance"] == money(Decimal("900"))     # the AUD row is simply left out
     assert row["rate_missing_count"] == 1
 
     other_row = item_by_name(payload, "现金")
