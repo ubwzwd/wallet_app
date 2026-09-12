@@ -32,6 +32,7 @@ import type {
   Uuid,
 } from '@/api/types';
 
+import type { MutationOpts } from './client';
 import {
   invalidatePair,
   invalidateTransactions,
@@ -91,48 +92,19 @@ export function useTransaction(
 }
 
 /**
- * A two-leg transfer, keyed by `pair_id`.
- *
- * There is no `GET .../transfer/{pair_id}` endpoint (03 §5.30–§5.34 only has POST / PATCH /
- * DELETE / unpair), so the pair is read through one of its legs: `GET /transactions/{tid}`
- * carries the whole `pair` (04 §3.3, §4.7). `legTxId` is the leg the caller came from; the
- * create / update transfer hooks below seed this key with the `TransferPair` they get back,
- * so a page reached straight from a mutation already has it. Without a leg id and without a
- * seeded pair the query stays idle.
+ * A two-leg transfer, keyed by `pair_id` — `GET /ledgers/{id}/transactions/transfer/{pair_id}`
+ * (03 §5.30a) returns both legs plus the pair's own `updated_at`, which is what a PATCH has
+ * to send back (04 §3.8). The create / update hooks below seed this key with the pair they
+ * get back, so a page reached straight from a mutation paints without a second request.
  */
 export function useTransfer(
   l: Uuid | undefined,
   pid: Uuid | undefined,
-  legTxId?: Uuid,
 ): UseQueryResult<TransferPair> {
   return useQuery({
     queryKey: qk.ledger(l ?? '').transfer(pid ?? ''),
-    queryFn: async () => {
-      const leg = await txApi.get(l as Uuid, legTxId as Uuid);
-      const ref = leg.pair;
-      if (!ref) throw new Error(`transaction ${leg.id} is not part of a transfer pair`);
-      // `pair` is only a reference (04 §3.3), so both legs are read in full.
-      const [out, into] = await Promise.all([
-        leg.id === ref.out.transaction_id
-          ? Promise.resolve(leg)
-          : txApi.get(l as Uuid, ref.out.transaction_id),
-        leg.id === ref.in.transaction_id
-          ? Promise.resolve(leg)
-          : txApi.get(l as Uuid, ref.in.transaction_id),
-      ]);
-      const pair: TransferPair = {
-        pair_id: ref.pair_id,
-        occurred_at: out.occurred_at,
-        subtype: out.transfer_subtype ?? 'plain',
-        note: out.note,
-        out,
-        in: into,
-        // 04 §3.8: the newer of the two legs is what a PATCH must send back.
-        updated_at: out.updated_at >= into.updated_at ? out.updated_at : into.updated_at,
-      };
-      return pair;
-    },
-    enabled: Boolean(l) && Boolean(pid) && Boolean(legTxId),
+    queryFn: () => txApi.getTransfer(l as Uuid, pid as Uuid),
+    enabled: Boolean(l) && Boolean(pid),
   });
 }
 
@@ -140,10 +112,12 @@ export function useTransfer(
 
 export function useCreateTransaction(
   l: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<Transaction, Error, TransactionCreate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransactionCreate) => txApi.create(l, b),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateTransactions(qc, l),
   });
 }
@@ -151,29 +125,36 @@ export function useCreateTransaction(
 export function useUpdateTransaction(
   l: Uuid,
   tid: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<Transaction, Error, TransactionUpdate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransactionUpdate) => txApi.update(l, tid, b),
-    meta: { detailKey: qk.ledger(l).tx(tid) },
+    meta: { detailKey: qk.ledger(l).tx(tid), silent: opts?.silent },
     onSuccess: () => invalidateTransactions(qc, l),
   });
 }
 
-export function useDeleteTransaction(l: Uuid): UseMutationResult<void, Error, Uuid> {
+export function useDeleteTransaction(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, Uuid> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (tid: Uuid) => txApi.remove(l, tid),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateTransactions(qc, l),
   });
 }
 
 export function useCreateTransfer(
   l: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<TransferPair, Error, TransferCreate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransferCreate) => txApi.createTransfer(l, b),
+    meta: { silent: opts?.silent },
     onSuccess: (pair) => {
       qc.setQueryData(qk.ledger(l).transfer(pair.pair_id), pair);
       invalidateTransfer(qc, l, pair.pair_id);
@@ -184,11 +165,12 @@ export function useCreateTransfer(
 export function useUpdateTransfer(
   l: Uuid,
   pairId: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<TransferPair, Error, TransferUpdate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransferUpdate) => txApi.updateTransfer(l, pairId, b),
-    meta: { detailKey: qk.ledger(l).transfer(pairId) },
+    meta: { detailKey: qk.ledger(l).transfer(pairId), silent: opts?.silent },
     onSuccess: (pair) => {
       qc.setQueryData(qk.ledger(l).transfer(pairId), pair);
       invalidateTransfer(qc, l, pairId);
@@ -196,10 +178,14 @@ export function useUpdateTransfer(
   });
 }
 
-export function useDeleteTransfer(l: Uuid): UseMutationResult<void, Error, Uuid> {
+export function useDeleteTransfer(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, Uuid> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (pairId: Uuid) => txApi.removeTransfer(l, pairId),
+    meta: { silent: opts?.silent },
     onSuccess: (_data, pairId) => {
       invalidateTransactions(qc, l);
       removeTransfer(qc, l, pairId);
@@ -211,20 +197,26 @@ export function useDeleteTransfer(l: Uuid): UseMutationResult<void, Error, Uuid>
 export function usePairTransaction(
   l: Uuid,
   tid: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<TransferPair, Error, TransactionPairRequest> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransactionPairRequest) => txApi.pair(l, tid, b),
+    meta: { silent: opts?.silent },
     onSuccess: (_pair, variables) =>
       invalidatePair(qc, l, tid, variables.other_transaction_id),
   });
 }
 
 /** Split a pair back into two legs: the pair itself stops existing, so its key is removed. */
-export function useUnpairTransfer(l: Uuid): UseMutationResult<UnpairResult, Error, Uuid> {
+export function useUnpairTransfer(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<UnpairResult, Error, Uuid> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (pairId: Uuid) => txApi.unpair(l, pairId),
+    meta: { silent: opts?.silent },
     onSuccess: (result, pairId) => {
       invalidatePair(qc, l, result.out.id, result.in.id);
       removeTransfer(qc, l, pairId);

@@ -20,7 +20,8 @@
     "name_label": "Ledger name",
     "base_currency_label": "Base currency",
     "submit": "Create",
-    "limit_reached": "You've reached the limit of 10 ledgers"
+    "limit_reached": "You've reached the limit of 10 ledgers",
+    "success_toast": "Created “{{name}}”"
   },
   "join": {
     "title": "Join a ledger",

@@ -1,7 +1,11 @@
 /** The hooks, driven through the mocked API (04 §8.2). */
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  type UseMutationResult,
+} from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { LedgerMember, Transaction, TransactionListResponse } from '@/api/types';
@@ -12,13 +16,38 @@ import {
   makeCategoryTree,
   makeCurrencyList,
   makeTransaction,
+  makeTransferPair,
 } from '@/test/fixtures';
 import { apiUrl, mockApi, mockGet, mockPost, type MockApi } from '@/test/mockApi';
 import { PREF_NAMES, getJsonPref, getJsonPrefSync, setJsonPref } from '@/utils/prefs';
 
 import { useCategories, useCurrencies } from '../useGlobal';
-import { useMemberNames } from '../useLedgers';
-import { useCreateTransaction, useInfiniteTransactions } from '../useTransactions';
+import {
+  useCreateInvite,
+  useCreateLedger,
+  useDeleteLedger,
+  useJoinLedger,
+  useLeaveLedger,
+  useMemberNames,
+  useRemoveMember,
+  useRevokeInvite,
+  useTransferOwnership,
+  useUpdateLedger,
+} from '../useLedgers';
+import { useUpdateMe } from '../useMe';
+import { useCreateSource, useDeleteSource, useUpdateSource } from '../useSources';
+import {
+  useCreateTransaction,
+  useCreateTransfer,
+  useDeleteTransaction,
+  useDeleteTransfer,
+  useInfiniteTransactions,
+  usePairTransaction,
+  useTransfer,
+  useUnpairTransfer,
+  useUpdateTransaction,
+  useUpdateTransfer,
+} from '../useTransactions';
 import { useStatsTrend } from '../useStats';
 
 // jest-expo runs as native, where `getJsonPrefSync` always returns null; mocking it lets
@@ -153,6 +182,123 @@ describe('query hooks', () => {
         CATEGORY_VERSION,
       ),
     );
+  });
+
+  test('useCategories drops a malformed stored tree and forgets the preference', async () => {
+    // `expense` is not an array: `buildCategoryIndex` would throw on it.
+    const broken = { version: '2026-01-01', expense: 'not-a-list', income: [] };
+    syncPref.mockReturnValue(broken);
+    await setJsonPref(PREF_NAMES.categories, broken);
+    // The request fails, so nothing writes the preference back and the clean-up is visible.
+    mockGet('/categories', { detail: 'boom', code: 'internal_error' }, 500);
+
+    const { result } = renderHook(() => useCategories(), { wrapper: wrapper(qc) });
+
+    expect(result.current.tree).toBeNull();
+    expect(result.current.index).toBeNull();
+    await waitFor(async () =>
+      expect(await getJsonPref(PREF_NAMES.categories)).toBeNull(),
+    );
+  });
+
+  test('useCategories drops a malformed tree read asynchronously too', async () => {
+    // A version that is not a string — the shape check has to look past `expense`/`income`.
+    const broken = { version: 20260101, expense: [], income: [] };
+    syncPref.mockReturnValue(null);
+    await setJsonPref(PREF_NAMES.categories, broken);
+    mockGet('/categories', { detail: 'boom', code: 'internal_error' }, 500);
+
+    const { result } = renderHook(() => useCategories(), { wrapper: wrapper(qc) });
+
+    await waitFor(async () =>
+      expect(await getJsonPref(PREF_NAMES.categories)).toBeNull(),
+    );
+    expect(result.current.tree).toBeNull();
+  });
+
+  test('useTransfer reads the pair through its own endpoint, by pair id alone', async () => {
+    const pairId = 'pair-77';
+    mockGet(
+      `/ledgers/${L}/transactions/transfer/${pairId}`,
+      makeTransferPair({ pair_id: pairId }),
+    );
+
+    const { result } = renderHook(() => useTransfer(L, pairId), { wrapper: wrapper(qc) });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.pair_id).toBe(pairId);
+    // One request, and no `GET /transactions/{tid}` for either leg.
+    expect(api.mock.history.get.map((c) => c.url)).toEqual([
+      `/ledgers/${L}/transactions/transfer/${pairId}`,
+    ]);
+  });
+
+  test('useTransfer stays idle without a pair id', async () => {
+    const { result } = renderHook(() => useTransfer(L, undefined), { wrapper: wrapper(qc) });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(api.mock.history.get.length).toBe(0);
+  });
+
+  test('every mutation hook forwards opts.silent into its meta', async () => {
+    api.mock.onAny().reply(500, { detail: 'boom', code: 'internal_error' });
+
+    type AnyMutation = UseMutationResult<unknown, Error, never>;
+    const hooks: Record<string, () => AnyMutation> = {
+      useCreateLedger: () => useCreateLedger({ silent: true }) as AnyMutation,
+      useUpdateLedger: () => useUpdateLedger(L, { silent: true }) as AnyMutation,
+      useDeleteLedger: () => useDeleteLedger(L, { silent: true }) as AnyMutation,
+      useJoinLedger: () => useJoinLedger({ silent: true }) as AnyMutation,
+      useCreateInvite: () => useCreateInvite(L, { silent: true }) as AnyMutation,
+      useRevokeInvite: () => useRevokeInvite(L, { silent: true }) as AnyMutation,
+      useRemoveMember: () => useRemoveMember(L, { silent: true }) as AnyMutation,
+      useTransferOwnership: () => useTransferOwnership(L, { silent: true }) as AnyMutation,
+      useLeaveLedger: () => useLeaveLedger(L, { silent: true }) as AnyMutation,
+      useCreateSource: () => useCreateSource(L, { silent: true }) as AnyMutation,
+      useUpdateSource: () => useUpdateSource(L, 's1', { silent: true }) as AnyMutation,
+      useDeleteSource: () => useDeleteSource(L, { silent: true }) as AnyMutation,
+      useCreateTransaction: () => useCreateTransaction(L, { silent: true }) as AnyMutation,
+      useUpdateTransaction: () => useUpdateTransaction(L, 't1', { silent: true }) as AnyMutation,
+      useDeleteTransaction: () => useDeleteTransaction(L, { silent: true }) as AnyMutation,
+      useCreateTransfer: () => useCreateTransfer(L, { silent: true }) as AnyMutation,
+      useUpdateTransfer: () => useUpdateTransfer(L, 'p1', { silent: true }) as AnyMutation,
+      useDeleteTransfer: () => useDeleteTransfer(L, { silent: true }) as AnyMutation,
+      usePairTransaction: () => usePairTransaction(L, 't1', { silent: true }) as AnyMutation,
+      useUnpairTransfer: () => useUnpairTransfer(L, { silent: true }) as AnyMutation,
+      useUpdateMe: () => useUpdateMe({ silent: true }) as AnyMutation,
+    };
+
+    for (const [name, useHook] of Object.entries(hooks)) {
+      const { result } = renderHook(useHook, { wrapper: wrapper(qc) });
+      await result.current.mutateAsync({} as never).catch(() => undefined);
+      const mutations = qc.getMutationCache().getAll();
+      const meta = mutations[mutations.length - 1]?.meta;
+      expect([name, meta?.silent]).toEqual([name, true]);
+    }
+  });
+
+  test('a mutation hook without opts leaves the global toast in charge', async () => {
+    api.mock.onAny().reply(500, { detail: 'boom', code: 'internal_error' });
+
+    const { result } = renderHook(() => useDeleteTransaction(L), { wrapper: wrapper(qc) });
+    await result.current.mutateAsync('t1').catch(() => undefined);
+
+    expect(qc.getMutationCache().getAll()[0]?.meta?.silent).toBeUndefined();
+  });
+
+  test('the PATCH-shaped hooks keep their 409 detail key alongside silent', async () => {
+    api.mock.onAny().reply(500, { detail: 'boom', code: 'internal_error' });
+
+    const { result } = renderHook(() => useUpdateTransaction(L, 't1', { silent: true }), {
+      wrapper: wrapper(qc),
+    });
+    await result.current
+      .mutateAsync({ updated_at: '2026-09-01T00:00:00.000000Z' })
+      .catch(() => undefined);
+
+    expect(qc.getMutationCache().getAll()[0]?.meta).toEqual({
+      detailKey: ['l', L, 'tx', 'detail', 't1'],
+      silent: true,
+    });
   });
 
   test('useCurrencies sorts the codes', async () => {

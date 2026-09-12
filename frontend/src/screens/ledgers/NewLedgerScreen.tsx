@@ -61,7 +61,10 @@ export default function NewLedgerScreen(): React.JSX.Element {
       create.mutate(
         { name: values.name.trim(), base_currency: values.base_currency },
         {
-          onSuccess: (ledger) => router.replace(routes.l(ledger.id).home() as Href),
+          onSuccess: (ledger) => {
+            toast.success(t('ledger:create.success_toast', { name: ledger.name }));
+            router.replace(routes.l(ledger.id).home() as Href);
+          },
           onError: (err) => toast.error(errorMessage(t, err)),
         },
       );

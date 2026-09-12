@@ -26,6 +26,22 @@ export const CODE_LENGTH = 6;
 const SHAKE_OFFSET = 8;
 const SHAKE_STEP_MS = 45;
 
+/**
+ * The single digit one keystroke leaves in a cell. Depending on the platform, typing over
+ * a filled cell reports `'7'` (the selection was replaced) or `'37'` / `'73'` (it was not),
+ * so the digit that is not the one already there wins — and the newest one otherwise.
+ */
+export function keystroke(previous: string, digits: string): string {
+  if (digits === '') return '';
+  if (previous !== '' && digits.length > 1) {
+    const rest = digits.startsWith(previous)
+      ? digits.slice(previous.length)
+      : digits.replace(previous, '');
+    if (rest !== '') return rest.slice(-1);
+  }
+  return digits.slice(-1);
+}
+
 export interface CodeInputProps {
   /** Digits entered so far, `''`–`'123456'`. */
   value: string;
@@ -108,20 +124,26 @@ export function CodeInput({
   const handleChangeText = React.useCallback(
     (index: number, text: string): void => {
       const digits = text.replace(/\D/g, '');
+      const previous = value[index] ?? '';
 
-      // A paste (or an autofilled one-time code) fans out from the cell it landed in.
-      if (digits.length > 1) {
-        const next = (value.slice(0, index) + digits).slice(0, CODE_LENGTH);
-        commit(next);
-        focus(next.length);
+      // A paste (or an autofilled one-time code) is a jump of two or more characters at
+      // once — and it is only spread across the cells when the whole thing is a complete
+      // code. A shorter jump is ambiguous (autocorrect, a fast typist, a selected cell
+      // being typed over), so it is treated as ordinary typing below.
+      if (text.length - previous.length >= 2 && digits.length === CODE_LENGTH) {
+        commit(digits);
+        focus(CODE_LENGTH - 1);
         return;
       }
 
+      // Typing into a cell that already holds a digit replaces that one cell: the digits
+      // after it belong to the user, not to this keystroke.
+      const typed = keystroke(previous, digits);
       const chars = Array.from({ length: CODE_LENGTH }, (_, i) => value[i] ?? '');
-      chars[index] = digits;
+      chars[index] = typed;
       const next = chars.join('').slice(0, CODE_LENGTH);
       commit(next);
-      if (digits.length === 1) focus(index + 1);
+      if (typed !== '') focus(index + 1);
     },
     [commit, focus, value],
   );

@@ -11,7 +11,8 @@
     "download": "下载",
     "back": "返回",
     "loading": "加载中",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "confirm_again": "再点一次确认"
   },
   "nav": {
     "home": "首页",
@@ -47,5 +48,11 @@
     "body": "它可能已被删除，或者你被移出了这个账本。",
     "switch_last": "切到 {{name}}",
     "view_ledgers": "看我的账本"
+  },
+  "toast": {
+    "show_detail": "查看详情"
+  },
+  "placeholder": {
+    "home_building": "首页还在建设中"
   }
 }

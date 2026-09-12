@@ -63,6 +63,14 @@ async function pasteCode(code: string): Promise<void> {
   fireEvent.changeText(await screen.findByTestId('join-code-0'), code);
 }
 
+/** Type one digit per cell, the way a person does. */
+async function typeDigits(digits: string): Promise<void> {
+  await screen.findByTestId('join-code-0');
+  for (const [index, digit] of [...digits].entries()) {
+    fireEvent.changeText(screen.getByTestId(`join-code-${index}`), digit);
+  }
+}
+
 function joinRequests(): string[] {
   return api.mock.history.post
     .filter((r) => (r.url ?? '').endsWith('/ledgers/join'))
@@ -97,10 +105,40 @@ test('an incomplete code is never submitted', async () => {
   mockPost('/ledgers/join', makeLedger());
   renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
-  await pasteCode('12345');
+  await typeDigits('12345');
 
   expect(joinRequests()).toEqual([]);
   expect(screen.getByTestId('join-code-4').props.value).toBe('5');
+  expect(screen.getByTestId('join-code-5').props.value).toBe('');
+});
+
+test('a partial paste is treated as typing, not spread across the cells', async () => {
+  mockPost('/ledgers/join', makeLedger());
+  renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  // Three digits at once is not a code: only the last one lands, in the cell it was
+  // dropped into, and nothing is submitted.
+  fireEvent.changeText(await screen.findByTestId('join-code-0'), '123');
+
+  expect(screen.getByTestId('join-code-0').props.value).toBe('3');
+  expect(screen.getByTestId('join-code-1').props.value).toBe('');
+  expect(joinRequests()).toEqual([]);
+});
+
+test('typing over a filled cell replaces that cell and keeps the ones after it', async () => {
+  mockPost('/ledgers/join', { detail: 'Invite invalid', code: 'invite_invalid' }, 400);
+  renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  await typeDigits('12345');
+
+  // The cell is selected on focus, so the platform reports either '9' or '39' — both mean
+  // "this cell now holds a 9", and '45' after it must survive either way.
+  fireEvent.changeText(screen.getByTestId('join-code-2'), '39');
+
+  expect(screen.getByTestId('join-code-2').props.value).toBe('9');
+  expect(screen.getByTestId('join-code-3').props.value).toBe('4');
+  expect(screen.getByTestId('join-code-4').props.value).toBe('5');
+  expect(joinRequests()).toEqual([]);
 });
 
 test('429 counts down, keeps the code valid in the copy, then retries it once', async () => {

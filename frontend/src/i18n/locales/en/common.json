@@ -11,7 +11,8 @@
     "download": "Download",
     "back": "Back",
     "loading": "Loading",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "confirm_again": "Tap again to confirm"
   },
   "nav": {
     "home": "Home",
@@ -47,5 +48,11 @@
     "body": "It may have been deleted, or you may have been removed from it.",
     "switch_last": "Switch to {{name}}",
     "view_ledgers": "View my ledgers"
+  },
+  "toast": {
+    "show_detail": "Show details"
+  },
+  "placeholder": {
+    "home_building": "The home page is still being built"
   }
 }

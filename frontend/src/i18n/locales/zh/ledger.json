@@ -19,7 +19,8 @@
     "name_label": "账本名",
     "base_currency_label": "基准币种",
     "submit": "创建",
-    "limit_reached": "你的账本数已达上限（10 本）"
+    "limit_reached": "你的账本数已达上限（10 本）",
+    "success_toast": "已创建《{{name}}》"
   },
   "join": {
     "title": "加入账本",

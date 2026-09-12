@@ -17,10 +17,11 @@ import i18next from 'i18next';
 
 import { clearAuthToken, setAuthToken, type User } from '@/api';
 import { initI18n, type Lang } from '@/i18n';
+import { createQueryClient, type QueryHandlers } from '@/queries/client';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider, useAuth, type AuthStatus } from '@/store/AuthContext';
-import { ConfirmHost, ToastHost } from '@/ui';
+import { ConfirmHost, ToastHost, type ToastKind } from '@/ui';
 
 import { makeUser } from './fixtures';
 import { mockGet } from './mockApi';
@@ -37,9 +38,30 @@ export type AuthSeed =
   | 'authenticated'
   | { status: AuthStatus; user?: User | null };
 
+/** The three global side effects of `createQueryClient`, as spies (04 §2.4, §3.8, §3.9). */
+export interface TestQueryHandlers {
+  onUnauthorized: jest.Mock<void, []>;
+  onLedgerGone: jest.Mock<void, [string]>;
+  notify: jest.Mock<void, [ToastKind, string, (string | undefined)?]>;
+}
+
+/** Fresh spies for one test's client. */
+export function makeTestHandlers(): TestQueryHandlers {
+  return {
+    onUnauthorized: jest.fn(),
+    onLedgerGone: jest.fn(),
+    notify: jest.fn(),
+  };
+}
+
 export interface RenderWithProvidersOptions {
   /** Reuse a client (e.g. to assert on its cache); a throw-away one is made otherwise. */
   queryClient?: QueryClient;
+  /**
+   * Spies for the client's global handlers. Only used when `queryClient` is omitted —
+   * a client handed in already carries handlers of its own.
+   */
+  handlers?: TestQueryHandlers;
   /** Starting session. Omit to let the provider bootstrap from whatever storage holds. */
   auth?: AuthSeed;
   lang?: Lang;
@@ -50,16 +72,29 @@ export interface RenderWithProvidersOptions {
 
 export interface RenderWithProvidersResult extends RenderResult {
   queryClient: QueryClient;
+  /**
+   * The client's global handlers. `notify` is what the §3.8 / §3.9 error paths call, so a
+   * screen test asserts the global error chain on it instead of hunting for a toast node.
+   */
+  handlers: TestQueryHandlers;
 }
 
-/** The defaults every test wants: no retries, no cache carried between tests. */
-export function makeTestQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
+/**
+ * The real `createQueryClient` — the same `QueryCache` / `MutationCache` error paths the
+ * app runs — with the two defaults every test wants on top: no retries, and no cache
+ * carried between tests. `gcTime: 0` on both caches also matters for the runner: the
+ * five-minute default would leave a garbage-collection timer behind and keep the jest
+ * worker alive long after the test finished.
+ */
+export function makeTestQueryClient(handlers: QueryHandlers = makeTestHandlers()): QueryClient {
+  const client = createQueryClient(handlers);
+  const defaults = client.getDefaultOptions();
+  client.setDefaultOptions({
+    ...defaults,
+    queries: { ...defaults.queries, retry: false, gcTime: 0 },
+    mutations: { ...defaults.mutations, retry: false, gcTime: 0 },
   });
+  return client;
 }
 
 // The probe below mirrors the live auth status out of the tree so `waitForAuth` can
@@ -122,7 +157,6 @@ const spies: jest.SpyInstance[] = [];
  * component that reads the window size itself.
  */
 function mockWindowWidth(wide: boolean): void {
-  restoreWindowDimensions();
   spies.push(jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(wide));
   try {
     spies.push(
@@ -143,8 +177,12 @@ export async function renderWithProviders(
   options: RenderWithProvidersOptions = {},
 ): Promise<RenderWithProvidersResult> {
   const { auth, lang = 'zh', theme = 'light', wide } = options;
-  const queryClient = options.queryClient ?? makeTestQueryClient();
+  const handlers = options.handlers ?? makeTestHandlers();
+  const queryClient = options.queryClient ?? makeTestQueryClient(handlers);
 
+  // Whatever the previous render mocked is undone first, whether or not this one asks for
+  // a layout: a leftover `useIsWide` spy would silently decide the next test's branch.
+  restoreWindowDimensions();
   if (wide !== undefined) mockWindowWidth(wide);
 
   await initI18n();
@@ -156,7 +194,7 @@ export async function renderWithProviders(
   const confirmLabels = {
     confirm: i18next.t('common:button.confirm'),
     cancel: i18next.t('common:button.cancel'),
-    confirmAgain: i18next.t('common:button.confirm'),
+    confirmAgain: i18next.t('common:button.confirm_again'),
   };
 
   const result = render(
@@ -177,5 +215,14 @@ export async function renderWithProviders(
     if (target !== 'bootstrapping') await waitForAuth(target);
   }
 
-  return Object.assign(result, { queryClient });
+  // Unmounting takes the probe's status and the layout mocks with it, so a test that
+  // renders twice (or forgets `restoreWindowDimensions`) still starts from a clean slate.
+  const unmountTree = result.unmount;
+  const unmount = (): void => {
+    unmountTree();
+    currentStatus = null;
+    restoreWindowDimensions();
+  };
+
+  return Object.assign(result, { queryClient, handlers, unmount });
 }

@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { Ledger } from '@/api/types';
 import { routes } from '@/domain/routes';
-import { invalidateLedgers, useLedgers } from '@/queries';
+import { removeLedger, useLedgers } from '@/queries';
 import { EmptyState, Page } from '@/ui';
 
 import { AppSkeleton } from './RequireAuth';
@@ -94,11 +94,13 @@ export function RequireLedger({ ledgerId, children }: RequireLedgerProps): React
   const gone = useLedgerGone(ledgerId);
   const queryClient = useQueryClient();
 
-  // Rule 4: a ledger detail 404 is authoritative, so re-read the list to find out whether
-  // anything else is still reachable (the two buttons below need an accurate list).
+  // Rule 4: a ledger detail 404 is authoritative. Everything cached under `['l', id]` is
+  // now unreadable (and would be served to whatever renders next), so it is dropped rather
+  // than merely marked stale; the list is re-read because the two buttons below need to
+  // know what is still reachable.
   React.useEffect(() => {
-    if (gone) invalidateLedgers(queryClient);
-  }, [gone, queryClient]);
+    if (gone) removeLedger(queryClient, ledgerId);
+  }, [gone, ledgerId, queryClient]);
 
   // Leaving the ledger forgets the flag: if the user ever comes back (re-invited, say), a
   // fresh `GET /ledgers/{id}` decides again rather than the stale verdict deciding for it.

@@ -20,6 +20,8 @@ import type { ApiClientError } from '@/api/errors';
 import { errorMessage } from '@/i18n/errorCodes';
 import { toast, type ToastKind } from '@/ui/Toast';
 
+import { LEDGER_KEY_PREFIX } from './keys';
+
 declare module '@tanstack/react-query' {
   interface Register {
     mutationMeta: {
@@ -29,6 +31,15 @@ declare module '@tanstack/react-query' {
       silent?: boolean;
     };
   }
+}
+
+/**
+ * Options every mutation hook takes as its last argument: the caller that renders the
+ * failure itself (a form field, an inline row, its own toast) passes `{ silent: true }`
+ * so the global error toast of `MutationCache.onError` stays quiet (04 §3.9).
+ */
+export interface MutationOpts {
+  silent?: boolean;
 }
 
 /** Side effects the two caches need; injected so they can be asserted in tests. */
@@ -49,7 +60,7 @@ export function shouldRetry(count: number, err: unknown): boolean {
 /** `['l', <id>, 'detail']` — the ledger detail key, and nothing else. */
 function ledgerIdOfDetailKey(key: readonly unknown[]): string | null {
   if (key.length !== 3) return null;
-  if (key[0] !== 'l' || key[2] !== 'detail') return null;
+  if (key[0] !== LEDGER_KEY_PREFIX || key[2] !== 'detail') return null;
   return typeof key[1] === 'string' ? key[1] : null;
 }
 
@@ -88,7 +99,10 @@ export function createQueryClient(deps: QueryHandlers): QueryClient {
         return;
       }
       const e: ApiClientError = error;
-      if (e.status === 401) return; // the query cache's 401 path already signed the user out
+      // An expired session is handled once, by the axios interceptor's `setOnUnauthorized`
+      // callback (`AuthContext` clears the token and the cache). Nothing is left to say
+      // here, and a toast about it would only arrive after the login screen is up.
+      if (e.status === 401) return;
 
       // 04 §3.8: 409 `stale_update` is handled in exactly one place.
       if (e.status === 409 && e.code === 'stale_update') {

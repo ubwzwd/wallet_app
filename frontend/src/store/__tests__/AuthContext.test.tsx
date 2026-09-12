@@ -12,7 +12,7 @@ import { apiClient, ApiClientError, setAuthToken } from '@/api';
 import { AUTH_TOKEN_KEY } from '@/constants/config';
 import * as i18n from '@/i18n';
 import { AuthProvider, useAuth } from '@/store/AuthContext';
-import { makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
+import { apiUrl, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
 import { PREF_NAMES, prefKey, setPref } from '@/utils/prefs';
 
 let api: MockApi;
@@ -86,6 +86,49 @@ test('a stored token plus GET /me 200 boots to authenticated and applies the use
 
   await expectProbe('authenticated:bob@example.com');
   expect(applySpy).toHaveBeenCalledWith('en', { persist: false });
+});
+
+test('language: null leaves the language initI18n already resolved alone', async () => {
+  const applySpy = jest.spyOn(i18n, 'applyLanguage');
+  await setAuthToken('stored-token');
+  // "Follow the system" (04 §5.1 / §4.13): the device choice was resolved on boot, and
+  // applying `null` here would re-resolve it and discard a local preference.
+  mockGet('/me', makeUser({ email: 'bob@example.com', language: null }));
+
+  renderAuth();
+
+  await expectProbe('authenticated:bob@example.com');
+  expect(applySpy).not.toHaveBeenCalled();
+});
+
+test('a 401 that lands while GET /me is in flight wins: the session stays anonymous', async () => {
+  await setAuthToken('stored-token');
+  let releaseMe: (() => void) | null = null;
+  api.mock.onGet(apiUrl('/me')).reply(
+    () =>
+      new Promise((resolve) => {
+        releaseMe = () => resolve([200, makeUser()]);
+      }),
+  );
+  mockGet('/ledgers', { detail: 'Not authenticated', code: 'unauthorized' }, 401);
+
+  renderAuth();
+  await waitFor(() => expect(releaseMe).not.toBeNull());
+
+  // Another request comes back 401 first — the session is over.
+  await act(async () => {
+    await apiClient.get('/ledgers').catch(() => undefined);
+  });
+  await expectProbe('anonymous:none');
+
+  // The profile request finally answers 200. It must not resurrect the session.
+  await act(async () => {
+    releaseMe?.();
+    await Promise.resolve();
+  });
+
+  await waitFor(() => expect(probeText()).toBe('anonymous:none'));
+  expect(statuses).toEqual(['bootstrapping', 'anonymous']);
 });
 
 test('a stored token rejected with 401 drops to anonymous and forgets the token', async () => {

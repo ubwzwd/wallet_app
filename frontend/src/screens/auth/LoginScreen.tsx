@@ -75,6 +75,12 @@ export default function LoginScreen(): React.JSX.Element {
 
   const submit = handleSubmit(onSubmit);
 
+  // 04 §4.1: the server's verdict is about what was submitted, so the moment the user
+  // changes anything it stops being true — and the message under the password field goes.
+  const clearServerError = React.useCallback((): void => {
+    setServerError((current) => (current === null ? current : null));
+  }, []);
+
   return (
     <AuthLayout title={t('auth:login.title')} testID="login-screen">
       <Controller
@@ -86,7 +92,10 @@ export default function LoginScreen(): React.JSX.Element {
             label={t('auth:login.email_label')}
             accessibilityLabel={t('auth:login.email_label')}
             value={field.value}
-            onChangeText={field.onChange}
+            onChangeText={(text) => {
+              clearServerError();
+              field.onChange(text);
+            }}
             onBlur={field.onBlur}
             onSubmitEditing={() => passwordRef.current?.focus()}
             error={validationMessage(t, errors.email?.message)}
@@ -110,7 +119,10 @@ export default function LoginScreen(): React.JSX.Element {
             label={t('auth:login.password_label')}
             accessibilityLabel={t('auth:login.password_label')}
             value={field.value}
-            onChangeText={field.onChange}
+            onChangeText={(text) => {
+              clearServerError();
+              field.onChange(text);
+            }}
             onBlur={field.onBlur}
             onSubmitEditing={() => void submit()}
             error={validationMessage(t, errors.password?.message) ?? serverError}

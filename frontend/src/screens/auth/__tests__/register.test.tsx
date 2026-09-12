@@ -90,6 +90,49 @@ test('registration_open=true renders the four fields of §14.54 and no display n
   expect(screen.queryByText('显示名')).toBeNull();
 });
 
+test('the subtitle explains what registering creates, open or closed', async () => {
+  const subtitle = '注册后会自动为你建一本『我的账本』，也可以用邀请码加入别人的';
+  mockGet('/config', { registration_open: true });
+  mockCurrencies();
+  const open = renderRouter(ROUTES, { initialUrl: '/register', wrapper: Wrapper });
+  expect(await screen.findByText(subtitle)).toBeTruthy();
+  open.unmount();
+
+  queryClient.clear();
+  mockGet('/config', { registration_open: false });
+  renderRouter(ROUTES, { initialUrl: '/register', wrapper: Wrapper });
+  expect(await screen.findByTestId('register-closed-body')).toBeTruthy();
+  expect(screen.getByText(subtitle)).toBeTruthy();
+});
+
+test('"go to sign in" carries the ?next= the user arrived with', async () => {
+  mockGet('/config', { registration_open: true });
+  mockCurrencies();
+  const router = renderRouter(ROUTES, {
+    initialUrl: '/register?next=%2Fl%2Fabc%2Ftransactions',
+    wrapper: Wrapper,
+  });
+
+  fireEvent.press(await screen.findByTestId('register-login-link'));
+
+  await waitFor(() => expect(router.getPathname()).toBe('/login'));
+  expect(router.getSearchParams().next).toBe('/l/abc/transactions');
+});
+
+test('an unsafe ?next= is dropped on the way to sign in', async () => {
+  mockGet('/config', { registration_open: true });
+  mockCurrencies();
+  const router = renderRouter(ROUTES, {
+    initialUrl: '/register?next=%2F%2Fevil.example.com',
+    wrapper: Wrapper,
+  });
+
+  fireEvent.press(await screen.findByTestId('register-login-link'));
+
+  await waitFor(() => expect(router.getPathname()).toBe('/login'));
+  expect(router.getSearchParams().next).toBeUndefined();
+});
+
 test('a short password and a mismatched confirmation report their own messages', async () => {
   mockGet('/config', { registration_open: true });
   mockCurrencies();
