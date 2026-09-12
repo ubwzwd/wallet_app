@@ -14,6 +14,7 @@
     "income": "收入",
     "category_other_n": "其他 {{count}} 项",
     "month_empty": "这个月还没有记账",
+    "trend_empty": "这一年还没有支出记录",
     "add_transaction": "记一笔",
     "trend_title": "12 个月支出趋势",
     "refresh": "刷新"

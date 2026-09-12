@@ -13,6 +13,17 @@ function firstOf(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
+/** Plain decimal digits only — `Number()` alone would happily swallow `''`, `'  '`,
+ *  `'0x10'`, `'1e3'` and `'Infinity'`, none of which survive a serialize → parse round
+ *  trip unchanged (04 §1.3). */
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+
+function decimalOrUndefined(raw: string | undefined): number | undefined {
+  if (raw === undefined || !DECIMAL.test(raw)) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function toArray(v: string | string[] | undefined): string[] {
   if (v === undefined) return [];
   return Array.isArray(v) ? v : [v];
@@ -47,25 +58,18 @@ export function parseTxFilters(
   const currency = firstOf(search.currency);
   if (currency && /^[A-Z]{3}$/.test(currency)) params.currency = currency;
 
-  const minAmount = firstOf(search.min_amount);
-  if (minAmount !== undefined) {
-    const n = Number(minAmount);
-    if (Number.isFinite(n)) params.min_amount = n;
-  }
-  const maxAmount = firstOf(search.max_amount);
-  if (maxAmount !== undefined) {
-    const n = Number(maxAmount);
-    if (Number.isFinite(n)) params.max_amount = n;
-  }
+  const minAmount = decimalOrUndefined(firstOf(search.min_amount));
+  if (minAmount !== undefined) params.min_amount = minAmount;
+  const maxAmount = decimalOrUndefined(firstOf(search.max_amount));
+  if (maxAmount !== undefined) params.max_amount = maxAmount;
 
   const importBatchId = firstOf(search.import_batch_id);
   if (importBatchId) params.import_batch_id = importBatchId;
 
-  const offset = firstOf(search.offset);
-  if (offset !== undefined) {
-    const n = Number(offset);
-    if (Number.isInteger(n) && n >= 0) params.offset = n;
-  }
+  // `offset=0` is the default and is never written back to the URL, so it is dropped here
+  // too — otherwise parse → serialize → parse would not be idempotent.
+  const offset = decimalOrUndefined(firstOf(search.offset));
+  if (offset !== undefined && Number.isInteger(offset) && offset > 0) params.offset = offset;
 
   return params;
 }

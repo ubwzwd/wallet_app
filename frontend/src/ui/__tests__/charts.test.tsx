@@ -112,6 +112,29 @@ describe('BarList', () => {
   });
 });
 
+describe('BarList hover / long press reveals the criterion', () => {
+  const withDesc: BarListItem[] = [
+    { code: 'groceries', label: '生活购物', amount: '900.0000', share: 0.5, desc: '用完就没了' },
+  ];
+
+  test('the criterion is hidden at rest and appears on hover', () => {
+    renderThemed(<BarList items={withDesc} currency="CNY" lang="zh" testID="bars" />);
+    expect(screen.queryByTestId('bars-desc-groceries')).toBeNull();
+
+    fireEvent(screen.getByTestId('bars-row-groceries'), 'hoverIn');
+    expect(screen.getByTestId('bars-desc-groceries')).toHaveTextContent('用完就没了');
+
+    fireEvent(screen.getByTestId('bars-row-groceries'), 'hoverOut');
+    expect(screen.queryByTestId('bars-desc-groceries')).toBeNull();
+  });
+
+  test('a long press reveals it too, for touch devices', () => {
+    renderThemed(<BarList items={withDesc} currency="CNY" lang="zh" testID="bars" />);
+    fireEvent(screen.getByTestId('bars-row-groceries'), 'longPress');
+    expect(screen.getByTestId('bars-desc-groceries')).toBeTruthy();
+  });
+});
+
 describe('TrendChart', () => {
   const twelve = Array.from({ length: 12 }, (_, i) => ({
     month: `2026-${String(i + 1).padStart(2, '0')}`,
@@ -124,8 +147,10 @@ describe('TrendChart', () => {
       expect(screen.getByTestId(`trend-value-${point.month}`)).toBeTruthy();
       expect(screen.getByTestId(`trend-month-${point.month}`)).toBeTruthy();
     }
-    // Exact, so a change in how the label is formatted cannot slip past the test.
-    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent('¥12,000.00');
+    // Compact, so twelve labels fit side by side (04 §4.4; exact, so a change in the
+    // formatting cannot slip past the test).
+    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent('¥1.2万');
+    expect(screen.getByTestId('trend-value-2026-01')).toHaveTextContent('¥1000');
   });
 
   test('tapping a month reports it', () => {
@@ -144,10 +169,11 @@ describe('TrendChart', () => {
     expect(onPressMonth).toHaveBeenCalledWith('2026-05');
   });
 
-  test('no months at all is an empty state, not a flat line', () => {
+  test('no months at all is an empty state about the year, not about this month', () => {
     renderThemed(<TrendChart months={[]} currency="CNY" lang="zh" testID="trend" />);
     expect(screen.getByTestId('trend-empty')).toBeTruthy();
-    expect(screen.getByText('这个月还没有记账')).toBeTruthy();
+    expect(screen.getByText('这一年还没有支出记录')).toBeTruthy();
+    expect(screen.queryByText('这个月还没有记账')).toBeNull();
   });
 
   test('the geometry puts the peak at the top and zero at the bottom', () => {

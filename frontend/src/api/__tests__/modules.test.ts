@@ -86,6 +86,28 @@ describe('API modules (04 §3.4)', () => {
     expect(declared.filter((fn) => !exercised.has(fn))).toEqual([]);
   });
 
+  describe('public endpoints stay anonymous (03 §5.3, §5.5)', () => {
+    function authHeader(config: { headers?: unknown }): unknown {
+      const h = config.headers as
+        | (Record<string, unknown> & { get?: (n: string) => unknown })
+        | undefined;
+      return typeof h?.get === 'function' ? h.get('Authorization') : h?.['Authorization'];
+    }
+
+    it('GET /config and GET /import-format send no Authorization when anonymous', async () => {
+      api.mockGet('/config', { registration_open: true });
+      api.mockGet('/import-format', { version: '2026-09-10', columns: [] });
+
+      await configApi.get();
+      await importFormatApi.get();
+
+      expect(api.mock.history.get).toHaveLength(2);
+      for (const sent of api.mock.history.get) {
+        expect(authHeader(sent) ?? undefined).toBeUndefined();
+      }
+    });
+  });
+
   describe('importsApi.upload (multipart)', () => {
     it('goes through uploadClient with a FormData body and reports progress', async () => {
       api.mockPost(`/ledgers/${LEDGER_ID}/imports`, { batch: { id: BATCH_ID }, rows: [] }, 201);
@@ -103,6 +125,15 @@ describe('API modules (04 §3.4)', () => {
 
       sent.onUploadProgress?.({ loaded: 5, total: 10 } as never);
       expect(onProgress).toHaveBeenCalledWith(0.5);
+    });
+
+    it('importsApi.uploadText goes through apiClient, not uploadClient', async () => {
+      api.mockPost(`/ledgers/${LEDGER_ID}/imports`, { batch: { id: BATCH_ID }, rows: [] }, 201);
+      await importsApi.uploadText(LEDGER_ID, { source_id: SOURCE_ID, text: 'a,b\n1,2\n' });
+      const sent = api.mock.history.post[0];
+      // apiClient's own timeout: pasted text is plain JSON, not a multipart upload.
+      expect(sent.timeout).toBe(15_000);
+      expect(typeof sent.data).toBe('string');
     });
 
     it('sends no JSON Content-Type default, leaving the boundary to FormData', async () => {

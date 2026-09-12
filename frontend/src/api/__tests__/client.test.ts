@@ -6,6 +6,7 @@ import {
   resetAuthTokenCache,
   setAuthToken,
   setOnUnauthorized,
+  uploadClient,
 } from '@/api/client';
 import { ApiClientError, isApiClientError, isClientError, normalizeAxiosError } from '@/api/errors';
 import { AUTH_TOKEN_KEY, CLIENT_NAME } from '@/constants/config';
@@ -122,6 +123,34 @@ describe('api client', () => {
       await setAuthToken('jwt-fresh');
       await expectApiError(apiClient.get('/me'));
       expect(cb).toHaveBeenCalledTimes(2);
+    });
+
+    it('stays quiet for a 401 from POST /auth/login — that is invalid_credentials', async () => {
+      const cb = jest.fn();
+      setOnUnauthorized(cb);
+      api.mockPost('/auth/login', { detail: 'Wrong', code: 'invalid_credentials' }, 401);
+      const err = await expectApiError(apiClient.post('/auth/login', {}));
+      expect(err.code).toBe('invalid_credentials');
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('stays quiet for a 401 from POST /auth/register', async () => {
+      const cb = jest.fn();
+      setOnUnauthorized(cb);
+      api.mockPost('/auth/register', { detail: 'Nope', code: 'registration_closed' }, 401);
+      await expectApiError(apiClient.post('/auth/register', {}));
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('still reports a 401 from another endpoint after a login 401', async () => {
+      const cb = jest.fn();
+      setOnUnauthorized(cb);
+      api.mockPost('/auth/login', { detail: 'Wrong', code: 'invalid_credentials' }, 401);
+      api.mockGet('/me', { detail: 'Not authenticated', code: 'unauthorized' }, 401);
+
+      await expectApiError(apiClient.post('/auth/login', {}));
+      await expectApiError(apiClient.get('/me'));
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
     it('normalises the 401 body itself', async () => {
@@ -267,5 +296,45 @@ describe('api client', () => {
       expect(isClientError(new ApiClientError(503, 'fx_unavailable', 'x'))).toBe(false);
       expect(isClientError(new Error('x'))).toBe(false);
     });
+  });
+});
+
+/** The adapters as axios built them — captured before any harness is installed. */
+const PRISTINE_API_ADAPTER = apiClient.defaults.adapter;
+const PRISTINE_UPLOAD_ADAPTER = uploadClient.defaults.adapter;
+
+describe('mockApi() is re-entrant (04 §8.2)', () => {
+  afterEach(() => {
+    apiClient.defaults.adapter = PRISTINE_API_ADAPTER;
+    uploadClient.defaults.adapter = PRISTINE_UPLOAD_ADAPTER;
+  });
+
+  it('a second mockApi() takes over and restoring it leaves no dead adapter behind', async () => {
+    const first = mockApi();
+    first.mockGet('/config', { registration_open: false });
+    const second = mockApi(); // the first is never restored
+    second.mockGet('/config', { registration_open: true });
+
+    // The newest harness serves the request, and its history records it.
+    const res = await apiClient.get('/config');
+    expect(res.data).toEqual({ registration_open: true });
+    expect(second.mock.history.get).toHaveLength(1);
+    expect(first.mock.history.get).toHaveLength(0);
+
+    second.restore();
+    expect(apiClient.defaults.adapter).toBe(PRISTINE_API_ADAPTER);
+    expect(uploadClient.defaults.adapter).toBe(PRISTINE_UPLOAD_ADAPTER);
+  });
+
+  it('a harness installed after a nested one still serves uploadClient', async () => {
+    mockApi();
+    const second = mockApi();
+    second.restore();
+
+    const third = mockApi();
+    third.mockPost('/ledgers/abc/imports', { ok: true }, 201);
+    const res = await uploadClient.post('/ledgers/abc/imports', new FormData());
+    expect(res.status).toBe(201);
+    third.restore();
   });
 });

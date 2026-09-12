@@ -55,8 +55,37 @@ function applyWebDocumentLang(lang: string): void {
 
 let initPromise: Promise<void> | null = null;
 
+// --------------------------------------------- "follow the system" device-language watch
+
+let removeDeviceLanguageListener: (() => void) | null = null;
+
+/**
+ * While no explicit language is stored, the app follows the device. The web fires
+ * `languagechange` on `window` when the browser's language list changes, so that case is
+ * picked up live; React Native has no such event, so native simply skips it (the value is
+ * re-read on the next launch).
+ */
+function watchDeviceLanguage(follow: boolean): void {
+  if (!follow) {
+    removeDeviceLanguageListener?.();
+    removeDeviceLanguageListener = null;
+    return;
+  }
+  if (removeDeviceLanguageListener !== null) return;
+  if (Platform.OS !== 'web') return;
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+
+  const handler = (): void => {
+    // `persist: false`: following the system must not turn into a stored choice.
+    void applyLanguage(null, { persist: false });
+  };
+  window.addEventListener('languagechange', handler);
+  removeDeviceLanguageListener = () => window.removeEventListener('languagechange', handler);
+}
+
 /** Idempotent: safe to call more than once (e.g. from multiple entry points during
- *  tests) — later calls resolve immediately once the first init has completed. */
+ *  tests) — later calls resolve immediately once the first init has completed. A failed
+ *  init drops the memo, so a later call can try again instead of re-throwing forever. */
 export function initI18n(): Promise<void> {
   if (i18next.isInitialized) return Promise.resolve();
   if (initPromise) return initPromise;
@@ -73,7 +102,11 @@ export function initI18n(): Promise<void> {
       interpolation: { escapeValue: false },
     });
     applyWebDocumentLang(i18next.language);
-  })();
+    watchDeviceLanguage(!isLang(storedLang));
+  })().catch((e: unknown) => {
+    initPromise = null;
+    throw e;
+  });
   return initPromise;
 }
 
@@ -95,21 +128,26 @@ export async function applyLanguage(lang: Lang | null, opts?: ApplyLanguageOptio
     const device = deviceLanguage();
     const next: Lang = device && device.toLowerCase().startsWith('zh') ? 'zh' : 'en';
     await i18next.changeLanguage(next);
+    watchDeviceLanguage(true);
   } else {
     await i18next.changeLanguage(lang);
     if (persist) await setPref(PREF_NAMES.lang, lang);
+    watchDeviceLanguage(false);
   }
   applyWebDocumentLang(i18next.language);
 }
 
-function normalizeLang(tag: string): Lang {
+/** `undefined` happens before i18next has settled on a language (and in isolated component
+ *  tests that never initialise it) — fall back to the default language rather than throw. */
+function normalizeLang(tag: string | undefined | null): Lang {
+  if (typeof tag !== 'string' || tag === '') return 'zh';
   return tag.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
 /** The current language, re-rendering the caller whenever it changes. */
 export function useLang(): Lang {
   const { i18n } = useTranslation();
-  return normalizeLang(i18n.language);
+  return normalizeLang(i18n?.language);
 }
 
 export { namespaces, resources } from './resources';

@@ -27,6 +27,21 @@ export interface MockApi {
 
 let active: MockApi | null = null;
 
+/**
+ * The adapters as axios built them, captured once at module load. Capturing inside
+ * `mockApi()` instead would record whatever a previous, still-installed harness left
+ * behind, so a second `mockApi()` without a `restore()` would leave a dead adapter
+ * mounted for the rest of the run.
+ */
+const ORIGINAL_API_ADAPTER = apiClient.defaults.adapter;
+const ORIGINAL_UPLOAD_ADAPTER = uploadClient.defaults.adapter;
+
+/** Put both instances back on their as-built adapters. Safe to call at any time. */
+function uninstall(): void {
+  apiClient.defaults.adapter = ORIGINAL_API_ADAPTER;
+  uploadClient.defaults.adapter = ORIGINAL_UPLOAD_ADAPTER;
+}
+
 /** Absolute URL for a path written relative to the API base, e.g. `/ledgers`. */
 export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
@@ -38,8 +53,9 @@ function currentMock(): MockApi {
 }
 
 export function mockApi(): MockApi {
+  // Re-entrant: a harness that was never restored is dropped here rather than nested.
+  uninstall();
   const mock = new MockAdapter(apiClient);
-  const uploadAdapter = uploadClient.defaults.adapter;
   uploadClient.defaults.adapter = apiClient.defaults.adapter as AxiosAdapter;
 
   const reply =
@@ -53,10 +69,10 @@ export function mockApi(): MockApi {
     reset: () => mock.reset(),
     restore: () => {
       mock.restore();
-      uploadClient.defaults.adapter = uploadAdapter;
+      uninstall();
       setOnUnauthorized(null);
       resetAuthTokenCache();
-      active = null;
+      if (active === harness) active = null;
     },
     mockGet: reply('onGet'),
     mockPost: reply('onPost'),

@@ -7,6 +7,8 @@
   "amount_positive": "金额必须大于 0",
   "amount_decimal_max": "最多 4 位小数",
   "date_not_future": "日期不能晚于明天",
+  "date_invalid": "日期格式不对",
+  "date_too_early": "日期太早了",
   "max_length": "最多 {{max}} 个字符",
   "category_l1_required": "请选择一级分类",
   "category_l2_mismatch": "二级分类必须属于所选一级",

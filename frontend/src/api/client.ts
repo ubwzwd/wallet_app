@@ -114,9 +114,26 @@ function onFulfilled(response: AxiosResponse): AxiosResponse {
   return response;
 }
 
+/**
+ * The two endpoints whose 401 means "wrong email or password" (`invalid_credentials`,
+ * 03 §5.2/§5.1) rather than "the session expired": signing in cannot expire a session that
+ * does not exist yet, and firing `onUnauthorized` there would bounce the user off the very
+ * form they are typing into (04 §2.1).
+ */
+const CREDENTIAL_CHECK_PATHS = ['/auth/login', '/auth/register'] as const;
+
+function isCredentialCheck(error: unknown): boolean {
+  const config = (error as { config?: { url?: string; method?: string } } | null)?.config;
+  const url = config?.url;
+  if (typeof url !== 'string') return false;
+  if ((config?.method ?? 'get').toLowerCase() !== 'post') return false;
+  const path = url.split('?')[0].replace(/\/+$/, '');
+  return CREDENTIAL_CHECK_PATHS.some((p) => path === p || path.endsWith(p));
+}
+
 function onRejected(error: unknown): Promise<never> {
   const normalized: ApiClientError = normalizeAxiosError(error);
-  if (normalized.status === 401) fireUnauthorized();
+  if (normalized.status === 401 && !isCredentialCheck(error)) fireUnauthorized();
   return Promise.reject(normalized);
 }
 

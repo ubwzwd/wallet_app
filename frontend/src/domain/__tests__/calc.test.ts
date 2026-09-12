@@ -44,6 +44,13 @@ describe('evaluateExpression', () => {
     expect(evaluateExpression('   ')).toBeNull();
   });
 
+  test('a literal with more than 8 decimals is truncated, not rejected', () => {
+    expect(evaluateExpression('1.123456789')).toBe('1.1235');
+    // The 9th digit and beyond are dropped before the maths, so it cannot round the 8th up.
+    expect(evaluateExpression('0.000000009')).toBe('0.0000');
+    expect(evaluateExpression('1.999999999*1')).toBe('2.0000');
+  });
+
   test('rounds the final result to 4 decimal places (round-half-up)', () => {
     expect(evaluateExpression('1/3')).toBe('0.3333');
     expect(evaluateExpression('2/3')).toBe('0.6667');

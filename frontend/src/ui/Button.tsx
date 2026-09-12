@@ -20,7 +20,8 @@ import { Text } from './Text';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
-/** Every touchable must clear 44×44; `sm` (36) makes that up with hit slop. */
+/** Every touchable must clear 44×44 on BOTH axes; `sm` (36) makes that up with hit slop —
+ *  an icon-only `sm` button is 36 wide as well as 36 tall, so the slop is symmetric. */
 const MIN_TOUCH = 44;
 
 interface VariantStyle {
@@ -120,7 +121,7 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       disabled={inert}
-      hitSlop={{ top: slop, bottom: slop, left: 0, right: 0 }}
+      hitSlop={{ top: slop, bottom: slop, left: slop, right: slop }}
       onPress={inert ? undefined : onPress}
       testID={testID}
       style={(state) => [paint(state), style]}

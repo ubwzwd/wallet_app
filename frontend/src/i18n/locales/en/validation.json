@@ -7,6 +7,8 @@
   "amount_positive": "Amount must be greater than 0",
   "amount_decimal_max": "At most 4 decimal places",
   "date_not_future": "Date can't be later than tomorrow",
+  "date_invalid": "That date doesn't look right",
+  "date_too_early": "That date is too early",
   "max_length": "At most {{max}} characters",
   "category_l1_required": "Choose a category",
   "category_l2_mismatch": "The subcategory must belong to the selected category",
