@@ -741,6 +741,36 @@ def test_list_summary_is_the_same_on_both_paths(env, rows):
     assert fast["total"] == bounded["total"]
 
 
+def test_list_summary_agrees_on_both_paths_with_several_rows_per_group(
+    env, transaction_factory
+):
+    """Same day, same currency, several rows — the two paths must still agree.
+
+    The fast path converts one subtotal per ``(kind, currency, day)`` group, so
+    if the bound path converted row by row instead, a group of foreign-currency
+    rows whose fractions round differently together than apart would make the
+    same selection report two different expenses. These four EUR amounts do
+    exactly that.
+    """
+    for amount in ("-40.1400", "-36.5100", "-52.4800", "-63.3100"):
+        transaction_factory(
+            env.ledger,
+            env.euro,
+            amount=Decimal(amount),
+            currency="EUR",
+            occurred_at=SEP4,
+            category_l1="food",
+            category_l2="dinner",
+        )
+
+    fast = env.get(limit=200).json()
+    bounded = env.get(limit=200, min_amount="0").json()
+
+    assert fast["summary"] == bounded["summary"]
+    assert fast["total"] == bounded["total"]
+    assert ids(env.get(limit=200)) == ids(env.get(limit=200, min_amount="0"))
+
+
 def test_list_returns_both_legs_of_a_transfer(env, rows):
     items = env.get(kind="transfer").json()["items"]
 
@@ -878,6 +908,10 @@ def test_detail_refunds_are_scoped_to_this_ledger(
     body = env.get(f"/{origin.id}").json()
 
     assert [refund["id"] for refund in body["refunds"]] == [str(mine.id)]
+    # The two totals describe that same list, so the foreign row is out of
+    # them too: 45.50 - 10.00, not 45.50 - 17.00 (§5.27).
+    assert body["refunded_total"] == "10.0000"
+    assert body["refundable"] == "35.5000"
 
 
 def test_detail_refund_expands_the_original_without_itself(env, transaction_factory):

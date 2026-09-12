@@ -15,6 +15,7 @@ body — plus committing the transaction the services only flush into.
 """
 import datetime as dt
 import uuid
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Optional
 
@@ -314,25 +315,26 @@ def _filtered_query(
     )
 
 
-def _grouped_summary(
-    db: Session, ctx: LedgerContext, stmt: Select, total: int
-) -> dict:
-    """§5.25's ``summary`` over the whole filtered set, without loading it.
+def _sql_groups(
+    db: Session, stmt: Select
+) -> list[tuple[str, str, dt.date, Decimal, int]]:
+    """``(kind, currency, occurred_at, sum(amount), count)`` straight from SQL.
 
-    One ``GROUP BY (kind, currency, occurred_at)`` gives the subtotals, and one
-    conversion per group turns them into the base currency — the same shape
-    ``valuation.source_balances`` uses for balances (§5.20), so the number of
-    rows converted depends on how many (kind, currency, day) combinations the
-    filter hit, never on how many transactions did.
-
-    The arithmetic is §5.25's to the letter: expenses are all negative, so the
-    absolute value of a group's subtotal is the sum of the row absolutes;
-    transfer legs take no part in the three amounts but a group that could not
-    be valued still contributes its rows to ``rate_missing_count``.
+    One ``GROUP BY`` over the filtered set, the same shape
+    ``valuation._amount_groups`` builds for balances (§5.20) — including its
+    quantizing of the subtotal, because ``func.sum`` is floating point on
+    SQLite and ``str()`` would otherwise carry a representation error into the
+    conversion.
     """
     rows = stmt.order_by(None).subquery()
-    groups = [
-        (kind, currency.upper(), occurred_at, Decimal(str(subtotal)), int(count))
+    return [
+        (
+            kind,
+            currency.upper(),
+            occurred_at,
+            valuation.quantize_amount(Decimal(str(subtotal))),
+            int(count),
+        )
         for kind, currency, occurred_at, subtotal, count in db.execute(
             select(
                 rows.c.kind,
@@ -343,6 +345,54 @@ def _grouped_summary(
             ).group_by(rows.c.kind, rows.c.currency, rows.c.occurred_at)
         )
     ]
+
+
+def _python_groups(
+    rows: Sequence[Transaction],
+) -> list[tuple[str, str, dt.date, Decimal, int]]:
+    """The same grouping as :func:`_sql_groups`, over rows already in memory.
+
+    The amount-bound path decides what matches in Python (decision §14.49), so
+    its selection cannot be re-expressed in SQL; grouping the surviving rows
+    here is what keeps its ``summary`` arithmetic identical to the fast path's
+    instead of merely equivalent.
+    """
+    groups: dict[tuple[str, str, dt.date], list] = {}
+    for row in rows:
+        key = (row.kind, row.currency.upper(), row.occurred_at)
+        bucket = groups.setdefault(key, [valuation.ZERO, 0])
+        bucket[0] += Decimal(row.amount)
+        bucket[1] += 1
+    return [
+        (kind, currency, on, valuation.quantize_amount(subtotal), count)
+        for (kind, currency, on), (subtotal, count) in groups.items()
+    ]
+
+
+def _grouped_summary(
+    db: Session,
+    ctx: LedgerContext,
+    groups: Sequence[tuple[str, str, dt.date, Decimal, int]],
+    *,
+    count: int,
+    rate_missing_extra: int = 0,
+) -> dict:
+    """§5.25's ``summary`` from ``(kind, currency, day, subtotal, rows)`` groups.
+
+    Both list paths feed this one function — the fast path from SQL, the
+    amount-bound path from the rows it kept — so the block cannot drift between
+    them: adding a bound that excludes nothing has to leave every figure alone.
+    One conversion per group means the number of rows converted depends on how
+    many (kind, currency, day) combinations the filter hit, never on how many
+    transactions did.
+
+    The arithmetic is §5.25's to the letter: expenses are all negative, so the
+    absolute value of a group's subtotal is the sum of the row absolutes;
+    transfer legs take no part in the three amounts but a group that could not
+    be valued still contributes its rows to ``rate_missing_count``.
+    ``rate_missing_extra`` carries the rows the caller already dropped for
+    having no rate (the bound path), which no group can account for any more.
+    """
     converted = valuation.convert_rows(
         db,
         [(subtotal, currency, on) for _kind, currency, on, subtotal, _n in groups],
@@ -350,12 +400,12 @@ def _grouped_summary(
     )
 
     totals = {"expense": valuation.ZERO, "income": valuation.ZERO, "refund": valuation.ZERO}
-    rate_missing_count = 0
-    for (kind, _currency, _on, _subtotal, count), value in zip(
+    rate_missing_count = rate_missing_extra
+    for (kind, _currency, _on, _subtotal, rows_in_group), value in zip(
         groups, converted, strict=True
     ):
         if value is None:
-            rate_missing_count += count
+            rate_missing_count += rows_in_group
             continue
         if kind not in totals:
             continue    # transfer legs, deliberately (decision §14.52 A14)
@@ -369,7 +419,7 @@ def _grouped_summary(
         "net": valuation.quantize_amount(
             totals["income"] - totals["expense"] + totals["refund"]
         ),
-        "count": total,
+        "count": count,
         "rate_missing_count": rate_missing_count,
     }
 
@@ -620,7 +670,9 @@ def list_transactions(
       (§5.25, sync 2026-09-12).
 
     Either way ``summary`` is computed over the **whole** filtered set, which is
-    why it does not change while paging (decision §14.52 A14).
+    why it does not change while paging (decision §14.52 A14), and both paths
+    hand the same ``(kind, currency, day)`` groups to the same arithmetic, so
+    a bound that excludes nothing leaves every figure exactly where it was.
     """
     if min_amount is not None and max_amount is not None and min_amount > max_amount:
         raise ApiError(
@@ -653,7 +705,7 @@ def list_transactions(
         page_values = valuation.value_transactions(
             db, ctx.ledger.base_currency, page_rows
         )
-        summary = _grouped_summary(db, ctx, stmt, total)
+        summary = _grouped_summary(db, ctx, _sql_groups(db, stmt), count=total)
     else:
         rows = list(db.execute(stmt).scalars().all())
         values = valuation.value_transactions(db, ctx.ledger.base_currency, rows)
@@ -673,9 +725,16 @@ def list_transactions(
         rows = [row for row, _value in kept]
         values = [value for _row, value in kept]
 
-        summary = valuation.list_summary(ctx.ledger.base_currency, rows, values)
-        summary["rate_missing_count"] += dropped_missing
         total = len(rows)
+        # Same grouping, same conversion, same arithmetic as the fast path —
+        # a bound that excludes nothing must not move a figure (§5.25).
+        summary = _grouped_summary(
+            db,
+            ctx,
+            _python_groups(rows),
+            count=total,
+            rate_missing_extra=dropped_missing,
+        )
         window = slice(page.offset, page.offset + page.limit)
         page_rows, page_values = rows[window], values[window]
 

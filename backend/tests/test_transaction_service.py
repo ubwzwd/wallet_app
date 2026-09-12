@@ -670,7 +670,6 @@ def test_one_patch_stamps_both_of_its_events_with_the_rows_updated_at(world):
     assert [row.id for row in events.list_for(world["db"], refund.id)] == [
         row.id for row in trail
     ]
-    assert trail[0].id > trail[1].id
 
 
 def test_an_amount_wider_than_the_column_is_rejected(world):

@@ -727,7 +727,14 @@ def refund_totals(
         )
         .join(
             refund,
-            and_(refund.refund_of == Transaction.id, refund.kind == "refund"),
+            and_(
+                refund.refund_of == Transaction.id,
+                refund.kind == "refund",
+                # Same ledger as the expense: the detail page's ``refunds[]``
+                # is ledger-scoped (§3.3), and these two totals describe that
+                # same list, so they must not count a row it never shows.
+                refund.ledger_id == ledger.id,
+            ),
             isouter=True,
         )
         .where(
