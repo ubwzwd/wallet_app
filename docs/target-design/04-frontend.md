@@ -297,6 +297,7 @@ interface LedgerContextValue {
 - **持久化上次选择**：`ledgerId` 变化时写 `localStorage['wallet:last_ledger_id']`（原生端 `AsyncStorage`，键 `@wallet_app:last_ledger_id`）。只在 §1.5 第 2 条的落地重定向里读，别处不读——它是便利，不是状态。
 - `switchTo(id)` 保留当前路由形态而不是一律回首页：在交易列表切账本仍然停在交易列表，但**丢弃 query 里的 id 类筛选**（`source_id`、`category_*` 之外的 id 都不跨账本通用），保留 `from`/`to`/`kind`/`q`。
 - `myRole` 决定账本设置里那些只有 owner 能点的操作（决策 §2）。
+- web 上 `localStorage` 的键统一由 `src/utils/prefs.ts` 加 `wallet:` 前缀，原生端沿用 `@wallet_app:` 前缀（同步 2026-09-12）。
 
 ### 2.3 分类表：启动拉取，按 `version` 永久缓存（决策 §1.3）
 
@@ -921,7 +922,7 @@ export class ApiClientError extends Error {
 }
 ```
 
-- 422（FastAPI 校验错误，`detail` 是数组）：按 `loc` 的最后一段归到 `fields`，`code` 置 `validation_error`。
+- 422：`detail` 是 [`./03-backend-api.md`](./03-backend-api.md) §4.1 定义的字符串（形如 `"<loc>: <msg>; <loc>: <msg>"`，`loc` 各段用 `.` 连接），前端按 `; ` 拆分成若干条，取每条 `loc` 的最后一段作为字段名归到 `fields`；同时兼容服务端返回数组形态的旧行为。`code` 置 `validation_error`。（同步 2026-09-12）
 - 无响应（超时 / 离线 / CORS）：`status=0`、`code='network_error'`。
 - 导入的 400（`import_format_invalid` / `skill_outdated`）带结构化字段（`errors[]` / `current_version` / `file_version` / `guide_url`，形状见 §3.3 的 `ImportFileError`），整个响应体挂在 `payload` 上，由 §4.10 步骤 1 的失败态渲染。
 
@@ -1085,7 +1086,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
      - 前端从 `sourcesApi.list` 的结果本地求和即可，不需要额外接口；`balance_base` 为 `null`（拿不到汇率）的账户单独提示「有 N 个账户暂时无法折算」，不静默按 0 算。
   2. **账户余额卡片**：横向可滚的卡片行（宽屏是网格）。每张显示账户名、类型图标、`balance` + 币种；`default_currency !== base_currency` 时第二行小字显示 `balance_base`。点击 → 交易列表并预填 `?source_id=`。归档账户默认不显示。
   3. **本月汇总**：月份切换器（`‹ 2026 年 8 月 ›`，写进 `?month=`，不能越过当前月）。支出 / 收入两个大数（支出已按退款日期冲减，决策 §7）。下面是按一级分类的条形排行（前 8 条 + 「其他 N 项」），点一条展开二级分类。条形颜色取 `chart.series[0..7]`，**不用四个 kind 色**（§6.2 规则 3）。一级分类名带 tooltip（触摸端长按），内容是分类缓存里该 code 的 `categoryDesc()`——统计接口不下发说明文字，按 `byL1[code]` 从 §2.3 的缓存里取（决策 §14.21）。转账不出现（决策 §1）。
-  4. **12 个月趋势**：**只画支出**一条线（决策 §7、§14.52 B20——收入不放，一屏放不下两条线还要图例）。X 轴月份，Y 轴基准币种，每个点的数值直接标在线上，不只靠 tooltip。点某个月 → 切到该月汇总。**不显示月均 / 峰值**（决策 §14.52 A21）。
+  4. **12 个月趋势**：**只画支出**一条线（决策 §7、§14.52 B20——收入不放，一屏放不下两条线还要图例）。X 轴月份，Y 轴基准币种，每个点的数值直接标在线上，不只靠 tooltip。点某个月 → 切到该月汇总。趋势右上保留月均 / 峰值两个小数字（决策 §14.52 A21，2026-09-11 用户确认；同步 2026-09-12）。
 - **状态**：三块各自骨架屏，互不阻塞；某块失败只在该块内显示重试；账户为 0 时余额区显示空态「先添加一个账户」+ 按钮；本月无交易时汇总区显示「这个月还没有记账」+「记一笔」按钮；用户一本账都没有时根本到不了这里（路由守卫送去 `/ledgers` 的引导页，§1.5 第 2 条、决策 §14.40 的 01-8）。
 - **交互**：下拉刷新（原生）/ 顶部刷新按钮（Web）；`refetchOnWindowFocus` 保证切回标签页即最新（§2.4）。
 
@@ -2014,7 +2015,7 @@ formatDateTime(iso, lang)            // '2026-08-14 09:12'
 | `build:web` | `EXPO_PUBLIC_API_BASE_URL=/api/v1 expo export -p web && npx workbox generateSW workbox-config.cjs` |
 | `test` | `jest` |
 | `typecheck` | `tsc --noEmit` |
-| `lint` | `eslint . --max-warnings 0` |
+| `lint` | `eslint . --max-warnings 0`（本阶段未配置 eslint，见 PROGRESS；同步 2026-09-12） |
 | `verify` | `npm run typecheck && npm run lint && npm test && npm run build:web && node scripts/verify-pwa.mjs --all && node scripts/verify-touch-targets.mjs` |
 
 `build:web` 不再改动工作区文件，`config.prod.ts` / `config.dev.ts` 一并删除。
