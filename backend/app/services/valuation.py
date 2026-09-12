@@ -31,10 +31,10 @@ from app.models.finance_source import FinanceSource
 from app.models.ledger import Ledger
 from app.models.transaction import Transaction
 from app.services import fx
+from app.services.fx import RATE_QUANTUM, quantize_rate  # one rate quantizer for the whole app
 
-# Money is Numeric(18, 4), exchange rates Numeric(18, 8) everywhere (03 §4.5).
+# Money is Numeric(18, 4) everywhere (03 §4.5); the Numeric(18, 8) rate quantum is fx.RATE_QUANTUM.
 AMOUNT_QUANTUM = Decimal("0.0001")
-RATE_QUANTUM = Decimal("0.00000001")
 ZERO = Decimal("0.0000")
 
 # Account types that are debt rather than an asset (decision §14.50).
@@ -72,16 +72,6 @@ class SourceBalance:
 def quantize_amount(value: Decimal) -> Decimal:
     """Round to the 4 decimals every money column and response field uses."""
     return Decimal(value).quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP)
-
-
-def quantize_rate(value: Decimal) -> Decimal:
-    """Round to the 8 decimals every exchange-rate column and response field uses.
-
-    Public so later callers in this module (and other services) share one
-    rate-quantizing function instead of repeating the ``Decimal.quantize``
-    call, the same way ``quantize_amount`` already does for money.
-    """
-    return Decimal(value).quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
 
 
 def convert_rows(
@@ -243,43 +233,6 @@ def net_worth(
         quantize_amount(liabilities),
         quantize_amount(assets + liabilities),
     )
-
-
-def list_summary(
-    base_currency: str, rows: Sequence[Transaction], valuations: Sequence[Valuation | None]
-) -> dict:
-    """The transaction list's ``summary`` block (§5.25, decision §14.52 A14).
-
-    Computed over *all* filtered rows, not the current page, and transfers
-    never take part — neither leg of a two-leg transfer and not a one-leg one
-    either. ``net`` is what this selection did to the wallet:
-    ``income - expense + refund``.
-    """
-    expense = ZERO
-    income = ZERO
-    refund = ZERO
-    rate_missing_count = 0
-
-    for row, valuation in zip(rows, valuations, strict=True):
-        if valuation is None:
-            rate_missing_count += 1
-            continue
-        if row.kind == "expense":
-            expense += abs(valuation.amount_base)
-        elif row.kind == "income":
-            income += valuation.amount_base
-        elif row.kind == "refund":
-            refund += valuation.amount_base
-        # transfer legs are deliberately ignored (decision §14.52 A14)
-
-    return {
-        "base_currency": base_currency.upper(),
-        "expense": quantize_amount(expense),
-        "income": quantize_amount(income),
-        "net": quantize_amount(income - expense + refund),
-        "count": len(rows),
-        "rate_missing_count": rate_missing_count,
-    }
 
 
 # ---------------------------------------------------------------------------

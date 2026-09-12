@@ -269,3 +269,11 @@ def test_trend_of_one_month_counts_missing_rates(db, book):
 
     assert result["months"] == [{"month": "2026-09", "expense": Decimal("100.0000")}]
     assert result["rate_missing_count"] == 1
+
+
+def test_trend_rejects_a_non_positive_number_of_months(db, book):
+    """The endpoint bounds ``months`` to 1..36; the service must still fail honestly."""
+    ledger, _user, _source = book
+    for months in (0, -1):
+        with pytest.raises(ValueError):
+            trend(db, ledger, months, dt.date(2026, 8, 31))

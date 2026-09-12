@@ -17,7 +17,6 @@ from app.models.transaction import Transaction
 from app.services.valuation import (
     SourceBalance,
     Valuation,
-    list_summary,
     net_worth,
     source_balances,
     value_transactions,
@@ -291,7 +290,7 @@ def test_net_worth_of_a_missing_balance_entry_is_skipped(db, ledger_setup):
 
 
 # ---------------------------------------------------------------------------
-# value_transactions / list_summary
+# value_transactions
 # ---------------------------------------------------------------------------
 
 
@@ -318,65 +317,3 @@ def test_value_transactions_of_nothing_is_empty(db, ledger_setup):
     assert value_transactions(db, ledger.base_currency, []) == []
 
 
-def test_list_summary_covers_the_four_kinds(db, ledger_setup):
-    """§5.25: expense positive, refund only in ``net``, transfers nowhere."""
-    ledger, user = ledger_setup
-    source = make_source(db, ledger, user)
-    rows = [
-        make_tx(db, ledger, source, user, amount="-100.0000"),
-        make_tx(db, ledger, source, user, kind="income", category_l1="salary", amount="300.0000"),
-        make_tx(db, ledger, source, user, kind="refund", amount="20.0000"),
-        make_tx(
-            db,
-            ledger,
-            source,
-            user,
-            kind="transfer",
-            amount="-50.0000",
-            transfer_role="out",
-            transfer_subtype="plain",
-            counterparty="老婆",
-        ),
-    ]
-
-    result = list_summary(
-        ledger.base_currency, rows, value_transactions(db, ledger.base_currency, rows)
-    )
-
-    assert result == {
-        "base_currency": "CNY",
-        "expense": Decimal("100.0000"),
-        "income": Decimal("300.0000"),
-        "net": Decimal("220.0000"),
-        "count": 4,
-        "rate_missing_count": 0,
-    }
-
-
-def test_list_summary_counts_rows_it_could_not_value(db, ledger_setup):
-    ledger, user = ledger_setup
-    source = make_source(db, ledger, user)
-    rows = [
-        make_tx(db, ledger, source, user, amount="-100.0000"),
-        make_tx(db, ledger, source, user, amount="-999.0000", currency="XXX"),
-    ]
-
-    result = list_summary(
-        ledger.base_currency, rows, value_transactions(db, ledger.base_currency, rows)
-    )
-
-    assert result["expense"] == Decimal("100.0000")
-    assert result["net"] == Decimal("-100.0000")
-    assert result["count"] == 2
-    assert result["rate_missing_count"] == 1
-
-
-def test_list_summary_of_an_empty_selection(db, ledger_setup):
-    ledger, _user = ledger_setup
-
-    result = list_summary(ledger.base_currency, [], [])
-
-    assert result["expense"] == Decimal("0.0000")
-    assert result["income"] == Decimal("0.0000")
-    assert result["net"] == Decimal("0.0000")
-    assert result["count"] == 0
