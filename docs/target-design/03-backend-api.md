@@ -209,7 +209,7 @@ def pagination(limit: int = Query(50, ge=1, le=200),
 
 def client_name(x_client: str | None = Header(None, alias="X-Client")) -> str | None:
     """请求头 X-Client 的值，写进 transaction_events.client（决策 §14.51）。
-    ≤ 40 字符、只留可打印 ASCII，超长截断，缺头返回 None。"""
+    ≤ 16 字符、只留可打印 ASCII，超长截断，缺头返回 None。（同步 2026-09-12：与 02 §1.9 的 transaction_events.client VARCHAR(16) 对齐）"""
 ```
 
 #### `core/categories.py`（决策 §1.3）
@@ -678,7 +678,7 @@ PATCH /api/v1/ledgers/8f0f.../transactions/1c2d...
 X-Client: web
 ```
 
-服务端把它原样写进 `transaction_events.client`（≤ 40 字符、只保留可打印 ASCII，超长截断，缺头存 `null`），交易详情的操作记录（§5.27 的 `events[]`）据此显示"在 web 上修改"。它**不参与任何鉴权或授权判断**，纯粹是留痕；缺这个头不影响任何接口的行为。前端固定发 `web`（[`./04-frontend.md`](./04-frontend.md) §3.2 的 axios 拦截器里加），将来有别的客户端再换值。
+服务端把它原样写进 `transaction_events.client`（≤ 16 字符、只保留可打印 ASCII，超长截断，缺头存 `null`；同步 2026-09-12：与 02 §1.9 的 `transaction_events.client VARCHAR(16)` 对齐），交易详情的操作记录（§5.27 的 `events[]`）据此显示"在 web 上修改"。它**不参与任何鉴权或授权判断**，纯粹是留痕；缺这个头不影响任何接口的行为。前端固定发 `web`（[`./04-frontend.md`](./04-frontend.md) §3.2 的 axios 拦截器里加），将来有别的客户端再换值。
 
 带这个头有意义的端点：`POST/PATCH/DELETE /transactions`、`POST/PATCH/DELETE /transactions/transfer`、`POST .../pair`、`POST .../unpair`、`POST .../imports/{bid}/commit`、`DELETE .../imports/{bid}`。其余端点收到它会忽略。
 
@@ -1725,6 +1725,8 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions?kind=expense&kind=refund&from=2026
 | `count` | 与 `total` 相同，放在这里是为了让前端只读一个对象就能画汇总条 |
 | `rate_missing_count` | 因为汇率取不到而没能计入的行数，正常是 0 |
 
+（同步 2026-09-12）`count` 与 `total` 是否总是相等，取决于有没有给金额区间：给了 `min_amount` / `max_amount` 时，取不到汇率的行没有 `amount_base`，没法参与"折算后比较"，所以根本不进过滤后的结果集——此时 `total`（也就是 `count`）只统计**能折算的行**，取不到汇率而被排除的行数单独由 `rate_missing_count` 给出，两者不重叠。没给金额区间时不需要折算就能判断是否命中筛选，取不到汇率的行照常留在结果集里（只是 `amount_base` 等三个字段为 `null`，见 §5.25 响应行字段说明），所以这时 `count == total` 包含全部命中的行，`rate_missing_count` 统计的是这些行里汇率缺失的数量。
+
 `summary` 算的是**全部筛选结果**，不是当前页——翻页时这一栏不变，这正是它的用途（决策 §14.52 A14：列表顶部显示"支出 / 收入 / 净额"）。按日分组和每日小计由前端在当前页数据上做，服务端不管。
 
 两腿转账在列表里仍然是**两行**返回（决策 §14.52 B15：接口按行返回，合并成一行显示由前端按 `transfer_pair_id` 做；按账户筛选时任一腿命中就显示整对，也由前端处理）。
@@ -1923,7 +1925,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/aa11bb22-cc33-4d44-8e55-ff66778899
     "refundable": "30.5000",
     "other_refunds": [
       {"id": "bb22cc33-...", "occurred_at": "2026-09-12", "amount": "5.0000",
-       "currency": "EUR", "note": "又退了一份"}
+       "currency": "EUR", "note": "又退了一份", "source_id": "1022fd24-..."}
     ]
   },
   "refunds": [],
@@ -1933,7 +1935,7 @@ GET /api/v1/ledgers/8f0f7b2e-.../transactions/aa11bb22-cc33-4d44-8e55-ff66778899
 ```
 
 - `refund_of` 仍然是那个裸 UUID（保持与列表一致），`refund_of_detail` 是它的展开：日期、商户、金额、账户、分类、**已退 / 可退**（决策 §14.46 逐字要求）。
-- `other_refunds`（决策 §14.52 A25）：指向**同一张原单**的其它退款行，**不含当前这条**，按日期升序。用途是"这单我已经退过两次了吗"——部分退款很容易重复登记。原单只被退过这一次时它是空数组。
+- `other_refunds`（决策 §14.52 A25）：指向**同一张原单**的其它退款行，**不含当前这条**，按日期升序，字段与 `refunds[]` 同形（含 `source_id`，同步 2026-09-12：实现复用同一模型）。用途是"这单我已经退过两次了吗"——部分退款很容易重复登记。原单只被退过这一次时它是空数组。
 - 原单被删除后 `refund_of` 是 `null`（`ON DELETE SET NULL`，决策 §1.1），此时 `refund_of_detail` 也是 `null`，前端显示"原单已删除"。
 - 非 refund 行上 `refund_of_detail` 恒为 `null`。
 
@@ -2125,6 +2127,7 @@ X-Client: web
   "occurred_at": "2026-09-06",
   "subtype": "plain",
   "note": "换汇到人民币账户",
+  "updated_at": "2026-09-06T12:00:00.000000Z",
   "out": {
     "id": "1111aaaa-2222-4bbb-8ccc-3333dddd4444",
     "source_id": "34fa63d8-5776-4775-982b-4d58deb0ace9",
@@ -2149,6 +2152,8 @@ X-Client: web
   }
 }
 ```
+
+（同步 2026-09-12）顶层 `updated_at` 取两腿 `updated_at` 中**较大**的那个，与 §5.31 的口径一致；本例两腿相等所以就是这个值。
 
 错误：
 
@@ -2280,6 +2285,7 @@ X-Client: web
   "occurred_at": "2026-09-05",
   "subtype": "repayment",
   "note": "还信用卡",
+  "updated_at": "2026-09-10T08:31:00.000000Z",
   "out": {
     "id": "5c4d3e2f-...",
     "source_id": "34fa63d8-...",
@@ -2307,7 +2313,7 @@ X-Client: web
 
 这个例子正好演示了上面两条规则：转出腿来自储蓄卡账单、原本是 `plain`，转入腿来自信用卡账单、原本是 `repayment`，而转入腿的账户 `5b6c7d8e`（招商 信用卡）是 `credit` 类型，所以整对统一成 `repayment`，转出腿那条另外多一条 `updated` 事件记下 `plain → repayment`。两腿日期一个 9-5 一个 9-6，配对后**各自保留**（决策 §14.53a）。
 
-响应形状与 §5.30 的两腿转账对象**逐字段一致**：顶层 `pair_id` + `occurred_at` + `subtype` + `note` + `out` + `in`，每一腿都是同一套 16 个字段（`id`、`source_id`、`kind`、`occurred_at`、`transfer_role`、`transfer_subtype`、`amount`、`currency`、`counterparty`、`amount_base`、`rate_used`、`rate_date`、`transfer_pair_id`、`note`、`created_at`、`updated_at`），04 的 `TransferPair` 类型按这一份定义、两个端点共用（决策 §14.53f）。差别只在**取值**：§5.30 建出来的两腿 `occurred_at` 与 `note` 必然相同，而本端点配对出来的两腿可能各不相同（决策 §14.53a），所以界面得按腿显示哪一腿是 9-5、哪一腿是 9-6。顶层的 `occurred_at` / `subtype` / `note` **取转出腿的值**（决策 §14.53a；不是取 `{tid}` 这一条——`{tid}` 可能是任意一腿，取转出腿才能保证同一对转账在任何入口下顶层摘要都一样）。`subtype` 经过上面的统一之后两腿必然相同；`occurred_at` 与 `note` 两腿仍可能各不相同，各腿的真值在各自的对象里，顶层这两个只是给界面显示用的摘要。
+响应形状与 §5.30 的两腿转账对象**逐字段一致**（同步 2026-09-12：含顶层 `updated_at`，取两腿中较大者，与 §5.31 一致）：顶层 `pair_id` + `occurred_at` + `subtype` + `note` + `updated_at` + `out` + `in`，每一腿都是同一套 16 个字段（`id`、`source_id`、`kind`、`occurred_at`、`transfer_role`、`transfer_subtype`、`amount`、`currency`、`counterparty`、`amount_base`、`rate_used`、`rate_date`、`transfer_pair_id`、`note`、`created_at`、`updated_at`），04 的 `TransferPair` 类型按这一份定义、两个端点共用（决策 §14.53f）。差别只在**取值**：§5.30 建出来的两腿 `occurred_at` 与 `note` 必然相同，而本端点配对出来的两腿可能各不相同（决策 §14.53a），所以界面得按腿显示哪一腿是 9-5、哪一腿是 9-6。顶层的 `occurred_at` / `subtype` / `note` **取转出腿的值**（决策 §14.53a；不是取 `{tid}` 这一条——`{tid}` 可能是任意一腿，取转出腿才能保证同一对转账在任何入口下顶层摘要都一样）。`subtype` 经过上面的统一之后两腿必然相同；`occurred_at` 与 `note` 两腿仍可能各不相同，各腿的真值在各自的对象里，顶层这两个只是给界面显示用的摘要。
 
 错误：
 
