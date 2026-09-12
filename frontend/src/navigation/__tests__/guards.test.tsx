@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { Text } from 'react-native';
-import { act, renderRouter, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
 
 // `expo-font` reaches for `expo-asset`, which is not in the dependency tree (see the task
 // notes); fonts never gate rendering anyway, so the root layout's `useAppFonts()` is stubbed.
@@ -21,10 +21,11 @@ import LandingRoute from '../../../app/index';
 import NotFoundRoute from '../../../app/+not-found';
 
 import { clearAuthToken, setAuthToken } from '@/api/client';
-import { queryClient } from '@/queries';
+import { qk, queryClient } from '@/queries';
 import { initI18n } from '@/i18n';
+import LoginScreen from '@/screens/auth/LoginScreen';
 import { makeLedger, makeUser } from '@/test/fixtures';
-import { mockApi, mockGet, type MockApi } from '@/test/mockApi';
+import { apiUrl, mockApi, mockGet, mockPost, type MockApi } from '@/test/mockApi';
 import { toast } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
@@ -47,6 +48,9 @@ const ROUTES = {
   '(app)/l/[ledgerId]/index': stub('ledger-home'),
   '(app)/l/[ledgerId]/transactions/index': stub('transactions-page'),
 };
+
+/** The same tree with the real sign-in screen, for the round trip through `?next=`. */
+const ROUTES_WITH_LOGIN = { ...ROUTES, '(auth)/login': LoginScreen };
 
 function mockLedgers(ids: string[]): void {
   mockGet('/ledgers', {
@@ -96,6 +100,43 @@ describe('rule 1 — anonymous visitors keep their destination', () => {
     await waitFor(() => expect(router.getPathname()).toBe('/login'));
     expect(router.getSearchParams().next).toBe('/l/x/transactions?kind=expense');
   });
+
+  test('signing in takes the user back to where they were headed', async () => {
+    mockLedgers([LEDGER_A]);
+    mockPost('/auth/login', { access_token: 'fresh-token', token_type: 'bearer' });
+    mockGet('/me', makeUser());
+
+    const router = renderRouter(ROUTES_WITH_LOGIN, {
+      initialUrl: `/l/${LEDGER_A}/transactions`,
+    });
+
+    await waitFor(() => expect(router.getPathname()).toBe('/login'));
+    expect(router.getSearchParams().next).toBe(`/l/${LEDGER_A}/transactions`);
+
+    fireEvent.changeText(await router.findByTestId('login-email'), 'alice@example.com');
+    fireEvent.changeText(router.getByTestId('login-password'), 'hunter2');
+    fireEvent.press(router.getByTestId('login-submit'));
+
+    await waitFor(() =>
+      expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`),
+    );
+    expect(await router.findByText('transactions-page')).toBeTruthy();
+  });
+
+  test('nothing renders and nothing redirects while the session is bootstrapping', async () => {
+    await setAuthToken('stored-token');
+    // `GET /me` never answers: the provider is stuck on `bootstrapping`.
+    api.mock.onGet(apiUrl('/me')).reply(() => new Promise(() => undefined));
+    mockLedgers([LEDGER_A]);
+
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/transactions` });
+
+    expect(await router.findByTestId('app-skeleton')).toBeTruthy();
+    expect(router.queryByText('login-page')).toBeNull();
+    expect(router.queryByText('transactions-page')).toBeNull();
+    // 04 §1.5: a guard that cannot decide yet waits — it never navigates.
+    expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`);
+  });
 });
 
 describe('rule 2 — the landing redirect', () => {
@@ -131,6 +172,32 @@ describe('rule 2 — the landing redirect', () => {
     mockLedgers([LEDGER_A, LEDGER_B]);
 
     const router = renderRouter(ROUTES, { initialUrl: '/login' });
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
+  });
+
+  test('/login?next= beats the landing logic for a user who is already signed in', async () => {
+    await signIn();
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockLedgers([LEDGER_A, LEDGER_B]);
+
+    const router = renderRouter(ROUTES, {
+      initialUrl: `/login?next=%2Fl%2F${LEDGER_A}%2Ftransactions`,
+    });
+
+    await waitFor(() =>
+      expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`),
+    );
+  });
+
+  test('an unsafe ?next= is ignored and the landing logic decides', async () => {
+    await signIn();
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockLedgers([LEDGER_A, LEDGER_B]);
+
+    const router = renderRouter(ROUTES, {
+      initialUrl: '/login?next=%2F%2Fevil.example.com',
+    });
+
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
   });
 });
@@ -188,6 +255,24 @@ describe('rule 4 — a 404 on the ledger detail is the anchor for "you were remo
     expect(router.queryByText('transactions-page')).toBeNull();
     // The other ledger is still reachable, so the notice offers a way over to it.
     expect(router.getByText('看我的账本')).toBeTruthy();
+  });
+
+  test('everything cached under the vanished ledger is dropped, not just marked stale', async () => {
+    await signIn();
+    mockLedgers([LEDGER_A, LEDGER_B]);
+
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/transactions` });
+    expect(await router.findByText('transactions-page')).toBeTruthy();
+
+    const txKey = qk.ledger(LEDGER_A).tx('tx-1');
+    queryClient.setQueryData(txKey, { id: 'tx-1' });
+    queryClient.setQueryData(qk.ledger(LEDGER_B).tx('tx-2'), { id: 'tx-2' });
+
+    act(() => markLedgerGone(LEDGER_A));
+
+    await waitFor(() => expect(queryClient.getQueryData(txKey)).toBeUndefined());
+    // Only that ledger's subtree: another ledger's cache is none of rule 4's business.
+    expect(queryClient.getQueryData(qk.ledger(LEDGER_B).tx('tx-2'))).toEqual({ id: 'tx-2' });
   });
 
   test('a 404 on some other ledger does not disturb the current one', async () => {

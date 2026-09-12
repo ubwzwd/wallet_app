@@ -16,6 +16,7 @@ import type {
   Uuid,
 } from '@/api/types';
 
+import type { MutationOpts } from './client';
 import { invalidateSources, invalidateTransactions } from './invalidate';
 import { qk } from './keys';
 
@@ -47,10 +48,12 @@ export function useSource(
 
 export function useCreateSource(
   l: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<FinanceSource, Error, FinanceSourceCreate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: FinanceSourceCreate) => sourcesApi.create(l, b),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateSources(qc, l),
   });
 }
@@ -62,11 +65,12 @@ export function useCreateSource(
 export function useUpdateSource(
   l: Uuid,
   sid: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<FinanceSource, Error, FinanceSourceUpdate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: FinanceSourceUpdate) => sourcesApi.update(l, sid, b),
-    meta: { detailKey: qk.ledger(l).source(sid) },
+    meta: { detailKey: qk.ledger(l).source(sid), silent: opts?.silent },
     onSuccess: (_data, variables) =>
       invalidateSources(qc, l, {
         affectsBalances:
@@ -76,10 +80,14 @@ export function useUpdateSource(
 }
 
 /** Deleting an account touches transactions as well, so it sweeps the transaction keys. */
-export function useDeleteSource(l: Uuid): UseMutationResult<void, Error, Uuid> {
+export function useDeleteSource(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, Uuid> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (sid: Uuid) => sourcesApi.remove(l, sid),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateTransactions(qc, l),
   });
 }

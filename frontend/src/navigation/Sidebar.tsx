@@ -16,8 +16,9 @@ import { routes } from '@/domain/routes';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
-import { useLedgerContext } from '@/store/LedgerContext';
+import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { Button, Divider, Icon, type IconName, Text } from '@/ui';
+import { PREF_NAMES, getPref, getPrefSync } from '@/utils/prefs';
 
 export const SIDEBAR_WIDTH = 240;
 
@@ -45,20 +46,49 @@ export function isActivePath(pathname: string, href: string, exact: boolean): bo
   return !exact && pathname.startsWith(`${href}/`);
 }
 
-/** The six sidebar destinations, in order (04 §1.4). */
-export function useSidebarDestinations(ledgerId: string): NavDestination[] {
+/**
+ * The ledger the sidebar's ledger-scoped entries point at when the page itself is outside
+ * any ledger (`/settings`): the one the user last had open. `null` while nothing is known,
+ * and forever on a device that never opened one.
+ */
+export function useLastLedgerId(): string | null {
+  const [id, setId] = React.useState<string | null>(() => getPrefSync(PREF_NAMES.lastLedgerId));
+  React.useEffect(() => {
+    let alive = true;
+    void getPref(PREF_NAMES.lastLedgerId).then((value) => {
+      if (alive && value) setId(value);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return id;
+}
+
+/**
+ * The six sidebar destinations, in order (04 §1.4). Without a ledger to scope them to,
+ * the five ledger-scoped entries all lead to the ledger list — which is where the user
+ * has to pick one anyway.
+ */
+export function useSidebarDestinations(ledgerId: string | null): NavDestination[] {
   const { t } = useTranslation();
-  const l = routes.l(ledgerId);
+  const l = ledgerId === null ? null : routes.l(ledgerId);
+  const inLedger = (href: string | undefined): string => href ?? routes.ledgers();
   return [
-    { key: 'home', label: t('common:nav.home'), icon: 'home', href: l.home() },
-    { key: 'transactions', label: t('common:nav.transactions'), icon: 'list', href: l.transactions() },
-    { key: 'sources', label: t('common:nav.sources'), icon: 'wallet', href: l.sources() },
-    { key: 'imports', label: t('common:nav.imports'), icon: 'upload', href: l.imports() },
+    { key: 'home', label: t('common:nav.home'), icon: 'home', href: inLedger(l?.home()) },
+    {
+      key: 'transactions',
+      label: t('common:nav.transactions'),
+      icon: 'list',
+      href: inLedger(l?.transactions()),
+    },
+    { key: 'sources', label: t('common:nav.sources'), icon: 'wallet', href: inLedger(l?.sources()) },
+    { key: 'imports', label: t('common:nav.imports'), icon: 'upload', href: inLedger(l?.imports()) },
     {
       key: 'ledger-settings',
       label: t('common:nav.ledger_settings'),
       icon: 'users',
-      href: l.settings(),
+      href: inLedger(l?.settings()),
       dividerBefore: true,
     },
     { key: 'settings', label: t('common:nav.settings'), icon: 'settings', href: routes.settings() },
@@ -111,9 +141,13 @@ export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { ledgerId, ledger } = useLedgerContext();
+  // `/settings` renders the shell without a ledger context (04 §1.4): the chrome then
+  // aims at the ledger the user last had open, and at the ledger list when there is none.
+  const ledgerContext = useOptionalLedgerContext();
+  const lastLedgerId = useLastLedgerId();
+  const ledgerId = ledgerContext?.ledgerId ?? lastLedgerId;
   const destinations = useSidebarDestinations(ledgerId);
-  const homeHref = routes.l(ledgerId).home();
+  const homeHref = ledgerId === null ? null : routes.l(ledgerId).home();
 
   const signOut = async (): Promise<void> => {
     await logout();
@@ -128,34 +162,56 @@ export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
         { backgroundColor: colors['bg.surface'], borderRightColor: colors['border.default'] },
       ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('common:nav.switch_ledger')}
-        onPress={onOpenSwitcher}
-        testID="sidebar-ledger"
-        style={({ pressed }) => [
-          styles.ledgerRow,
-          { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
-        ]}
-      >
-        <View style={styles.ledgerText}>
-          <Text variant="subheading" numberOfLines={1}>
-            {ledger.name}
-          </Text>
-          <Text variant="micro" tone="muted" mono numberOfLines={1}>
-            {ledger.base_currency}
-          </Text>
-        </View>
-        <Icon name="chevron-down" size={16} color={colors['fg.secondary']} />
-      </Pressable>
+      {ledgerContext ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common:nav.switch_ledger')}
+          onPress={onOpenSwitcher}
+          testID="sidebar-ledger"
+          style={({ pressed }) => [
+            styles.ledgerRow,
+            { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+          ]}
+        >
+          <View style={styles.ledgerText}>
+            <Text variant="subheading" numberOfLines={1}>
+              {ledgerContext.ledger.name}
+            </Text>
+            <Text variant="micro" tone="muted" mono numberOfLines={1}>
+              {ledgerContext.ledger.base_currency}
+            </Text>
+          </View>
+          <Icon name="chevron-down" size={16} color={colors['fg.secondary']} />
+        </Pressable>
+      ) : (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={t('ledger:list.title')}
+          onPress={() => router.navigate(routes.ledgers())}
+          testID="sidebar-ledgers-link"
+          style={({ pressed }) => [
+            styles.ledgerRow,
+            { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+          ]}
+        >
+          <View style={styles.ledgerText}>
+            <Text variant="subheading" numberOfLines={1}>
+              {t('ledger:list.title')}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={16} color={colors['fg.secondary']} />
+        </Pressable>
+      )}
 
-      <Button
-        label={t('common:nav.add')}
-        icon="plus"
-        fullWidth
-        onPress={() => router.navigate(routes.l(ledgerId).transactionNew())}
-        testID="sidebar-add"
-      />
+      {ledgerId === null ? null : (
+        <Button
+          label={t('common:nav.add')}
+          icon="plus"
+          fullWidth
+          onPress={() => router.navigate(routes.l(ledgerId).transactionNew())}
+          testID="sidebar-add"
+        />
+      )}
 
       <ScrollView style={styles.nav} contentContainerStyle={styles.navContent}>
         {destinations.map((item) => (

@@ -79,23 +79,35 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
   }, []);
 
   /**
-   * Fetch the profile and move to `authenticated`. The server-side language wins over
-   * the locally stored one (04 §5.1), and is applied without persisting: the local
-   * `lang` pref keeps meaning "what this device chose while signed out".
+   * Every sign-out (logout, a 401, a failed bootstrap) bumps this counter, so a `GET /me`
+   * that was already in flight when the session died cannot write `authenticated` back
+   * after the fact (04 §2.1 item 2).
+   */
+  const session = React.useRef(0);
+
+  /**
+   * Fetch the profile and move to `authenticated`. A non-null server-side language wins
+   * over the locally stored one (04 §5.1) and is applied without persisting: the local
+   * `lang` pref keeps meaning "what this device chose while signed out". `language: null`
+   * means "follow the device" — which `initI18n()` has already resolved (local pref →
+   * device language), so it is left exactly as it is.
    */
   const loadProfile = React.useCallback(async (): Promise<void> => {
+    const mySession = session.current;
     const me = await meApi.get();
-    if (!alive.current) return;
+    if (!alive.current || session.current !== mySession) return;
     setUserState(me);
     setStatus('authenticated');
+    if (!me.language) return;
     try {
-      await applyLanguage(me.language ?? null, { persist: false });
+      await applyLanguage(me.language, { persist: false });
     } catch {
       // A language switch that fails must never cost the user their session.
     }
   }, []);
 
   const goAnonymous = React.useCallback((): void => {
+    session.current += 1;
     setUserState(null);
     setStatus('anonymous');
   }, []);
@@ -181,6 +193,7 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
   }, [loadProfile]);
 
   const setUser = React.useCallback((next: User | null): void => {
+    if (!next) session.current += 1;
     setUserState(next);
     setStatus(next ? 'authenticated' : 'anonymous');
   }, []);

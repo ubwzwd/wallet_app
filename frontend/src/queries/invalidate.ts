@@ -8,7 +8,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import type { Uuid } from '@/api/types';
 
-import { qk } from './keys';
+import { LEDGER_KEY_PREFIX, qk } from './keys';
 
 /** `ledgersApi.create` / `join` — the ledger list changed. */
 export function invalidateLedgers(qc: QueryClient): void {
@@ -101,7 +101,7 @@ export function invalidateMe(qc: QueryClient, scope?: MeChangeScope): void {
 /** Ledger ids that currently have at least one cached query under `['l', id, ...]`. */
 export function cachedLedgerIds(qc: QueryClient): string[] {
   const ids = new Set<string>();
-  for (const query of qc.getQueryCache().findAll({ queryKey: ['l'] })) {
+  for (const query of qc.getQueryCache().findAll({ queryKey: [LEDGER_KEY_PREFIX] })) {
     const id = query.queryKey[1];
     if (typeof id === 'string') ids.add(id);
   }

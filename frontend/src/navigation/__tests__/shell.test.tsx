@@ -3,7 +3,7 @@
  * chrome's copy — every label comes from the language pack.
  */
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { act, fireEvent, renderHook, renderRouter, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
 
@@ -16,14 +16,17 @@ import AppGroupLayout from '../../../app/(app)/_layout';
 import LedgerLayout from '../../../app/(app)/l/[ledgerId]/_layout';
 
 import { setAuthToken } from '@/api/client';
+import * as i18n from '@/i18n';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
 import { makeLedger, makeUser } from '@/test/fixtures';
 import { mockApi, mockGet, type MockApi } from '@/test/mockApi';
+import { space } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { toast } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
+import { TAB_BAR_HEIGHT } from '../BottomTabBar';
 import { resetLedgerGone } from '../RequireLedger';
 import { useSwUpdateToast } from '../useSwUpdateToast';
 
@@ -134,6 +137,57 @@ describe('narrow (<1024)', () => {
     expect(router.getByText('成员')).toBeTruthy();
     expect(router.getByText('创建者')).toBeTruthy();
   });
+
+  test('the toast host clears the tab bar inside a ledger and sits low outside it', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+    expect(await router.findByTestId('bottom-tab-bar')).toBeTruthy();
+
+    act(() => {
+      toast.info('哟');
+    });
+
+    const inLedger = StyleSheet.flatten(
+      (await router.findByTestId('toast-host')).props.style,
+    ) as { bottom?: number };
+    expect(inLedger.bottom).toBe(space['4'] + TAB_BAR_HEIGHT);
+
+    // `/settings` has no tab bar, so nothing has to be cleared.
+    router.unmount();
+    const settings = renderRouter(ROUTES, { initialUrl: '/settings' });
+    expect(await settings.findByText('settings-page')).toBeTruthy();
+
+    act(() => {
+      toast.info('哟');
+    });
+
+    const outside = StyleSheet.flatten(
+      (await settings.findByTestId('toast-host')).props.style,
+    ) as { bottom?: number };
+    expect(outside.bottom).toBe(space['4']);
+  });
+
+  test('an error toast names its detail toggle and its close button from the pack', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+    expect(await router.findByTestId('bottom-tab-bar')).toBeTruthy();
+
+    act(() => {
+      toast.error('出错了', { detail: 'HTTP 500' });
+    });
+
+    expect(await router.findByLabelText('查看详情')).toBeTruthy();
+    expect(router.getByLabelText('关闭')).toBeTruthy();
+  });
+
+  test('/settings keeps the chrome: a title bar with a way back, and no tabs', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    expect(await router.findByText('settings-page')).toBeTruthy();
+    expect(router.getByTestId('app-shell-narrow')).toBeTruthy();
+    expect(router.getByLabelText('返回')).toBeTruthy();
+    // Every tab is ledger-scoped, and there is no ledger here.
+    expect(router.queryByTestId('bottom-tab-bar')).toBeNull();
+    expect(router.queryByTestId('top-bar-ledger')).toBeNull();
+  });
 });
 
 describe('wide (>=1024)', () => {
@@ -190,6 +244,68 @@ describe('wide (>=1024)', () => {
 
     expect(await router.findByText('阿狸')).toBeTruthy();
     expect(router.getByLabelText('登出')).toBeTruthy();
+  });
+
+  test('/settings marks 个人设置 selected and keeps the ledger entries usable', async () => {
+    // The user was in a ledger a moment ago, so the ledger-scoped entries still lead there.
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    expect(await router.findByText('settings-page')).toBeTruthy();
+    expect(router.getByTestId('sidebar-settings').props.accessibilityState.selected).toBe(true);
+    expect(router.getByTestId('sidebar-home').props.accessibilityState.selected).toBe(false);
+    // No ledger context: the header is a link to the ledger list, not the switcher.
+    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
+    expect(router.getByTestId('sidebar-ledgers-link')).toBeTruthy();
+
+    fireEvent.press(router.getByTestId('sidebar-transactions'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/transactions`));
+  });
+
+  test('without a remembered ledger the sidebar sends every ledger entry to /ledgers', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    expect(await router.findByText('settings-page')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-add')).toBeNull();
+
+    fireEvent.press(router.getByTestId('sidebar-home'));
+    await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  });
+});
+
+describe('the language pack gate (04 §2)', () => {
+  /** Pretend i18next has not booted yet, so the root layout runs its gate again. */
+  function pretendUninitialized(): () => void {
+    const was = i18next.isInitialized;
+    Object.defineProperty(i18next, 'isInitialized', { value: false, configurable: true });
+    return () =>
+      Object.defineProperty(i18next, 'isInitialized', { value: was, configurable: true });
+  }
+
+  test('a language pack that fails to load offers a retry instead of a forever skeleton', async () => {
+    setWide(false);
+    const restore = pretendUninitialized();
+    const initSpy = jest
+      .spyOn(i18n, 'initI18n')
+      .mockRejectedValueOnce(new Error('pack unavailable'));
+
+    try {
+      const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+      expect(await router.findByTestId('i18n-failed')).toBeTruthy();
+      expect(router.queryByTestId('app-skeleton')).toBeNull();
+
+      // The retry runs `initI18n()` again; this time it succeeds and the gate opens.
+      initSpy.mockResolvedValue(undefined);
+      fireEvent.press(router.getByTestId('i18n-retry'));
+
+      await waitFor(() => expect(router.queryByTestId('i18n-failed')).toBeNull());
+      expect(initSpy.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      initSpy.mockRestore();
+      restore();
+    }
   });
 });
 

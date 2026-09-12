@@ -27,6 +27,29 @@ export function useConfig(): UseQueryResult<AppConfig> {
   });
 }
 
+/**
+ * The `categories` preference is written by an older build, by another tab, or by a user
+ * poking at storage: anything that is not shaped like a `CategoryTree` would blow up in
+ * `buildCategoryIndex`, so it is checked before it is allowed to seed the cache.
+ */
+export function isCategoryTree(value: unknown): value is CategoryTree {
+  if (typeof value !== 'object' || value === null) return false;
+  const tree = value as Partial<CategoryTree>;
+  return (
+    typeof tree.version === 'string' &&
+    Array.isArray(tree.expense) &&
+    Array.isArray(tree.income)
+  );
+}
+
+/** A stored tree, or `null` — dropping (and forgetting) a copy that fails the check. */
+function readCachedTree(raw: unknown): CategoryTree | null {
+  if (raw === null || raw === undefined) return null;
+  if (isCategoryTree(raw)) return raw;
+  void setJsonPref(PREF_NAMES.categories, null);
+  return null;
+}
+
 export type CategoriesResult = UseQueryResult<CategoryTree> & {
   /** The tree, or `null` while nothing (neither cache nor network) has arrived. */
   tree: CategoryTree | null;
@@ -44,15 +67,16 @@ export function useCategories(): CategoriesResult {
   // Lazy initialiser: the synchronous preference is read exactly once per mount, not on
   // every render.
   const [syncCached] = React.useState<CategoryTree | null>(() =>
-    getJsonPrefSync<CategoryTree>(PREF_NAMES.categories),
+    readCachedTree(getJsonPrefSync<unknown>(PREF_NAMES.categories)),
   );
   const [asyncCached, setAsyncCached] = React.useState<CategoryTree | null>(null);
 
   React.useEffect(() => {
     if (syncCached) return; // web already had it before the first paint
     let alive = true;
-    void getJsonPref<CategoryTree>(PREF_NAMES.categories).then((v) => {
-      if (alive && v) setAsyncCached(v);
+    void getJsonPref<unknown>(PREF_NAMES.categories).then((v) => {
+      const tree = readCachedTree(v);
+      if (alive && tree) setAsyncCached(tree);
     });
     return () => {
       alive = false;

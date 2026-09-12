@@ -8,6 +8,7 @@ export {
   queryClient,
   registerQueryHandlers,
   shouldRetry,
+  type MutationOpts,
   type QueryHandlers,
 } from './client';
 export {
@@ -28,6 +29,7 @@ export {
 } from './invalidate';
 
 export {
+  isCategoryTree,
   useCategories,
   useConfig,
   useCurrencies,
@@ -38,7 +40,6 @@ export {
 export { useMe, useUpdateMe } from './useMe';
 export {
   memberLabel,
-  type MutationOpts,
   useCreateInvite,
   useCreateLedger,
   useDeleteLedger,

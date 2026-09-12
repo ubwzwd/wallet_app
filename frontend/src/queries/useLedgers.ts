@@ -28,6 +28,7 @@ import type {
   Uuid,
 } from '@/api/types';
 
+import type { MutationOpts } from './client';
 import { invalidateLedger, invalidateLedgers, invalidateMembers, removeLedger } from './invalidate';
 import { qk } from './keys';
 
@@ -78,11 +79,11 @@ export function useMemberNames(l: Uuid | undefined): Record<Uuid, string> {
 
 // ------------------------------------------------------------------ mutations
 
-/** Options shared by the mutation hooks whose callers render the error themselves. */
-export interface MutationOpts {
-  /** `true` keeps the global error toast quiet (04 §3.9): the page shows the error inline. */
-  silent?: boolean;
-}
+/**
+ * Every mutation hook below takes `opts?: MutationOpts` last and forwards `opts.silent`
+ * as mutation meta: a page that renders the failure itself passes `{ silent: true }`, and
+ * everything else lets the global error toast of §3.9 do the talking.
+ */
 
 export function useCreateLedger(
   opts?: MutationOpts,
@@ -96,20 +97,27 @@ export function useCreateLedger(
 }
 
 /** A changed `base_currency` invalidates the ledger's whole subtree (04 §3.6). */
-export function useUpdateLedger(l: Uuid): UseMutationResult<Ledger, Error, LedgerUpdate> {
+export function useUpdateLedger(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<Ledger, Error, LedgerUpdate> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: LedgerUpdate) => ledgersApi.update(l, b),
-    meta: { detailKey: qk.ledger(l).detail() },
+    meta: { detailKey: qk.ledger(l).detail(), silent: opts?.silent },
     onSuccess: (_data, variables) =>
       invalidateLedger(qc, l, { baseCurrencyChanged: variables.base_currency !== undefined }),
   });
 }
 
-export function useDeleteLedger(l: Uuid): UseMutationResult<void, Error, void> {
+export function useDeleteLedger(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, void> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => ledgersApi.remove(l),
+    meta: { silent: opts?.silent },
     onSuccess: () => removeLedger(qc, l),
   });
 }
@@ -126,36 +134,58 @@ export function useJoinLedger(
 }
 
 /** Invite codes never enter the cache: the code is shown once and then it is gone. */
-export function useCreateInvite(l: Uuid): UseMutationResult<LedgerInvite, Error, void> {
-  return useMutation({ mutationFn: () => ledgersApi.createInvite(l) });
+export function useCreateInvite(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<LedgerInvite, Error, void> {
+  return useMutation({
+    mutationFn: () => ledgersApi.createInvite(l),
+    meta: { silent: opts?.silent },
+  });
 }
 
-export function useRevokeInvite(l: Uuid): UseMutationResult<void, Error, string> {
-  return useMutation({ mutationFn: (code: string) => ledgersApi.revokeInvite(l, code) });
+export function useRevokeInvite(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, string> {
+  return useMutation({
+    mutationFn: (code: string) => ledgersApi.revokeInvite(l, code),
+    meta: { silent: opts?.silent },
+  });
 }
 
-export function useRemoveMember(l: Uuid): UseMutationResult<void, Error, Uuid> {
+export function useRemoveMember(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, Uuid> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (userId: Uuid) => ledgersApi.removeMember(l, userId),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateMembers(qc, l),
   });
 }
 
 export function useTransferOwnership(
   l: Uuid,
+  opts?: MutationOpts,
 ): UseMutationResult<Paged<LedgerMember>, Error, TransferOwnershipRequest> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: TransferOwnershipRequest) => ledgersApi.transferOwnership(l, b),
+    meta: { silent: opts?.silent },
     onSuccess: () => invalidateMembers(qc, l),
   });
 }
 
-export function useLeaveLedger(l: Uuid): UseMutationResult<void, Error, void> {
+export function useLeaveLedger(
+  l: Uuid,
+  opts?: MutationOpts,
+): UseMutationResult<void, Error, void> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => ledgersApi.leave(l),
+    meta: { silent: opts?.silent },
     onSuccess: () => removeLedger(qc, l),
   });
 }

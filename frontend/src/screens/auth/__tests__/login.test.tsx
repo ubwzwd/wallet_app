@@ -78,6 +78,21 @@ test('401 invalid_credentials shows under the password field, toasts, and keeps 
   expect(screen.getByTestId('login-password').props.value).toBe('hunter2');
 });
 
+test('editing a field clears the message the server put under the password', async () => {
+  mockPost('/auth/login', { detail: 'Incorrect email or password', code: 'invalid_credentials' }, 401);
+  renderRouter(ROUTES, { initialUrl: '/login', wrapper: Wrapper });
+
+  await fillAndSubmit();
+  expect((await screen.findAllByText('邮箱或密码不正确')).length).toBe(2);
+
+  // The verdict was about what was submitted; a changed password makes it obsolete.
+  fireEvent.changeText(screen.getByTestId('login-password'), 'hunter3');
+
+  await waitFor(() => expect(screen.queryAllByText('邮箱或密码不正确')).toHaveLength(1));
+  // The one left is the toast, which the user dismisses themselves (04 §3.9).
+  expect(screen.getByTestId('toast-error')).toBeTruthy();
+});
+
 test('a legal ?next= is where a successful sign-in lands', async () => {
   mockPost('/auth/login', { access_token: 'tok', token_type: 'bearer' });
   mockGet('/me', makeUser());

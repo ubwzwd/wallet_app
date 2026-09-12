@@ -124,6 +124,7 @@ test('creating a ledger defaults to the user currency and lands in the new ledge
   await waitFor(() => expect(router.getPathname()).toBe('/l/new-led'));
   const body = JSON.parse(api.mock.history.post[0].data as string) as Record<string, string>;
   expect(body).toEqual({ name: '旅行账本', base_currency: 'SGD' });
+  expect(await screen.findByTestId('toast-success')).toHaveTextContent('已创建《旅行账本》');
 });
 
 test('an empty ledger name is refused before the request', async () => {

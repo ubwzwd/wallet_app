@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { View } from 'react-native';
-import { type Href, useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,7 +20,7 @@ import { deviceLanguage } from '@/i18n';
 import { errorMessage } from '@/i18n/errorCodes';
 import { formatCountdown } from '@/i18n/format';
 import { qk, useConfig, useCurrencies } from '@/queries';
-import { routes } from '@/domain/routes';
+import { routes, safeNext } from '@/domain/routes';
 import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
 import { Button, Skeleton, Text, TextField, toast } from '@/ui';
@@ -50,6 +50,10 @@ export default function RegisterScreen(): React.JSX.Element {
   const router = useRouter();
   const qc = useQueryClient();
   const { register } = useAuth();
+  // `/register?next=…` comes from the login page's "register" link: the destination the
+  // user was originally bounced off survives the detour through registration (04 §1.5).
+  const params = useLocalSearchParams<{ next?: string }>();
+  const next = safeNext(params.next);
   const config = useConfig();
   const currencies = useCurrencies();
 
@@ -118,13 +122,20 @@ export default function RegisterScreen(): React.JSX.Element {
   );
 
   const submit = handleSubmit(onSubmit);
-  const goToLogin = React.useCallback(() => router.replace(routes.login() as Href), [router]);
+  const goToLogin = React.useCallback(
+    () => router.replace(routes.login(next ?? undefined) as Href),
+    [next, router],
+  );
 
   const registrationClosed = closedAfterSubmit || config.data?.registration_open === false;
 
   if (registrationClosed) {
     return (
-      <AuthLayout title={t('auth:register.closed.title')} testID="register-screen">
+      <AuthLayout
+        title={t('auth:register.closed.title')}
+        subtitle={t('auth:register.subtitle')}
+        testID="register-screen"
+      >
         <Text variant="body" tone="secondary" testID="register-closed-body">
           {t('auth:register.closed.body')}
         </Text>
@@ -140,7 +151,11 @@ export default function RegisterScreen(): React.JSX.Element {
 
   if (config.isPending) {
     return (
-      <AuthLayout title={t('auth:register.title')} testID="register-screen">
+      <AuthLayout
+        title={t('auth:register.title')}
+        subtitle={t('auth:register.subtitle')}
+        testID="register-screen"
+      >
         <Text variant="caption" tone="muted">
           {t('auth:register.config_loading')}
         </Text>
@@ -150,7 +165,11 @@ export default function RegisterScreen(): React.JSX.Element {
   }
 
   return (
-    <AuthLayout title={t('auth:register.title')} testID="register-screen">
+    <AuthLayout
+      title={t('auth:register.title')}
+      subtitle={t('auth:register.subtitle')}
+      testID="register-screen"
+    >
       <Controller
         control={control}
         name="email"
