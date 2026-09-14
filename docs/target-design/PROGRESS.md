@@ -8,7 +8,7 @@
 | 2 账本 | 账本 / 成员 / 邀请码接口（03 §5.8–5.19）、注册自动建账本、`core/deps.py`、限流 | `v3/phase-2-ledgers` → 已合回 `main`（656cfb7） | **完成（2026-09-12）** |
 | 3 账户与交易 | 账户接口（余额与三个合计）、交易 CRUD、两腿转账、配对 / 拆开、`transaction_events`、统计 summary / trend | `v3/phase-3-transactions` → 已合回 `main`（666c4ed） | **完成（2026-09-12）** |
 | 4 统计 | 并入第三阶段 | — | — |
-| 5 前端骨架 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 账户各页 | `v3/phase-5-frontend`（5a 地基与骨架 → 5b 各页） | 进行中（2026-09-12） |
+| 5 前端 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 详情 / 账户 / 设置各页、PWA 与构建 | `v3/phase-5-frontend` → 已合回 `main`（d0b4044） | **完成（2026-09-15）** |
 | 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | | 未开始 |
 | 7 视觉 | `theme/tokens.ts`、组件按 04 §6 换色、浅色 / 深色 WCAG 验收 | | 未开始 |
 | 8 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
@@ -41,4 +41,9 @@
 - 2026-09-12：5a「前端地基与骨架」工作流（9 个任务 / 3 波）全部合入 `v3/phase-5-frontend`，前端 473 个测试、tsc 零错误。终审的 blocker（两处旧 `@/ui/index2` 引用）与 major（全局错误 Toast 与页面重复弹）已直接修掉，`types.ts` 按 03 改正三处（`TransactionSummary` 字段名、`TransactionPairRequest.other_transaction_id`、`ImportRowListParams.flagged`）。**新增后端端点** `GET /ledgers/{id}/transactions/transfer/{pair_id}`（03 §5.30a，同步 2026-09-12）：04 §1.2 的两腿详情 / 编辑路由只带 pair_id，原接口集无法按 pair_id 读一对。jest 改为直接转换 lucide-react-native（去掉手写 mock）；`expo-asset` 补为直接依赖（expo-font 隐式依赖它，否则字体 hook 无法解析）。终审剩余 minor（约 30 条：Toast 避让底部 tab、confirm 二次确认文案、登录时 language=null 越过本地偏好、`/settings` 不在壳下、formatConverted 符号、filters 空串解析、safeNext 控制字符、Button 横向 hitSlop、CategoryPicker 411 行、TrendChart 标签过宽等）作为 5b 的第一波两个收口任务处理。人工冒烟注意：5b 合入前 `/l/:id` 没有首页路由。
 - 2026-09-12：5b「前端各页」工作流（10 个任务 / 3 波）跑完，七个任务合入：两个 5a 收口（fe-fix-core 二十条、fe-fix-shell 二十一条）、04 文档同步、首页、交易列表、账户、账本设置与个人设置。**fe-tx-form（记一笔与编辑）被审核打回**（两轮修复后仍有两处 major，都在两腿转账的编辑路径），fe-tx-detail 与 fe-build 因依赖被跳过。编排者手工处理：把 `task/fe-tx-form` 合入后直接补掉两处 major——(a) `toTransferUpdate` 改为按差异只发改动字段（03 §5.31 只在请求点名时才写两腿的 `occurred_at` / `subtype` / `note`，原来的全量 body 会把 §14.53a 允许的「两腿各有日期与备注」在任何一次保存时抹平）；(b) `showsSecondLeg()` 成为「第二组金额是否展开」的唯一判据，并同时看币种与金额，使同币种 1000 → 995 的一对不再在第一次保存时被镜像成 1000 / 1000。另外 `jest.setup.js` 把 Testing Library 的 `asyncUtilTimeout` 提到 10 秒（48 个测试套件并行时 1 秒默认值会随机误报）。此时 647 个前端测试通过。
 - 2026-09-12：5c 收尾工作流启动（3 个任务 / 2 波）：交易详情与两腿转账详情、5b 终审收口（四个页面窄屏顶栏标题、「共 N 笔」计数漂移、记一笔表单的八条 minor、prefs / 错误判定 / 金额比较三处小重构）、构建与 PWA 收尾（workbox 策略、manifest / index.html / app.json 取 token 色、`verify-touch-targets.mjs` 重写、导入占位路由、README / START、全应用贯穿测试）。
+- 2026-09-15：5c 收尾工作流（3 个任务 / 2 波）全部合入，终审 ship：交易详情与两腿转账详情、5b 终审的十一条收口、构建与 PWA 收尾（workbox 只缓存三条只读接口、导航回落 index.html、主题色取 tokens、`verify-touch-targets.mjs` 重写、导入占位路由、README / START 重写、全应用贯穿测试）。`npm run verify` 端到端通过，前端 685 个测试、后端 828 个测试全绿。编排者手工补了两处：
+  - **真 bug**：`UnpairResult` 原本按 `{out, in}` 定型，而 03 §5.34 与后端 `UnpairResponse` 返回 `{pair_id, unpaired: [leg, leg]}`，`useUnpairTransfer` 的 `onSuccess` 在真实后端上会抛异常并导致两条腿都不失效。已改成 `{pair_id, unpaired}` + `UnpairedLeg` 精简形态，两处测试 mock 同步，04 §3.3 已注（同步 2026-09-15）。
+  - `/l/:ledgerId/imports/:batchId` 没有路由文件，而交易列表与两个详情页都会跳它，「来自导入」一点就 404；已补占位路由并登记进贯穿测试的路由表。
+  - 04 §4.5「共 N 笔」的口径改成服务端 `total`（过滤后的行数），文档已同步；两腿转账仍合并成一行显示。
+- 留档未做（不阻塞，第六阶段或之后处理）：记一笔表单里 `CategoryPicker` / `SourcePicker` / `CurrencyPicker` 的浮层打开时 Esc 仍会落到表单（这三个组件的 open 状态私有在 `src/ui` 内部，要加 `onOpenChange` 才能上报）；`RefundOriginCard` 的「原单已删除」分支在生产不可达（后端 `ON DELETE SET NULL` 会让 `refund_of` 一起变 null）；退款行的 accessibilityLabel 逐行相同；`BarList` 的「其他 N 项」非交互行也被撑到 44 高。
 
