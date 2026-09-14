@@ -13,6 +13,9 @@ export {
 } from './client';
 export {
   cachedLedgerIds,
+  invalidateAfterCommit,
+  invalidateImportBatch,
+  invalidateImports,
   invalidateLedger,
   invalidateLedgers,
   invalidateMe,
@@ -21,6 +24,7 @@ export {
   invalidateSources,
   invalidateTransactions,
   invalidateTransfer,
+  removeImportBatch,
   removeLedger,
   removeTransfer,
   type LedgerUpdateScope,
@@ -78,3 +82,19 @@ export {
   useUpdateTransfer,
 } from './useTransactions';
 export { TREND_MONTHS, useStatsSummary, useStatsTrend } from './useStats';
+export {
+  useCommitImport,
+  useDeleteImport,
+  useImportBatch,
+  useImportRows,
+  useImports,
+  usePatchImportRow,
+  usePatchImportRows,
+  useUploadImport,
+  useUploadImportText,
+  type ImportDeleteVars,
+  type ImportListParams,
+  type ImportRowPatchVars,
+  type ImportUploadTextVars,
+  type ImportUploadVars,
+} from './useImports';
