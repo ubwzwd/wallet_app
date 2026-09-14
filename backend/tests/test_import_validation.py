@@ -16,6 +16,7 @@ from app.core.errors import ApiError
 from app.services.importing.reading import RawFile, read_upload
 from app.services.importing.validation import (
     COLUMNS,
+    GUIDE_URL,
     ImportContext,
     ImportFormatInvalid,
     RowDraft,
@@ -189,8 +190,11 @@ def test_rule_5_stale_version_carries_both_versions_and_the_guide() -> None:
         "code": "skill_outdated",
         "current_version": CATEGORY_VERSION,
         "file_version": "2026-08-20",
-        "guide_url": "/import/guide",
+        # The service layer carries the path *template*; `app/api/imports.py`
+        # fills `{ledger_id}` in, because only it knows which ledger (04 §4.10).
+        "guide_url": GUIDE_URL,
     }
+    assert "{ledger_id}" in GUIDE_URL
 
 
 def test_missing_version_line_is_not_skill_outdated() -> None:

@@ -66,6 +66,7 @@ from app.schemas.importing import (
 from app.services.importing import committing, flagging, reading, validation
 from app.services.importing.commit_checks import CommitRejected
 from app.services.importing.drafts import (
+    GUIDE_URL,
     ImportContext,
     ImportFormatInvalid,
     SkillOutdated,
@@ -124,6 +125,11 @@ async def create_import(
         skill_version = validation.check_version(raw, CATEGORY_VERSION)
         drafts = validation.normalize_rows(raw, ictx)  # also §2.6's row ceiling
     except (ImportFormatInvalid, SkillOutdated) as exc:
+        if isinstance(exc, SkillOutdated):
+            # The guide is ledger-scoped (04 §4.10: `/l/:ledgerId/imports/guide`,
+            # and the frontend pushes `guide_url` verbatim), so only this layer
+            # can name it — `GUIDE_URL` reaches the service as a template.
+            exc.guide_url = GUIDE_URL.format(ledger_id=ctx.ledger.id)
         return JSONResponse(status_code=exc.status_code, content=exc.body())
 
     flagging.flag_rows(db, ictx, drafts)

@@ -38,8 +38,14 @@ TRANSFER_SUBTYPES: tuple[str, ...] = ("plain", "repayment")
 #: Matches the first line when it is a version comment; group 1 is the value.
 VERSION_RE = re.compile(r"^\s*#\s*version\s*:\s*(\S.*?)\s*$")
 
-#: Where the app's import guide lives; carried by ``skill_outdated`` (§2.3).
-GUIDE_URL = "/import/guide"
+#: Where the app's import guide lives, as a **path template**; carried by
+#: ``skill_outdated`` (§2.3). The real route is ledger-scoped
+#: (``/l/:ledgerId/imports/guide``, 04 §4.10) and the frontend pushes whatever
+#: the response hands it verbatim, so the value that goes on the wire can only
+#: be built where the ledger is known — the endpoint layer fills
+#: ``{ledger_id}`` in (``app/api/imports.py``). Nothing in ``services/importing``
+#: formats it: the service layer must not depend on the route shape.
+GUIDE_URL = "/l/{ledger_id}/imports/guide"
 
 MAX_ERRORS = 50  # §2.2: list at most this many, count the rest in `detail`
 MAX_MERCHANT = 200
