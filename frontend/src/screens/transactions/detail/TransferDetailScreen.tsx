@@ -17,13 +17,18 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
+import type { Transaction } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
+import { useLang } from '@/i18n';
+import { formatDate } from '@/i18n/format';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import {
+  qk,
   useCategories,
   useDeleteTransfer,
   useMemberNames,
@@ -38,16 +43,16 @@ import { Card, EmptyState, EventTimeline, Page, Skeleton, Text, confirm, toast }
 import { DetailActions, type DetailAction } from './DetailActions';
 import { DetailHeader } from './DetailHeader';
 import { TransferLegs } from './PairSection';
-import { RateLine } from './RateLine';
 import { useSourceNames } from './TransactionDetailScreen';
 
 export default function TransferDetailScreen(): React.JSX.Element {
   const { t } = useTranslation();
+  const lang = useLang();
   const router = useRouter();
+  const qc = useQueryClient();
   const { ledgerId, baseCurrency } = useLedgerContext();
   const params = useLocalSearchParams<{ pairId?: string }>();
   const pairId = typeof params.pairId === 'string' ? params.pairId : '';
-  useTopBar(t('transaction:list.title'));
 
   const query = useTransfer(ledgerId, pairId === '' ? undefined : pairId);
   const pair = query.data;
@@ -61,6 +66,21 @@ export default function TransferDetailScreen(): React.JSX.Element {
 
   const remove = useDeleteTransfer(ledgerId);
   const unpair = useUnpairTransfer(ledgerId);
+
+  // 屏幕稿 07 (decision B16): 「交易 · 9月8日 · 招行储蓄卡 → 建行信用卡」, so the narrow top
+  // bar says which move this is without opening the page.
+  useTopBar(
+    pair
+      ? [
+          t('transaction:list.title'),
+          formatDate(pair.occurred_at, lang),
+          t('transaction:list.row.transfer_pair', {
+            from: sourceNames[pair.out.source_id] ?? pair.out.source_id,
+            to: sourceNames[pair.in.source_id] ?? pair.in.source_id,
+          }),
+        ].join(' · ')
+      : t('transaction:list.title'),
+  );
 
   const l = routes.l(ledgerId);
 
@@ -98,16 +118,24 @@ export default function TransferDetailScreen(): React.JSX.Element {
       confirmLabel: t('transaction:detail.unpair_action'),
       cancelLabel: t('common:button.cancel'),
     }).then((ok) => {
-      if (!ok || pairId === '') return;
+      if (!ok || pairId === '' || !pair) return;
+      // The out leg's id comes off the pair already on screen, never off the response:
+      // 03 §5.34 answers `{ pair_id, unpaired: [leg, leg] }`, which has no `out` on it.
+      const outId = pair.out.id;
       unpair.mutate(pairId, {
-        onSuccess: (result) => {
+        onSuccess: () => {
           toast.success(t('transaction:detail.unpair_saved'));
-          // The pair no longer exists; the out leg's own page is where this reader is now.
-          router.replace(l.transaction(result.out.id) as Href);
+          // The cached detail of that leg still says it belongs to a pair, and the leg's page
+          // redirects to the pair — straight back to a pair that no longer exists. Clear the
+          // relation here so the reader lands on the leg itself; the refetch confirms it.
+          qc.setQueryData(qk.ledger(ledgerId).tx(outId), (prev?: Transaction) =>
+            prev ? { ...prev, pair: null, transfer_pair_id: null } : prev,
+          );
+          router.replace(l.transaction(outId) as Href);
         },
       });
     });
-  }, [l, pairId, router, t, unpair]);
+  }, [ledgerId, l, pair, pairId, qc, router, t, unpair]);
 
   if (query.isError) {
     return (
@@ -173,24 +201,16 @@ export default function TransferDetailScreen(): React.JSX.Element {
         note={pair.note}
       />
 
-      <RateLine
-        testID="transfer-detail-rate"
-        amount={pair.out.amount}
-        currency={pair.out.currency}
-        baseCurrency={baseCurrency}
-        amountBase={pair.out.amount_base}
-        rateUsed={pair.out.rate_used}
-        rateDate={pair.out.rate_date}
-        occurredAt={pair.out.occurred_at}
-      />
-
       <DetailActions actions={actions} testID="transfer-detail-actions" />
 
+      {/* A cross-currency pair converts each leg on its own, so each leg carries its own
+          rate line (decision §14.52 A24) — one line for the pair would hide the other half. */}
       <TransferLegs
         testID="transfer-detail-legs"
         out={pair.out}
         into={pair.in}
         sourceNames={sourceNames}
+        baseCurrency={baseCurrency}
       />
 
       {events.length > 0 ? (

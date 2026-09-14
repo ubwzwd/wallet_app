@@ -2,8 +2,9 @@
  * The transfer half of the detail page (04 §4.7, decisions §14.34, §14.53a).
  *
  * `TransferLegs` draws the two legs of a paired transfer side by side — account, amount,
- * currency, each leg keeping its own numbers so a cross-currency pair reads honestly. It
- * deliberately shows no running balance (decision §14.52 A7).
+ * currency and, when the leg is not in the ledger's own currency, its own rate line, so a
+ * cross-currency pair reads honestly on both halves. It deliberately shows no running
+ * balance (decision §14.52 A7).
  *
  * `PairSection` is the single-leg case: the other side is just `counterparty` text (or
  * "对方不在应用里"), and the leg can be married to another single leg through
@@ -23,7 +24,7 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { Money, Transaction, TransferRole, Uuid } from '@/api/types';
+import type { IsoDate, Money, Transaction, TransferRole, Uuid } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
@@ -36,6 +37,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, Checkbox, Icon, Text, confirm, toast } from '@/ui';
 
 import { TransactionPicker } from '../TransactionPicker';
+import { RateLine } from './RateLine';
 
 /** How far around this leg's date the candidate search starts (04 §4.7). */
 export const PAIR_WINDOW_DAYS = 3;
@@ -51,6 +53,12 @@ export interface LegLike {
   source_id: Uuid;
   amount: Money;
   currency: string;
+  // The conversion triple (decision §14.52 A24). Present on a real leg; optional so the
+  // rate line simply does not render for a caller that has no rate to show.
+  amount_base?: Money | null;
+  rate_used?: Money | null;
+  rate_date?: IsoDate | null;
+  occurred_at?: IsoDate;
 }
 
 export interface TransferLegsProps {
@@ -58,6 +66,8 @@ export interface TransferLegsProps {
   /** `in` is a reserved word in a destructuring position often enough to be worth renaming. */
   into: LegLike;
   sourceNames: Readonly<Record<Uuid, string>>;
+  /** The ledger's currency; each leg gets its own rate line when it differs from it. */
+  baseCurrency?: string;
   testID?: string;
 }
 
@@ -65,11 +75,13 @@ function Leg({
   label,
   leg,
   sourceNames,
+  baseCurrency,
   testID,
 }: {
   label: string;
   leg: LegLike;
   sourceNames: Readonly<Record<Uuid, string>>;
+  baseCurrency?: string;
   testID: string;
 }): React.JSX.Element {
   const lang = useLang();
@@ -91,6 +103,18 @@ function Leg({
       <Text variant="caption" tone="muted">
         {leg.currency}
       </Text>
+      {baseCurrency !== undefined && leg.occurred_at !== undefined ? (
+        <RateLine
+          testID={`${testID}-rate`}
+          amount={leg.amount}
+          currency={leg.currency}
+          baseCurrency={baseCurrency}
+          amountBase={leg.amount_base ?? null}
+          rateUsed={leg.rate_used ?? null}
+          rateDate={leg.rate_date ?? null}
+          occurredAt={leg.occurred_at}
+        />
+      ) : null}
     </View>
   );
 }
@@ -99,6 +123,7 @@ export function TransferLegs({
   out,
   into,
   sourceNames,
+  baseCurrency,
   testID,
 }: TransferLegsProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -113,6 +138,7 @@ export function TransferLegs({
           label={t('transaction:transfer.role.out')}
           leg={out}
           sourceNames={sourceNames}
+          baseCurrency={baseCurrency}
           testID={`${id}-out`}
         />
         <Icon
@@ -124,6 +150,7 @@ export function TransferLegs({
           label={t('transaction:transfer.role.in')}
           leg={into}
           sourceNames={sourceNames}
+          baseCurrency={baseCurrency}
           testID={`${id}-in`}
         />
       </View>

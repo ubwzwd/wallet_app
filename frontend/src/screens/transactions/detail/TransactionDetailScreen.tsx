@@ -22,6 +22,7 @@ import type { Uuid } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
+import { formatDate } from '@/i18n/format';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import {
@@ -62,7 +63,6 @@ export default function TransactionDetailScreen(): React.JSX.Element {
   const { ledgerId, baseCurrency } = useLedgerContext();
   const params = useLocalSearchParams<{ txId?: string }>();
   const txId = typeof params.txId === 'string' ? params.txId : '';
-  useTopBar(t('transaction:list.title'));
 
   const query = useTransaction(ledgerId, txId === '' ? undefined : txId);
   const tx = query.data;
@@ -75,6 +75,20 @@ export default function TransactionDetailScreen(): React.JSX.Element {
   const remove = useDeleteTransaction(ledgerId);
   const update = useUpdateTransaction(ledgerId, txId);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+
+  // 屏幕稿 07 (decision B16) titles a single leg 「交易 · 9月5日 · 对方：工资卡」; everything
+  // else keeps the plain page title.
+  useTopBar(
+    tx && tx.kind === 'transfer' && tx.transfer_pair_id === null
+      ? [
+          t('transaction:list.title'),
+          formatDate(tx.occurred_at, lang),
+          t('transaction:list.row.counterparty', {
+            name: tx.counterparty ?? t('transaction:detail.counterparty_external'),
+          }),
+        ].join(' · ')
+      : t('transaction:list.title'),
+  );
 
   const l = routes.l(ledgerId);
 
@@ -150,8 +164,11 @@ export default function TransactionDetailScreen(): React.JSX.Element {
   }
 
   // A leg of a two-leg transfer has no page of its own: both legs live at the pair's URL.
-  if (tx.pair) {
-    return <Redirect href={l.transfer(tx.pair.pair_id) as Href} />;
+  // `pair` is the expansion, `transfer_pair_id` the raw relation — either one being set
+  // means this row is half of a pair, so neither may be trusted alone.
+  const pairId = tx.pair?.pair_id ?? tx.transfer_pair_id;
+  if (pairId !== null && pairId !== undefined) {
+    return <Redirect href={l.transfer(pairId) as Href} />;
   }
 
   const category = categoryPath(index, tx.category_l1, tx.category_l2, lang);
@@ -250,7 +267,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         />
       ) : null}
 
-      {tx.kind === 'transfer' ? (
+      {tx.kind === 'transfer' && tx.transfer_pair_id === null ? (
         <PairSection testID="tx-detail-pair" tx={tx} sourceNames={sourceNames} />
       ) : null}
 

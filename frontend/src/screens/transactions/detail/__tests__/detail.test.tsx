@@ -347,7 +347,8 @@ test('a refund whose original was deleted says so, instead of showing an empty c
 
   expect(await router.findByTestId('tx-detail-origin-none')).toHaveTextContent('原单已删除');
   // Still fixable from here: decision §14.34 keeps both relations editable after an import.
-  expect(router.getByTestId('tx-detail-origin-pick')).toBeTruthy();
+  // A dangling link is re-pointed, so the button says 「改选」, not 「去关联」.
+  expect(router.getByTestId('tx-detail-origin-pick')).toHaveTextContent('改选');
 });
 
 test('a refund that was never linked offers 「去关联」', async () => {
@@ -361,6 +362,7 @@ test('a refund that was never linked offers 「去关联」', async () => {
   );
 
   expect(await router.findByTestId('tx-detail-origin-none')).toHaveTextContent('未关联原支出');
+  expect(router.getByTestId('tx-detail-origin-pick')).toHaveTextContent('去关联');
   expect(router.queryByTestId('tx-detail-origin-unlink')).toBeNull();
 });
 

@@ -6,7 +6,7 @@
  *    「解除关联」and「改选」— both relations stay editable after an import (decision §14.34);
  *  - never linked (`refund_of === null`): 「未关联原支出」+「去关联」;
  *  - linked to something that has since been deleted (`refund_of` set, `refund_of_detail`
- *    null): 「原单已删除」, still offering to re-point or clear the dangling link.
+ *    null): 「原单已删除」, still offering to 「改选」 (re-point) or clear the dangling link.
  *
  * Under the card, `other_refunds[]` — the *other* refunds against the same original, oldest
  * first — so nobody registers the same refund twice. Those elements carry no `source_id`
@@ -93,7 +93,12 @@ export function RefundOriginCard({
             testID={`${id}-pick`}
             variant="secondary"
             size="sm"
-            label={t('transaction:detail.original_link_action')}
+            // A dangling link is re-pointed, not linked for the first time: 「改选」.
+            label={t(
+              deleted
+                ? 'transaction:detail.original_relink_action'
+                : 'transaction:detail.original_link_action',
+            )}
             onPress={onPick}
             disabled={busy}
           />

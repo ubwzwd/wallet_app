@@ -176,16 +176,92 @@ test('both legs are shown with their own account and amount, and no running bala
   // Header fields come off the out leg / the pair (decision §14.53a); no 余后 (§14.52 A7).
   expect(router.getByTestId('transfer-detail-header-extra')).toHaveTextContent('信用卡还款');
   expect(router.queryByText(containing('余后'))).toBeNull();
+
+  // 屏幕稿 07 (B16): the bar names the move, not just 「交易」.
+  expect(router.getByTestId('top-bar-title')).toHaveTextContent(
+    '交易 · 9月8日 · 招行储蓄卡 → 建行信用卡',
+  );
+});
+
+test('a cross-currency pair gives each leg its own rate line', async () => {
+  const out = {
+    ...OUT,
+    currency: 'USD',
+    amount: '-100.0000',
+    amount_base: '-716.9400',
+    rate_used: '7.16940000',
+    rate_date: '2026-09-08',
+  };
+  const into = {
+    ...IN,
+    currency: 'EUR',
+    amount: '92.0000',
+    amount_base: '716.9400',
+    rate_used: '7.79280000',
+    // A day behind the transfer: the fallback hint belongs to this leg alone.
+    rate_date: '2026-09-07',
+  };
+  mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, {
+    ...pairResponse(),
+    out,
+    in: into,
+  });
+  mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...out, events: [] });
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+
+  expect(await router.findByTestId('transfer-detail-legs-out-rate-text')).toHaveTextContent(
+    containing('按 9月8日 汇率 1 USD = 7.1694 CNY'),
+  );
+  expect(router.getByTestId('transfer-detail-legs-in-rate-text')).toHaveTextContent(
+    containing('按 9月7日 汇率 1 EUR = 7.7928 CNY'),
+  );
+  // Only the in leg fell back to another day's quote.
+  expect(router.getByTestId('transfer-detail-legs-in-rate-fallback')).toHaveTextContent(
+    containing('该日无行情'),
+  );
+  expect(router.queryByTestId('transfer-detail-legs-out-rate-fallback')).toBeNull();
 });
 
 test('「拆开」warns what unpairing does, then lands on the out leg\'s own page', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
+
+  // The leg answers as 03 §5.27 does while it is still paired — `pair` expanded — and only
+  // the unpair call turns it into a single leg. A screen that navigates to the leg without
+  // dropping the cached `pair` would bounce straight back to the pair page it just deleted.
+  const pairedLeg = {
+    ...OUT,
+    events: [],
+    pair: {
+      pair_id: PAIR,
+      out: { transaction_id: 'leg-out', source_id: 's1', amount: OUT.amount, currency: 'CNY' },
+      in: { transaction_id: 'leg-in', source_id: 's2', amount: IN.amount, currency: 'CNY' },
+    },
+  };
   const single = { ...OUT, transfer_pair_id: null, pair: null, events: [] };
-  mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, single);
-  mockPost(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}/unpair`, {
-    out: single,
-    in: { ...IN, transfer_pair_id: null },
+  let unpaired = false;
+  api.mock.onGet(apiUrl(`/ledgers/${LEDGER}/transactions/leg-out`)).reply(async () => {
+    // The refetch the unpair triggers takes a moment, exactly as a network round trip does:
+    // the navigation happens first, so whatever sits in the cache is what the leg's page
+    // renders from.
+    if (unpaired) await new Promise((resolve) => setTimeout(resolve, 50));
+    return [200, unpaired ? single : pairedLeg];
   });
+  api.mock
+    .onPost(apiUrl(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}/unpair`))
+    .reply(() => {
+      unpaired = true;
+      // 03 §5.34's own shape, plus the `{out, in}` the api layer currently types (that
+      // mismatch is escalated); the screen must not depend on either.
+      return [
+        200,
+        {
+          pair_id: PAIR,
+          unpaired: [single, { ...IN, transfer_pair_id: null }],
+          out: single,
+          in: { ...IN, transfer_pair_id: null },
+        },
+      ];
+    });
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
 
   fireEvent.press(await router.findByTestId('transfer-detail-actions-unpair'));
@@ -200,6 +276,10 @@ test('「拆开」warns what unpairing does, then lands on the out leg\'s own pa
   await waitFor(() =>
     expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/leg-out`),
   );
+  // ...and stays there: the leg's page must not redirect back to the pair that is gone.
+  expect(await router.findByTestId('tx-detail-header')).toBeTruthy();
+  await waitFor(() => expect(router.getByTestId('tx-detail-pair')).toBeTruthy());
+  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/leg-out`);
 });
 
 test('deleting a two-leg transfer goes through the pair endpoint, not a leg', async () => {
@@ -301,6 +381,8 @@ test('a single leg names the other side and offers 「关联为转账对腿」',
 
   expect(await router.findByTestId('tx-detail-pair-counterparty')).toHaveTextContent('工资卡');
   expect(router.getByTestId('tx-detail-pair-action')).toBeTruthy();
+  // 屏幕稿 07 (B16): 「交易 · 9月5日 · 对方：工资卡」.
+  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易 · 9月5日 · 对方：工资卡');
   // A single leg has nothing to unpair.
   expect(router.queryByTestId('tx-detail-actions-unpair')).toBeNull();
 });
