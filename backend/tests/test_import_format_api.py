@@ -40,7 +40,6 @@ SKILL_MD_PATH = REPO_ROOT / "skills" / "wallet-import" / "SKILL.md"
 CHATGPT_INSTRUCTIONS_PATH = REPO_ROOT / "skills" / "wallet-import" / "chatgpt-instructions.md"
 
 
-
 @pytest.fixture()
 def etag(client):
     """The current tag, read off a real response rather than hard-coded."""
@@ -172,22 +171,59 @@ def test_cache_control_and_etag_present(client):
     assert "max-age" in response.headers["Cache-Control"]
 
 
-def test_etag_moves_when_a_skill_text_changes_and_the_version_does_not(client, body):
+def _tag(payload: dict) -> str:
+    """The tag ``_etag_for`` would produce for this body, serialized one fixed way.
+
+    Both sides of every comparison below go through here: mixing this with the
+    *served* tag would compare two different serializations of the same dict
+    (``json.dumps`` escapes the Chinese that ``model_dump_json`` emits raw), and
+    the assertion would then hold even for a body nobody touched.
+    """
+    return import_format._etag_for(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+
+def test_a_tag_moves_only_when_the_content_does(body):
+    """The control for the three tests below: put the edit back, get the old tag back.
+
+    Without it "the tag moved" proves nothing — a digest taken over a body that
+    was serialized differently always moves, which is exactly how the earlier
+    version of this test passed while comparing two unrelated serializations.
+    """
+    baseline = _tag(dict(body))
+    edited = dict(body)
+    edited["skill_text"] = body["skill_text"] + "x"
+    assert _tag(edited) != baseline
+
+    edited["skill_text"] = body["skill_text"]  # ... and back again
+
+    assert _tag(edited) == baseline
+
+
+@pytest.mark.parametrize(
+    ("field", "addition"),
+    [
+        ("skill_text", "\n\n（补一句措辞，分类表没动）"),
+        ("skill_markdown", "\n\n<!-- reworded, categories untouched -->\n"),
+        ("sample_csv", "\n2026-09-01,-1.00,CNY,expense,,,措辞,,food_drink,groceries,\n"),
+    ],
+)
+def test_etag_moves_when_a_skill_text_changes_and_the_version_does_not(body, field, addition):
     """03 §5.7: a release may reword the skill texts without bumping ``version``.
 
     A version-only tag would answer 304 forever to every client that cached the
-    old wording, so the tag is fed the whole body. The body below differs from
-    the served one in ``skill_text`` alone — a change a version-only tag could
-    not possibly see.
+    old wording, so the tag is fed the whole body. Each body below differs from
+    the baseline in one skill text alone — a change a version-only tag could not
+    possibly see — and the baseline is digested the same way, so the only thing
+    that can move the tag is the text itself.
     """
-    served = client.get(IMPORT_FORMAT_URL).headers["ETag"]
+    baseline = _tag(dict(body))
     reworded = dict(body)
-    reworded["skill_text"] = body["skill_text"] + "\n\n（补一句措辞，分类表没动）"
+    reworded[field] = body[field] + addition
     assert reworded["version"] == body["version"] == CATEGORY_VERSION
 
-    tag = import_format._etag_for(json.dumps(reworded).encode("utf-8"))
+    tag = _tag(reworded)
 
-    assert tag != served
+    assert tag != baseline
     assert tag.startswith(f'"{CATEGORY_VERSION}-')
 
 
