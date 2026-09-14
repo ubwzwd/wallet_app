@@ -36,9 +36,13 @@ import { isCommittable, isUncategorized } from './useReviewSelection';
  * The per-row commit refusals of 03 §5.43. The server states their row numbers in the
  * response body's `rows` (see below), so this set is only the fallback for a body that
  * arrived without one — the prose of `detail` is all there is then. Everything not listed
- * here either counts rows or talks about the batch as a whole; `not_found` is deliberately
- * absent, because commit's 404 is raised as a plain "Import batch not found"
- * (`commit_checks.load_context`) and any digit in such a detail belongs to an id, not a row.
+ * here either counts rows or talks about the batch as a whole.
+ *
+ * `not_found` is deliberately absent from the *fallback* only, because commit raises two
+ * different 404s: `commit_checks.load_context`'s "Import batch not found", whose detail
+ * names no row and whose digits belong to an id, and `commit_checks.load_counterpart`'s
+ * "Counterpart account not found", which does name a row — but always carries it in the
+ * body's `rows`, which is read before this set is ever consulted.
  */
 const ROW_NUMBERED_CODES: ReadonlySet<string> = new Set([
   'pair_invalid',

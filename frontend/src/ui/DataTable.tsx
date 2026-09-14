@@ -297,6 +297,7 @@ export function DataTable<Row>({
                 onPress={(event) =>
                   onToggleRow?.(row, rowIndex, { extend: isShiftPress(event) })
                 }
+                style={{ minHeight: DATA_TABLE_ROW_HEIGHT, justifyContent: 'center' }}
               >
                 <View
                   pointerEvents="none"
@@ -318,6 +319,9 @@ export function DataTable<Row>({
                 onPress={() => onFocusCell?.({ row: rowIndex, col: colIndex })}
                 style={{
                   width: column.width,
+                  // The row is this tall anyway; saying so on the cell itself is what makes
+                  // the whole cell — not just the text in it — a full-size tap target.
+                  minHeight: DATA_TABLE_ROW_HEIGHT,
                   justifyContent: 'center',
                   alignItems: column.align === 'right' ? 'flex-end' : 'stretch',
                   paddingHorizontal: space['1'],

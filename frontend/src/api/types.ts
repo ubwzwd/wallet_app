@@ -370,7 +370,12 @@ export type ImportRowPatch = Partial<Pick<ImportRow,
 // PATCH .../imports/{bid}/rows（批量，决策 §14.52 A4）。
 // **要么全成要么全不成**（03 §5.42）：整批在一个事务里跑，任何一行校验不过就 400 并全部回滚，
 // 没有「部分成功」这种响应，因此响应里也没有「被跳过的行」这一项。
-export interface ImportRowsBulkPatch { row_ids: Uuid[]; patch: ImportRowPatch; }
+// 批量体不收 matched_transaction_id / counterpart_source_id / counterparty 三个逐行关联字段
+// （05 §4.1；03 §5.42 那句「与 §5.41 的可改字段完全相同」与之冲突，取 05，见 00-decisions §14.55）。
+// 服务端 ImportRowsBulkRowPatch 多带一个就 422。
+export type ImportRowsBulkRowPatch = Omit<ImportRowPatch,
+  'matched_transaction_id' | 'counterpart_source_id' | 'counterparty'>;
+export interface ImportRowsBulkPatch { row_ids: Uuid[]; patch: ImportRowsBulkRowPatch; }
 export interface ImportRowsBulkResult {
   updated: number;              // 改掉的行数
   rows: ImportRow[];            // 这些行改完之后的完整形态，字段同 ImportRow

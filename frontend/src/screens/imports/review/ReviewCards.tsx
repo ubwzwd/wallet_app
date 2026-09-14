@@ -68,29 +68,55 @@ export function ReviewCards({
   const selecting = selection.count > 0;
   const highlightRowNo = highlight?.rowNo ?? null;
 
-  // Where each card ended up inside the scroll box, so the highlighted one can be brought
-  // into view whatever its height turned out to be (a card with a link cell is much taller
-  // than a plain one, so a nominal row height would not do).
+  // Bringing the highlighted card into view needs its position inside the scroll box, and a
+  // card with a link cell is much taller than a plain one, so a nominal row height would not
+  // do. Two ways in, because a jump reaches a card in two different states:
+  //  - the card is mounting for the first time (the jump widened the slice to reveal it) —
+  //    its own `onLayout` reports where it landed and serves the pending request;
+  //  - the card was already on screen and only *moved* down as the widened slice inserted
+  //    rows above it. Moving is not a size change, so no renderer reports a new layout for
+  //    it; the position has to be measured off the live node instead. A remembered offset
+  //    would be the pre-widening one and would scroll to where the card used to be.
   const scroller = React.useRef<ScrollView | null>(null);
+  const cardNodes = React.useRef(new Map<number, View>());
   const cardTops = React.useRef(new Map<number, number>());
-  // A jump widens the slice in the same commit, so the card it points at is usually
-  // mounting for the first time and has not reported a layout yet when this effect runs.
-  // Remember the request instead of dropping it; the card's own `onLayout` serves it.
   const pendingScroll = React.useRef<number | null>(null);
   const scrollToTop = React.useCallback((top: number): void => {
     scroller.current?.scrollTo({ y: Math.max(0, top - space['2']), animated: true });
   }, []);
+  // Every offset recorded under the previous slice is stale the moment the slice changes, so
+  // drop them all. Effects run in declaration order, so this lands before the highlight
+  // effect below: a jump that widens the slice can never read a pre-widening offset back.
+  React.useEffect(() => {
+    cardTops.current.clear();
+  }, [selection.slice]);
   const highlightSeq = highlight?.seq ?? 0;
   React.useEffect(() => {
     if (highlightRowNo === null) {
       pendingScroll.current = null;
       return;
     }
-    const top = cardTops.current.get(highlightRowNo);
-    if (top === undefined) {
-      pendingScroll.current = highlightRowNo;
+    // Record the request first; whichever of the three paths below gets there first clears it.
+    pendingScroll.current = highlightRowNo;
+    const node = cardNodes.current.get(highlightRowNo);
+    const content = scroller.current?.getInnerViewNode?.();
+    if (node && content && typeof node.measureLayout === 'function') {
+      node.measureLayout(
+        content,
+        (_x: number, y: number) => {
+          // A newer jump may have landed while the measurement was in flight.
+          if (pendingScroll.current !== highlightRowNo) return;
+          pendingScroll.current = null;
+          scrollToTop(y);
+        },
+        () => {
+          // Measuring failed (the node went away); `onLayout` still has the request.
+        },
+      );
       return;
     }
+    const top = cardTops.current.get(highlightRowNo);
+    if (top === undefined) return;
     pendingScroll.current = null;
     scrollToTop(top);
     // `highlightSeq` is the point: the same row twice is a new request to scroll to it.
@@ -110,16 +136,21 @@ export function ReviewCards({
       ) : null}
 
       {rows.map((row, index) => (
+        // touch-target-exempt: wraps a whole card, which is never shorter than one row of
+        // fields plus its padding — far past 44 at any density.
         <Pressable
           key={row.id}
           testID={`${id}-row-${row.row_no}`}
+          ref={(node: View | null) => {
+            if (node) cardNodes.current.set(row.row_no, node);
+            else cardNodes.current.delete(row.row_no);
+          }}
           onLayout={(event: LayoutChangeEvent) => {
             const y = event.nativeEvent.layout.y;
             cardTops.current.set(row.row_no, y);
-            if (pendingScroll.current === row.row_no) {
-              pendingScroll.current = null;
-              scrollToTop(y);
-            }
+            if (pendingScroll.current !== row.row_no) return;
+            pendingScroll.current = null;
+            scrollToTop(y);
           }}
           onLongPress={() => selection.toggle(row, index)}
           accessibilityRole="button"

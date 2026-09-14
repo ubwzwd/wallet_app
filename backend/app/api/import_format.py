@@ -13,16 +13,17 @@ checkout that skipped ``skills/``), the endpoint must not take the whole app
 down with it: a missing file degrades to an empty string plus a logged
 error, rather than raising at import time or on every request.
 
-Where the deliverables come from in production: the API image ships
-``skills/`` (its build context is the repo root), so the plain
-``<repo-root>/skills/wallet-import`` lookup resolves inside the image the
-same way it does in a checkout. ``SKILLS_DIR`` below still probes
-``backend/skills/wallet-import`` as a second candidate, and a missing file
-still degrades to an empty string plus a logged ``error`` (not a
-``warning``) on process start: both are the safety net for the day the
-image layout changes again — an import-guide page (04 §4.10 step 0's only
-data source) that renders blank must show up in ops rather than take the
-app down or fail silently.
+Where the deliverables come from in production: the API image is built from
+the repo root and lays the two trees out side by side — ``backend/`` becomes
+``/app`` and ``skills/`` becomes ``/app/skills`` (infra/Dockerfile.api). So
+inside the image this module sits at ``/app/app/api/`` and the candidate that
+resolves is the *second* one, ``<backend dir>/skills/wallet-import`` =
+``/app/skills/wallet-import``; ``<repo-root>`` is ``/`` there and holds
+nothing. In a checkout (and local dev) the *first* candidate resolves. Both
+are load-bearing — neither is dead code. A missing file still degrades to an
+empty string plus a logged ``error`` (not a ``warning``) on process start:
+an import-guide page (04 §4.10 step 0's only data source) that renders blank
+must show up in ops rather than take the app down or fail silently.
 
 Caching: unlike ``GET /categories`` this is *not* ``immutable`` — its
 ``version`` changes on ordinary deploys (whenever ``CATEGORY_VERSION``
@@ -56,12 +57,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import-format", tags=["Import"])
 
-# repo_root/skills/wallet-import (three parents up from this file: api -> app
-# -> backend -> repo root) — where a checkout, local dev and the API image
-# (built from the repo root) all have it. backend/skills/wallet-import is
-# tried as well so that a build context narrowed to `backend/` again, which
-# would copy the deliverables in there instead, still resolves without a
-# code change here (see the module docstring).
+# Two real layouts, one probe order (see the module docstring). A checkout and
+# local dev have the deliverables at repo_root/skills/wallet-import (three
+# parents up from this file: api -> app -> backend -> repo root). The API
+# image copies backend/ to /app and skills/ to /app/skills, so there the
+# match is the second candidate, <backend dir>/skills/wallet-import. Neither
+# candidate is a fallback for the other; dropping either breaks one layout.
 _HERE = pathlib.Path(__file__).resolve()
 _REPO_ROOT = _HERE.parents[3]  # api -> app -> backend -> repo root
 _BACKEND_DIR = _HERE.parents[2]  # api -> app -> backend

@@ -747,6 +747,43 @@ test('the same refusal on a phone widens the slice and scrolls the card into vie
   );
 });
 
+test('a phone jump re-measures a card that was already on screen in the narrow slice', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+  const rows = [1, 2, 3, 4, 5, 6].map((n) => row({ id: `row-${n}`, row_no: n }));
+  rows.push(row({ id: 'row-7', row_no: 7, flags: ['transfer_candidate'] }));
+  seed(rows);
+  api.mock.onPost(apiUrl(`${BATCH_PATH}/commit`)).reply(400, {
+    detail: '这一行的转账配对不合法',
+    code: 'pair_invalid',
+    rows: [7],
+  });
+  renderReview();
+
+  // Stand where the user stands: the flagged slice, where row 7 is the only card and sits
+  // at the top of the flow.
+  fireEvent.press(await screen.findByText('有标记 1'));
+  const card = await screen.findByTestId('review-cards-row-7');
+  fireEvent(card, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 320, height: 96 } } });
+  scrollTo.mockClear();
+
+  // The refusal widens the slice to the whole batch, so six rows are inserted above row 7
+  // and it is no longer at the top — but moving is not a layout change, so nothing reports
+  // its new position on its own. Scrolling to the position it had under the narrow slice
+  // would leave the user looking at row 1.
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+  await screen.findByTestId('review-cards-row-1');
+  expect(scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 0)).toBe(false);
+
+  const moved = screen.getByTestId('review-cards-row-7');
+  fireEvent(moved, 'layout', { nativeEvent: { layout: { x: 0, y: 900, width: 320, height: 96 } } });
+  await waitFor(() =>
+    expect(
+      scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 900 - space['2']),
+    ).toBe(true),
+  );
+});
+
 test('pressing submit twice on the wide grid scrolls to the refused row both times', async () => {
   const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
   const rows = [1, 2, 3, 4, 5, 6, 7].map((n) => row({ id: `row-${n}`, row_no: n }));
