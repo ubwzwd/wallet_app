@@ -515,6 +515,71 @@ def test_bulk_refuses_a_row_of_another_batch(setup, client, db):
     assert db.get(ImportRow, uuid.UUID(rows[0]["id"])).status == "pending"
 
 
+@pytest.mark.parametrize(
+    "field", ["matched_transaction_id", "counterpart_source_id", "counterparty"]
+)
+def test_bulk_refuses_the_three_per_row_link_fields(setup, client, db, field):
+    """05 §4.1: a link points at one counterpart of one row, so §5.42 does not
+    take these three (03 §5.42's blanket "same fields as §5.41" loses to that
+    specific rule). Pasting one ``matched_transaction_id`` over a selection would
+    only produce ``pair_invalid`` at commit from the second row on.
+    """
+    _user, headers, ledger, card, bank = setup
+    bid, rows = imported(client, headers, ledger, card)
+    value = "老婆" if field == "counterparty" else str(bank.id)
+
+    response = patch_many(
+        client, headers, ledger, bid, [row["id"] for row in rows[:2]], {field: value}
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "validation_error"
+    untouched = db.get(ImportRow, uuid.UUID(rows[0]["id"]))
+    assert untouched.status == "pending"  # nothing was applied
+    # ... while §5.41's per-row endpoint still knows the field: whatever it
+    # answers about the *value* (this one points at an account, not a
+    # transaction), it is never "unknown field".
+    single = patch_row(client, headers, ledger, bid, rows[5]["id"], {field: value})
+    assert single.status_code != 422, single.text
+
+
+def test_bulk_still_takes_every_other_editable_field(setup, client):
+    """The narrowing is exactly three fields wide: §5.41's other eleven still
+    apply to a whole selection in one call."""
+    _user, headers, ledger, card, _bank = setup
+    bid, rows = imported(client, headers, ledger, card)
+
+    response = patch_many(
+        client,
+        headers,
+        ledger,
+        bid,
+        [rows[0]["id"], rows[1]["id"]],
+        {
+            "status": "skipped",
+            "date": "2026-08-30",
+            "amount": "-9.5",
+            "currency": "cny",
+            "kind": "expense",
+            "merchant": "便利店",
+            "note": "批量改的",
+            "category_l1": "food",
+            "category_l2": "lunch",
+            "transfer_role": None,
+            "transfer_subtype": None,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    for row in response.json()["rows"]:
+        assert row["status"] == "skipped"
+        assert row["date"] == "2026-08-30"
+        assert row["amount"] == "-9.5000"
+        assert row["currency"] == "CNY"
+        assert (row["category_l1"], row["category_l2"]) == ("food", "lunch")
+        assert row["merchant"] == "便利店"
+
+
 def test_bulk_row_ids_must_be_one_to_five_hundred(setup, client):
     _user, headers, ledger, card, _bank = setup
     bid, rows = imported(client, headers, ledger, card)

@@ -159,16 +159,26 @@ def _reject_null_status(value: object) -> object:
     return value
 
 
-class ImportRowPatch(ApiRequestModel):
-    """§5.41 editable fields, all optional; ``updated_at`` is not part of this body —
-    draft rows do not use optimistic concurrency, the last write wins.
+class ImportRowsBulkRowPatch(ApiRequestModel):
+    """§5.42's per-row patch: the fields one request may set on **many** rows at once.
 
-    ``row_no`` / ``source_ref`` / ``flags`` / ``hint`` / ``transaction_id`` are
-    read-only and simply absent from this model, so sending them is an unknown
-    field and a 422 (``ApiRequestModel``'s ``extra='forbid'``) — likewise
-    ``source_id``, which §5.41 explicitly keeps out of the editable set (decision
-    §14.52 A5: one file, one target account; the counterpart account is a
-    separate field, ``counterpart_source_id``).
+    This is §5.41's editable set minus the three per-row link fields
+    (``matched_transaction_id`` / ``counterpart_source_id`` / ``counterparty``),
+    which §5.41 adds back in :class:`ImportRowPatch` below.
+
+    Why narrower, when 03 §5.42 says "exactly the same editable fields as
+    §5.41": 05 §4.1 names those three fields specifically and gives the reason —
+    they identify *one* counterpart for *one* row, so applying one value to a
+    selection is meaningless at best and harmful at worst. The same
+    ``matched_transaction_id`` on two rows is a guaranteed 400 ``pair_invalid``
+    from the second row on at commit time (§4.4 / §4.5: a transaction pairs with
+    exactly one leg, a refund links to one original). 03 §5.42's sentence is a
+    blanket cross-reference to §5.41's field *set*, while 05 §4.1 is a rule
+    written about these three fields by name and with a reason, so the specific
+    rule is the one followed here (ruling to be recorded as decision §14.55).
+    Sending one is therefore an unknown field and a 422 under
+    ``ApiRequestModel``'s ``extra='forbid'`` — the per-row endpoint (§5.41) is
+    where a link is set.
 
     Null semantics (§5.41): every field below accepts an explicit ``null`` to mean
     "clear this field" *except* ``status``, which rejects one (a 422) — omission
@@ -184,9 +194,6 @@ class ImportRowPatch(ApiRequestModel):
     note: str | None = Field(default=None, max_length=500)
     category_l1: str | None = None
     category_l2: str | None = None
-    matched_transaction_id: uuid.UUID | None = None
-    counterpart_source_id: uuid.UUID | None = None
-    counterparty: str | None = Field(default=None, max_length=100)
     transfer_role: TransferRole | None = None
     transfer_subtype: TransferSubtype | None = None
 
@@ -198,6 +205,26 @@ class ImportRowPatch(ApiRequestModel):
     @classmethod
     def _uppercase_currency(cls, value: str | None) -> str | None:
         return value.upper() if value is not None else value
+
+
+class ImportRowPatch(ImportRowsBulkRowPatch):
+    """§5.41 editable fields, all optional; ``updated_at`` is not part of this body —
+    draft rows do not use optimistic concurrency, the last write wins.
+
+    Everything :class:`ImportRowsBulkRowPatch` takes, plus the three per-row link
+    fields only a single-row request may set (05 §4.1, see that class's docstring).
+
+    ``row_no`` / ``source_ref`` / ``flags`` / ``hint`` / ``transaction_id`` are
+    read-only and simply absent from this model, so sending them is an unknown
+    field and a 422 (``ApiRequestModel``'s ``extra='forbid'``) — likewise
+    ``source_id``, which §5.41 explicitly keeps out of the editable set (decision
+    §14.52 A5: one file, one target account; the counterpart account is a
+    separate field, ``counterpart_source_id``).
+    """
+
+    matched_transaction_id: uuid.UUID | None = None
+    counterpart_source_id: uuid.UUID | None = None
+    counterparty: str | None = Field(default=None, max_length=100)
 
     @field_validator("counterparty", mode="before")
     @classmethod
@@ -213,7 +240,7 @@ class ImportRowsBulkPatch(ApiRequestModel):
     """§5.42 request body: the same one ``patch`` applied to 1..500 rows at once."""
 
     row_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=500)
-    patch: ImportRowPatch
+    patch: ImportRowsBulkRowPatch
 
 
 class ImportRowsBulkResult(ApiModel):
