@@ -25,6 +25,9 @@ import { Badge, Card, DateField, Sheet, SourcePicker, Text, TextField, Skeleton 
 /** How many candidates one page of the picker shows. */
 export const PICKER_PAGE_SIZE = 20;
 
+/** The search box reaches the request this long after the last keystroke (04 §4.5). */
+export const PICKER_Q_DEBOUNCE_MS = 300;
+
 export interface TransactionPickerProps {
   open: boolean;
   onClose(): void;
@@ -86,19 +89,32 @@ export function TransactionPicker({
   const id = testID ?? 'tx-picker';
 
   const [filters, setFilters] = React.useState<EditableFilters>(() => seed(initial));
+  // What the request actually carries: typing 「京东」 is three keystrokes and must not be
+  // three list requests, so the box runs ahead of the query by `PICKER_Q_DEBOUNCE_MS`.
+  const [searchedQ, setSearchedQ] = React.useState<string>(() => seed(initial).q);
+
+  React.useEffect(() => {
+    if (filters.q === searchedQ) return;
+    const timer = setTimeout(() => setSearchedQ(filters.q), PICKER_Q_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [filters.q, searchedQ]);
 
   // Re-opening the picker starts from the caller's prefill again, not from whatever the
-  // user narrowed it to last time.
+  // user narrowed it to last time — the pending keystroke included.
   const wasOpen = React.useRef(open);
   React.useEffect(() => {
-    if (open && !wasOpen.current) setFilters(seed(initial));
+    if (open && !wasOpen.current) {
+      const fresh = seed(initial);
+      setFilters(fresh);
+      setSearchedQ(fresh.q);
+    }
     wasOpen.current = open;
     // `initial` is a fresh object on every render; the open transition is the trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const params: TransactionListParams = {
-    ...(filters.q.trim() === '' ? {} : { q: filters.q.trim() }),
+    ...(searchedQ.trim() === '' ? {} : { q: searchedQ.trim() }),
     ...(filters.source_id ? { source_id: [filters.source_id] } : {}),
     ...(filters.from === '' ? {} : { from: filters.from }),
     ...(filters.to === '' ? {} : { to: filters.to }),
@@ -267,7 +283,8 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', gap: space['2'] },
   grow: { flex: 1 },
   list: { maxHeight: 360 },
-  row: { paddingVertical: space['2'], borderBottomWidth: 1 },
+  // 04 §6.6: no touch target smaller than 44×44.
+  row: { paddingVertical: space['2'], borderBottomWidth: 1, minHeight: 44, justifyContent: 'center' },
   rowBody: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
   rowMain: { flex: 1, gap: 2 },
   modalRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space['4'] },

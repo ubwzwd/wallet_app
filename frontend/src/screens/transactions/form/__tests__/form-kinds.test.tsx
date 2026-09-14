@@ -111,6 +111,16 @@ afterEach(() => {
   toast.clear();
 });
 
+/** One flat style object out of whatever shape a component handed to `style`. */
+function flatStyle(element: { props: { style?: unknown } }): Record<string, number> {
+  const style = element.props.style;
+  const parts = Array.isArray(style) ? style.flat(Infinity) : [style];
+  return Object.assign({}, ...parts.filter((p) => p && typeof p === 'object')) as Record<
+    string,
+    number
+  >;
+}
+
 /** Pick `food` (level 1 only) in the category picker. */
 async function pickFood(): Promise<void> {
   fireEvent.press(await screen.findByTestId('tx-category-trigger'));
@@ -307,6 +317,73 @@ test('?refund_of= alone prefills the original’s category and account, both sti
   expect(await screen.findByTestId('refund-other-source-hint')).toBeTruthy();
 });
 
+test('a prefill from 「登记退款」 is not an edit: leaving straight away asks nothing', async () => {
+  // Everything `?refund_of=` inherits is the URL's doing, not the user's, so the form must
+  // still be pristine — otherwise pressing 取消 would challenge an exit nobody earned
+  // (04 §4.6.3 prefills, §4.6.5 离开确认).
+  mockGet(`/ledgers/${LEDGER_ID}/transactions/${ORIGIN.id}`, ORIGIN);
+  const router = renderRouter(ROUTES, {
+    initialUrl: `${NEW_URL}?refund_of=${ORIGIN.id}`,
+    wrapper: Wrapper,
+  });
+
+  expect(await screen.findByTestId('refund-origin-card')).toBeTruthy();
+  // The account really did follow the original — the prefill happened, it just was not dirty.
+  await waitFor(() =>
+    expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name),
+  );
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('tx-cancel'));
+  });
+
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`));
+});
+
+test('「复制一笔」 on one leg of a two-leg transfer carries what it can and says what it cannot', async () => {
+  // A leg knows nothing about its sibling's account, amount or currency (04 §4.6.4), but a
+  // blank form would throw away the shape, the subtype and the note it *does* know.
+  const LEG = makeTransaction({
+    id: 'tx-leg',
+    source_id: CHECKING.id,
+    kind: 'transfer',
+    amount: '-3000.0000',
+    currency: 'CNY',
+    occurred_at: '2026-07-02',
+    merchant: null,
+    note: '还 6 月账单',
+    category_l1: null,
+    category_l2: null,
+    transfer_role: 'out',
+    transfer_subtype: 'repayment',
+    transfer_pair_id: 'pair-1',
+  });
+  mockGet(`/ledgers/${LEDGER_ID}/transactions/tx-leg`, LEG);
+
+  const router = renderRouter(ROUTES, {
+    initialUrl: `${NEW_URL}?copy_of=tx-leg`,
+    wrapper: Wrapper,
+  });
+
+  // The transfer tab, the subtype and the note came along; the URL follows the tab.
+  await waitFor(() => expect(screen.getByTestId('transfer-note').props.value).toBe('还 6 月账单'));
+  expect(screen.getByTestId('tx-kind-transfer').props.accessibilityState.selected).toBe(true);
+  expect(screen.getByTestId('transfer-subtype-repayment').props.accessibilityState.selected).toBe(
+    true,
+  );
+  // A copy is made today, never on the original's day (04 §4.7).
+  expect(screen.getByTestId('transfer-date').props.value).toBe(todayLocalIso());
+  await waitFor(() => expect(router.getSearchParams().kind).toBe('transfer'));
+
+  // What only the other leg knows is left blank on purpose, and the warning says so
+  // instead of leaving a half-filled form to be discovered on save.
+  expect(screen.getByTestId('transfer-amount').props.value).toBe('');
+  expect(
+    toast.peek().some((item) => item.kind === 'warning' && item.message.includes('两腿转账')),
+  ).toBe(true);
+});
+
 // ------------------------------------------------------- 离开确认 (04 §4.6.5)
 
 test('the cancel button asks exactly once and then really leaves', async () => {
@@ -407,7 +484,12 @@ test('the merchant box suggests recent merchants, preferring the chosen category
   const panel = await screen.findByTestId('tx-merchant-suggestions');
   // Both are offered, the one last used with 餐饮 first.
   expect(panel).toHaveTextContent('最近商户星巴克山姆');
-  fireEvent.press(screen.getByTestId('tx-merchant-suggestion-星巴克'));
+
+  // 04 §6.6: a thumb has to be able to hit the row.
+  const row = screen.getByTestId('tx-merchant-suggestion-星巴克');
+  expect(flatStyle(row).minHeight).toBeGreaterThanOrEqual(44);
+
+  fireEvent.press(row);
   expect(screen.getByTestId('tx-merchant').props.value).toBe('星巴克');
 });
 
@@ -559,6 +641,63 @@ test('useFormShortcuts maps every key, ignores text boxes and unhooks when disab
     unmount();
     expect(doc.listeners()).toBe(0);
   } finally {
+    doc.restore();
+  }
+});
+
+test('Esc inside a text box means "never mind this box", not "throw the form away"', () => {
+  const doc = stubDocument();
+  const handlers = {
+    onSave: jest.fn(),
+    onSaveAndNext: jest.fn(),
+    onDiscard: jest.fn(),
+    onKind: jest.fn(),
+    onHelp: jest.fn(),
+  };
+  try {
+    const { unmount } = renderHook(() => useFormShortcuts(handlers));
+
+    // The caret is in 备注 and half a sentence is typed: Esc there is the browser's own
+    // "undo this field", and discarding the whole entry would be the opposite (04 §4.6).
+    doc.press(keyEvent({ key: 'Escape', target: { tagName: 'TEXTAREA' } }));
+    doc.press(keyEvent({ key: 'Escape', target: { tagName: 'INPUT' } }));
+    doc.press(keyEvent({ key: 'Escape', target: { isContentEditable: true } }));
+    expect(handlers.onDiscard).not.toHaveBeenCalled();
+
+    // Outside a box it still discards — that is what the shortcut is for.
+    doc.press(keyEvent({ key: 'Escape' }));
+    expect(handlers.onDiscard).toHaveBeenCalledTimes(1);
+
+    unmount();
+  } finally {
+    doc.restore();
+  }
+});
+
+test('an open overlay takes the keyboard: the refund picker unhooks the form shortcuts', async () => {
+  // `enabled` is the one switch every overlay reports into — while the picker is up, Esc
+  // means "close me" and 1..4 belong to whatever it is showing, not to the tab row behind.
+  const doc = stubDocument();
+  let router: ReturnType<typeof renderRouter> | null = null;
+  try {
+    mockCandidates([ORIGIN]);
+    router = renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=refund`, wrapper: Wrapper });
+
+    await screen.findByTestId('refund-link');
+    const listeningWithFormOnly = doc.listeners();
+    expect(listeningWithFormOnly).toBe(1);
+
+    fireEvent.press(screen.getByTestId('refund-link'));
+    await screen.findByTestId(`refund-picker-row-${ORIGIN.id}`);
+    expect(doc.listeners()).toBe(0);
+
+    // Closing it hands the keyboard back.
+    fireEvent.press(screen.getByTestId(`refund-picker-row-${ORIGIN.id}`));
+    await waitFor(() => expect(doc.listeners()).toBe(1));
+  } finally {
+    // The tree has to come down while the stub is still installed: its listener cleanup
+    // reaches for `document`, which this environment does not otherwise have.
+    router?.unmount();
     doc.restore();
   }
 });

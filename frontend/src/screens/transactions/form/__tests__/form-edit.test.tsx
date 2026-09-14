@@ -412,3 +412,49 @@ test('a 422 shows the server’s own wording on the field, not a validation key'
   // Not the generic 「这是必填项」 the key channel would have produced.
   expect(screen.queryByText('这是必填项')).toBeNull();
 });
+
+test('a 409 on a single-leg transfer names the transfer-only fields too', async () => {
+  // `counterparty` / `direction` / `subtype` are boxes like any other on this screen, so a
+  // server value that disagrees with the user's edit has to be named, not silently taken
+  // (04 §3.8 step 4) — a field missing from `MERGEABLE_FIELDS` would be.
+  const single = makeTransaction({
+    id: TX_ID,
+    source_id: CHECKING.id,
+    kind: 'transfer',
+    amount: '-500.0000',
+    currency: 'CNY',
+    occurred_at: '2026-08-03',
+    merchant: null,
+    note: '给房东',
+    category_l1: null,
+    category_l2: null,
+    transfer_role: 'out',
+    transfer_subtype: 'plain',
+    transfer_pair_id: null,
+    counterparty: '房东',
+    updated_at: '2026-08-03T11:00:00.000000Z',
+  });
+  const server = {
+    ...single,
+    counterparty: '别人改的对方',
+    updated_at: '2026-08-04T09:00:00.000000Z',
+  };
+  api.mock.onGet(apiUrl(TX_PATH)).replyOnce(200, single);
+  api.mock.onGet(apiUrl(TX_PATH)).reply(200, server);
+  mockPatch(TX_PATH, { detail: '这条记录刚被改过', code: 'stale_update' }, 409);
+
+  renderRouter(ROUTES, { initialUrl: EDIT_URL, wrapper: Wrapper });
+
+  fireEvent.changeText(await screen.findByTestId('transfer-counterparty'), '我改的对方');
+  fireEvent.press(screen.getByTestId('tx-submit'));
+
+  await waitFor(() => expect(screen.queryByTestId('tx-edit-conflict')).not.toBeNull());
+  expect(screen.getByText(`对方 · 服务器上现在是：${server.counterparty}`)).toBeTruthy();
+  // My own edit stands and nothing was re-sent (04 §3.8 step 5).
+  expect(screen.getByTestId('transfer-counterparty').props.value).toBe('我改的对方');
+  expect(patches(TX_PATH)).toHaveLength(1);
+
+  fireEvent.press(screen.getByTestId('tx-edit-use-server-counterparty'));
+  expect(screen.getByTestId('transfer-counterparty').props.value).toBe(server.counterparty);
+  expect(patches(TX_PATH)).toHaveLength(1);
+});

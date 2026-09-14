@@ -40,7 +40,13 @@ import {
   valuesFromTransaction,
 } from './useTransactionForm';
 
-/** The fields a 409 can disagree about, in the order they are shown. */
+/**
+ * The fields a 409 can disagree about, in the order they are shown.
+ *
+ * Every box this screen can edit is here, the single-leg transfer's own three included
+ * (`counterparty` / `subtype` / `direction`) and the refund link: a field left out of this
+ * list would be quietly overwritten by the server's value with nothing said (04 §3.8).
+ */
 const MERGEABLE_FIELDS: readonly (keyof TxFormValues)[] = [
   'amount',
   'currency',
@@ -50,6 +56,10 @@ const MERGEABLE_FIELDS: readonly (keyof TxFormValues)[] = [
   'note',
   'category_l1',
   'category_l2',
+  'counterparty',
+  'subtype',
+  'direction',
+  'refund_of',
 ];
 
 export default function EditTransactionScreen(): React.JSX.Element {
