@@ -9,7 +9,7 @@
 | 3 账户与交易 | 账户接口（余额与三个合计）、交易 CRUD、两腿转账、配对 / 拆开、`transaction_events`、统计 summary / trend | `v3/phase-3-transactions` → 已合回 `main`（666c4ed） | **完成（2026-09-12）** |
 | 4 统计 | 并入第三阶段 | — | — |
 | 5 前端 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 详情 / 账户 / 设置各页、PWA 与构建 | `v3/phase-5-frontend` → 已合回 `main`（d0b4044） | **完成（2026-09-15）** |
-| 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | | 未开始 |
+| 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | `v3/phase-6-import` → 已合回 `main`（60bf8cb） | **完成（2026-09-15）** |
 | 7 视觉 | `theme/tokens.ts`、组件按 04 §6 换色、浅色 / 深色 WCAG 验收 | | 未开始 |
 | 8 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
 
@@ -45,5 +45,12 @@
   - **真 bug**：`UnpairResult` 原本按 `{out, in}` 定型，而 03 §5.34 与后端 `UnpairResponse` 返回 `{pair_id, unpaired: [leg, leg]}`，`useUnpairTransfer` 的 `onSuccess` 在真实后端上会抛异常并导致两条腿都不失效。已改成 `{pair_id, unpaired}` + `UnpairedLeg` 精简形态，两处测试 mock 同步，04 §3.3 已注（同步 2026-09-15）。
   - `/l/:ledgerId/imports/:batchId` 没有路由文件，而交易列表与两个详情页都会跳它，「来自导入」一点就 404；已补占位路由并登记进贯穿测试的路由表。
   - 04 §4.5「共 N 笔」的口径改成服务端 `total`（过滤后的行数），文档已同步；两腿转账仍合并成一行显示。
+- 2026-09-15：第六阶段（导入）完成并合回 `main`（60bf8cb）。三轮工作流（10 + 5 + 2 个任务）加编排者手工收口，后端 1165 个测试、前端 59 套件 776 个测试、`npm run verify` 端到端全绿。产出：`services/importing/`（`reading` / `validation` + `drafts` + `rules` / `flagging` / `committing` + `commit_checks`）、`schemas/importing.py`、`api/imports.py`（03 §5.37–§5.44 八个端点）与 `api/import_format.py`、`scripts/gen_import_skill.py` + `skills/wallet-import/` 四份交付物、`backend/tests/fixtures/import/` 十四份样本与端到端用例；前端 `queries/useImports.ts`、导入指南 / 上传粘贴 / 历史与撤销三页、review 表格（`ui/DataTable.tsx` + `ui/useRowWindow.ts` + `screens/imports/review/`）与已提交结果页。要点与偏差：
+  - **新决策 §14.55**：批量改草稿行不接受 `matched_transaction_id` / `counterpart_source_id` / `counterparty`（03 §5.42 与 05 §4.1 冲突，取 05）。03 §5.42 与 05 §4.1 待同步。
+  - **部署级修正**：生产镜像的 build context 从 `backend/` 提到仓库根，`infra/Dockerfile.api` 增 `COPY skills/ ./skills/`，仓库根新增 `.dockerignore`（挡住 `frontend/` / `docs/` / `.git/` 等）。此前 `skills/` 进不了镜像，线上 `GET /import-format` 的 `sample_csv` / `skill_text` / `skill_markdown` 会是空串、导入指南页整页空白。镜像里命中的是 `<backend dir>/skills/wallet-import`（`/app/skills/wallet-import`），开发机命中 `<repo-root>/skills/wallet-import`，两条探测路径都承重。`infra/scripts/smoke.sh` 与 `RUNBOOK.md` 同步。
+  - **跨任务缺陷修正**：`skill_outdated` 的 `guide_url` 原为 `/import/guide`（03 示例值），应用里没有这条路由，版本过期时的恢复按钮会跳 404；改为端点层按本账本拼 `/l/{ledger_id}/imports/guide`（03 §5.37 示例待同步）。11 列表头收敛到 `services/importing/drafts.COLUMNS` 一份真源（`import_format.HEADERS` 由它派生）。`GET /import-format` 的 ETag 改成整个响应体的摘要（原来只用 `CATEGORY_VERSION`，只改 skill 文案的发版会让老客户端永远拿 304）。
+  - **前端要点**：review 表格的提交失败按响应体的 `rows` 定位出错行（`detail` 里没有行号）；批量设 kind 先按选中行的金额符号过滤掉注定失败的选项，失败文案不再假称是分类问题；撤销流程收敛到 `screens/imports/undoBatch.ts` 一份；手机上的跳转改为实测当前节点位置（卡片只是被挤下去时不会触发布局回调，缓存的偏移必然是旧的）；`DataTable` 做了行窗口化（视口未测量时降级到 162 行，否则 jest 里会一片空白），窗口按 index 定位所以能跳到未挂载的行。
+  - **`npm run verify` 曾经是红的**：第六阶段新增的三个 `Pressable`（`DataTable` 的行选择与单元格、`ReviewCards` 的整卡）没到 44px 触控目标，被跳过的收口任务恰好是唯一会跑完整 verify 的那个，所以两轮都没撞上。已按真实尺寸补上（只有整卡那个用豁免注释）。教训：手工合入任务分支时要跑 `CI=1 npm run verify`，不能只跑 tsc + jest。
+  - 留档未做（不阻塞）：`DataTable` 的行高按 44 估算，带 `hint` 的行实际更高，滚动时有十几像素抖动；正在编辑的单元格被快速滚出窗口会丢掉 500ms 去抖内未提交的草稿（干净的修法要动 `ReviewRow.tsx` 的 `useDraft`）；贯穿测试的导入那一段跑在窄屏，虚拟化后的宽屏表格只在 `review.test.tsx` 里被覆盖；`ImportRowsBulkPatch` 的批量语义已收窄但 03 §5.42 / 05 §4.1 两处文档尚未同步。
 - 留档未做（不阻塞，第六阶段或之后处理）：记一笔表单里 `CategoryPicker` / `SourcePicker` / `CurrencyPicker` 的浮层打开时 Esc 仍会落到表单（这三个组件的 open 状态私有在 `src/ui` 内部，要加 `onOpenChange` 才能上报）；`RefundOriginCard` 的「原单已删除」分支在生产不可达（后端 `ON DELETE SET NULL` 会让 `refund_of` 一起变 null）；退款行的 accessibilityLabel 逐行相同；`BarList` 的「其他 N 项」非交互行也被撑到 44 高。
 
