@@ -43,6 +43,7 @@ import SourcesRoute from '../../app/(app)/l/[ledgerId]/sources/index';
 import ImportsRoute from '../../app/(app)/l/[ledgerId]/imports/index';
 import ImportsGuideRoute from '../../app/(app)/l/[ledgerId]/imports/guide';
 import NewImportRoute from '../../app/(app)/l/[ledgerId]/imports/new';
+import ImportBatchRoute from '../../app/(app)/l/[ledgerId]/imports/[batchId]';
 import LedgerSettingsRoute from '../../app/(app)/l/[ledgerId]/settings';
 import NewSourceRoute from '../../app/(app)/l/[ledgerId]/sources/new';
 import EditSourceRoute from '../../app/(app)/l/[ledgerId]/sources/[sourceId]/edit';
@@ -105,6 +106,7 @@ const APP_ROUTES = {
   '(app)/l/[ledgerId]/imports/index': ImportsRoute,
   '(app)/l/[ledgerId]/imports/guide': ImportsGuideRoute,
   '(app)/l/[ledgerId]/imports/new': NewImportRoute,
+  '(app)/l/[ledgerId]/imports/[batchId]': ImportBatchRoute,
   '(app)/l/[ledgerId]/settings': LedgerSettingsRoute,
   '(app)/l/[ledgerId]/sources/new': NewSourceRoute,
   '(app)/l/[ledgerId]/sources/[sourceId]/edit': EditSourceRoute,

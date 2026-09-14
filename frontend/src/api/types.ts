@@ -213,8 +213,17 @@ export interface TransferPair {
 // 配对 / 拆开（决策 §14.34）
 // POST /ledgers/{id}/transactions/{tid}/pair：把两条单腿转账合成一笔
 export interface TransactionPairRequest { other_transaction_id: Uuid; }   // 03 §5.33 的字段名
-// 响应是合成后的 TransferPair；unpair 无请求体，响应是拆开后的两条 Transaction
-export interface UnpairResult { out: Transaction; in: Transaction; }
+// 配对的响应是合成后的 TransferPair；unpair 无请求体，响应是 03 §5.34 的
+// `{pair_id, unpaired}`——两条腿的**精简**形态，不是完整的 Transaction（同步 2026-09-15）
+export interface UnpairedLeg {
+  id: Uuid; source_id: Uuid; kind: 'transfer';
+  transfer_role: TransferRole; transfer_subtype: TransferSubtype;
+  amount: Money; currency: string;
+  transfer_pair_id: Uuid | null;      // 拆开之后恒为 null
+  counterparty: string | null;
+  updated_at: IsoDateTime;
+}
+export interface UnpairResult { pair_id: Uuid; unpaired: UnpairedLeg[]; }
 
 export interface TransactionListParams {
   q?: string; kind?: TxKind[]; category_l1?: string; category_l2?: string;

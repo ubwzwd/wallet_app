@@ -230,7 +230,11 @@ describe('mutations wire themselves to the matrix', () => {
   test('useUnpairTransfer removes the pair key and invalidates both legs', async () => {
     const out = makeTransaction({ id: TX_ID, transfer_role: 'out' });
     const into = makeTransaction({ id: 'bbbb2222-7777-4888-8999-000011112222', transfer_role: 'in' });
-    mockPost(`/ledgers/${L}/transactions/transfer/p1/unpair`, { out, in: into });
+    // 03 §5.34: `{pair_id, unpaired: [leg, leg]}`, not `{out, in}`.
+    mockPost(`/ledgers/${L}/transactions/transfer/p1/unpair`, {
+      pair_id: 'p1',
+      unpaired: [out, into],
+    });
 
     const s = spies(qc);
     const { result } = renderHook(() => useUnpairTransfer(L), { wrapper: wrapper(qc) });

@@ -600,7 +600,18 @@ export interface TransferPair {
 // POST /ledgers/{id}/transactions/{tid}/pair：把两条单腿转账合成一笔
 export interface TransactionPairRequest { counterpart_transaction_id: Uuid; }
 // 响应是合成后的 TransferPair；unpair 无请求体，响应是拆开后的两条 Transaction
-export interface UnpairResult { out: Transaction; in: Transaction; }
+// （同步 2026-09-15）unpair 的响应是 03 §5.34 的 `{pair_id, unpaired}`，两条腿是**精简**形态
+// （id / source_id / kind / transfer_role / transfer_subtype / amount / currency /
+// transfer_pair_id / counterparty / updated_at），不是完整的 Transaction
+export interface UnpairedLeg {
+  id: Uuid; source_id: Uuid; kind: 'transfer';
+  transfer_role: TransferRole; transfer_subtype: TransferSubtype;
+  amount: Money; currency: string;
+  transfer_pair_id: Uuid | null;
+  counterparty: string | null;
+  updated_at: IsoDateTime;
+}
+export interface UnpairResult { pair_id: Uuid; unpaired: UnpairedLeg[]; }
 
 export interface TransactionListParams {
   q?: string; kind?: TxKind[]; category_l1?: string; category_l2?: string;
@@ -1111,7 +1122,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 - **分页**：`limit=50`（上限 200，决策 §14.44 的 03-14），**窄屏无限滚动**（`useInfiniteQuery`，`offset` 递增，滚动位置在返回时恢复），**宽屏底部分页条**（显示 `total`，`offset` 写进 URL）。两种模式共用同一个 query 家族。
 - **两腿转账合并成一行**（决策 §14.52 B15）：接口仍按行返回两条腿，**合并在前端做**。规则：
   - 按 `transfer_pair_id` 分组，同一 pair 的两条渲染成一行，标题显示「招行储蓄卡 → 招行信用卡」，金额显示转出腿的绝对值（跨币种时显示「−¥1,000 → +$140」两个数）。
-  - 「共 N 笔」的计数**按合并后算**。
+  - （同步 2026-09-15）「共 N 笔」**按服务端 `total`（过滤后的行数）显示**，不按合并后的行数：合并只发生在当前页，拿 `total` 减当前页合并掉的对数会让这个数字随翻页 / 滚动变化。两腿转账仍然合并成一行显示。
   - 按账户筛选时**任一腿命中就显示整对**（这样从信用卡视角也能看见还款的来源账户）；如果只有一条腿落在当前页（跨页），那一页仍按单条渲染并标「另一半在上/下一页」，不做跨页拼接。
   - 单腿转账不合并，标题显示「招行储蓄卡 → 对方：老婆」（`counterparty`）或只有账户名（决策 §14.52 B16：转账不设商户，标题就是这个）。
 - **按日分组 + 每日小计 + 底部汇总**（决策 §14.52 A14）：

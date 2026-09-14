@@ -250,16 +250,11 @@ test('「拆开」warns what unpairing does, then lands on the out leg\'s own pa
     .onPost(apiUrl(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}/unpair`))
     .reply(() => {
       unpaired = true;
-      // 03 §5.34's own shape, plus the `{out, in}` the api layer currently types (that
-      // mismatch is escalated); the screen must not depend on either.
+      // 03 §5.34's shape exactly; the screen navigates off the pair it already had, so it
+      // must not read the response at all.
       return [
         200,
-        {
-          pair_id: PAIR,
-          unpaired: [single, { ...IN, transfer_pair_id: null }],
-          out: single,
-          in: { ...IN, transfer_pair_id: null },
-        },
+        { pair_id: PAIR, unpaired: [single, { ...IN, transfer_pair_id: null }] },
       ];
     });
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });

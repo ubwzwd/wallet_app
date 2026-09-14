@@ -218,7 +218,9 @@ export function useUnpairTransfer(
     mutationFn: (pairId: Uuid) => txApi.unpair(l, pairId),
     meta: { silent: opts?.silent },
     onSuccess: (result, pairId) => {
-      invalidatePair(qc, l, result.out.id, result.in.id);
+      // 03 §5.34 answers `{pair_id, unpaired: [leg, leg]}` — never `{out, in}`.
+      const [first, second] = result.unpaired;
+      if (first && second) invalidatePair(qc, l, first.id, second.id);
       removeTransfer(qc, l, pairId);
     },
   });
