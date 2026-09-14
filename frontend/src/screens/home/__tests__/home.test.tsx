@@ -30,7 +30,6 @@ import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
 import { resetLedgerGone } from '@/navigation';
-import { ONBOARDING_HINT_PREF } from '@/screens/auth/RegisterScreen';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
   makeCategoryTree,
@@ -194,7 +193,7 @@ beforeEach(async () => {
   await initI18n();
   await i18next.changeLanguage('zh');
   await setPref(PREF_NAMES.lastLedgerId, null);
-  await setPref(ONBOARDING_HINT_PREF, null);
+  await setPref(PREF_NAMES.onboardingHint, null);
   await setJsonPref(PREF_NAMES.categories, null);
   await setAuthToken('test-access-token');
 
@@ -211,7 +210,7 @@ afterEach(async () => {
   queryClient.clear();
   toast.clear();
   jest.restoreAllMocks();
-  await setPref(ONBOARDING_HINT_PREF, null);
+  await setPref(PREF_NAMES.onboardingHint, null);
   await setJsonPref(PREF_NAMES.categories, null);
 });
 
@@ -474,7 +473,7 @@ test('the wide layout drops the top bar and puts the title on the page', async (
 // ---------------------------------------------------- the one-shot card of 04 §4.2
 
 test('the onboarding card shows only while the pref is set and the ledger has no account', async () => {
-  await setPref(ONBOARDING_HINT_PREF, '1');
+  await setPref(PREF_NAMES.onboardingHint, '1');
   mockHome({ sources: [] });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
@@ -485,11 +484,11 @@ test('the onboarding card shows only while the pref is set and the ledger has no
   fireEvent.press(router.getByTestId('home-onboarding-dismiss'));
 
   await waitFor(() => expect(router.queryByTestId('home-onboarding')).toBeNull());
-  await waitFor(async () => expect(await getPref(ONBOARDING_HINT_PREF)).toBeNull());
+  await waitFor(async () => expect(await getPref(PREF_NAMES.onboardingHint)).toBeNull());
 });
 
 test('the onboarding card stays away once the ledger has an account', async () => {
-  await setPref(ONBOARDING_HINT_PREF, '1');
+  await setPref(PREF_NAMES.onboardingHint, '1');
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
@@ -498,12 +497,12 @@ test('the onboarding card stays away once the ledger has an account', async () =
 });
 
 test('taking the onboarding action spends the pref and goes to the account form', async () => {
-  await setPref(ONBOARDING_HINT_PREF, '1');
+  await setPref(PREF_NAMES.onboardingHint, '1');
   mockHome({ sources: [] });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-onboarding-action'));
 
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
-  await waitFor(async () => expect(await getPref(ONBOARDING_HINT_PREF)).toBeNull());
+  await waitFor(async () => expect(await getPref(PREF_NAMES.onboardingHint)).toBeNull());
 });
