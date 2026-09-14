@@ -2,32 +2,21 @@
 
 **This module has no ``router``** — ``app.api.iter_routers()`` imports it and
 skips it, exactly as it skips anything else without one. It exists because the
-eight routes of §5.37-§5.44 plus §4.9's derived fields and §4.1's draft-row
-rules do not fit one file under the 400-line budget; the split is the same one
-``services/importing`` made between ``committing.py`` and ``commit_checks.py``:
-the routes stay readable, the rules they apply live next door.
+eight routes of §5.37-§5.44 and everything they apply do not fit one file under
+the 400-line budget; the split is the same one ``services/importing`` made
+between ``committing.py`` and ``commit_checks.py``: the routes stay readable,
+the rules they apply live next door.
 
-Three groups live here:
-
-* **Reading §5.37's request** — the multipart half is parsed here rather than
-  through ``request.form()``, because Starlette's parser spools a part over
-  1 MB into a temporary *file* and decision §14.28 leaves the backend no
-  filesystem state at all. Bytes in, drafts out, nothing touches disk.
-* **Patching draft rows** (§5.41 / §5.42, 05 §4.1), including the all-or-nothing
-  guarantee the bulk endpoint needs.
-* **Building a batch payload** — the six derived fields of §4.9, computed fresh
-  (02 §1.7 stores no redundant counters).
+What lives here is §4.1's draft-row rules — §5.41 / §5.42's patching, including
+the all-or-nothing guarantee the bulk endpoint needs — plus the three loaders
+and the error shorthands the routes share. Reading §5.37's request body is
+``import_upload.py``; §4.9's derived fields are ``import_batches.py``.
 """
 from __future__ import annotations
 
 import datetime as dt
 import uuid
-from collections import Counter, defaultdict
-from decimal import Decimal
 
-from fastapi import Request
-from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.categories import validate_category
@@ -38,30 +27,20 @@ from app.core.errors import ApiError, ErrorCode
 from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch, ImportRow
 from app.models.transaction import Transaction
-from app.schemas.importing import ImportBatchResponse, ImportRowPatch, PasteUploadRequest
-from app.services import valuation
+from app.schemas.importing import ImportRowPatch
+from app.services.importing import flagging
 from app.services.importing.commit_checks import assert_pairable, load_counterpart
-from app.services.importing.drafts import RowDraft
+from app.services.importing.drafts import ImportContext, RowDraft
 from app.services.importing.rules import sanitize_category
 
-#: §2.6's 2 MB ceiling, plus the slack a multipart envelope adds around a file
-#: that sits exactly at it. The stream is cut at the sum; the 413 of §5.37 is
-#: decided on the payload itself.
+#: §2.6's 2 MB ceiling, on the payload itself (§5.37's 413).
 MAX_BYTES = settings.MAX_UPLOAD_MB * 1024 * 1024
-ENVELOPE_SLACK = 64 * 1024
 
 MAX_FILENAME = 200  # §5.37: display only, control characters filtered out
-FLAG_NAMES = ("duplicate", "refund_candidate", "transfer_candidate", "needs_review")
-ROW_STATUSES = ("pending", "edited", "skipped")
 #: §4.1: changing ``kind`` drops what the old kind's flagging had decided.
 CANDIDATE_FLAGS = ("refund_candidate", "transfer_candidate")
-
-# The batch columns that go out verbatim (02 §1.7 names, decision §14.53e).
-_BATCH_COLUMNS = (
-    "id", "ledger_id", "source_id", "source", "filename", "size_bytes",
-    "skill_version", "status", "row_count", "warnings", "created_by",
-    "created_at", "updated_at", "committed_at",
-)
+#: The patch fields that put the sign and its ``kind`` back under discussion.
+_SIGN_INPUTS = {"amount", "kind", "transfer_role"}
 
 # Wire field -> column, for the one field whose names differ (decision §14.41).
 _PATCH_COLUMNS = {"date": "occurred_at"}
@@ -76,93 +55,6 @@ _ROW_STATE = (
 )
 
 
-# ---------------------------------------------------------------------------
-# §5.37's two request bodies
-# ---------------------------------------------------------------------------
-
-
-async def read_request(request: Request) -> tuple[uuid.UUID, bytes | str, str | None]:
-    """``(source_id, payload, filename)``; ``filename`` is ``None`` for a paste."""
-    body = await _read_capped(request)
-    content_type = request.headers.get("content-type", "")
-    if content_type.lower().startswith("multipart/form-data"):
-        fields = _parse_multipart(body, content_type)
-        if "file" not in fields or "source_id" not in fields:
-            raise invalid_form("multipart body needs a file and a source_id part")
-        filename, data = fields["file"]
-        return _as_uuid(fields["source_id"][1]), data, _clean_filename(filename)
-    try:
-        paste = PasteUploadRequest.model_validate_json(body)
-    except ValidationError as exc:
-        raise invalid_form(f"body: {exc.error_count()} invalid field(s)") from exc
-    return paste.source_id, paste.text, None
-
-
-async def _read_capped(request: Request) -> bytes:
-    """Read the body, giving up as soon as it passes the ceiling (§5.37 step 4).
-
-    The cap runs before the target account is looked up, because ``source_id``
-    is *inside* the body: a body too large to read is a 413 with nothing to say
-    about the account it names.
-    """
-    chunks: list[bytes] = []
-    total = 0
-    async for chunk in request.stream():
-        total += len(chunk)
-        if total > MAX_BYTES + ENVELOPE_SLACK:
-            raise too_large()
-        chunks.append(chunk)
-    return b"".join(chunks)
-
-
-def _parse_multipart(body: bytes, content_type: str) -> dict[str, tuple[str | None, bytes]]:
-    """Split a ``multipart/form-data`` body into ``{name: (filename, bytes)}``.
-
-    Deliberately minimal: §5.37's form has exactly two parts, neither of which
-    is streamed anywhere, and the whole upload stays in memory (§4.11).
-    """
-    boundary = _params(content_type.partition(";")[2]).get("boundary")
-    if not boundary:
-        raise invalid_form("multipart body has no boundary")
-    fields: dict[str, tuple[str | None, bytes]] = {}
-    for part in body.split(b"--" + boundary.encode("utf-8", "replace"))[1:-1]:
-        head, sep, payload = part.lstrip(b"\r\n").partition(b"\r\n\r\n")
-        if not sep:
-            continue
-        disposition: dict[str, str] = {}
-        for line in head.decode("utf-8", "replace").splitlines():
-            name, _, value = line.partition(":")
-            if name.strip().lower() == "content-disposition":
-                disposition = _params(value)
-        if "name" in disposition:
-            if payload.endswith(b"\r\n"):
-                payload = payload[:-2]
-            fields[disposition["name"]] = (disposition.get("filename"), payload)
-    return fields
-
-
-def _params(text: str) -> dict[str, str]:
-    """``form-data; name="file"; filename="a.csv"`` -> its parameters, unquoted."""
-    values: dict[str, str] = {}
-    for chunk in text.split(";"):
-        key, sep, value = chunk.partition("=")
-        if sep:
-            values[key.strip().lower()] = value.strip().strip('"')
-    return values
-
-
-def _clean_filename(name: str | None) -> str:
-    """§5.37: display only — no path, no control characters, at most 200 chars."""
-    text = "".join(ch for ch in (name or "") if ch.isprintable()).strip()
-    text = text.replace("\\", "/").rsplit("/", 1)[-1]
-    return text[:MAX_FILENAME] or "upload.csv"
-
-
-def _as_uuid(raw: bytes) -> uuid.UUID:
-    try:
-        return uuid.UUID(raw.decode("utf-8", "replace").strip())
-    except ValueError as exc:
-        raise invalid_form("source_id is not a UUID") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +95,8 @@ def patch_rows(
     batch: ImportBatch,
     rows: list[ImportRow],
     patch: ImportRowPatch,
+    *,
+    bulk: bool,
 ) -> None:
     """Apply one patch to every row, or leave all of them exactly as they were.
 
@@ -210,18 +104,26 @@ def patch_rows(
     so putting the saved column values back undoes a partial run — and it undoes
     only *these* rows, unlike a ``rollback()``, which would also throw away
     whatever else the caller's transaction is holding.
+
+    ``bulk`` decides the shape of the refusal, not its content: §5.42 wants
+    ``detail`` to name the offending row even when the call happened to carry a
+    single id, while §5.41 has only one row to talk about.
     """
     saved = [{name: getattr(row, name) for name in _ROW_STATE} for row in rows]
     now = utcnow()
+    rekinded: list[ImportRow] = []
     for row in rows:
         try:
-            _apply_patch(db, ctx, batch, row, patch, now)
+            if _apply_patch(db, ctx, batch, row, patch, now):
+                rekinded.append(row)
         except ApiError as exc:
             for target, state in zip(rows, saved):
                 for name, value in state.items():
                     setattr(target, name, value)
-            detail = exc.detail if len(rows) == 1 else f"row {row.row_no}: {exc.detail}"
+            detail = f"row {row.row_no}: {exc.detail}" if bulk else exc.detail
             raise ApiError(exc.status_code, exc.code, detail, exc.headers) from exc
+    if rekinded:
+        _rerun_candidates(db, ctx, batch, rekinded, now)
     batch.updated_at = now
 
 
@@ -232,13 +134,18 @@ def _apply_patch(
     row: ImportRow,
     patch: ImportRowPatch,
     now: dt.datetime,
-) -> None:
-    """§4.1's rules for one row: apply, re-check, then set the row's status."""
+) -> bool:
+    """§4.1's rules for one row; returns whether ``kind`` changed."""
     data = patch.model_dump(exclude_unset=True)
     new_status = data.pop("status", None)
     kind_changed = "kind" in data and data["kind"] != row.kind
     for name, value in data.items():
         setattr(row, _PATCH_COLUMNS.get(name, name), value)
+    if data:
+        # §4.1: the server rewrites ``hint`` after an edit, so a note about a
+        # value the user has since corrected disappears. Only a status-only
+        # patch keeps it: nothing it says has been invalidated.
+        row.hint = None
 
     if kind_changed:
         # §4.1: a link found under the old kind would be written into
@@ -256,14 +163,24 @@ def _apply_patch(
     # (§5.41's state diagram, decision §14.52 B13: there is no "confirmed").
     row.status = "skipped" if new_status == "skipped" else "edited"
     row.updated_at = now
+    return kind_changed
 
 
 def _check_row(
     db: Session, ctx: LedgerContext, batch: ImportBatch, row: ImportRow, touched: set[str]
 ) -> None:
-    """§5.41's error table, judged on the row *after* the edit."""
+    """§5.41's error table, judged on what the request put on the row.
+
+    Every rule below runs only when the request named a field that feeds it.
+    That distinction matters because a draft row is allowed to be loose:
+    decision §1.3 and §2.8's rules 9/10 store an unparseable amount as ``0`` and
+    never clear a merchant off a transfer line, so judging the whole row would
+    make the importer's own output unpatchable — ``{"status": "skipped"}``
+    included, which is the one way out §5.41 gives the user. Setting a bad value
+    is still a 400; living with one the file arrived with is not.
+    """
     if row.kind == "transfer":
-        if row.merchant:
+        if row.merchant and touched & {"merchant", "kind"}:
             raise invalid("a transfer row must not carry a merchant")
         if row.transfer_role is None or row.transfer_subtype is None:
             raise invalid("a transfer row needs transfer_role and transfer_subtype")
@@ -271,7 +188,7 @@ def _check_row(
         raise invalid("counterpart_source_id only applies to a transfer row")
 
     _check_category(row, touched)
-    _check_sign(row)
+    _check_sign(row, touched)
 
     matched = row.matched_transaction_id
     if matched is not None:
@@ -310,21 +227,96 @@ def _check_category(row: ImportRow, touched: set[str]) -> None:
         row.category_l1, row.category_l2, row.hint = category_l1, category_l2, hint
 
 
-def _check_sign(row: ImportRow) -> None:
-    """§5.26's sign rule, which the CHECKs of 02 §1.6 enforce again at commit."""
+def _check_sign(row: ImportRow, touched: set[str]) -> None:
+    """§5.26's sign rule, which the CHECKs of 02 §1.6 enforce again at commit.
+
+    Only for a row whose sign the request had a hand in: §2.4 ⑤ already made
+    every *imported* row agree with its own ``kind``, except where §2.8 rule 10
+    had nothing to parse and stored ``0``. Such a row is not an error the user
+    can be asked to fix before skipping it.
+    """
     amount, kind = row.amount, row.kind
-    if amount is None or kind is None:
+    if amount is None or kind is None or not touched & _SIGN_INPUTS:
         return
     positive = amount > 0
     if kind == "expense" and positive:
         raise invalid("an expense amount must be negative")
-    if kind in ("income", "refund") and not positive:
-        raise invalid(f"a {kind} amount must be positive")
+    if kind == "income" and not positive:
+        raise invalid("an income amount must be positive")
+    if kind == "refund" and not positive:
+        raise invalid("a refund amount must be positive")
     if kind == "transfer":
         if row.transfer_role == "out" and positive:
             raise invalid("an outgoing transfer amount must be negative")
         if row.transfer_role == "in" and not positive:
             raise invalid("an incoming transfer amount must be positive")
+
+
+def _rerun_candidates(
+    db: Session,
+    ctx: LedgerContext,
+    batch: ImportBatch,
+    rows: list[ImportRow],
+    now: dt.datetime,
+) -> None:
+    """§4.1: look the §3.2 / §3.3 candidates up again for a row that changed kind.
+
+    Only the lookup that belongs to the *new* kind runs. §3.2's other trigger —
+    money arriving on a credit card — is deliberately left out here: it may
+    rewrite ``kind`` itself, and a user who just said "this is income" must not
+    be answered with "no, it is a refund". An ``expense`` or ``income`` row has
+    no candidates at all, which is why the three fields §4.1 clears stay clear.
+    """
+    source = db.get(FinanceSource, batch.source_id)
+    ictx = ImportContext(
+        ledger_id=ctx.ledger.id,
+        source_id=batch.source_id,
+        source_currency=source.default_currency,
+        source_type=source.type,
+        base_currency=ctx.ledger.base_currency,
+        actor_id=ctx.user.id,
+        category_version=batch.skill_version,
+    )
+    drafts = {row.id: _as_draft(row) for row in rows if row.kind in ("refund", "transfer")}
+    if not drafts:
+        return
+    refunds = [draft for draft in drafts.values() if draft.kind == "refund"]
+    transfers = [draft for draft in drafts.values() if draft.kind == "transfer"]
+    if refunds:
+        flagging.flag_refund_candidates(db, ictx, refunds)
+    if transfers:
+        flagging.flag_transfer_candidates(db, ictx, transfers)
+    for row in rows:
+        draft = drafts.get(row.id)
+        if draft is None:
+            continue
+        row.matched_transaction_id = draft.matched_transaction_id
+        row.counterpart_source_id = draft.counterpart_source_id
+        row.category_l1, row.category_l2 = draft.category_l1, draft.category_l2
+        row.flags = sorted(draft.flags)
+        row.hint = draft.hint
+        row.updated_at = now
+
+
+def _as_draft(row: ImportRow) -> RowDraft:
+    """The in-memory shape ``services/importing/flagging`` works on (§0.3)."""
+    return RowDraft(
+        row_no=row.row_no,
+        occurred_at=row.occurred_at,
+        amount=row.amount,
+        currency=row.currency,
+        kind=row.kind,
+        transfer_role=row.transfer_role,
+        transfer_subtype=row.transfer_subtype,
+        merchant=row.merchant,
+        note=row.note,
+        category_l1=row.category_l1,
+        category_l2=row.category_l2,
+        source_ref=row.source_ref,
+        counterparty=row.counterparty,
+        hint=row.hint,
+        flags=set(row.flags or ()),
+    )
 
 
 def _check_refund_target(db: Session, ctx: LedgerContext, matched: uuid.UUID) -> None:
@@ -336,91 +328,6 @@ def _check_refund_target(db: Session, ctx: LedgerContext, matched: uuid.UUID) ->
             ErrorCode.REFUND_TARGET_INVALID,
             "matched_transaction_id must point at an expense in this ledger",
         )
-
-
-# ---------------------------------------------------------------------------
-# Batch payload (§4.9's derived fields)
-# ---------------------------------------------------------------------------
-
-
-def batch_items(
-    db: Session, ctx: LedgerContext, batches: list[ImportBatch]
-) -> list[ImportBatchResponse]:
-    """Batch rows plus the six derived fields of §4.9, for any number of batches.
-
-    Three queries whatever the page size: the account names, the draft rows of
-    every batch on the page, and one ``convert_rows`` for the net amounts.
-
-    ``net_amount`` is in the ledger's base currency (income + refund - expense;
-    transfers and skipped rows left out, §4.9). A row still missing a date, an
-    amount or a currency, and a row whose currency has no usable rate, add
-    nothing rather than being counted at face value — a foreign figure added to
-    a base-currency sum would simply be wrong. ``uncategorized_count`` leaves
-    skipped rows out too: §5.37 calls it "the ones that must be filled in before
-    commit", and commit only looks at rows it will actually book (05 §4.2).
-    """
-    if not batches:
-        return []
-    names = dict(
-        db.execute(
-            select(FinanceSource.id, FinanceSource.name).where(
-                FinanceSource.id.in_({batch.source_id for batch in batches})
-            )
-        ).all()
-    )
-    flags: dict[uuid.UUID, Counter] = defaultdict(Counter)
-    statuses: dict[uuid.UUID, Counter] = defaultdict(Counter)
-    uncategorized: Counter = Counter()
-    owners: list[uuid.UUID] = []
-    convertible: list[tuple[Decimal, str, dt.date]] = []
-
-    rows = db.execute(
-        select(
-            ImportRow.batch_id,
-            ImportRow.status,
-            ImportRow.flags,
-            ImportRow.kind,
-            ImportRow.category_l1,
-            ImportRow.amount,
-            ImportRow.currency,
-            ImportRow.occurred_at,
-        ).where(ImportRow.batch_id.in_([batch.id for batch in batches]))
-    ).all()
-    for batch_id, row_status, row_flags, kind, category_l1, amount, currency, day in rows:
-        statuses[batch_id][row_status] += 1
-        for name in row_flags or ():
-            flags[batch_id][name] += 1
-        skipped, transfer = row_status == "skipped", kind == "transfer"
-        if not skipped and not transfer and category_l1 is None:
-            uncategorized[batch_id] += 1
-        if skipped or transfer or None in (amount, currency, day):
-            continue
-        owners.append(batch_id)
-        convertible.append((amount, currency, day))
-
-    net: dict[uuid.UUID, Decimal] = defaultdict(Decimal)
-    for owner, value in zip(
-        owners, valuation.convert_rows(db, convertible, ctx.ledger.base_currency)
-    ):
-        if value is not None:
-            net[owner] += value[0]
-
-    return [
-        ImportBatchResponse.model_validate(
-            {
-                **{name: getattr(batch, name) for name in _BATCH_COLUMNS},
-                "source_name": names.get(batch.source_id, ""),
-                "net_amount": valuation.quantize_amount(net[batch.id]),
-                "base_currency": ctx.ledger.base_currency,
-                "flags_summary": {name: flags[batch.id][name] for name in FLAG_NAMES},
-                "row_status_summary": {
-                    name: statuses[batch.id][name] for name in ROW_STATUSES
-                },
-                "uncategorized_count": uncategorized[batch.id],
-            }
-        )
-        for batch in batches
-    ]
 
 
 # ---------------------------------------------------------------------------

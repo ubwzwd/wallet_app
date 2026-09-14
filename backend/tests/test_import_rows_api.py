@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.core.categories import CATEGORY_VERSION
 from app.models.import_batch import ImportRow
 from tests.test_imports_api import paste, read_fixture, upload
 
@@ -525,3 +526,157 @@ def test_bulk_row_ids_must_be_one_to_five_hundred(setup, client):
     assert empty.status_code == 422
     assert empty.json()["code"] == "validation_error"
     assert too_many.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 05 §1.3 / §2.8: what the importer itself stored stays patchable
+# ---------------------------------------------------------------------------
+
+#: Two rows the validator deliberately leaves loose — §2.8 rules 9/10 store an
+#: unreadable amount as ``0`` and never take a merchant off a transfer line —
+#: plus one ordinary expense, so the batch has something left to commit.
+LOOSE = (
+    f"# version: {CATEGORY_VERSION}\n"
+    "date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,"
+    "category_l1,category_l2,source_ref\n"
+    "2026-08-10,n/a,CNY,income,,,,工资,salary,base_salary,p1:l2\n"
+    "2026-08-20,3000.00,CNY,transfer,in,repayment,招商银行,AUTOPAY,,,p1:l30\n"
+    "2026-08-21,-128.00,CNY,expense,,,盒马,,groceries,fresh_food,p1:l31\n"
+)
+
+
+@pytest.fixture()
+def loose(setup, client):
+    """The three rows above, imported through the real paste route."""
+    _user, headers, ledger, card, _bank = setup
+    body = paste(client, headers, ledger, card, LOOSE).json()
+    rows = body["rows"]
+    assert (rows[0]["amount"], rows[0]["kind"]) == ("0.0000", "income")
+    assert "needs_review" in rows[0]["flags"]
+    assert rows[1]["merchant"] == "招商银行"  # §2.4 ⑧ never clears it (05 §2.8)
+    return headers, ledger, body["batch"]["id"], rows
+
+
+def test_a_loose_row_can_still_be_skipped(loose, client, db):
+    """§5.41's ``pending -> skipped`` must stay reachable for every draft row.
+
+    Neither row below can be "fixed" the way a validation error implies: the
+    file simply had no amount, and a repayment line really does carry the bank's
+    name. Judging them on a PATCH that only sets ``status`` would leave the user
+    with a batch that can be neither skipped nor committed.
+    """
+    headers, ledger, bid, rows = loose
+
+    for row in rows[:2]:
+        response = patch_row(client, headers, ledger, bid, row["id"], {"status": "skipped"})
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "skipped"
+    assert db.get(ImportRow, uuid.UUID(rows[0]["id"])).amount == Decimal("0.0000")
+
+
+def test_a_loose_row_does_not_block_the_bulk_skip_or_the_commit(loose, client):
+    headers, ledger, bid, rows = loose
+
+    bulk = patch_many(client, headers, ledger, bid, [rows[0]["id"]], {"status": "skipped"})
+    assert bulk.status_code == 200, bulk.text
+    assert bulk.json()["updated"] == 1
+
+    commit = client.post(f"/api/v1/ledgers/{ledger.id}/imports/{bid}/commit", headers=headers)
+    assert commit.status_code == 200, commit.text
+    assert commit.json()["skipped_rows"] == 1
+    assert commit.json()["created_transactions"] == 2
+
+
+def test_the_whole_loose_batch_can_be_bulk_skipped(loose, client):
+    headers, ledger, bid, rows = loose
+
+    body = patch_many(
+        client, headers, ledger, bid, [row["id"] for row in rows], {"status": "skipped"}
+    )
+
+    assert body.status_code == 200, body.text
+    assert body.json()["updated"] == 3
+    assert all(row["status"] == "skipped" for row in body.json()["rows"])
+
+
+def test_a_request_that_sets_a_bad_sign_is_still_refused(loose, client, db):
+    """The leniency above is about leftovers only — §5.41's error table stands."""
+    headers, ledger, bid, rows = loose
+
+    single = patch_row(client, headers, ledger, bid, rows[0]["id"], {"amount": "-5.00"})
+    bulk = patch_many(client, headers, ledger, bid, [rows[0]["id"]], {"amount": "-5.00"})
+
+    assert single.status_code == bulk.status_code == 400
+    assert single.json()["code"] == "validation_error"
+    assert single.json()["detail"] == "an income amount must be positive"
+    # §5.42: the bulk detail names the row even when only one id was sent.
+    assert bulk.json()["detail"] == "row 1: an income amount must be positive"
+    assert db.get(ImportRow, uuid.UUID(rows[0]["id"])).amount == Decimal("0.0000")
+
+
+def test_a_request_that_puts_a_merchant_on_a_transfer_is_still_refused(loose, client, db):
+    headers, ledger, bid, rows = loose
+
+    # Turning a merchant-bearing expense into a transfer is the same mistake.
+    becomes_transfer = patch_row(
+        client,
+        headers,
+        ledger,
+        bid,
+        rows[2]["id"],
+        {"kind": "transfer", "transfer_role": "out", "transfer_subtype": "plain"},
+    )
+    sets_merchant = patch_row(client, headers, ledger, bid, rows[1]["id"], {"merchant": "招行"})
+
+    assert becomes_transfer.status_code == sets_merchant.status_code == 400
+    assert becomes_transfer.json()["detail"] == "a transfer row must not carry a merchant"
+    stored = db.get(ImportRow, uuid.UUID(rows[2]["id"]))
+    assert (stored.kind, stored.status) == ("expense", "pending")
+
+
+def test_hint_is_rewritten_after_an_edit(loose, client):
+    """05 §4.1: a note about a value the user has since corrected disappears."""
+    headers, ledger, bid, rows = loose
+    assert "n/a" in rows[0]["hint"]
+
+    skipped = patch_row(client, headers, ledger, bid, rows[0]["id"], {"status": "skipped"})
+    fixed = patch_row(client, headers, ledger, bid, rows[0]["id"], {"amount": "5000.00"})
+
+    assert skipped.json()["hint"] == rows[0]["hint"]  # a status-only patch says nothing new
+    assert fixed.json()["hint"] is None
+
+
+def test_changing_kind_looks_the_candidates_up_again(setup, client, transaction_factory):
+    """05 §4.1: §3.2 / §3.3 run again under the new ``kind``."""
+    _user, headers, ledger, card, bank = setup
+    leg = transaction_factory(
+        ledger,
+        bank,
+        kind="transfer",
+        amount=Decimal("-500.0000"),
+        occurred_at=dt.date(2026, 8, 22),
+        transfer_role="out",
+        transfer_subtype="plain",
+    )
+    text = (
+        f"# version: {CATEGORY_VERSION}\n"
+        "date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,"
+        "category_l1,category_l2,source_ref\n"
+        "2026-08-22,500.00,CNY,income,,,,,social_income,transfer_in,p1:l40\n"
+    )
+    created = paste(client, headers, ledger, card, text).json()
+    row = created["rows"][0]
+    assert row["matched_transaction_id"] is None  # nothing to find for an income row
+
+    body = patch_row(
+        client,
+        headers,
+        ledger,
+        created["batch"]["id"],
+        row["id"],
+        {"kind": "transfer", "transfer_role": "in", "transfer_subtype": "plain"},
+    ).json()
+
+    assert body["matched_transaction_id"] == str(leg.id)
+    assert body["counterpart_source_id"] == str(bank.id)
+    assert "transfer_candidate" in body["flags"]

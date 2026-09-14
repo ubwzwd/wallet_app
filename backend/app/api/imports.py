@@ -2,11 +2,12 @@
 
 Eight routes with almost no rules of their own: reading and validating a
 standard CSV is ``services/importing`` (05 §2), the four flags are §3,
-committing and reverting are §4.7-§4.8, and everything these routes then *do*
-with a request — the two bodies of §5.37, the derived batch fields of §4.9, the
-draft-row edit rules of §4.1 — lives in ``import_support.py`` next door. What
-is left here is the HTTP surface: paths, parameters, status codes, and the
-commit of the transaction the services only ever flush into.
+committing and reverting are §4.7-§4.8, and what these routes then *do* with a
+request lives in three router-less modules next door — ``import_upload`` (the
+two bodies of §5.37), ``import_support`` (§4.1's draft-row rules) and
+``import_batches`` (§4.9's derived fields). What is left here is the HTTP
+surface: paths, parameters, status codes, and the commit of the transaction the
+services only ever flush into.
 
 Two things worth knowing before reading on:
 
@@ -33,7 +34,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import import_support as support
+from app.api import import_batches, import_support as support, import_upload
 from app.core import ratelimit
 from app.core.categories import CATEGORY_VERSION
 from app.core.clock import utcnow
@@ -95,13 +96,12 @@ async def create_import(
     statements below are §2.1's order — rate limit, target account, size, decode,
     structure, version, row count — and none of the first six writes a row, so a
     file that trips any of them leaves no batch behind. From step 7 on every
-    problem is a row-level ``hint`` the user settles in the review table.
-
-    The bytes are dropped as soon as the drafts exist: nothing is written to
-    disk, only ``filename`` and ``size_bytes`` survive (§4.11, decision §14.28).
+    problem is a row-level ``hint`` the user settles in the review table. The
+    bytes are dropped as soon as the drafts exist: nothing is written to disk,
+    only ``filename`` and ``size_bytes`` survive (§4.11, decision §14.28).
     """
     ratelimit.check("import", str(ctx.user.id), IMPORT_LIMIT)
-    source_id, payload, filename = await support.read_request(request)
+    source_id, payload, filename = await import_upload.read_request(request)
     source = support.load_source(db, ctx, source_id)
 
     data = payload.encode("utf-8") if isinstance(payload, str) else payload
@@ -109,12 +109,9 @@ async def create_import(
         raise support.too_large()
 
     ictx = ImportContext(
-        ledger_id=ctx.ledger.id,
-        source_id=source.id,
-        source_currency=source.default_currency,
-        source_type=source.type,
-        base_currency=ctx.ledger.base_currency,
-        actor_id=ctx.user.id,
+        ledger_id=ctx.ledger.id, source_id=source.id,
+        source_currency=source.default_currency, source_type=source.type,
+        base_currency=ctx.ledger.base_currency, actor_id=ctx.user.id,
         category_version=CATEGORY_VERSION,
     )
     try:
@@ -152,17 +149,13 @@ async def create_import(
     db.flush()
 
     result = ImportUploadResult(
-        batch=support.batch_items(db, ctx, [batch])[0],
+        batch=import_batches.batch_items(db, ctx, [batch])[0],
         rows=[ImportRowResponse.model_validate(row) for row in rows],
     )
     db.commit()
     logger.info(  # §6.3: ids, counts, version — no filename, no row content
         "import batch %s ledger %s source %s rows %d version %s",
-        batch.id,
-        ctx.ledger.id,
-        source.id,
-        len(rows),
-        skill_version,
+        batch.id, ctx.ledger.id, source.id, len(rows), skill_version,
     )
     return result
 
@@ -181,11 +174,8 @@ def list_imports(
     ctx: LedgerContext = Depends(get_ledger_member),
     db: Session = Depends(get_db),
 ) -> ListResponse[ImportBatchResponse]:
-    """Batch history, newest first (§5.38).
-
-    A reverted batch is gone rather than listed: there is no third status and no
-    "reverted" row to show (decisions §14.22, §14.52 B1).
-    """
+    """Batch history, newest first (§5.38); a reverted batch is gone rather than
+    listed, there being no third status to show (decisions §14.22, §14.52 B1)."""
     stmt = select(ImportBatch).where(ImportBatch.ledger_id == ctx.ledger.id)
     if batch_status:
         stmt = stmt.where(ImportBatch.status.in_(list(batch_status)))
@@ -199,7 +189,9 @@ def list_imports(
         .scalars()
         .all()
     )
-    return ListResponse(items=support.batch_items(db, ctx, batches), total=total)
+    return ListResponse(
+        items=import_batches.batch_items(db, ctx, batches), total=total
+    )
 
 
 @router.get("/{bid}", response_model=ImportBatchResponse)
@@ -211,10 +203,9 @@ def get_import(
     """One batch, same shape as the list item (§5.39); its rows are §5.40.
 
     Not a polling target — there is no progress to poll. It is what the review
-    page re-reads for the summary numbers after a few edits, and for
-    ``committed_at`` after a commit.
+    page re-reads for the summary numbers after a few edits.
     """
-    return support.batch_items(db, ctx, [support.load_batch(db, ctx, bid)])[0]
+    return import_batches.batch_items(db, ctx, [support.load_batch(db, ctx, bid)])[0]
 
 
 # ---------------------------------------------------------------------------
@@ -243,10 +234,9 @@ def list_import_rows(
     """The batch's draft rows, ``row_no`` ascending, with §4.2's filters.
 
     ``flag`` / ``flagged`` are applied in Python because ``flags`` is a JSON
-    column: a batch holds at most ``IMPORT_MAX_ROWS`` rows — the upload response
-    already hands them over in one piece — so reading them to filter costs one
-    query either way. The two booleans filter only when ``true``; ``false`` is
-    read as "no opinion", since §5.40 gives them no negative meaning.
+    column: a batch holds at most ``IMPORT_MAX_ROWS`` rows, which the upload
+    response already hands over in one piece. The two booleans filter only when
+    ``true``; ``false`` is read as "no opinion" (§5.40 gives no negative sense).
     """
     batch = support.load_batch(db, ctx, bid)
     stmt = select(ImportRow).where(ImportRow.batch_id == batch.id)
@@ -281,9 +271,8 @@ def patch_import_row(
     """Edit one draft row (§5.41).
 
     No optimistic concurrency — the body carries no ``updated_at`` and the last
-    write wins; a batch being reviewed by two people at once is not what the
-    lock of decision §2 is for. ``transactions`` is untouched and no event is
-    written: a draft is not a transaction yet.
+    write wins (05 §4.1). ``transactions`` is untouched and no event is written:
+    a draft is not a transaction yet.
     """
     batch = support.ready_batch(db, ctx, bid)
     row = db.execute(
@@ -291,7 +280,7 @@ def patch_import_row(
     ).scalar_one_or_none()
     if row is None:
         raise ApiError(404, ErrorCode.NOT_FOUND, "Draft row not found")
-    support.patch_rows(db, ctx, batch, [row], body)
+    support.patch_rows(db, ctx, batch, [row], body, bulk=False)
     result = ImportRowResponse.model_validate(row)
     db.commit()
     return result
@@ -307,30 +296,23 @@ def patch_import_rows(
     """Apply one patch to 1..500 rows, all or nothing (§5.42).
 
     A row that fails validation takes the whole call down — including the rows
-    already patched in it — and answers 400 naming the offending ``row_no``: 40
-    rows set to "food" of which three are income rows must not leave a
-    half-applied state nobody asked for.
+    already patched in it — and answers 400 naming the offending ``row_no``,
+    even when only one id was sent: 40 rows set to "food" of which three are
+    income rows must not leave a half-applied state nobody asked for.
     """
     batch = support.ready_batch(db, ctx, bid)
     wanted = list(dict.fromkeys(body.row_ids))
-    found = {
-        row.id: row
-        for row in db.execute(
-            select(ImportRow).where(
-                ImportRow.batch_id == batch.id, ImportRow.id.in_(wanted)
-            )
-        )
-        .scalars()
-        .all()
-    }
+    stmt = select(ImportRow).where(
+        ImportRow.batch_id == batch.id, ImportRow.id.in_(wanted)
+    )
+    found = {row.id: row for row in db.execute(stmt).scalars().all()}
     if len(found) != len(wanted):
         raise ApiError(
-            404,
-            "not_found",
+            404, ErrorCode.NOT_FOUND,
             f"{len(wanted) - len(found)} row(s) do not belong to this batch",
         )
     rows = sorted(found.values(), key=lambda row: row.row_no)
-    support.patch_rows(db, ctx, batch, rows, body.patch)
+    support.patch_rows(db, ctx, batch, rows, body.patch, bulk=True)
     result = ImportRowsBulkResult(
         updated=len(rows),
         rows=[ImportRowResponse.model_validate(row) for row in rows],
@@ -354,8 +336,7 @@ def commit_import(
     """Book every non-skipped row of the batch in one transaction (§5.43).
 
     No request body (decision §14.18): a second click is stopped by the 409
-    ``batch_already_committed`` the locked batch row produces, not by an
-    ``updated_at`` the caller would have to carry around.
+    ``batch_already_committed`` the locked batch row produces.
     """
     support.load_batch(db, ctx, bid)
     try:
@@ -393,7 +374,7 @@ def delete_import(
     answering 200 with a body instead of 204, because the two counts of B24 are
     what the confirmation dialog is built from — and they mean opposite things:
     ``orphaned_refunds`` are refunds *outside* the batch losing their original,
-    ``refunds_in_batch`` are refunds *inside* it whose originals get room back.
+    ``refunds_in_batch`` are ones *inside* it whose originals get room back.
     """
     support.load_batch(db, ctx, bid)
     result = committing.delete_batch(db, bid, ctx.user.id, client, dry_run=dry_run)
@@ -408,7 +389,5 @@ def delete_import(
     )
     if not dry_run:
         db.commit()
-        logger.info(
-            "import batch %s %s, %d transaction(s)", bid, result.mode, result.transaction_count
-        )
+        logger.info("import batch %s %s, %d row(s)", bid, result.mode, result.transaction_count)
     return payload
