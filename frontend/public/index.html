@@ -1,12 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- `lang` is the default for the very first paint only: `src/i18n/index.ts`
+     rewrites document.documentElement.lang once the language is resolved (04 §5.1). -->
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Wallet</title>
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0ea5e9" />
+    <!-- theme-color = tokens.json light `accent.solid` (04 §7.2). Kept in sync with
+         public/manifest.json `theme_color`. This file is plain HTML, so the
+         "no literal colours" rule for components does not apply here. -->
+    <meta name="theme-color" content="#2F4A38" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Wallet" />

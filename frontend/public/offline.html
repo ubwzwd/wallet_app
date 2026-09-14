@@ -1,24 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<!--
+  Last-resort offline page (04 §7.2, last-but-one row).
+
+  It is still precached, but it is NO LONGER the navigation fallback — that is
+  `/index.html`, so a deep link like /l/<id>/transactions renders the app shell and the
+  app's own offline bar takes over. This file is only reached when the shell itself is
+  missing from the precache (e.g. a first visit made entirely offline).
+
+  Colours are the light theme's `bg.canvas` / `fg.primary` / `fg.muted` / `accent.solid`
+  from docs/target-design/mockups/tokens.json. This is a standalone HTML file served
+  outside the React tree, so it cannot read the theme tokens at runtime.
+-->
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>You're offline — Wallet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#2F4A38" />
+    <title>离线 — Wallet</title>
     <style>
       html, body {
         margin: 0;
         padding: 0;
       }
       body {
-        background: #f9fafb;
-        color: #6b7280;
+        background: #F1F6F1;
+        color: #5F6A62;
         font-family: -apple-system, system-ui, sans-serif;
         padding: 32px;
         text-align: center;
         line-height: 1.5;
       }
       h1 {
-        color: #1f2937;
+        color: #16201A;
         font-size: 24px;
         margin: 0 0 16px 0;
       }
@@ -29,7 +42,8 @@
     </style>
   </head>
   <body>
-    <h1>You're offline</h1>
-    <p>Check your connection. Your data will load once you're back online.</p>
+    <h1>当前处于离线状态</h1>
+    <p>检查一下网络连接，恢复后数据会自动加载。</p>
+    <p lang="en">You're offline. Your data will load once you're back online.</p>
   </body>
 </html>

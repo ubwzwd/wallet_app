@@ -170,6 +170,8 @@ export default function LoginScreen(): React.JSX.Element {
           accessibilityRole="link"
           accessibilityLabel={t('auth:login.register_link')}
           testID="login-register-link"
+          // One line of caption text; the slop is what makes it a 44 tap target.
+          hitSlop={space['3']}
           onPress={() => router.push(routes.register(safeNext(nextParam) ?? undefined) as Href)}
         >
           <Text variant="caption" tone="accent">

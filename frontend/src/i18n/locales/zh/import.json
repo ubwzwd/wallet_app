@@ -1,4 +1,9 @@
 {
+  "coming_soon": {
+    "title": "导入功能在下一阶段上线",
+    "body": "账单导入还没做完，下一阶段上线。在那之前，可以先用「记一笔」把交易手动记进来。",
+    "back_home": "回首页"
+  },
   "guide": {
     "title": "导入指南",
     "step1_title": "把 skill 装进你的 ChatGPT 或 Claude",

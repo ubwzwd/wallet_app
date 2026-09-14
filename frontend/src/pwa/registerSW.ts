@@ -1,23 +1,28 @@
 /**
- * registerSW.ts — Web-only service worker registration (PWA-04, Phase 5 plan 05-03).
+ * registerSW.ts — Web-only service worker registration (04 §7).
  *
- * Imported for side-effect only: `import '@/pwa/registerSW'` (wired in 05-05).
- * On web, registers `/sw.js` on `window`'s `load` event and logs the result.
- * On native (Expo Go iOS/Android), the guard returns false and this module
- * is a complete no-op — safe to import unconditionally from App.tsx.
+ * Imported for side-effect only: `import '@/pwa/registerSW'` at the top of
+ * `app/_layout.tsx`. On native the platform guard returns false and the module is a
+ * complete no-op, so it is safe to import unconditionally.
  *
- * Per the revised D-07 (2026-05-24), this module is intentionally minimal:
- * register + log. The silent-takeover path is handled entirely SW-side via
- * Workbox's lifecycle flags (configured in workbox-config.cjs, ROADMAP SC-3
- * preserved). NetworkFirst on `/index.html` surfaces the fresh shell on the
- * next nav/refresh — no client-side update hook, no UI surface.
- *
- * Analog: src/utils/queryClient.ts — module-level singleton init,
- * side-effect-on-import idiom.
+ * Two deliberate limits:
+ *  - **Production only.** `dist/sw.js` is produced by `workbox generateSW` during
+ *    `build:web`; it does not exist under `expo start --web`, and a worker registered in
+ *    development would serve stale bundles back over the dev server. `NODE_ENV` is
+ *    inlined at bundle time, so this whole block disappears from the dev bundle.
+ *  - **Registration only.** The "a new version took over, refresh" toast lives in
+ *    `src/navigation/useSwUpdateToast.ts` (04 §7.2, last row), which listens for
+ *    `controllerchange` inside the React tree where the language pack and the toast host
+ *    are available. Do not duplicate that listener here.
  */
 import { Platform } from 'react-native';
 
-if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+if (
+  process.env.NODE_ENV === 'production' &&
+  Platform.OS === 'web' &&
+  typeof navigator !== 'undefined' &&
+  'serviceWorker' in navigator
+) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

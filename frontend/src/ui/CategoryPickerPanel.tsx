@@ -223,6 +223,7 @@ export function CategoryPickerPanel({
           accessibilityRole="button"
           onPress={() => onPickL2(null)}
           testID={`${id}-l1-only`}
+          hitSlop={space['3']}
           style={styles.grow}
         >
           <Text variant="body" tone="accent">

@@ -240,6 +240,7 @@ export default function SourcesScreen(): React.JSX.Element {
             style={({ pressed }) => ({
               flexDirection: 'row',
               alignItems: 'center',
+              minHeight: 44,
               gap: space['2'],
               borderRadius: radius.md,
               backgroundColor: pressed ? colors['bg.hover'] : 'transparent',

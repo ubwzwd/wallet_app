@@ -164,7 +164,7 @@ export function BarList({
 
 const styles = StyleSheet.create({
   wrap: { gap: space['2'], alignSelf: 'stretch' },
-  row: { gap: space['1'], paddingVertical: space['1'], borderRadius: radius.md },
+  row: { minHeight: 44, gap: space['1'], paddingVertical: space['1'], borderRadius: radius.md },
   header: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
   label: { flex: 1 },
   track: { height: BAR_HEIGHT, borderRadius: radius.pill, overflow: 'hidden' },

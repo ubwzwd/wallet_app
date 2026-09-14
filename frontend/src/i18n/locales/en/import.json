@@ -1,4 +1,9 @@
 {
+  "coming_soon": {
+    "title": "Import ships in the next phase",
+    "body": "Statement import isn't ready yet — it arrives in the next phase. Until then, add transactions by hand with “New transaction”.",
+    "back_home": "Back to home"
+  },
   "guide": {
     "title": "Import guide",
     "step1_title": "Install the skill in your ChatGPT or Claude",
