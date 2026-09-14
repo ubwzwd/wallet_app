@@ -89,7 +89,11 @@ export function useRowWindow({
 
   const viewportRows =
     measured > 0 ? Math.max(1, Math.ceil(measured / rowHeight)) : UNMEASURED_VIEWPORT_ROWS;
-  const [first, last] = sliceFor(anchor, viewportRows, count);
+  // Clamp before slicing: a filter that narrows the data under a stale anchor (scrolled deep
+  // into 2000 rows, then switched to a twelve-row slice) would otherwise put the top of the
+  // grid behind a spacer until the browser's own scroll clamp caught up.
+  const top = Math.min(anchor, Math.max(0, count - viewportRows));
+  const [first, last] = sliceFor(top, viewportRows, count);
   // The effects below need the current window without depending on it: re-running them on
   // every scroll would drag the view back to the focused row the moment it left it.
   const shown = React.useRef<[number, number]>([first, last]);
@@ -134,8 +138,9 @@ export function useRowWindow({
       }
     }
     // Either the box has not been measured yet or the row is already on screen; the one
-    // thing still to guarantee is that the row is *mounted*, which PageDown, Home and End
-    // can walk straight past the window without ever moving the offset.
+    // thing still to guarantee is that the row is *mounted*, which `[` / `]` (jump to the
+    // previous / next uncategorized row) and Shift+arrow can walk straight past the window
+    // without ever moving the offset.
     if (focusRow < shown.current[0] || focusRow >= shown.current[1]) setAnchor(focusRow);
   }, [focusRow, rowHeight, moveTo]);
 

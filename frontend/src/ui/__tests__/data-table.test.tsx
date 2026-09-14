@@ -204,6 +204,31 @@ describe('DataTable row windowing', () => {
     expect(toggled).toEqual([700]);
   });
 
+  test('narrowing the rows under a deep scroll still paints from the top', () => {
+    const view = renderTable();
+    measure(440);
+    scrollTo(1500 * DATA_TABLE_ROW_HEIGHT);
+    expect(mountedRows()[0]).toBeGreaterThan(1000);
+
+    // What a review filter does: the same grid, a fraction of the rows, and an anchor still
+    // pointing a thousand rows past the end of them.
+    const few = ITEMS.slice(0, 12);
+    view.rerender(
+      <ThemeProvider initialPref="light">
+        <DataTable<Item>
+          testID="grid"
+          rows={few}
+          columns={COLUMNS}
+          rowKey={(item) => item.id}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(mountedRows()).toEqual([...few.keys()]);
+    expect(spacerHeight('top')).toBe(0);
+    expect(spacerHeight('bottom')).toBe(0);
+  });
+
   test('every mounted row is still a full-size tap target', () => {
     renderTable({ selected: new Set<string>() });
     const select = StyleSheet.flatten(
