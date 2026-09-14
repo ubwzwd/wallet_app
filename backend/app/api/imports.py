@@ -233,10 +233,12 @@ def list_import_rows(
 ) -> ListResponse[ImportRowResponse]:
     """The batch's draft rows, ``row_no`` ascending, with §4.2's filters.
 
-    ``flag`` / ``flagged`` are applied in Python because ``flags`` is a JSON
-    column: a batch holds at most ``IMPORT_MAX_ROWS`` rows, which the upload
-    response already hands over in one piece. The two booleans filter only when
-    ``true``; ``false`` is read as "no opinion" (§5.40 gives no negative sense).
+    ``flag`` / ``flagged`` are the only two applied in Python, because ``flags``
+    is a JSON column; they narrow independently (§5.40 has them as separate
+    filters, though naming a ``flag`` already implies ``flagged``), and a batch
+    holds at most ``IMPORT_MAX_ROWS`` rows. Without them nothing leaves SQL.
+    The booleans filter only when ``true``; ``false`` is "no opinion" (§5.40
+    gives no negative sense).
     """
     batch = support.load_batch(db, ctx, bid)
     stmt = select(ImportRow).where(ImportRow.batch_id == batch.id)
@@ -248,15 +250,20 @@ def list_import_rows(
             ImportRow.kind.is_distinct_from("transfer"),
             ImportRow.category_l1.is_(None),
         )
-    rows = list(db.execute(stmt.order_by(ImportRow.row_no)).scalars().all())
-    if flag:
-        wanted = set(flag)
-        rows = [row for row in rows if wanted & set(row.flags or ())]
-    elif flagged:
-        rows = [row for row in rows if row.flags]
-    page = rows[offset : offset + limit]
+    stmt = stmt.order_by(ImportRow.row_no)
+    if not flag and not flagged:  # nothing has to leave SQL
+        total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+        page = list(db.execute(stmt.limit(limit).offset(offset)).scalars().all())
+    else:
+        rows = list(db.execute(stmt).scalars().all())
+        if flag:
+            wanted = set(flag)
+            rows = [row for row in rows if wanted & set(row.flags or ())]
+        if flagged:
+            rows = [row for row in rows if row.flags]
+        total, page = len(rows), rows[offset : offset + limit]
     return ListResponse(
-        items=[ImportRowResponse.model_validate(row) for row in page], total=len(rows)
+        items=[ImportRowResponse.model_validate(row) for row in page], total=total
     )
 
 

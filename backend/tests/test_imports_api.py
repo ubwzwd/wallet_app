@@ -366,6 +366,21 @@ def test_detail_recomputes_the_summaries_after_an_edit(ledger_setup, client):
     assert body["net_amount"] == "-52.0000"  # the skipped -128 row drops out
     assert body["row_count"] == 6  # the column still counts every stored row
 
+    # 05 §4.9 counts what commit would still refuse, so skipping the one row
+    # that is left without a category empties the count — 03 §5.37's field table
+    # names only "rows without a category", and this is where the two are read
+    # together. The 淘宝 row (rows[4]) is the uncategorized one.
+    client.patch(
+        f"/api/v1/ledgers/{ledger.id}/imports/{bid}/rows/{rows[4]['id']}",
+        headers=headers,
+        json={"status": "skipped"},
+    )
+
+    body = client.get(f"/api/v1/ledgers/{ledger.id}/imports/{bid}", headers=headers).json()
+    assert body["row_status_summary"] == {"pending": 3, "edited": 1, "skipped": 2}
+    assert body["uncategorized_count"] == 0
+    assert body["net_amount"] == "186.0000"  # the skipped -238 row drops out too
+
 
 def test_batch_of_another_ledger_is_404(ledger_setup, client, ledger_factory, source_factory):
     user, headers, ledger, source = ledger_setup

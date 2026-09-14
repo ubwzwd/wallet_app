@@ -10,6 +10,7 @@ from decimal import Decimal
 import pytest
 
 from app.core.categories import CATEGORY_VERSION
+from app.core.clock import utcnow
 from app.models.import_batch import ImportRow
 from tests.test_imports_api import paste, read_fixture, upload
 
@@ -680,3 +681,72 @@ def test_changing_kind_looks_the_candidates_up_again(setup, client, transaction_
     assert body["matched_transaction_id"] == str(leg.id)
     assert body["counterpart_source_id"] == str(bank.id)
     assert "transfer_candidate" in body["flags"]
+
+
+def test_a_duplicate_flagged_expense_row_stays_patchable(setup, client, transaction_factory):
+    """05 §4.1: §3.1 pre-fills ``matched_transaction_id`` on *any* kind of row.
+
+    ``flag_duplicates`` links an expense row to the twin it found, and its whole
+    point is that the user then skips the row — so skipping it, skipping it in
+    bulk, and re-categorising it all have to work without the user first being
+    asked to clear a link 04 §4.10 gives them no control over.
+    """
+    _user, headers, ledger, card, _bank = setup
+    twin = transaction_factory(
+        ledger,
+        card,
+        amount=Decimal("-128.0000"),
+        occurred_at=dt.date(2026, 8, 3),
+        category_l1="groceries",
+        category_l2="fresh_food",
+    )
+    bid, rows = imported(client, headers, ledger, card)
+    assert "duplicate" in rows[0]["flags"]
+    assert rows[0]["matched_transaction_id"] == str(twin.id)
+
+    recategorized = patch_row(
+        client, headers, ledger, bid, rows[0]["id"],
+        {"category_l1": "food", "category_l2": "lunch"},
+    )
+    skipped = patch_row(client, headers, ledger, bid, rows[0]["id"], {"status": "skipped"})
+    bulk = patch_many(
+        client, headers, ledger, bid, [row["id"] for row in rows], {"status": "skipped"}
+    )
+
+    assert recategorized.status_code == 200
+    assert skipped.status_code == 200
+    assert skipped.json()["matched_transaction_id"] == str(twin.id)  # the link survives
+    assert bulk.status_code == 200
+    assert [row["status"] for row in bulk.json()["rows"]] == ["skipped"] * 6
+
+
+def test_a_transfer_row_stays_patchable_after_its_counterpart_is_archived(
+    setup, client, db, transaction_factory
+):
+    """05 §4.1: §3.3's pre-filled ``counterpart_source_id`` is not re-judged here.
+
+    The world can invalidate it after the upload; commit is where 03 §5.43's
+    error table puts that failure, and until then the row has to stay skippable.
+    """
+    _user, headers, ledger, card, bank = setup
+    transaction_factory(
+        ledger,
+        bank,
+        kind="transfer",
+        amount=Decimal("-3000.0000"),
+        occurred_at=dt.date(2026, 8, 20),
+        transfer_role="out",
+        transfer_subtype="plain",
+    )
+    bid, rows = imported(client, headers, ledger, card)
+    assert "transfer_candidate" in rows[5]["flags"]
+    assert rows[5]["counterpart_source_id"] == str(bank.id)
+
+    bank.archived = True
+    bank.archived_at = utcnow()  # the CHECK of 02 §1.4 wants both
+    db.flush()
+
+    body = patch_row(client, headers, ledger, bid, rows[5]["id"], {"status": "skipped"})
+
+    assert body.status_code == 200
+    assert body.json()["status"] == "skipped"

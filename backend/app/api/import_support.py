@@ -41,6 +41,10 @@ MAX_FILENAME = 200  # §5.37: display only, control characters filtered out
 CANDIDATE_FLAGS = ("refund_candidate", "transfer_candidate")
 #: The patch fields that put the sign and its ``kind`` back under discussion.
 _SIGN_INPUTS = {"amount", "kind", "transfer_role"}
+#: …and the ones that put each of the two link columns back under discussion.
+_MATCH_INPUTS = {"matched_transaction_id", "kind"}
+_PAIR_INPUTS = {"matched_transaction_id", "kind", "transfer_role"}
+_LINK_INPUTS = {"counterpart_source_id", "kind"}
 
 # Wire field -> column, for the one field whose names differ (decision §14.41).
 _PATCH_COLUMNS = {"date": "occurred_at"}
@@ -178,28 +182,41 @@ def _check_row(
     make the importer's own output unpatchable — ``{"status": "skipped"}``
     included, which is the one way out §5.41 gives the user. Setting a bad value
     is still a 400; living with one the file arrived with is not.
+
+    The two link columns are the sharpest case, because §3 fills them in by
+    itself: ``flag_duplicates`` writes ``matched_transaction_id`` on *any* kind
+    of row that has exactly one same-day same-amount twin — an expense row
+    included, which the "needs a refund or transfer row" rule below would
+    otherwise freeze forever, and skipping such a row is precisely what that
+    flag is for. ``flag_transfer_candidates`` likewise pre-fills
+    ``counterpart_source_id``, which the world can invalidate afterwards (the
+    account gets archived). Neither is a value the user chose, so neither is
+    re-judged until the user touches it; commit re-runs both anyway
+    (``commit_checks._validate_row``), which is where §5.43's error table puts
+    them, and ``committing._build`` reads ``matched_transaction_id`` only for a
+    refund row, so a leftover books correctly.
     """
     if row.kind == "transfer":
         if row.merchant and touched & {"merchant", "kind"}:
             raise invalid("a transfer row must not carry a merchant")
         if row.transfer_role is None or row.transfer_subtype is None:
             raise invalid("a transfer row needs transfer_role and transfer_subtype")
-    elif row.counterpart_source_id is not None:
+    elif row.counterpart_source_id is not None and touched & _LINK_INPUTS:
         raise invalid("counterpart_source_id only applies to a transfer row")
 
     _check_category(row, touched)
     _check_sign(row, touched)
 
     matched = row.matched_transaction_id
-    if matched is not None:
+    if matched is not None and touched & _MATCH_INPUTS:
         if row.kind == "refund":
             _check_refund_target(db, ctx, matched)
-        elif row.kind == "transfer":
-            # The six conditions of §5.33, judged on the draft (400 pair_invalid).
-            assert_pairable(db.get(Transaction, matched), row, batch)
-        else:
+        elif row.kind != "transfer":
             raise invalid("matched_transaction_id needs a refund or transfer row")
-    if row.counterpart_source_id is not None:
+    if matched is not None and row.kind == "transfer" and touched & _PAIR_INPUTS:
+        # The six conditions of §5.33, judged on the draft (400 pair_invalid).
+        assert_pairable(db.get(Transaction, matched), row, batch)
+    if row.counterpart_source_id is not None and touched & _LINK_INPUTS:
         load_counterpart(db, batch, row)  # 404 not_found / 400 same_source (§14.53c)
 
 
