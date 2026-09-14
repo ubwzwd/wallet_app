@@ -196,8 +196,9 @@ def test_openapi_route_inventory_still_contains_phase_two(client):
     which is the exact-equality assertion this test used to make back when
     phase two was the whole application. In particular: no leftover
     ``/auth/me`` alias (decision §14.42, retired alongside the previous
-    version's routes under that prefix) and no ``/import-format`` yet (§5.7
-    depends on the skill-text work of phase six).
+    version's routes under that prefix). ``/import-format`` (§5.7) is a
+    later phase's addition and this subset check has nothing to say about
+    it either way — it is not asserted against here.
     """
     response = client.get("/openapi.json")
     assert response.status_code == 200
@@ -213,7 +214,6 @@ def test_openapi_route_inventory_still_contains_phase_two(client):
 
     all_paths = set(paths)
     assert "/api/v1/auth/me" not in all_paths
-    assert "/api/v1/import-format" not in all_paths
 
 
 # ---------------------------------------------------------------------------
