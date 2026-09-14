@@ -350,10 +350,9 @@ test('setting the kind to transfer in bulk carries the transfer fields and drops
     transfer_subtype: 'plain',
     category_l1: null,
     category_l2: null,
-    // A leg carries no merchant (decision §14.52 B16) and no link it earned as some other
-    // kind — the same two the single-row kind change clears.
+    // A leg carries no merchant (decision §14.52 B16). The link fields are deliberately
+    // absent: §14.55 keeps them out of the bulk body and the server clears them itself.
     merchant: null,
-    matched_transaction_id: null,
   });
   // …and a bulk edit is never applied row by row (decision §14.52 A4).
   expect(api.mock.history.patch.filter((r) => r.url !== ROWS_PATH)).toHaveLength(0);

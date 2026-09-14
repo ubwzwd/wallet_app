@@ -44,6 +44,8 @@ const NOTE_MAX = 500;
  * The height is the viewport minus the page chrome above and below the list (the top bar,
  * the screen header, the slice control and the commit bar).
  */
+// 300 is the measured phone chrome at the C2 density, not a computed value; the row
+// virtualisation task that reworks this file replaces it with a measured height.
 const CARDS_CHROME_HEIGHT = 300;
 const MIN_CARDS_HEIGHT = 240;
 

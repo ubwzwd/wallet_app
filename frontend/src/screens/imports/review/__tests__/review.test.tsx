@@ -16,6 +16,7 @@ import { ThemeProvider } from '@/theme/ThemeProvider';
 import { lightColors, space } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
+import { DATA_TABLE_ROW_HEIGHT } from '@/ui/DataTable';
 import {
   BATCH_ID,
   LEDGER_ID,
@@ -25,6 +26,7 @@ import {
   makeCurrencyList,
   makeImportBatch,
   makeImportCommitResult,
+  makeImportDeleteResult,
   makeImportRow,
   makeLedger,
   makeSource,
@@ -743,4 +745,68 @@ test('the same refusal on a phone widens the slice and scrolls the card into vie
       scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 900 - space['2']),
     ).toBe(true),
   );
+});
+
+test('pressing submit twice on the wide grid scrolls to the refused row both times', async () => {
+  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+  const rows = [1, 2, 3, 4, 5, 6, 7].map((n) => row({ id: `row-${n}`, row_no: n }));
+  seed(rows);
+  api.mock.onPost(apiUrl(`${BATCH_PATH}/commit`)).reply(400, {
+    detail: '这一行的转账配对不合法',
+    code: 'pair_invalid',
+    rows: [7],
+  });
+  renderReview();
+
+  // Row 7 is the seventh row of the full slice, and the grid keeps one row of headroom
+  // above the target (`DataTable`).
+  const targetY = 6 * DATA_TABLE_ROW_HEIGHT - DATA_TABLE_ROW_HEIGHT;
+  const jumped = (): boolean =>
+    scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === targetY);
+
+  fireEvent.press(await screen.findByTestId('review-commit-submit'));
+  await waitFor(() => expect(jumped()).toBe(true));
+
+  // The same row again is a *new* request: the highlight's sequence number is in the
+  // scroll effect's dependencies precisely so that a repeated jump still moves the grid.
+  scrollTo.mockClear();
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+  await waitFor(() => expect(jumped()).toBe(true));
+});
+
+// ------------------------------- the committed panel undoes through the shared flow (§14.22)
+
+test('undoing from the committed panel dry-runs, double-taps and leaves for the history', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  api.mock
+    .onPost(apiUrl(`${BATCH_PATH}/commit`))
+    .reply(200, makeImportCommitResult({ created_transactions: 1, skipped_rows: 0 }));
+  api.mock
+    .onDelete(apiUrl(BATCH_PATH))
+    .replyOnce(
+      200,
+      makeImportDeleteResult({ deleted: false, would_delete_transactions: 1 }),
+    )
+    .onDelete(apiUrl(BATCH_PATH))
+    .replyOnce(200, makeImportDeleteResult({ deleted: true, deleted_transactions: 1 }));
+  const router = renderReview();
+
+  fireEvent.press(await screen.findByTestId('review-commit-submit'));
+  expect(await screen.findByTestId('import-committed')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('import-committed-undo'));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  // Same shared flow as the history list: ask with `dry_run` first, change nothing yet.
+  expect(api.mock.history.delete).toHaveLength(1);
+  expect(api.mock.history.delete[0].params).toEqual({ dry_run: true });
+
+  // `doubleTap`: the first press only arms the button.
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+  expect(api.mock.history.delete).toHaveLength(1);
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+
+  await waitFor(() => expect(api.mock.history.delete).toHaveLength(2));
+  expect(api.mock.history.delete[1].params).toBeUndefined();
+  // This screen's own URL 404s once the batch is gone, so it leaves for the list (§14.22).
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
 });

@@ -36,7 +36,9 @@ import { isCommittable, isUncategorized } from './useReviewSelection';
  * The per-row commit refusals of 03 §5.43. The server states their row numbers in the
  * response body's `rows` (see below), so this set is only the fallback for a body that
  * arrived without one — the prose of `detail` is all there is then. Everything not listed
- * here either counts rows or talks about the batch as a whole.
+ * here either counts rows or talks about the batch as a whole; `not_found` is deliberately
+ * absent, because commit's 404 is raised as a plain "Import batch not found"
+ * (`commit_checks.load_context`) and any digit in such a detail belongs to an id, not a row.
  */
 const ROW_NUMBERED_CODES: ReadonlySet<string> = new Set([
   'pair_invalid',
@@ -45,7 +47,6 @@ const ROW_NUMBERED_CODES: ReadonlySet<string> = new Set([
   'category_kind_mismatch',
   'repayment_target_not_credit',
   'same_source',
-  'not_found',
   'validation_error',
 ]);
 
