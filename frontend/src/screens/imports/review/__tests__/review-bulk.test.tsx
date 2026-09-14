@@ -411,6 +411,35 @@ test("a bulk kind is only offered where the selection's signs allow it", async (
   expect(screen.queryByTestId('review-bulk-kind-option-refund')).toBeNull();
 });
 
+test('a mixed-sign selection says why the kind picker is out, a zero amount does not', async () => {
+  seed([
+    row({ id: 'row-1', row_no: 1, kind: 'expense', amount: '-128.5000' }),
+    row({
+      id: 'row-2', row_no: 2, kind: 'income', amount: '3000.0000',
+      category_l1: 'salary', category_l2: null,
+    }),
+    // 02 §2.8 rule 10: an amount that could not be parsed is stored as 0.
+    row({ id: 'row-3', row_no: 3, kind: 'expense', amount: '0.0000' }),
+  ]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  // A dead control with no reason is the weakest form of "block the impossible option".
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  expect(screen.getByTestId('review-bulk-kind-hint')).toBeTruthy();
+
+  // The server's own sign check treats 0 as non-positive and skips it for expense and
+  // transfer, so one unparseable amount must not cost the user the whole picker.
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-3'));
+  expect(screen.queryByTestId('review-bulk-kind-hint')).toBeNull();
+  fireEvent.press(screen.getByTestId('review-bulk-kind-trigger'));
+  expect(await screen.findByTestId('review-bulk-kind-option-expense')).toBeTruthy();
+  expect(screen.getByTestId('review-bulk-kind-option-transfer')).toBeTruthy();
+  expect(screen.queryByTestId('review-bulk-kind-option-income')).toBeNull();
+  expect(screen.queryByTestId('review-bulk-kind-option-refund')).toBeNull();
+});
+
 test('a refused bulk kind change says nothing about categories and highlights the row', async () => {
   const rows = [1, 2].map((n) => row({ id: `row-${n}`, row_no: n, amount: '-10.0000' }));
   seed(rows);
@@ -430,6 +459,33 @@ test('a refused bulk kind change says nothing about categories and highlights th
   expect(message).not.toContain('分类');
   await waitFor(() =>
     expect(screen.getByTestId('review-table-row-row-2').props.style.backgroundColor).toBe(
+      lightColors['status.warning.bg'],
+    ),
+  );
+});
+
+test('a failure that names no row clears the highlight instead of blaming a row', async () => {
+  const rows = [1, 2].map((n) => row({ id: `row-${n}`, row_no: n, amount: '-10.0000' }));
+  seed(rows);
+  let detail = '第 2 行的符号与类型冲突';
+  api.mock.onPatch(apiUrl(ROWS_PATH)).reply(() => [400, { detail, code: 'validation_error' }]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  fireEvent.press(screen.getByTestId('review-bulk-skip'));
+  await waitFor(() =>
+    expect(screen.getByTestId('review-table-row-row-2').props.style.backgroundColor).toBe(
+      lightColors['status.warning.bg'],
+    ),
+  );
+
+  // Nothing in this refusal points at a row, so leaving row 2 tinted would send the user
+  // after an innocent row while the message only says "check the selected rows".
+  detail = '这一批没有通过校验';
+  fireEvent.press(screen.getByTestId('review-bulk-unskip'));
+  await waitFor(() =>
+    expect(screen.getByTestId('review-table-row-row-2').props.style.backgroundColor).not.toBe(
       lightColors['status.warning.bg'],
     ),
   );

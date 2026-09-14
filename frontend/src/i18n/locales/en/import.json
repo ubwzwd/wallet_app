@@ -75,6 +75,7 @@
     "bulk": {
       "set_category": "Set category in bulk",
       "set_kind": "Set type in bulk",
+      "kind_mixed_signs": "The selected rows mix positive and negative amounts — set their type in separate batches",
       "set_currency": "Set currency in bulk",
       "skip": "Skip selected",
       "unskip": "Unskip selected",

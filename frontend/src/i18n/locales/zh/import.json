@@ -69,6 +69,7 @@
     "bulk": {
       "set_category": "批量设分类",
       "set_kind": "批量设类型",
+      "kind_mixed_signs": "选中的行金额有正有负，批量改类型只能分开做",
       "set_currency": "批量设币种",
       "skip": "批量跳过",
       "unskip": "取消跳过",

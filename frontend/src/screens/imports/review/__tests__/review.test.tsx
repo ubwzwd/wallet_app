@@ -723,14 +723,24 @@ test('the same refusal on a phone widens the slice and scrolls the card into vie
   fireEvent.press(screen.getByTestId('review-commit-submit'));
 
   const card = await screen.findByTestId('review-cards-row-7');
-  // Layout is never measured in a test renderer, so tell the list where the card landed.
+  // Layout is never measured in a test renderer, so tell the list where the card landed —
+  // in the order a real device reports it: the card mounts (widened slice), *then* lays out.
+  // The very first jump has to scroll, which is the only order that ever happens in practice.
   fireEvent(card, 'layout', { nativeEvent: { layout: { x: 0, y: 900, width: 320, height: 96 } } });
-  scrollTo.mockClear();
-  fireEvent.press(screen.getByTestId('review-commit-submit'));
-  await waitFor(() => expect(scrollTo).toHaveBeenCalled());
   // A card flow that cannot scroll is a dead end on the one device where row 7 is furthest
   // from the submit button (04 §4.11.8).
+  await waitFor(() => expect(scrollTo).toHaveBeenCalled());
   expect(scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 900 - space['2'])).toBe(
     true,
+  );
+
+  // And once the card's position is known, pressing submit again scrolls again: the
+  // highlight's sequence number, not the row number, is what the effect reacts to.
+  scrollTo.mockClear();
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+  await waitFor(() =>
+    expect(
+      scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 900 - space['2']),
+    ).toBe(true),
   );
 });

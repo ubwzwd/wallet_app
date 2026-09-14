@@ -112,22 +112,25 @@ export function bulkKindPatch(kind: TxKind): ImportRowPatch {
  * cannot carry a per-row amount — so a kind only survives when every selected row's amount
  * already has the sign that kind demands: positive for `income` and `refund`, negative for
  * `expense`, and negative for `transfer` too, whose bulk patch always sends the default
- * `transfer_role: 'out'`. A mixed selection, a zero amount or a missing one leaves nothing
- * that could be set at all.
+ * `transfer_role: 'out'`. The server's own check skips a row with no amount and treats the
+ * sign as `amount > 0` (`_check_sign`), so a missing amount constrains nothing at all and a
+ * zero amount only rules out `income` / `refund` — a row whose amount could not be parsed
+ * (02 §2.8 rule 10 stores 0) must not cost the user the whole picker. Only a selection that
+ * genuinely mixes signs leaves nothing that could be set.
  */
 export function bulkKindOptions(rows: readonly ImportRow[]): TxKind[] {
   if (rows.length === 0) return [];
-  let positive = false;
-  let negative = false;
+  let needsPositive = false;
+  let needsNegative = false;
   for (const row of rows) {
-    if (row.amount === null) return [];
-    const sign = cmpMoney(row.amount, '0');
-    if (sign > 0) positive = true;
-    else if (sign < 0) negative = true;
-    else return [];
-    if (positive && negative) return [];
+    if (row.amount === null) continue;
+    if (cmpMoney(row.amount, '0') > 0) needsPositive = true;
+    else needsNegative = true;
+    if (needsPositive && needsNegative) return [];
   }
-  return positive ? ['income', 'refund'] : ['expense', 'transfer'];
+  if (needsPositive) return ['income', 'refund'];
+  if (needsNegative) return ['expense', 'transfer'];
+  return ['expense', 'income', 'refund', 'transfer'];
 }
 
 /** Which row a refused bulk edit is about — computed locally first, parsed from the
@@ -283,6 +286,14 @@ export function BulkBar({
       {message !== null ? (
         <Text variant="caption" tone="danger" testID={`${id}-error`}>
           {message}
+        </Text>
+      ) : null}
+
+      {/* A greyed picker with no reason is the weakest form of "block the impossible
+          option" (§4.11.6), so say why it is out. */}
+      {kindOptions.length === 0 && !env.ctrl.bulkPending ? (
+        <Text variant="caption" tone="muted" testID={`${id}-kind-hint`}>
+          {t('import:review.bulk.kind_mixed_signs')}
         </Text>
       ) : null}
 

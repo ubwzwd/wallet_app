@@ -202,7 +202,12 @@ export default function ImportBatchScreen(): React.JSX.Element {
    */
   const jumpTo = React.useCallback(
     (rowNo: number | null): void => {
-      if (rowNo === null) return;
+      // A failure nobody could pin on a row must *clear* the previous highlight rather than
+      // leave an innocent earlier row painted as the culprit — no widening, no new seq.
+      if (rowNo === null) {
+        setHighlight(null);
+        return;
+      }
       selection.setSlice('all');
       setHighlight((prev) => ({ rowNo, seq: (prev?.seq ?? 0) + 1 }));
     },

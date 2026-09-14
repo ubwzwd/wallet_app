@@ -71,14 +71,28 @@ export function ReviewCards({
   // than a plain one, so a nominal row height would not do).
   const scroller = React.useRef<ScrollView | null>(null);
   const cardTops = React.useRef(new Map<number, number>());
+  // A jump widens the slice in the same commit, so the card it points at is usually
+  // mounting for the first time and has not reported a layout yet when this effect runs.
+  // Remember the request instead of dropping it; the card's own `onLayout` serves it.
+  const pendingScroll = React.useRef<number | null>(null);
+  const scrollToTop = React.useCallback((top: number): void => {
+    scroller.current?.scrollTo({ y: Math.max(0, top - space['2']), animated: true });
+  }, []);
   const highlightSeq = highlight?.seq ?? 0;
   React.useEffect(() => {
-    if (highlightRowNo === null) return;
+    if (highlightRowNo === null) {
+      pendingScroll.current = null;
+      return;
+    }
     const top = cardTops.current.get(highlightRowNo);
-    if (top === undefined) return;
-    scroller.current?.scrollTo({ y: Math.max(0, top - space['2']), animated: true });
+    if (top === undefined) {
+      pendingScroll.current = highlightRowNo;
+      return;
+    }
+    pendingScroll.current = null;
+    scrollToTop(top);
     // `highlightSeq` is the point: the same row twice is a new request to scroll to it.
-  }, [highlightRowNo, highlightSeq]);
+  }, [highlightRowNo, highlightSeq, scrollToTop]);
 
   return (
     <ScrollView
@@ -97,9 +111,14 @@ export function ReviewCards({
         <Pressable
           key={row.id}
           testID={`${id}-row-${row.row_no}`}
-          onLayout={(event: LayoutChangeEvent) =>
-            cardTops.current.set(row.row_no, event.nativeEvent.layout.y)
-          }
+          onLayout={(event: LayoutChangeEvent) => {
+            const y = event.nativeEvent.layout.y;
+            cardTops.current.set(row.row_no, y);
+            if (pendingScroll.current === row.row_no) {
+              pendingScroll.current = null;
+              scrollToTop(y);
+            }
+          }}
           onLongPress={() => selection.toggle(row, index)}
           accessibilityRole="button"
           accessibilityLabel={t('import:review.select_row', { row: row.row_no })}
