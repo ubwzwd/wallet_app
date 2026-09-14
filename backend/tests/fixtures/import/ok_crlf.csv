@@ -1,0 +1,6 @@
+# version: 2026-09-10
+date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref
+2026-08-03,-128.00,CNY,expense,,,盒马鲜生,,groceries,fresh_food,p1:5
+2026-08-09,-68.00,CNY,expense,,,"星巴克（国贸店）","换行
+在引号里",food,snacks_drinks,p1:8
+2026-08-15,6200.00,CNY,income,,,ACME,,salary,base_salary,p1:9
