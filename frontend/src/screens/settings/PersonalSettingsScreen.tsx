@@ -15,10 +15,12 @@ import type { User } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { applyLanguage, useLang, type Lang } from '@/i18n';
 import { formatDateTime } from '@/i18n/format';
+import { useTopBar } from '@/navigation';
 import { useCurrencies, useMe, useUpdateMe } from '@/queries';
 import { useAuth, useOptionalLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useTheme, type ThemePref } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
 import {
   Button,
   Card,
@@ -46,6 +48,7 @@ function emailPrefix(email: string): string {
 export default function PersonalSettingsScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
+  const wide = useIsWide();
   const router = useRouter();
   const { logout, setUser } = useAuth();
   const theme = useTheme();
@@ -53,6 +56,9 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   const ledgerContext = useOptionalLedgerContext();
   const me = useMe();
   const update = useUpdateMe();
+  // 04 §1.4: the narrow shell's top bar is the title (`AppShell` renders it for a page
+  // outside any ledger too), so the page only prints one on a wide layout.
+  useTopBar(t('settings:title'));
 
   const user: User | undefined = me.data;
   const serverName = user?.display_name ?? '';
@@ -128,9 +134,11 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
 
   return (
     <Page>
-      <Text variant="title" accessibilityRole="header">
-        {t('settings:title')}
-      </Text>
+      {wide ? (
+        <Text variant="title" accessibilityRole="header" testID="personal-settings-title">
+          {t('settings:title')}
+        </Text>
+      ) : null}
 
       <Card variant="outlined" style={{ gap: space['3'] }} testID="profile-card">
         <Text variant="heading" accessibilityRole="header">

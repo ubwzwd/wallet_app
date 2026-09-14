@@ -13,6 +13,8 @@ import type { FinanceSource } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
+import { TopBarProvider, TopBarSurface } from '@/navigation';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider, LedgerProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
@@ -44,7 +46,12 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
       <ThemeProvider initialPref="light">
         <AuthProvider queryClient={queryClient}>
           <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
-            {children}
+            {/* The real narrow chrome: the page title is published to it, not printed
+                on the page (04 §1.4). */}
+            <TopBarProvider>
+              <TopBarSurface onPressLedger={() => {}} />
+              {children}
+            </TopBarProvider>
           </LedgerProvider>
           <ToastHost />
           <ConfirmHost
@@ -114,6 +121,8 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  // A `useIsWide` spy from a layout test must not decide the next test's branch.
+  jest.restoreAllMocks();
 });
 
 test('a new account defaults to the ledger base currency and posts what was typed', async () => {
@@ -285,4 +294,20 @@ test('an empty opening balance submits the documented default of 0', async () =>
 
   await waitFor(() => expect(api.mock.history.post.length).toBe(1));
   expect(JSON.parse(api.mock.history.post[0].data as string).opening_balance).toBe('0.0000');
+});
+
+// ----------------------------------------------------------- the title (04 §1.4)
+
+test('the narrow layout puts the title in the top bar and not on the page as well', async () => {
+  renderForm(NEW_URL);
+
+  expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('新建账户');
+  expect(screen.queryByTestId('source-form-title')).toBeNull();
+});
+
+test('the wide layout has no top bar, so the page carries the title itself', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  renderForm(NEW_URL);
+
+  expect(await screen.findByTestId('source-form-title')).toHaveTextContent('新建账户');
 });

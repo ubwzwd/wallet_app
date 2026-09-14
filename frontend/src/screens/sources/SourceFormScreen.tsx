@@ -20,6 +20,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 
+import { isApiClientError } from '@/api/errors';
 import type { FinanceSource, FinanceSourceUpdate, Money, SourceType } from '@/api/types';
 import { addMoney, formatMoney4, normalizeAmountInput, parseMoney, subMoney } from '@/domain/money';
 import { sumSources } from '@/domain/networth';
@@ -32,9 +33,11 @@ import {
 import { errorMessage } from '@/i18n/errorCodes';
 import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
+import { useTopBar } from '@/navigation';
 import { useCreateSource, useCurrencies, useSource, useSources, useUpdateSource } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
+import { useIsWide } from '@/theme/useBreakpoint';
 import {
   AmountField,
   Button,
@@ -96,6 +99,7 @@ export default function SourceFormScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
   const router = useRouter();
+  const wide = useIsWide();
   const { ledgerId, baseCurrency } = useLedgerContext();
   const params = useLocalSearchParams<{ sourceId?: string | string[] }>();
   const sourceId = Array.isArray(params.sourceId) ? params.sourceId[0] : params.sourceId;
@@ -247,13 +251,7 @@ export default function SourceFormScreen(): React.JSX.Element {
         onError: (e) => {
           // A 409 `stale_update` is the global handler's business (04 §3.8): it has already
           // refetched the row and warned; the effect above merges it into the form.
-          if (
-            e &&
-            typeof e === 'object' &&
-            (e as { code?: unknown }).code === 'stale_update'
-          ) {
-            return;
-          }
+          if (isApiClientError(e) && e.code === 'stale_update') return;
           toast.error(errorMessage(t, e));
         },
       });
@@ -264,13 +262,19 @@ export default function SourceFormScreen(): React.JSX.Element {
   const submit = handleSubmit((values) => void onSubmit(values));
   const busy = create.isPending || update.isPending;
   const title = isEdit ? t('source:form.edit_title') : t('source:form.new_title');
+  // 04 §1.4: the narrow layout's top bar carries the title, so the page does not repeat it.
+  useTopBar(title);
+
+  const heading = wide ? (
+    <Text variant="title" accessibilityRole="header" testID="source-form-title">
+      {title}
+    </Text>
+  ) : null;
 
   if (isEdit && detail.isPending) {
     return (
       <Page testID="source-form-screen">
-        <Text variant="title" accessibilityRole="header">
-          {title}
-        </Text>
+        {heading}
         <Skeleton variant="card" testID="source-form-skeleton" />
       </Page>
     );
@@ -279,9 +283,7 @@ export default function SourceFormScreen(): React.JSX.Element {
   if (isEdit && detail.isError) {
     return (
       <Page testID="source-form-screen">
-        <Text variant="title" accessibilityRole="header">
-          {title}
-        </Text>
+        {heading}
         <EmptyState
           icon="alert-triangle"
           title={t('source:form.load_error')}
@@ -296,9 +298,7 @@ export default function SourceFormScreen(): React.JSX.Element {
 
   return (
     <Page testID="source-form-screen">
-      <Text variant="title" accessibilityRole="header">
-        {title}
-      </Text>
+      {heading}
       <View style={{ gap: space['3'], maxWidth: 520, width: '100%' }}>
         <Controller
           control={control}

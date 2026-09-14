@@ -7,6 +7,7 @@ import React from 'react';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import i18next from 'i18next';
 
+import { AppShell } from '@/navigation';
 import { PREF_NAMES, getPref, setPref } from '@/utils/prefs';
 import {
   makeUser,
@@ -99,7 +100,9 @@ test('picking 中文 switches i18n and persists `language: "zh"`', async () => {
 
   await waitFor(() => expect(patchBodies()).toEqual([{ language: 'zh' }]));
   expect(i18next.language).toBe('zh');
-  expect(await screen.findByText('个人设置')).toBeTruthy();
+  // The page itself is in Chinese again — its title lives in the narrow top bar (04 §1.4),
+  // so a section heading is what proves it here.
+  expect(await screen.findByText('关于我')).toBeTruthy();
 });
 
 test('"follow the system" sends an explicit null', async () => {
@@ -173,4 +176,31 @@ test('re-picking the language already in use sends nothing', async () => {
   });
 
   expect(patchBodies()).toEqual([]);
+});
+
+// ----------------------------------------------------------- the title (04 §1.4)
+
+test('the narrow shell carries the title, so the page does not print it twice', async () => {
+  // `/settings` sits outside any ledger, so `AppShell` gives it the plain top bar — the
+  // page publishes its title to it rather than heading the page with it.
+  mockGet('/me', makeUser());
+  await renderWithProviders(
+    <AppShell>
+      <PersonalSettingsScreen />
+    </AppShell>,
+    { auth: { status: 'authenticated', user: makeUser() }, wide: false },
+  );
+
+  expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('个人设置');
+  expect(screen.queryByTestId('personal-settings-title')).toBeNull();
+});
+
+test('the wide layout has no top bar, so the page carries the title itself', async () => {
+  mockGet('/me', makeUser());
+  await renderWithProviders(<PersonalSettingsScreen />, {
+    auth: { status: 'authenticated', user: makeUser() },
+    wide: true,
+  });
+
+  expect(await screen.findByTestId('personal-settings-title')).toHaveTextContent('个人设置');
 });
