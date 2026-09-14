@@ -12,6 +12,8 @@ import type { FinanceSource } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
 import { formatDate, formatMoney } from '@/i18n/format';
+import { TopBarProvider, TopBarSurface } from '@/navigation';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider, LedgerProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
@@ -45,7 +47,12 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
       <ThemeProvider initialPref="light">
         <AuthProvider queryClient={queryClient}>
           <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
-            {children}
+            {/* The real narrow chrome: the page title is published to it, not printed
+                on the page (04 §1.4). */}
+            <TopBarProvider>
+              <TopBarSurface onPressLedger={() => {}} />
+              {children}
+            </TopBarProvider>
           </LedgerProvider>
           <ToastHost />
           <ConfirmHost
@@ -142,6 +149,8 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  // A `useIsWide` spy from a layout test must not decide the next test's branch.
+  jest.restoreAllMocks();
 });
 
 test('accounts are grouped into the four types, each with its converted subtotal', async () => {
@@ -307,4 +316,22 @@ test('a delete refused with source_has_transactions explains that archiving is t
   ).toBe('这个账户下有交易，只能归档');
   // The global error toast carried the server's copy as well (04 §3.9).
   await waitFor(() => expect(handlers.notify).toHaveBeenCalledWith('error', expect.any(String), expect.anything()));
+});
+
+// ----------------------------------------------------------- the title (04 §1.4)
+
+test('the narrow layout publishes the title to the top bar instead of printing it twice', async () => {
+  seedList();
+  renderList();
+
+  expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('账户');
+  expect(screen.queryByTestId('sources-title')).toBeNull();
+});
+
+test('the wide layout carries the title on the page', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  seedList();
+  renderList();
+
+  expect(await screen.findByTestId('sources-title')).toHaveTextContent('账户');
 });

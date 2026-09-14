@@ -10,11 +10,10 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import { ONBOARDING_HINT_PREF } from '@/screens/auth/RegisterScreen';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Button, Card, Icon, Text } from '@/ui';
-import { getPref, setPref } from '@/utils/prefs';
+import { PREF_NAMES, getPref, setPref } from '@/utils/prefs';
 
 export interface OnboardingHintProps {
   /** Unarchived accounts in this ledger; `undefined` while the list is still loading. */
@@ -33,7 +32,7 @@ export function OnboardingHint({
 
   React.useEffect(() => {
     let alive = true;
-    void getPref(ONBOARDING_HINT_PREF).then((value) => {
+    void getPref(PREF_NAMES.onboardingHint).then((value) => {
       if (alive) setPrefValue(value);
     });
     return () => {
@@ -44,7 +43,7 @@ export function OnboardingHint({
   // Spent on the first press, whichever one it is: the card never comes back.
   const spend = React.useCallback((): void => {
     setDismissed(true);
-    void setPref(ONBOARDING_HINT_PREF, null);
+    void setPref(PREF_NAMES.onboardingHint, null);
   }, []);
 
   if (dismissed || pref !== '1' || sourceCount !== 0) return null;

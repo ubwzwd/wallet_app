@@ -16,12 +16,14 @@ import { Pressable, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
+import { isApiClientError } from '@/api/errors';
 import type { FinanceSource } from '@/api/types';
-import { absMoney } from '@/domain/money';
+import { absMoney, isZeroMoney } from '@/domain/money';
 import { SOURCE_TYPE_ORDER, sumSources } from '@/domain/networth';
 import { routes } from '@/domain/routes';
 import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
+import { useTopBar } from '@/navigation';
 import { useDeleteSource, useSources } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { density, radius, space } from '@/theme/tokens';
@@ -48,14 +50,6 @@ const SKELETON_CARDS = 3;
 /** The server's refusal when an account still has transactions (decision §3). */
 const HAS_TRANSACTIONS = 'source_has_transactions';
 
-function errorCodeOf(e: unknown): string | null {
-  if (e && typeof e === 'object' && 'code' in e) {
-    const code = (e as { code: unknown }).code;
-    if (typeof code === 'string') return code;
-  }
-  return null;
-}
-
 export default function SourcesScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
@@ -63,6 +57,9 @@ export default function SourcesScreen(): React.JSX.Element {
   const router = useRouter();
   const wide = useIsWide();
   const { ledgerId, baseCurrency } = useLedgerContext();
+  // The narrow layout carries the page title in the top bar (04 §1.4); the wide one has
+  // no top bar, so there the heading below is the only one.
+  useTopBar(t('source:list.title'));
   const params = useLocalSearchParams<{ include_archived?: string | string[] }>();
   const rawFlag = Array.isArray(params.include_archived)
     ? params.include_archived[0]
@@ -102,7 +99,7 @@ export default function SourcesScreen(): React.JSX.Element {
       } catch (e) {
         // The global toast already carried the error copy (04 §3.9); the row additionally
         // explains the one failure the user can act on — archive it instead (decision §3).
-        if (errorCodeOf(e) === HAS_TRANSACTIONS) setDeleteBlockedId(source.id);
+        if (isApiClientError(e) && e.code === HAS_TRANSACTIONS) setDeleteBlockedId(source.id);
         return;
       }
       setDeleteBlockedId(null);
@@ -113,9 +110,13 @@ export default function SourcesScreen(): React.JSX.Element {
 
   const header = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'], flexWrap: 'wrap' }}>
-      <Text variant="title" accessibilityRole="header" style={{ flex: 1 }}>
-        {t('source:list.title')}
-      </Text>
+      {wide ? (
+        <Text variant="title" accessibilityRole="header" style={{ flex: 1 }} testID="sources-title">
+          {t('source:list.title')}
+        </Text>
+      ) : (
+        <View style={{ flex: 1 }} />
+      )}
       <Button
         testID="sources-new"
         label={t('source:list.new_button')}
@@ -189,7 +190,7 @@ export default function SourcesScreen(): React.JSX.Element {
           testID="sources-liabilities"
           label={t('source:list.liabilities')}
           value={formatMoney(absMoney(summary.liabilities), baseCurrency, lang)}
-          tone={summary.liabilities === '0.0000' ? 'primary' : 'expense'}
+          tone={isZeroMoney(summary.liabilities) ? 'primary' : 'expense'}
           style={{ flex: wide ? 1 : undefined }}
         />
         <StatTile

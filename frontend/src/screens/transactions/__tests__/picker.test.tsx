@@ -8,7 +8,7 @@
 import React from 'react';
 import { Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -30,7 +30,7 @@ import {
   type MockApi,
 } from '@/test';
 
-import { TransactionPicker } from '../TransactionPicker';
+import { PICKER_Q_DEBOUNCE_MS, TransactionPicker } from '../TransactionPicker';
 
 let queryClient: QueryClient;
 let api: MockApi;
@@ -83,10 +83,15 @@ const ROUTES = {
   'l/[ledgerId]/index': Harness,
 };
 
+function listRequests(): Array<{ url?: string; params?: Record<string, unknown> }> {
+  return api.mock.history.get.filter((r) => (r.url ?? '').endsWith('/transactions')) as Array<{
+    url?: string;
+    params?: Record<string, unknown>;
+  }>;
+}
+
 function listRequest(): { url?: string; params?: Record<string, unknown> } | undefined {
-  return api.mock.history.get.find((r) => (r.url ?? '').endsWith('/transactions')) as
-    | { url?: string; params?: Record<string, unknown> }
-    | undefined;
+  return listRequests()[0];
 }
 
 beforeEach(async () => {
@@ -153,7 +158,15 @@ test('filterRows narrows the list on the client', async () => {
 test('picking a row hands the transaction back and closes', async () => {
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
 
-  fireEvent.press(await screen.findByTestId(`tx-picker-row-${CHEAP.id}`));
+  const row = await screen.findByTestId(`tx-picker-row-${CHEAP.id}`);
+  // 04 §6.6: a row is a touch target, never a 32px-tall line of text.
+  const style = Object.assign(
+    {},
+    ...[row.props.style].flat(Infinity).filter((part) => part && typeof part === 'object'),
+  ) as { minHeight?: number };
+  expect(style.minHeight).toBeGreaterThanOrEqual(44);
+
+  fireEvent.press(row);
 
   expect(onSelect).toHaveBeenCalledTimes(1);
   expect(onSelect.mock.calls[0][0].id).toBe(CHEAP.id);
@@ -172,6 +185,33 @@ test('the editable filters go into the request; the fixed one stays put', async 
     expect(withQuery).toHaveLength(1);
     expect(withQuery[0].params).toMatchObject({ kind: ['expense'] });
   });
+});
+
+test('typing three characters costs one request, not three', async () => {
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+
+  const box = await screen.findByTestId('tx-picker-search');
+  // The unfiltered candidate list; everything after this is the search box's doing.
+  await waitFor(() => expect(listRequests()).toHaveLength(1));
+
+  fireEvent.changeText(box, '京');
+  fireEvent.changeText(box, '京东');
+  fireEvent.changeText(box, '京东超');
+
+  // The box keeps up with every keystroke, the request does not: nothing has gone out yet.
+  expect(box.props.value).toBe('京东超');
+  expect(listRequests()).toHaveLength(1);
+
+  // One request, once the typing stops — and it carries the whole word, not a prefix.
+  await waitFor(() => expect(listRequests()).toHaveLength(2));
+  expect(listRequests()[1].params?.q).toBe('京东超');
+  expect(listRequests().some((r) => r.params?.q === '京' || r.params?.q === '京东')).toBe(false);
+
+  // Nothing trails in afterwards either.
+  await act(async () => {
+    jest.advanceTimersByTime(PICKER_Q_DEBOUNCE_MS * 4);
+  });
+  expect(listRequests()).toHaveLength(2);
 });
 
 test('a picker that is only mounted, not shown, asks the server for nothing', async () => {

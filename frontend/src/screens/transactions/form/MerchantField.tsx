@@ -131,5 +131,11 @@ const styles = StyleSheet.create({
     paddingVertical: space['1'],
   },
   heading: { paddingHorizontal: space['3'], paddingVertical: space['1'] },
-  row: { paddingHorizontal: space['3'], paddingVertical: space['2'] },
+  // 04 §6.6: no touch target smaller than 44×44.
+  row: {
+    paddingHorizontal: space['3'],
+    paddingVertical: space['2'],
+    minHeight: 44,
+    justifyContent: 'center',
+  },
 });

@@ -32,12 +32,6 @@ import { registerSchema, type RegisterFormValues, validationMessage } from './sc
 
 const DEFAULT_RETRY_AFTER = 30;
 
-/**
- * Preference the home page reads to show its one-shot "add an account first" card
- * (04 §4.2). `prefs` accepts any name; this one is written only here.
- */
-export const ONBOARDING_HINT_PREF = 'onboarding_hint';
-
 /** Decision §2 / 04 §4.2: guess from the device language, `zh-*` → CNY, else USD. */
 export function guessBaseCurrency(deviceLang: string | null, codes: readonly string[]): string {
   const guess = deviceLang && deviceLang.toLowerCase().startsWith('zh') ? 'CNY' : 'USD';
@@ -93,7 +87,7 @@ export default function RegisterScreen(): React.JSX.Element {
           password: values.password,
           base_currency: values.base_currency,
         });
-        await setPref(ONBOARDING_HINT_PREF, '1');
+        await setPref(PREF_NAMES.onboardingHint, '1');
         // '/' is the landing redirect, which sends the user into the ledger the server
         // just created for them (decision §2).
         router.replace('/' as Href);

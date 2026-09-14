@@ -79,6 +79,8 @@
     "summary_rate_missing_other": "{{count}} transactions have no exchange rate yet and aren't included",
     "count_one": "{{count}} transaction",
     "count_other": "{{count}} transactions",
+    "count_loaded_one": "{{loaded}} of {{count}} transaction loaded",
+    "count_loaded_other": "{{loaded}} of {{count}} transactions loaded",
     "rate_missing": "No rate yet",
     "badge": {
       "repayment": "Repayment",
@@ -156,6 +158,7 @@
     "refund_only_refundable_toggle": "Only show rows with a refundable balance",
     "impact_preview": "{{label}} {{before}} → {{after}}",
     "impact_this_month": "{{category}} this month",
+    "copy_transfer_pair_unsupported": "Only the kind, subtype and note were copied: the other leg is not part of this entry, so pick both accounts and amounts again",
     "from_import": "This one came from import #{{batch}}",
     "archived_source_hint": "This account is archived: the entry can still be edited, but it can't be moved to another archived account",
     "unlink_refund_first": "Unlink the original expense first, then the type can change",
@@ -174,7 +177,10 @@
       "amount_in": "Amount received",
       "currency_in": "Currency received",
       "to_source_id": "To account",
-      "subtype": "Subtype"
+      "subtype": "Subtype",
+      "counterparty": "Counterparty",
+      "direction": "Direction",
+      "refund_of": "Linked original expense"
     },
     "keyboard_hint_title": "Keyboard shortcuts",
     "keyboard_hint": {

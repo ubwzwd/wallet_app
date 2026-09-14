@@ -14,6 +14,8 @@ export const PREF_NAMES = {
   lang: 'lang',
   theme: 'theme',
   categories: 'categories',
+  /** Written by 注册 and spent by the home page's one-shot card (04 §4.2). */
+  onboardingHint: 'onboarding_hint',
   lastSource: (ledgerId: string) => `last_source:${ledgerId}`,
   recentMerchants: (ledgerId: string) => `recent_merchants:${ledgerId}`,
   recentCategories: (ledgerId: string) => `recent_categories:${ledgerId}`,

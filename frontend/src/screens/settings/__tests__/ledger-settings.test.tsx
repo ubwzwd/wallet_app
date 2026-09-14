@@ -7,6 +7,7 @@ import React from 'react';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import type { Ledger, LedgerDetail, LedgerInvite, LedgerMember } from '@/api/types';
+import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { LedgerProvider } from '@/store';
 import {
   LEDGER_ID,
@@ -349,4 +350,36 @@ test('a failed rename is visible even though the card renders no error of its ow
 
   await waitFor(() => expect(handlers.notify).toHaveBeenCalled());
   expect(handlers.notify.mock.calls[0]?.[0]).toBe('error');
+});
+
+// ----------------------------------------------------------- the title (04 §1.4)
+
+test('the narrow layout publishes the title to the top bar and drops the page heading', async () => {
+  mockGet(`/ledgers/${LEDGER_ID}`, makeDetail());
+  mockGet(`/ledgers/${LEDGER_ID}/members`, { items: [makeMember()], total: 1 });
+  await renderWithProviders(
+    <LedgerProvider ledgerId={LEDGER_ID} ledgers={[makeLedger({ role: 'owner' })]}>
+      <TopBarProvider>
+        <TopBarSurface onPressLedger={() => {}} />
+        <LedgerSettingsScreen />
+      </TopBarProvider>
+    </LedgerProvider>,
+    { auth: { status: 'authenticated', user: makeUser() }, wide: false },
+  );
+
+  expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('账本设置');
+  expect(screen.queryByTestId('ledger-settings-title')).toBeNull();
+});
+
+test('the wide layout has no top bar, so the page carries the title itself', async () => {
+  mockGet(`/ledgers/${LEDGER_ID}`, makeDetail());
+  mockGet(`/ledgers/${LEDGER_ID}/members`, { items: [makeMember()], total: 1 });
+  await renderWithProviders(
+    <LedgerProvider ledgerId={LEDGER_ID} ledgers={[makeLedger({ role: 'owner' })]}>
+      <LedgerSettingsScreen />
+    </LedgerProvider>,
+    { auth: { status: 'authenticated', user: makeUser() }, wide: true },
+  );
+
+  expect(await screen.findByTestId('ledger-settings-title')).toHaveTextContent('账本设置');
 });

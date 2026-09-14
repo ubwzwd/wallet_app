@@ -8,8 +8,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useTopBar } from '@/navigation';
 import { useLedger, useMembers } from '@/queries';
 import { useLedgerContext } from '@/store';
+import { useIsWide } from '@/theme/useBreakpoint';
 import { Page, Text } from '@/ui';
 
 import { DangerZone } from './DangerZone';
@@ -19,7 +21,10 @@ import { MembersSection } from './MembersSection';
 
 export default function LedgerSettingsScreen(): React.JSX.Element {
   const { t } = useTranslation();
+  const wide = useIsWide();
   const { ledgerId, ledger, myRole } = useLedgerContext();
+  // 04 §1.4: on a narrow layout the top bar is the title; the page must not repeat it.
+  useTopBar(t('ledger:settings.title'));
   const detail = useLedger(ledgerId);
   const membersQuery = useMembers(ledgerId);
 
@@ -30,9 +35,11 @@ export default function LedgerSettingsScreen(): React.JSX.Element {
 
   return (
     <Page testID="ledger-settings-screen">
-      <Text variant="title" accessibilityRole="header">
-        {t('ledger:settings.title')}
-      </Text>
+      {wide ? (
+        <Text variant="title" accessibilityRole="header" testID="ledger-settings-title">
+          {t('ledger:settings.title')}
+        </Text>
+      ) : null}
 
       <LedgerBasics ledgerId={ledgerId} detail={detail.data} canEdit={isOwner} />
 

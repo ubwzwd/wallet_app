@@ -8,8 +8,10 @@
  *
  * Two of the numbers on screen are deliberately *not* computed from the rows: the bottom
  * summary comes from the response's `summary` (the whole filtered result, not this page),
- * and the row count is the server's `total` minus the pairs this page merged, because
- * "共 N 笔" counts a two-leg transfer once (decisions §14.52 A14 / B15).
+ * and the count is the response's `total` as it stands — the number of entries the filters
+ * match on the server. Subtracting the pairs merged *on this page* (the two legs of a
+ * transfer render as one row) would make the count drift as more pages arrive, so the
+ * header counts entries, and the narrow layout says how many of them are loaded.
  */
 import React from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
@@ -95,12 +97,11 @@ export default function TransactionsScreen(): React.JSX.Element {
   const rows: ListRow[] = React.useMemo(() => mergeTransferRows(items), [items]);
   const groups: DayGroupData[] = React.useMemo(() => groupByDay(rows), [rows]);
 
+  // The whole filtered result, straight from the server: a number that does not move when
+  // another page arrives. `loaded` is what the infinite list has in hand so far.
   const total = pages[0]?.total ?? 0;
+  const loaded = items.length;
   const summary: TransactionSummary | undefined = pages[pages.length - 1]?.summary;
-  // A merged pair is one row but two `items`, so the server's total over-counts by exactly
-  // the number of pairs that were merged on the pages we have.
-  const mergedPairs = rows.filter((row) => row.kind === 'pair').length;
-  const rowCount = Math.max(0, total - mergedPairs);
 
   const sourceName = React.useCallback(
     (sid: Uuid): string =>
@@ -182,7 +183,9 @@ export default function TransactionsScreen(): React.JSX.Element {
           </Text>
         ) : null}
         <Text variant="caption" tone="secondary" mono testID="tx-count">
-          {t('transaction:list.count', { count: rowCount })}
+          {wide
+            ? t('transaction:list.count', { count: total })
+            : t('transaction:list.count_loaded', { loaded, count: total })}
         </Text>
         {summary ? (
           <Text variant="caption" tone="muted" mono testID="tx-summary-line">

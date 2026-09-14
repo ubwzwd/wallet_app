@@ -137,6 +137,9 @@ export function TransactionForm({
   const { form, kind, setKind, sources, sourcesLoading, values } = ctrl;
   const refund = useRefundOrigin(ctrl);
   const [helpOpen, setHelpOpen] = React.useState(false);
+  // An overlay owns the keyboard while it is up. Every overlay this form puts up reports
+  // its own open state here, and the one shared shortcut switch reads the lot.
+  const overlayOpen = helpOpen || refund.pickerOpen;
 
   const submit = (again: boolean): void => {
     // `AmountField` only evaluates `12.5+8.8*2` when it loses focus, so ⌘S with the caret
@@ -160,9 +163,7 @@ export function TransactionForm({
           setKind(next);
         },
     onHelp: () => setHelpOpen(true),
-    // An overlay owns the keyboard while it is up: `Esc` there means "close me", and the
-    // digits belong to whatever it is showing — not to the tab row behind it.
-    enabled: !submitting && !helpOpen && !refund.pickerOpen,
+    enabled: !submitting && !overlayOpen,
   });
 
   const shortcuts: Shortcut[] = [
@@ -401,6 +402,10 @@ export function ConflictBanner({
       return category ? categoryName(category, ctrl.lang) : value;
     }
     if (field === 'subtype') return t(`transaction:transfer.subtype.${value}`);
+    if (field === 'direction') return t(`transaction:transfer.role.${value}`);
+    // A refund link is an id with no copy of its own: "已关联" is all it can say, and the
+    // `null` case above has already answered with 「无」.
+    if (field === 'refund_of') return t('transaction:picker.linked_title');
     return value;
   }
 
@@ -479,10 +484,24 @@ export default function TransactionFormScreen(): React.JSX.Element {
   React.useEffect(() => {
     if (copied.current || !copyData) return;
     copied.current = true;
-    // One leg of a two-leg transfer carries no trace of the other side (its account, its
-    // amount, its currency all live on the sibling leg), so there is nothing here to copy
-    // into a two-leg form. The blank form stands instead of a half-filled one.
-    if (copyData.kind === 'transfer' && copyData.transfer_pair_id !== null) return;
+    // One leg of a two-leg transfer carries no trace of the other side: the receiving
+    // account, its amount and its currency all live on the sibling leg. What this leg does
+    // know — the shape, the subtype and the note — is still worth carrying over, and the
+    // warning says out loud which half has to be picked again (04 §4.6.4, §4.7).
+    if (copyData.kind === 'transfer' && copyData.transfer_pair_id !== null) {
+      ctrl.form.reset({
+        ...ctrl.form.getValues(),
+        kind: 'transfer',
+        external: false,
+        subtype: copyData.transfer_subtype ?? 'plain',
+        note: copyData.note ?? '',
+        occurred_at: todayLocalIso(),
+      });
+      router.setParams({ kind: 'transfer' });
+      setFocusKey((n) => n + 1);
+      toast.warning(t('transaction:form.copy_transfer_pair_unsupported'));
+      return;
+    }
     const magnitude = copyData.amount.startsWith('-')
       ? copyData.amount.slice(1)
       : copyData.amount;
@@ -509,7 +528,7 @@ export default function TransactionFormScreen(): React.JSX.Element {
     // The tab follows the copy, so the URL has to as well — browser back/forward reads it.
     router.setParams({ kind: copyData.kind });
     setFocusKey((n) => n + 1);
-  }, [copyData, ctrl.form, router]);
+  }, [copyData, ctrl.form, router, t]);
 
   const goBack = React.useCallback((): void => {
     if (next) {

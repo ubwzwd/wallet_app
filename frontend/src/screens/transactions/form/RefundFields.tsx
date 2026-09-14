@@ -81,13 +81,21 @@ export function useRefundOrigin(ctrl: TxFormController): RefundOriginState {
     if (inherited.current || alreadyHave || ctrl.mode !== 'create') return;
     if (!fetched || fetched.id !== refundOf) return;
     inherited.current = true;
+    // Nothing here is the user's own edit, so none of it may mark the form dirty — a
+    // prefill that did would make 「登记退款 → 返回」 ask about unsaved changes (04 §4.6.5).
     // Only into an empty category box: a tab switch may already have carried one along.
     if (form.getValues('category_l1') === null) {
-      form.setValue('category_l1', fetched.category_l1);
-      form.setValue('category_l2', fetched.category_l2);
+      form.setValue('category_l1', fetched.category_l1, { shouldDirty: false });
+      form.setValue('category_l2', fetched.category_l2, { shouldDirty: false });
     }
     // An explicit `?source_id=` is the caller's own instruction and outranks the original.
-    if (!ctrl.sourcePinned) ctrl.selectSource(fetched.source_id);
+    if (!ctrl.sourcePinned) {
+      // `ctrl.selectSource` is the user-facing picker's setter and dirties the form, so
+      // the account and its currency are written directly instead.
+      form.setValue('source_id', fetched.source_id, { shouldDirty: false });
+      const source = ctrl.sourceById(fetched.source_id);
+      if (source) form.setValue('currency', source.default_currency, { shouldDirty: false });
+    }
   }, [alreadyHave, ctrl, fetched, form, refundOf]);
 
   return {
