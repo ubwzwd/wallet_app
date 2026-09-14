@@ -69,10 +69,12 @@
     "bulk": {
       "set_category": "批量设分类",
       "set_kind": "批量设类型",
+      "kind_mixed_signs": "选中的行金额有正有负，批量改类型只能分开做",
       "set_currency": "批量设币种",
       "skip": "批量跳过",
       "unskip": "取消跳过",
       "mixed_kind_error": "第 {{row}} 行是{{kind}}行，和这个分类对不上，这一批没有改动",
+      "failed_row": "第 {{row}} 行没通过校验，这一批没有改动",
       "failed": "这一批没有改动，请检查选中的行"
     },
     "column": {

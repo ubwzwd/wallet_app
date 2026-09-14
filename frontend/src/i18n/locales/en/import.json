@@ -75,10 +75,12 @@
     "bulk": {
       "set_category": "Set category in bulk",
       "set_kind": "Set type in bulk",
+      "kind_mixed_signs": "The selected rows mix positive and negative amounts — set their type in separate batches",
       "set_currency": "Set currency in bulk",
       "skip": "Skip selected",
       "unskip": "Unskip selected",
       "mixed_kind_error": "Row {{row}} is a {{kind}} row and doesn't match this category — nothing in this batch was changed",
+      "failed_row": "Row {{row}} did not pass validation — nothing in this batch was changed",
       "failed": "Nothing in this batch was changed — check the selected rows"
     },
     "column": {

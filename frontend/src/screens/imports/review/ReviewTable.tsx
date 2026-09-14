@@ -33,11 +33,22 @@ const TEXT_COLUMNS = new Set(['date', 'amount', 'merchant', 'note']);
 const MERCHANT_MAX = 200;
 const NOTE_MAX = 500;
 
+/**
+ * A one-shot "look at this row" signal (04 §4.11.8).
+ *
+ * `seq` is what makes it one-shot: the same `rowNo` twice is a *new* request, so pressing
+ * "jump to the first one" again scrolls again instead of doing nothing.
+ */
+export interface ReviewHighlight {
+  rowNo: number;
+  seq: number;
+}
+
 export interface ReviewViewProps {
   env: ReviewEnv;
   selection: ReviewSelection;
   /** The row an error (or "jump to the first one") pointed at. */
-  highlightRowNo: number | null;
+  highlight: ReviewHighlight | null;
   /** `⌘/Ctrl + Enter` asks the screen's commit bar to submit. */
   onCommitRequest(): void;
   testID?: string;
@@ -46,7 +57,7 @@ export interface ReviewViewProps {
 export function ReviewTable({
   env,
   selection,
-  highlightRowNo,
+  highlight,
   onCommitRequest,
   testID,
 }: ReviewViewProps): React.JSX.Element {
@@ -287,6 +298,9 @@ export function ReviewTable({
     help: () => setHelpOpen(true),
   });
 
+  // The caller widens the slice to "all" before it highlights, so the row is normally
+  // here; a row that is genuinely gone (an id that no longer exists) simply does not scroll.
+  const highlightRowNo = highlight?.rowNo ?? null;
   const highlightIndex =
     highlightRowNo === null ? null : rows.findIndex((row) => row.row_no === highlightRowNo);
 
@@ -322,6 +336,7 @@ export function ReviewTable({
           setEditing(TEXT_COLUMNS.has(columns[pos.col].key) ? pos : null);
         }}
         scrollToRow={highlightIndex !== null && highlightIndex >= 0 ? highlightIndex : null}
+        scrollSignal={highlight?.seq ?? 0}
         emptyLabel={t('import:review.no_rows_in_slice')}
       />
 

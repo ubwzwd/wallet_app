@@ -2,7 +2,7 @@
  * The review table (04 §4.11, §8.4 cases 1–5, 8, 10, 11, 13, 14).
  */
 import React from 'react';
-import { Text as RNText } from 'react-native';
+import { ScrollView, Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
@@ -13,8 +13,10 @@ import { initI18n } from '@/i18n';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { AuthProvider, LedgerProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
+import { lightColors, space } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
+import { DATA_TABLE_ROW_HEIGHT } from '@/ui/DataTable';
 import {
   BATCH_ID,
   LEDGER_ID,
@@ -24,6 +26,7 @@ import {
   makeCurrencyList,
   makeImportBatch,
   makeImportCommitResult,
+  makeImportDeleteResult,
   makeImportRow,
   makeLedger,
   makeSource,
@@ -668,4 +671,142 @@ test('a failed edit on the phone shows the dot and the retry button on the card'
     expect(screen.queryByTestId('review-commit-block-failed')).toBeNull(),
   );
   expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBeFalsy();
+});
+
+// ------------------------------------ the commit refusal names its rows in the body (§5.43)
+
+test('a commit refused for one row jumps to it even when the slice on screen hides it', async () => {
+  const rows = [1, 2, 3, 4, 5, 6, 7].map((n) =>
+    row({ id: `row-${n}`, row_no: n, flags: n === 1 ? ['needs_review'] : [] }),
+  );
+  seed(rows);
+  // 03 §5.43 / 05 §4.3: the row numbers are an extension field of the error body; `detail`
+  // itself carries no number at all, so nothing else could point at row 7.
+  api.mock.onPost(apiUrl(`${BATCH_PATH}/commit`)).reply(400, {
+    detail: '这一行的转账配对不合法',
+    code: 'pair_invalid',
+    rows: [7],
+  });
+  renderReview();
+
+  // The user is looking at the flagged rows: row 7 is not rendered at all.
+  fireEvent.press(await screen.findByText('有标记 1'));
+  expect(await screen.findByTestId('review-table-row-row-1')).toBeTruthy();
+  expect(screen.queryByTestId('review-table-row-row-7')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+
+  // The slice widens to the whole batch and row 7 is the one painted as the problem.
+  const seven = await screen.findByTestId('review-table-row-row-7');
+  await waitFor(() =>
+    expect(seven.props.style.backgroundColor).toBe(lightColors['status.warning.bg']),
+  );
+  expect(screen.getByTestId('review-table-row-row-1').props.style.backgroundColor).not.toBe(
+    lightColors['status.warning.bg'],
+  );
+});
+
+test('the same refusal on a phone widens the slice and scrolls the card into view', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+  const rows = [1, 2, 3, 4, 5, 6, 7].map((n) => row({ id: `row-${n}`, row_no: n }));
+  seed(rows);
+  api.mock.onPost(apiUrl(`${BATCH_PATH}/commit`)).reply(400, {
+    detail: '这一行的转账配对不合法',
+    code: 'pair_invalid',
+    rows: [7],
+  });
+  renderReview();
+
+  // The phone opens on "uncategorized" whatever the counts say (04 §4.11.9), and every row
+  // here is categorized — so the card of row 7 is not even mounted.
+  expect(await screen.findByTestId('review-cards-empty')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+
+  const card = await screen.findByTestId('review-cards-row-7');
+  // Layout is never measured in a test renderer, so tell the list where the card landed —
+  // in the order a real device reports it: the card mounts (widened slice), *then* lays out.
+  // The very first jump has to scroll, which is the only order that ever happens in practice.
+  fireEvent(card, 'layout', { nativeEvent: { layout: { x: 0, y: 900, width: 320, height: 96 } } });
+  // A card flow that cannot scroll is a dead end on the one device where row 7 is furthest
+  // from the submit button (04 §4.11.8).
+  await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+  expect(scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 900 - space['2'])).toBe(
+    true,
+  );
+
+  // And once the card's position is known, pressing submit again scrolls again: the
+  // highlight's sequence number, not the row number, is what the effect reacts to.
+  scrollTo.mockClear();
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+  await waitFor(() =>
+    expect(
+      scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === 900 - space['2']),
+    ).toBe(true),
+  );
+});
+
+test('pressing submit twice on the wide grid scrolls to the refused row both times', async () => {
+  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+  const rows = [1, 2, 3, 4, 5, 6, 7].map((n) => row({ id: `row-${n}`, row_no: n }));
+  seed(rows);
+  api.mock.onPost(apiUrl(`${BATCH_PATH}/commit`)).reply(400, {
+    detail: '这一行的转账配对不合法',
+    code: 'pair_invalid',
+    rows: [7],
+  });
+  renderReview();
+
+  // Row 7 is the seventh row of the full slice, and the grid keeps one row of headroom
+  // above the target (`DataTable`).
+  const targetY = 6 * DATA_TABLE_ROW_HEIGHT - DATA_TABLE_ROW_HEIGHT;
+  const jumped = (): boolean =>
+    scrollTo.mock.calls.some((call) => (call[0] as { y: number }).y === targetY);
+
+  fireEvent.press(await screen.findByTestId('review-commit-submit'));
+  await waitFor(() => expect(jumped()).toBe(true));
+
+  // The same row again is a *new* request: the highlight's sequence number is in the
+  // scroll effect's dependencies precisely so that a repeated jump still moves the grid.
+  scrollTo.mockClear();
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+  await waitFor(() => expect(jumped()).toBe(true));
+});
+
+// ------------------------------- the committed panel undoes through the shared flow (§14.22)
+
+test('undoing from the committed panel dry-runs, double-taps and leaves for the history', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  api.mock
+    .onPost(apiUrl(`${BATCH_PATH}/commit`))
+    .reply(200, makeImportCommitResult({ created_transactions: 1, skipped_rows: 0 }));
+  api.mock
+    .onDelete(apiUrl(BATCH_PATH))
+    .replyOnce(
+      200,
+      makeImportDeleteResult({ deleted: false, would_delete_transactions: 1 }),
+    )
+    .onDelete(apiUrl(BATCH_PATH))
+    .replyOnce(200, makeImportDeleteResult({ deleted: true, deleted_transactions: 1 }));
+  const router = renderReview();
+
+  fireEvent.press(await screen.findByTestId('review-commit-submit'));
+  expect(await screen.findByTestId('import-committed')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('import-committed-undo'));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  // Same shared flow as the history list: ask with `dry_run` first, change nothing yet.
+  expect(api.mock.history.delete).toHaveLength(1);
+  expect(api.mock.history.delete[0].params).toEqual({ dry_run: true });
+
+  // `doubleTap`: the first press only arms the button.
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+  expect(api.mock.history.delete).toHaveLength(1);
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+
+  await waitFor(() => expect(api.mock.history.delete).toHaveLength(2));
+  expect(api.mock.history.delete[1].params).toBeUndefined();
+  // This screen's own URL 404s once the batch is gone, so it leaves for the list (§14.22).
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
 });
