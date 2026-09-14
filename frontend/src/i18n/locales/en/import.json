@@ -1,9 +1,4 @@
 {
-  "coming_soon": {
-    "title": "Import ships in the next phase",
-    "body": "Statement import isn't ready yet — it arrives in the next phase. Until then, add transactions by hand with “New transaction”.",
-    "back_home": "Back to home"
-  },
   "guide": {
     "title": "Import guide",
     "step1_title": "Install the skill in your ChatGPT or Claude",
@@ -83,7 +78,8 @@
       "set_currency": "Set currency in bulk",
       "skip": "Skip selected",
       "unskip": "Unskip selected",
-      "mixed_kind_error": "Row {{row}} is a {{kind}} row and doesn't match this category — nothing in this batch was changed"
+      "mixed_kind_error": "Row {{row}} is a {{kind}} row and doesn't match this category — nothing in this batch was changed",
+      "failed": "Nothing in this batch was changed — check the selected rows"
     },
     "column": {
       "row_no": "Row",
@@ -116,7 +112,8 @@
       "transfer_pick_single": "Pick one",
       "transfer_pick_none": "That one is already paired",
       "counterpart_source_label": "Counterparty account",
-      "counterpart_text_label": "Counterparty text"
+      "counterpart_text_label": "Counterparty text",
+      "transfer_already_paired": "The other side is already paired with something else"
     },
     "hint_duplicate_row": "There's an identical row in this batch (row {{row}})",
     "skip_row": "Skip",
@@ -130,7 +127,34 @@
     "keyboard_help_title": "Keyboard shortcuts",
     "save_state": { "saved": "Saved", "saving": "Saving", "failed": "Failed to save" },
     "edit_details": "Edit details",
-    "mobile_default_filter_hint": "On mobile, it's usually easiest to finish the uncategorized rows here and handle the rest on a computer"
+    "mobile_default_filter_hint": "On mobile, it's usually easiest to finish the uncategorized rows here and handle the rest on a computer",
+    "error_retry": "This import didn't load — try again",
+    "missing_value": "Missing",
+    "select_all": "Select all rows shown",
+    "select_row": "Select row {{row}}",
+    "pick_category": "Pick a category",
+    "pick_category_l2": "Pick a subcategory",
+    "no_rows_in_slice": "No rows in this slice",
+    "committing": "Committing this import…",
+    "block_incomplete_one": "{{count}} row still has no date, amount or currency",
+    "block_incomplete_other": "{{count}} rows still have no date, amount or currency",
+    "block_all_skipped": "Every row in this batch is skipped — keep at least one to submit",
+    "block_rows_loading": "{{rows}} more rows are still loading — you can submit once they are here",
+    "block_failed_saves": "{{rows}} edits failed to save (from row {{row}}) — retry them before submitting",
+    "keyboard": {
+      "rows": "Previous / next row",
+      "cells": "Previous / next cell",
+      "edit": "Edit this cell; while editing, save and move down",
+      "cancel": "Cancel the edit and restore the original; outside an edit, leave the table",
+      "select": "Select / deselect this row",
+      "extend": "Extend the selection",
+      "skip": "Skip / unskip this row",
+      "category": "Open this row's category picker",
+      "jump": "Previous / next uncategorized row",
+      "commit": "Commit the whole batch",
+      "help": "Show keyboard shortcuts"
+    },
+    "summary_flag": "⚑{{label}} {{count}}"
   },
   "committed": {
     "summary": "Imported {{created}} transactions ({{pairs}} paired transfers created together, {{paired}} paired with an existing transfer, {{refunds}} linked to an original expense, {{skipped}} rows skipped)",
@@ -143,7 +167,8 @@
     "undo_orphaned_refunds_other": "{{count}} refunds outside this batch point to expenses in it — after deleting, they will become refunds with no original expense (the refunds themselves are kept).",
     "undo_refunds_in_batch_one": "This batch has {{count}} refund — deleting it will restore the refundable balance on the expense it reduced.",
     "undo_refunds_in_batch_other": "This batch has {{count}} refunds — deleting them will restore the refundable balance on the expenses they reduced.",
-    "undo_success_toast": "Undone — deleted {{count}} transactions"
+    "undo_success_toast": "Undone — deleted {{count}} transactions",
+    "summary_fallback": "This import has been committed — {{rows}} rows"
   },
   "history": {
     "title": "Import history",

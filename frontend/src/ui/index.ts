@@ -13,6 +13,7 @@ export * from './Card';
 export * from './Checkbox';
 export * from './Chip';
 export * from './ConfirmDialog';
+export * from './DataTable';
 export * from './Divider';
 export * from './EmptyState';
 export * from './Icon';
@@ -31,6 +32,9 @@ export * from './Toast';
 export * from './AmountField';
 export * from './BarList';
 export * from './CategoryPicker';
+// Named, not `export *`: the panel module also owns `CategoryValue` / `orderByRecent`,
+// which `CategoryPicker` already re-exports above.
+export { CategoryPickerPanel, type CategoryPickerPanelProps } from './CategoryPickerPanel';
 export * from './CurrencyPicker';
 export * from './DateField';
 export * from './EventTimeline';
