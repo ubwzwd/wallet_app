@@ -1,118 +1,142 @@
-# Wallet App - Frontend
+# Wallet · 前端
 
-前端应用基于 **Expo** (React Native + Web) 构建，使用 TypeScript 和 NativeWind (Tailwind CSS)。
+Expo（React Native + Web）+ TypeScript + **Expo Router**。主力形态是 **Web PWA**，同一套代码也能跑在 iOS / Android 上（本阶段不发原生包）。
 
-## 🚀 快速开始
+设计文档在 `docs/target-design/`，其中 [`04-frontend.md`](../docs/target-design/04-frontend.md) 是前端规格，[`00-decisions.md`](../docs/target-design/00-decisions.md) 是最终裁定；两者冲突时以 `00` 为准。
 
-### 1. 安装依赖
+---
+
+## 快速开始
+
 ```bash
-npm install
+cd frontend
+npm ci          # 安装依赖（node_modules 不入库）
+npm run web     # 开发服务器，浏览器打开 http://localhost:8081
 ```
 
-### 2. 启动开发服务器
+后端默认指向 `http://localhost:8000/api/v1`，先把 `backend/` 跑起来（见 `backend/README.md`）。
 
-**Web 模式**（推荐用于 M1-M2 开发）：
-```bash
-npm run web
-```
-浏览器会自动打开 `http://localhost:8081`
+其它平台：
 
-**其他平台**：
 ```bash
-npm start        # 显示 QR 码，可在 Expo Go 应用扫码
+npm start        # 显示 QR 码，用 Expo Go 扫码
 npm run android  # Android 模拟器
 npm run ios      # iOS 模拟器（需要 macOS）
 ```
 
-## 📁 项目结构
+---
 
-```
+## 常用命令
+
+| 命令 | 作用 |
+|---|---|
+| `npm run web` | `expo start --web`，开发服务器 |
+| `npm run build:web` | `EXPO_PUBLIC_API_BASE_URL=/api/v1 expo export -p web` 产出 `dist/`，再用 `workbox generateSW` 生成 `dist/sw.js` |
+| `npm test` | Jest（`jest-expo` preset + Testing Library） |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run verify` | typecheck → test → build:web → `verify-pwa` → `verify-touch-targets`，提交前跑这一条 |
+
+单独跑某一组测试：`npx jest src/screens/home`。
+
+`dist/` 与 `node_modules/` 都不入库（见 `.gitignore`）。
+
+---
+
+## 配置
+
+只有一个构建期变量：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `EXPO_PUBLIC_API_BASE_URL` | `http://localhost:8000/api/v1` | 后端 API 根地址。生产构建由 `build:web` 设成 `/api/v1`（同源，Caddy 反代）。原生模拟器不能用相对地址，所以默认值是绝对的。 |
+
+`EXPO_PUBLIC_` 前缀的变量由 Expo 在打包时内联进 bundle，读取处在 `src/constants/config.ts`。**没有** `config.prod.ts` / `config.dev.ts` 这类会被覆盖的文件（04 §7.2）。
+
+---
+
+## 目录结构
+
+```text
 frontend/
+  app/                     # Expo Router 的路由树，每个文件都是薄壳：
+                           #   export { default } from '@/screens/<area>/<Screen>'
+    _layout.tsx            #   根布局：主题 / i18n / QueryClient / Auth / Toast / 确认框
+    (auth)/                #   登录、注册
+    (app)/                 #   需要登录的一切
+      ledgers/             #     账本列表 / 新建 / 加入
+      settings.tsx         #     个人设置
+      l/[ledgerId]/        #     账本内的所有页面（首页 / 交易 / 账户 / 导入 / 账本设置）
   src/
-    api/          # API 客户端和接口调用
-    components/   # 可复用的 UI 组件
-    screens/      # 页面组件
-    hooks/        # 自定义 React Hooks
-    store/        # 全局状态管理（如需要）
-    types/        # TypeScript 类型定义
-    utils/        # 工具函数
-    constants/    # 常量配置
-  App.tsx         # 应用入口
-  app.json        # Expo 配置
-  tailwind.config.js  # Tailwind CSS 配置
+    api/                   # axios 客户端、类型（对齐 03-backend-api.md §5）、各 xxxApi
+    constants/             # 构建期配置
+    domain/                # 纯函数：金额、四种 kind、转账、净值、路由、筛选序列化
+    i18n/                  # i18next 初始化、格式化、错误码文案、zh / en 语言包
+    navigation/            # 路由守卫、AppShell、侧栏 / 底部 tab / 顶栏
+    pwa/                   # service worker 注册（仅生产 Web）
+    queries/               # TanStack Query 的 hooks 与失效策略
+    screens/               # 页面组件与它们私有的子组件
+    store/                 # AuthContext、LedgerContext
+    test/                  # 测试专用：renderWithProviders / mockApi / fixtures
+    theme/                 # 设计 token（由 tokens.json 生成）、ThemeProvider
+    ui/                    # 组件库（Button / TextField / Card / 各种选择器 / 图表…）
+  public/                  # PWA 静态资源：manifest.json、index.html、pwa.css、图标
+  scripts/                 # gen-tokens / generate-icons / verify-pwa / verify-touch-targets
+  workbox-config.cjs       # service worker 生成配置
 ```
 
-## 🛠️ 技术栈
+写页面时的几条硬约定（完整版见 04 §3、§6）：
 
-- **Expo**: 跨平台开发框架
-- **React Native**: UI 框架
-- **TypeScript**: 类型安全
-- **NativeWind**: Tailwind CSS for React Native
-- **React Navigation**: 路由导航
-- **TanStack Query**: 数据请求和缓存
-- **React Hook Form + Zod**: 表单验证
-- **Axios**: HTTP 客户端
-- **AsyncStorage**: 本地数据存储
+- 数据只走 `src/queries` 的 hooks，写操作成功后的缓存失效由 hooks 负责。
+- 每一个字都来自语言包（`useTranslation('<ns>')`），包括 Toast、确认框、空态和 `accessibilityLabel`。
+- 不允许字面量色值，颜色一律 `useColors()['<token>']`；页面里不出现 `Platform.OS`（`npm run verify` 会 grep）。
+- 表单用 `react-hook-form` + `zod`，校验文案的 key 在 `validation` 命名空间。
+- 窄 / 宽屏用 `useIsWide()`，窄屏的筛选与选择器用 `Sheet`。
 
-## 🔧 配置
+---
 
-API 地址配置在 `src/constants/config.ts`：
-- **开发环境**: `http://localhost:8000/api/v1`
-- **生产环境**: `https://api.yourapp.com/api/v1`
+## 设计 token
 
-## 📝 开发指南
+`src/theme/tokens.ts` 是**生成文件**，源头是 `docs/target-design/mockups/tokens.json`：
 
-### 使用 NativeWind (Tailwind CSS)
-
-```tsx
-import { View, Text } from 'react-native';
-
-function MyComponent() {
-  return (
-    <View className="flex-1 bg-white p-4">
-      <Text className="text-xl font-bold text-primary-600">
-        Hello World
-      </Text>
-    </View>
-  );
-}
-```
-
-### API 调用示例
-
-```tsx
-import { useQuery } from '@tanstack/react-query';
-import { QUERY_KEYS } from '@/constants/config';
-
-function useTransactions() {
-  return useQuery({
-    queryKey: [QUERY_KEYS.TRANSACTIONS],
-    queryFn: async () => {
-      const response = await fetch('/api/v1/transactions');
-      return response.json();
-    },
-  });
-}
-```
-
-## 🚢 部署
-
-### 构建 Web 版本
 ```bash
-npx expo export:web
+node scripts/gen-tokens.mjs           # 重新生成
+node scripts/gen-tokens.mjs --check   # 校验是否与 tokens.json 一致
 ```
-生成的文件在 `web-build/` 目录，可上传到 S3 + CloudFront。
 
-### 构建 Android APK
+`public/manifest.json`、`public/index.html`、`app.json`、`scripts/generate-icons.mjs` 里的颜色也取自同一份 token（`accent.solid` `#2F4A38`、`bg.canvas` `#F1F6F1`）——它们是 JSON / HTML / 脚本，不受「组件里无字面量色值」的约束，但改动时要一起改。
+
+图标（`public/192.png` 等）由 `node scripts/generate-icons.mjs` 生成，改了品牌色才需要重跑。
+
+---
+
+## PWA
+
+- `public/manifest.json` + `public/index.html`（`viewport-fit=cover`、apple 系列 meta）+ `public/pwa.css`（输入框 16px，防 iOS 聚焦缩放）。
+- `npm run build:web` 的第二步用 `workbox-config.cjs` 生成 `dist/sw.js`：
+  - 导航回落到 `/index.html`（深链接是核心功能，刷新 `/l/xxx/transactions` 必须拿到应用本体）；
+  - `GET /api/v1/categories`、`/api/v1/import-format`、`/api/v1/rates/currencies` 走 `CacheFirst`（30 天），**其余 `/api/` 一律 `NetworkOnly`**——账本数据是多人共享的，读到别人改过的旧数据比报错更糟；
+  - `offline.html` 仍在预缓存里，但只在应用本体也缺失时兜底。
+- `src/pwa/registerSW.ts` 只在生产 Web 注册 worker；新 worker 接管（`controllerchange`）时由 `src/navigation/useSwUpdateToast.ts` 弹一条「刷新以使用新版本」。
+
+校验：
+
 ```bash
-npx eas build --platform android
+npm run build:web
+node scripts/verify-pwa.mjs --all              # manifest / apple-meta / viewport / sw / ios-zoom
+node scripts/verify-touch-targets.mjs          # 触控目标与输入法属性
 ```
 
-## 📚 相关文档
+---
 
-- [Expo 官方文档](https://docs.expo.dev/)
-- [React Native 文档](https://reactnative.dev/)
-- [NativeWind 文档](https://www.nativewind.dev/)
-- [React Navigation 文档](https://reactnavigation.org/)
-- [TanStack Query 文档](https://tanstack.com/query/latest)
+## 测试
 
+- `jest-expo` preset，`@testing-library/react-native`，路由相关用 `expo-router/testing-library` 的 `renderRouter`。
+- 统一入口是 `src/test/renderWithProviders`（**async**）+ `mockApi()`（`axios-mock-adapter`）+ `src/test/fixtures`。
+- 断言行为——发出的请求、URL、渲染出来的文案——不做快照。
+- `src/__tests__/app-flow.test.tsx` 是贯穿整棵真实路由树的集成测试：匿名深链接 → 登录 → 首页 → 交易列表 → 记一笔。
+
+---
+
+## 部署
+
+`npm run build:web` 产出的 `dist/` 交给 Caddy 托管（未知路径回落 `index.html`，`/api/*` 反代到后端），见 `infra/Caddyfile`。

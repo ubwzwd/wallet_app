@@ -11,7 +11,9 @@
  *          frontend/public/apple-touch-icon.png (180x180 iOS home-screen icon)
  *          frontend/public/favicon.ico        (32x32 ICO; see Part C below)
  *
- * Background: solid #0ea5e9 (UI-SPEC accent / D-11).
+ * Background: solid #2F4A38 — the light theme's `accent.solid` in
+ * docs/target-design/mockups/tokens.json (04 §7.1). Same value as the `theme_color`
+ * in public/manifest.json and the `theme-color` meta in public/index.html.
  *
  * Re-run after any logo or color change: `cd frontend && node scripts/generate-icons.mjs`.
  *
@@ -30,7 +32,8 @@ const FRONTEND = path.resolve(SCRIPT_DIR, '..');
 const SRC = path.join(FRONTEND, 'assets/adaptive-icon.png');
 const OUT_DIR = path.join(FRONTEND, 'public');
 
-const BG = { r: 0x0e, g: 0xa5, b: 0xe9, alpha: 1 };
+// #2F4A38 — tokens.json light `accent.solid`.
+const BG = { r: 0x2f, g: 0x4a, b: 0x38, alpha: 1 };
 
 async function emit(outName, canvasSize, foregroundScale) {
   const sourceBuf = fs.readFileSync(SRC);
