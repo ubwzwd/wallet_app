@@ -27,7 +27,7 @@ from app.core.errors import ApiError, ErrorCode
 from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch, ImportRow
 from app.models.transaction import Transaction
-from app.schemas.importing import ImportRowPatch
+from app.schemas.importing import ImportRowsBulkRowPatch
 from app.services.importing import flagging
 from app.services.importing.commit_checks import assert_pairable, load_counterpart
 from app.services.importing.drafts import ImportContext, RowDraft
@@ -98,7 +98,7 @@ def patch_rows(
     ctx: LedgerContext,
     batch: ImportBatch,
     rows: list[ImportRow],
-    patch: ImportRowPatch,
+    patch: ImportRowsBulkRowPatch,
     *,
     bulk: bool,
 ) -> None:
@@ -136,7 +136,7 @@ def _apply_patch(
     ctx: LedgerContext,
     batch: ImportBatch,
     row: ImportRow,
-    patch: ImportRowPatch,
+    patch: ImportRowsBulkRowPatch,
     now: dt.datetime,
 ) -> bool:
     """§4.1's rules for one row; returns whether ``kind`` changed."""

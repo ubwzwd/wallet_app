@@ -28,6 +28,7 @@ from app.schemas.importing import (
     ImportRowStatusSummary,
     ImportRowsBulkPatch,
     ImportRowsBulkResult,
+    ImportRowsBulkRowPatch,
     ImportUploadResult,
     PasteUploadRequest,
 )
@@ -487,12 +488,70 @@ def test_import_row_patch_counterparty_strips_and_blank_becomes_null():
 
 
 def test_import_rows_bulk_patch_shape_and_row_id_bounds():
-    bulk = ImportRowsBulkPatch(row_ids=[UID(), UID()], patch=ImportRowPatch(status="skipped"))
+    bulk = ImportRowsBulkPatch(
+        row_ids=[UID(), UID()], patch=ImportRowsBulkRowPatch(status="skipped")
+    )
     assert len(bulk.row_ids) == 2
     with pytest.raises(ValidationError):
-        ImportRowsBulkPatch(row_ids=[], patch=ImportRowPatch())
+        ImportRowsBulkPatch(row_ids=[], patch=ImportRowsBulkRowPatch())
     with pytest.raises(ValidationError):
-        ImportRowsBulkPatch(row_ids=[UID() for _ in range(501)], patch=ImportRowPatch())
+        ImportRowsBulkPatch(
+            row_ids=[UID() for _ in range(501)], patch=ImportRowsBulkRowPatch()
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("matched_transaction_id", str(UID())),
+        ("counterpart_source_id", str(UID())),
+        ("counterparty", "老婆"),
+        ("matched_transaction_id", None),  # not even an explicit "clear them all"
+    ],
+)
+def test_bulk_patch_refuses_the_three_per_row_link_fields(field, value):
+    """05 §4.1: those three name *one* counterpart for *one* row, so they are not
+    in §5.42's set — the same ``matched_transaction_id`` on two rows is a
+    guaranteed ``pair_invalid`` at commit. ``extra='forbid'`` makes it a 422.
+    (03 §5.42's "same fields as §5.41" is the blanket cross-reference the
+    ruling reads as losing to 05 §4.1's specific rule — schema docstring.)
+    """
+    with pytest.raises(ValidationError):
+        ImportRowsBulkRowPatch(**{field: value})
+    with pytest.raises(ValidationError):
+        ImportRowsBulkPatch(row_ids=[UID()], patch={field: value})
+
+    # ... while the single-row model of §5.41 still takes all three.
+    assert field in ImportRowPatch(**{field: value}).model_fields_set
+
+
+def test_bulk_patch_keeps_the_other_eleven_editable_fields():
+    """Narrowed by exactly three: everything else §5.41 edits stays bulk-settable."""
+    assert set(ImportRowsBulkRowPatch.model_fields) == set(ImportRowPatch.model_fields) - {
+        "matched_transaction_id",
+        "counterpart_source_id",
+        "counterparty",
+    }
+    patch = ImportRowsBulkRowPatch(
+        status="skipped",
+        date=dt.date(2026, 8, 3),
+        amount=Decimal("-128.5"),
+        currency="sgd",
+        kind="expense",
+        merchant="盒马",
+        note="n",
+        category_l1="food",
+        category_l2="lunch",
+        transfer_role=None,
+        transfer_subtype=None,
+    )
+    assert len(patch.model_fields_set) == 11
+    assert patch.currency == "SGD"  # the shared validators come along
+    assert patch.amount == Decimal("-128.5000")
+    with pytest.raises(ValidationError):
+        ImportRowsBulkRowPatch(status=None)
+    with pytest.raises(ValidationError):
+        ImportRowsBulkRowPatch(nonsense="x")
 
 
 def test_import_rows_bulk_result_shape():
