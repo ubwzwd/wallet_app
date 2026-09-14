@@ -62,7 +62,7 @@ diff -q frontend/src/constants/config.ts frontend/src/constants/config.dev.ts >/
 
 # ---- backend image (rows 04-01-01..03) ----
 echo "==> backend: build linux/arm64 image (row 04-01-01)"
-docker build --platform linux/arm64 -f "$DOCKERFILE_API" backend/ -t wallet-app/api:local >/tmp/smoke-docker.log 2>&1 || { tail -50 /tmp/smoke-docker.log; echo "FAIL: docker build"; exit 1; }
+docker build --platform linux/arm64 -f "$DOCKERFILE_API" . -t wallet-app/api:local >/tmp/smoke-docker.log 2>&1 || { tail -50 /tmp/smoke-docker.log; echo "FAIL: docker build"; exit 1; }
 
 echo "==> backend: architecture is arm64 (row 04-01-03)"
 [ "$(docker image inspect wallet-app/api:local --format '{{.Architecture}}')" = "arm64" ] || { echo "FAIL: image not arm64"; exit 1; }

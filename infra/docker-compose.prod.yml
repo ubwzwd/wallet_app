@@ -32,8 +32,10 @@ services:
 
   migrate:
     build:
-      context: ../backend
-      dockerfile: ../infra/Dockerfile.api
+      # Repo-root context: the image needs backend/ AND skills/wallet-import/
+      # (GET /import-format reads the skill deliverables off disk).
+      context: ..
+      dockerfile: infra/Dockerfile.api
     image: wallet-app/api:local
     container_name: wallet_migrate_prod
     env_file: ./.env

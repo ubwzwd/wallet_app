@@ -13,8 +13,15 @@
 #   docker build --platform linux/arm64 ...   (CI / Oracle VM deploy)
 #   docker build ...                          (local dev, uses host arch)
 #
-# Build context is `backend/` (set by infra/docker-compose.prod.yml in the
-# next plan). All COPY paths are relative to that context.
+# Build context is the REPO ROOT (set by infra/docker-compose.prod.yml:
+# `context: ..` + `dockerfile: infra/Dockerfile.api`). All COPY paths below are
+# therefore relative to the repo root, not to `backend/`.
+# It used to be `backend/`, but the image must also carry the import-skill
+# deliverables in `skills/wallet-import/` — GET /import-format reads them from
+# disk (05 §5.5) and they are the import-guide page's only data source (04
+# §4.10 step 0), so with a `backend/`-only context that page rendered blank in
+# production. Repo-root noise (frontend/, docs/, tooling state) is held out of
+# the context by the repo-root `.dockerignore`.
 
 # ---------------------------------------------------------------------------
 # Builder stage: resolve deps with Poetry-export + uv, install into /usr/local
@@ -35,7 +42,7 @@ RUN pip install --no-cache-dir poetry==1.8.5 "poetry-plugin-export>=1.8"
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY backend/pyproject.toml backend/poetry.lock ./
 
 RUN poetry export -f requirements.txt --without-hashes --only main -o /tmp/requirements.txt
 RUN uv pip install --system --no-cache -r /tmp/requirements.txt
@@ -65,7 +72,11 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-COPY --chown=appuser:appuser . .
+# App code lands at /app (so modules stay importable as `app.main`), and the
+# skill deliverables at /app/skills/wallet-import — the path
+# app/api/import_format.py probes as `<backend dir>/skills/wallet-import`.
+COPY --chown=appuser:appuser backend/ .
+COPY --chown=appuser:appuser skills/ ./skills/
 
 USER appuser
 

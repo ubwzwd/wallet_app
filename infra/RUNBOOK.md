@@ -540,6 +540,15 @@ cd ~/wallet_app/infra
 docker compose -f docker-compose.prod.yml up -d --build --wait
 ```
 
+> **Build context is the repo root** (`context: ..` + `dockerfile: infra/Dockerfile.api`),
+> not `backend/`. The API image has to carry both `backend/` and the import-skill
+> deliverables in `skills/wallet-import/` — `GET /import-format` reads those files off
+> disk and the import-guide page has no other data source, so a checkout missing
+> `skills/` builds an image whose guide page renders blank. Make sure the VM checkout is
+> a full one (no sparse checkout that drops `skills/`). Everything the image does not
+> need — `frontend/`, `docs/`, `.git/`, tooling state — is held out of the context by the
+> repo-root `.dockerignore`.
+
 First start takes 3–5 minutes: `db` starts → `migrate` runs (alembic upgrade head) → `api` becomes healthy → `caddy` starts and immediately attempts the HTTP-01 challenge against the LE staging endpoint.
 
 **10c. Verify the staging cert was issued:**
@@ -935,7 +944,17 @@ docker compose -f docker-compose.prod.yml up -d
 **Pull the latest image after a code update** (Phase 7 introduces GHCR; for now, rebuild on VM):
 
 ```bash
+cd ~/wallet_app/infra
 docker compose -f docker-compose.prod.yml up -d --build
+```
+
+The rebuild reads the whole repo root as its build context, so update the entire repo
+first — a stale or missing `skills/wallet-import/` ships an image that serves an empty
+`GET /import-format`. To check a freshly built image:
+
+```bash
+docker run --rm wallet-app/api:local ls /app/skills/wallet-import
+# Expected: README.md  SKILL.md  chatgpt-instructions.md  example.csv
 ```
 
 **Edit `.env` on the VM:**
