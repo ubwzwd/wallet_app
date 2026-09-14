@@ -36,6 +36,9 @@ type Overlay = Partial<Record<Uuid, ImportRowPatch>>;
  */
 type FailedFields = Partial<Record<Uuid, ImportRowPatch>>;
 
+/** One shared empty answer, so `failedFieldsOf` is stable for a row with nothing refused. */
+const NO_FIELDS: ImportRowPatch = {};
+
 export interface ReviewRowsController {
   /** The batch's rows with any in-flight edit applied, in `row_no` order. */
   rows: ImportRow[];
@@ -51,6 +54,12 @@ export interface ReviewRowsController {
    * names and jumps to (04 §4.11.8).
    */
   failedRowIds: readonly Uuid[];
+  /**
+   * The fields of this row whose last write was refused, so the cell that owns one can say
+   * so *in place* (04 §4.11.5): on a twelve-column grid the row-number dot is ten columns
+   * away from the cell the user was typing in.
+   */
+  failedFieldsOf(rowId: Uuid): ImportRowPatch;
   patch(row: ImportRow, patch: ImportRowPatch): void;
   retry(rowId: Uuid): void;
   bulk(rowIds: readonly Uuid[], patch: ImportRowPatch): Promise<ImportRowsBulkResult>;
@@ -169,6 +178,11 @@ export function useReviewRows(
     [failed],
   );
 
+  const failedFieldsOf = React.useCallback(
+    (rowId: Uuid): ImportRowPatch => failed[rowId] ?? NO_FIELDS,
+    [failed],
+  );
+
   const saveStateOf = React.useCallback(
     (rowId: Uuid): RowSaveState => {
       if (saving.has(rowId)) return 'saving';
@@ -191,6 +205,7 @@ export function useReviewRows(
     saveStateOf,
     revisionOf,
     failedRowIds,
+    failedFieldsOf,
     patch,
     retry,
     bulk,

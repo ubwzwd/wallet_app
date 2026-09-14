@@ -71,8 +71,17 @@ export interface ReviewSelection {
  * `rows` is the whole batch (already merged with any optimistic edits); the hook derives
  * the visible slice from it, so a row that stops matching the slice — the moment its
  * category is filled in, say — leaves the list without any extra bookkeeping.
+ *
+ * `preferUncategorized` is the phone (04 §4.11.9): the slices are the same, but the card
+ * flow opens on "uncategorized" whatever the counts say, because the phone's job is
+ * explicitly "finish the uncategorized rows and leave the rest for a computer". The wide
+ * grid only lands there when there is something to fix (§4.11.6).
  */
-export function useReviewSelection(rows: readonly ImportRow[]): ReviewSelection {
+export function useReviewSelection(
+  rows: readonly ImportRow[],
+  options: { preferUncategorized?: boolean } = {},
+): ReviewSelection {
+  const preferUncategorized = options.preferUncategorized === true;
   const [slice, setSliceState] = React.useState<ReviewSlice | null>(null);
   const [selected, setSelected] = React.useState<ReadonlySet<Uuid>>(() => new Set<Uuid>());
   const anchor = React.useRef<number | null>(null);
@@ -87,8 +96,8 @@ export function useReviewSelection(rows: readonly ImportRow[]): ReviewSelection 
   React.useEffect(() => {
     if (didInit.current || rows.length === 0) return;
     didInit.current = true;
-    setSliceState(counts.uncategorized > 0 ? 'uncategorized' : 'all');
-  }, [rows.length, counts.uncategorized]);
+    setSliceState(preferUncategorized || counts.uncategorized > 0 ? 'uncategorized' : 'all');
+  }, [rows.length, counts.uncategorized, preferUncategorized]);
 
   const current = slice ?? 'all';
 

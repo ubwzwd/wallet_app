@@ -198,10 +198,11 @@ test('changing kind rewrites the sign, clears the category and wakes the link ce
   // The sign follows the kind (04 §4.11.2); the category is not touched by an expense.
   expect(patchBodies()[0]).toEqual({ kind: 'expense', amount: '-3000.0000' });
 
-  // …and moving to a transfer clears the category and turns the link cell on.
+  // …and moving to a transfer clears the category and turns the link cell on. The answer
+  // is the row the *server* would now hold — it keeps nothing the patch did not clear.
   answer = {
     ...income, kind: 'transfer', amount: '-3000.0000', category_l1: null, category_l2: null,
-    merchant: null,
+    merchant: null, matched_transaction_id: null,
   };
   fireEvent.press(screen.getByTestId('review-2-kind-trigger'));
   fireEvent.press(await screen.findByTestId('review-2-kind-option-transfer'));
@@ -209,14 +210,54 @@ test('changing kind rewrites the sign, clears the category and wakes the link ce
   // `category_l2` was already null, so it is not in the body — only what changed is sent.
   // The two transfer fields *are*: 03 §5.41 refuses a transfer row with either one null,
   // and the row has no way to set them before it is a transfer.
+  // `merchant` goes with them: 03 §5.41 and decision §14.52 B16 refuse a transfer that
+  // still carries one, and this row had "公司" in that column.
   expect(patchBodies()[1]).toEqual({
     kind: 'transfer',
     category_l1: null,
+    merchant: null,
     transfer_role: 'out',
     transfer_subtype: 'plain',
   });
   expect(await screen.findByTestId('review-2-link-role')).toBeTruthy();
   expect(screen.getByTestId('review-2-l1').props.children).toBe('—');
+});
+
+test('a refund turned into a transfer drops the link it had to the original expense', async () => {
+  const refund = row({
+    id: 'row-4', row_no: 4, kind: 'refund', amount: '50.0000', merchant: '京东',
+    category_l1: 'shopping', category_l2: null, flags: ['refund_candidate'],
+    matched_transaction_id: 'tx-origin',
+  });
+  seed([refund]);
+  mockGet(`/ledgers/${LEDGER_ID}/transactions/tx-origin`, {
+    ...makeImportRow(), id: 'tx-origin',
+  });
+  renderReview();
+
+  // It starts out linked: the origin is named in the cell.
+  expect(await screen.findByTestId('review-4-link-origin')).toBeTruthy();
+
+  mockPatch(`${ROWS_PATH}/row-4`, {
+    ...refund, kind: 'transfer', amount: '-50.0000', merchant: null, category_l1: null,
+    matched_transaction_id: null, transfer_role: 'out', transfer_subtype: 'plain',
+  });
+  fireEvent.press(screen.getByTestId('review-4-kind-trigger'));
+  fireEvent.press(await screen.findByTestId('review-4-kind-option-transfer'));
+
+  await waitFor(() => expect(patchBodies()).toHaveLength(1));
+  // The link cannot survive the kind: kept, it would be drawn as a confirmed pairing with
+  // that expense as the opposite leg, and the commit would answer 400 `pair_invalid` —
+  // whose detail names no row, so nothing could jump to it either.
+  expect(patchBodies()[0]).toMatchObject({
+    kind: 'transfer',
+    matched_transaction_id: null,
+    merchant: null,
+    category_l1: null,
+  });
+  // …and the cell is not showing a checked "pair these two" box.
+  await waitFor(() => expect(screen.queryByTestId('review-4-link-origin')).toBeNull());
+  expect(screen.queryByTestId('review-4-link-pair')).toBeNull();
 });
 
 // ------------------------------------------------------------------ cases 4 & 5
@@ -255,7 +296,14 @@ test('a rejected cell edit rolls the value back and offers a retry', async () =>
 
   fireEvent.press(await screen.findByTestId('review-table-cell-row-1-merchant'));
   const input = await screen.findByTestId('review-1-merchant-input');
-  mockPatch(`${ROWS_PATH}/row-1`, { detail: 'nope', code: 'validation_error' }, 400);
+  // One mutable handler: axios-mock-adapter keeps the first match for a URL, so the retry
+  // below has to reuse this one rather than register a second.
+  let fail = true;
+  api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-1`)).reply(() =>
+    fail
+      ? [400, { detail: 'nope', code: 'validation_error' }]
+      : [200, { ...expense, merchant: '打错了', status: 'edited' }],
+  );
   fireEvent.changeText(input, '打错了');
   fireEvent(input, 'blur');
 
@@ -263,6 +311,16 @@ test('a rejected cell edit rolls the value back and offers a retry', async () =>
   // The draft is gone: the cell shows the value the server still holds.
   expect(screen.getByTestId('review-1-merchant-input').props.value).toBe('星巴克');
   expect(screen.getByTestId('review-1-row-no-save-failed')).toBeTruthy();
+  // …and the failure is marked in the cell the user was typing in, not only ten columns
+  // away beside the row number (04 §4.11.5).
+  expect(screen.getByTestId('review-1-merchant-error')).toBeTruthy();
+  const cellRetry = screen.getByTestId('review-1-merchant-retry');
+
+  // Retrying from inside the cell resends the same edit and clears the marker.
+  fail = false;
+  fireEvent.press(cellRetry);
+  await waitFor(() => expect(screen.queryByTestId('review-1-merchant-error')).toBeNull());
+  expect(patchBodies()[1]).toEqual({ merchant: '打错了' });
 });
 
 test('a window focus does not refetch the rows out from under an edit', async () => {
@@ -420,7 +478,13 @@ test('a narrow viewport renders the card flow, with kind, category and the pairi
 
   expect(await screen.findByTestId('review-cards')).toBeTruthy();
   expect(screen.queryByTestId('review-table')).toBeNull();
-  expect(screen.getByTestId('review-1-kind-trigger')).toBeTruthy();
+  // 04 §4.11.9: the phone opens on "uncategorized" whatever the counts say, and says why.
+  expect(screen.getByTestId('review-mobile-filter-hint')).toBeTruthy();
+  expect(screen.getByTestId('review-cards-empty')).toBeTruthy();
+
+  // The slices are the same ones the wide grid has; "all" brings the batch back.
+  fireEvent.press(screen.getByText('全部 2'));
+  expect(await screen.findByTestId('review-1-kind-trigger')).toBeTruthy();
   expect(screen.getByTestId('review-1-l1-trigger')).toBeTruthy();
   // The prefilled pairing checkbox has to be visible (and clearable) without opening anything.
   const pair = screen.getByTestId('review-3-link-pair');
@@ -582,6 +646,8 @@ test('a failed edit on the phone shows the dot and the retry button on the card'
   );
   renderReview();
 
+  // The phone lands on "uncategorized" (04 §4.11.9); this row is categorized.
+  fireEvent.press(await screen.findByText('全部 1'));
   fireEvent.press(await screen.findByTestId('review-cards-details-1'));
   const input = await screen.findByTestId('review-detail-merchant-input');
   fireEvent.changeText(input, '瑞幸');

@@ -145,7 +145,7 @@
       "rows": "Previous / next row",
       "cells": "Previous / next cell",
       "edit": "Edit this cell; while editing, save and move down",
-      "cancel": "Cancel the edit and restore the original",
+      "cancel": "Cancel the edit and restore the original; outside an edit, leave the table",
       "select": "Select / deselect this row",
       "extend": "Extend the selection",
       "skip": "Skip / unskip this row",

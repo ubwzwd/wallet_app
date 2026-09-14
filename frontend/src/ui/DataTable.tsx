@@ -9,18 +9,25 @@
  * the "inline editing slot": the caller decides when a cell renders a value and when it
  * renders an editor.
  *
- * Rows are not virtualised: a batch is capped at 2000 rows server-side and the page is one
- * scroll container; a windowing layer would fight the sticky header and the focus ring for
- * no measurable gain at this size.
+ * The table is its own scroll container in both directions — a vertical box of a bounded
+ * height (`maxHeight`, or the viewport minus the page chrome) inside a horizontal one — so
+ * the header can stick, `scrollToRow` can move and the focused cell can be kept in view.
+ *
+ * Rows are not virtualised: a batch is capped at 2000 rows server-side; a windowing layer
+ * would fight the sticky header and the focus ring for no measurable gain at this size.
  */
 import React from 'react';
 import {
   type GestureResponderEvent,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   type StyleProp,
   View,
   type ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 
 import { radius, space } from '@/theme/tokens';
@@ -34,6 +41,18 @@ export const DATA_TABLE_ROW_HEIGHT = 44;
 
 /** Width of the leading selection column. */
 const SELECT_WIDTH = 44;
+
+/**
+ * How much of the viewport the page keeps for everything that is not the table (the top
+ * bar, the screen header, the filter slices, the bulk bar and the submit bar). The table's
+ * own scroll box is what is left, unless the caller measures better and passes `maxHeight`.
+ *
+ * A height matters: the vertical ScrollView is nested inside the page's own scroll view, so
+ * without one it grows to its content and *nothing* scrolls inside it — the sticky header
+ * would not stick and `scrollTo` would be a no-op.
+ */
+const CHROME_HEIGHT = 320;
+const MIN_TABLE_HEIGHT = 240;
 
 export interface DataTableCellContext {
   rowIndex: number;
@@ -97,6 +116,11 @@ export interface DataTableProps<Row> {
   onFocusCell?(pos: DataTableCellPos): void;
   /** Whenever this index changes to a number, that row is scrolled into view. */
   scrollToRow?: number | null;
+  /**
+   * Height of the table's own scroll box. Defaults to the viewport minus the page chrome;
+   * pass a measured value when the surrounding layout is known.
+   */
+  maxHeight?: number;
   emptyLabel?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -117,6 +141,7 @@ export function DataTable<Row>({
   focus,
   onFocusCell,
   scrollToRow,
+  maxHeight,
   emptyLabel,
   style,
   testID,
@@ -125,6 +150,15 @@ export function DataTable<Row>({
   const id = testID ?? 'data-table';
   const selectable = selected !== undefined;
   const scroller = React.useRef<ScrollView | null>(null);
+  const viewportSize = useWindowDimensions();
+  const boxHeight =
+    maxHeight ?? Math.max(MIN_TABLE_HEIGHT, viewportSize.height - CHROME_HEIGHT);
+
+  // Where the scroll box is and how tall it turned out, so "keep the focused cell in view"
+  // can tell whether it already is. Row heights are the nominal 44 — a row carrying a hint
+  // line is taller, which costs the scroll a few pixels of accuracy and nothing else.
+  const offset = React.useRef(0);
+  const viewport = React.useRef(0);
 
   // "Scroll this row into view" is a one-shot request expressed as state: the caller sets
   // an index, we move, and nothing else in the table depends on it.
@@ -135,6 +169,28 @@ export function DataTable<Row>({
       animated: true,
     });
   }, [scrollToRow]);
+
+  // 04 §4.11.7: the focused cell stays in the viewport as the keyboard walks the grid —
+  // but only when it would otherwise leave it, so arrowing around inside the visible rows
+  // never yanks the view.
+  const focusRow = focus?.row ?? null;
+  React.useEffect(() => {
+    if (focusRow === null) return;
+    const height = viewport.current;
+    if (height <= 0) return;
+    const top = focusRow * DATA_TABLE_ROW_HEIGHT;
+    const bottom = top + DATA_TABLE_ROW_HEIGHT;
+    // The header sits on top of the first visible row, so a row is only really visible one
+    // row height below the current offset.
+    if (top < offset.current + DATA_TABLE_ROW_HEIGHT) {
+      scroller.current?.scrollTo({
+        y: Math.max(0, top - DATA_TABLE_ROW_HEIGHT),
+        animated: true,
+      });
+    } else if (bottom > offset.current + height) {
+      scroller.current?.scrollTo({ y: bottom - height, animated: true });
+    }
+  }, [focusRow]);
 
   const totalWidth =
     (selectable ? SELECT_WIDTH : 0) + columns.reduce((sum, c) => sum + c.width, 0);
@@ -290,6 +346,14 @@ export function DataTable<Row>({
         ref={scroller}
         testID={id}
         stickyHeaderIndices={[0]}
+        style={{ maxHeight: boxHeight }}
+        scrollEventThrottle={16}
+        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+          offset.current = event.nativeEvent.contentOffset.y;
+        }}
+        onLayout={(event: LayoutChangeEvent) => {
+          viewport.current = event.nativeEvent.layout.height;
+        }}
         contentContainerStyle={{ width: totalWidth, minWidth: '100%' }}
       >
         {header}

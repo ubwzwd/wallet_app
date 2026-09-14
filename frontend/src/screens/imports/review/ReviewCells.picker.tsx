@@ -25,7 +25,7 @@ import {
   TextField,
 } from '@/ui';
 
-import { type CellProps, Dash } from './ReviewRow';
+import { type CellProps, CellFrame, Dash } from './ReviewRow';
 
 /**
  * The patch a kind change implies (04 §4.11.2, §8.4 case 3): the sign follows the new kind,
@@ -47,6 +47,9 @@ export function kindChangePatch(row: ImportRow, kind: TxKind): ImportRowPatch {
   if (kind === 'transfer') {
     patch.category_l1 = null;
     patch.category_l2 = null;
+    // A transfer has no merchant either (03 §5.41, decision §14.52 B16): the CSV's own
+    // merchant column is meaningless on a leg, and the commit refuses the row otherwise.
+    patch.merchant = null;
     patch.transfer_role = role;
     patch.transfer_subtype = row.transfer_subtype ?? 'plain';
   } else {
@@ -55,7 +58,12 @@ export function kindChangePatch(row: ImportRow, kind: TxKind): ImportRowPatch {
     patch.transfer_role = null;
     patch.transfer_subtype = null;
   }
-  if (kind !== 'transfer' && kind !== 'refund') patch.matched_transaction_id = null;
+  // A link never survives a change of kind: a refund points at the expense it refunds and a
+  // transfer at its opposite leg, and neither claim means anything under the other kind —
+  // keeping it would paint the wrong cell and earn a `pair_invalid` /
+  // `refund_target_invalid` at commit time, whose `detail` names no row. `changedFields`
+  // drops the key again for a row that was not linked in the first place.
+  patch.matched_transaction_id = null;
   return patch;
 }
 
@@ -63,14 +71,16 @@ export function kindChangePatch(row: ImportRow, kind: TxKind): ImportRowPatch {
 
 export function CurrencyCell({ row, env, testID }: CellProps): React.JSX.Element {
   return (
-    <CurrencyPicker
-      testID={testID}
-      variant="inline"
-      codes={env.currencyCodes}
-      names={env.currencyNames}
-      value={row.currency}
-      onChange={(next) => env.ctrl.patch(row, { currency: next })}
-    />
+    <CellFrame row={row} env={env} field="currency" testID={testID}>
+      <CurrencyPicker
+        testID={testID}
+        variant="inline"
+        codes={env.currencyCodes}
+        names={env.currencyNames}
+        value={row.currency}
+        onChange={(next) => env.ctrl.patch(row, { currency: next })}
+      />
+    </CellFrame>
   );
 }
 
@@ -79,16 +89,18 @@ export function CurrencyCell({ row, env, testID }: CellProps): React.JSX.Element
 export function KindCell({ row, env, testID }: CellProps): React.JSX.Element {
   const { t } = useTranslation();
   return (
-    <Select
-      testID={testID}
-      value={row.kind}
-      options={KINDS.map((kind) => ({ value: kind, label: t(`transaction:kind.${kind}`) }))}
-      label={t('import:review.column.kind')}
-      onChange={(next) => {
-        if (next === null || next === row.kind) return;
-        env.ctrl.patch(row, kindChangePatch(row, next as TxKind));
-      }}
-    />
+    <CellFrame row={row} env={env} field="kind" testID={testID}>
+      <Select
+        testID={testID}
+        value={row.kind}
+        options={KINDS.map((kind) => ({ value: kind, label: t(`transaction:kind.${kind}`) }))}
+        label={t('import:review.column.kind')}
+        onChange={(next) => {
+          if (next === null || next === row.kind) return;
+          env.ctrl.patch(row, kindChangePatch(row, next as TxKind));
+        }}
+      />
+    </CellFrame>
   );
 }
 
@@ -138,7 +150,12 @@ export function CategoryCell({
   if (dead) return <Dash testID={testID} />;
 
   return (
-    <>
+    <CellFrame
+      row={row}
+      env={env}
+      field={level === 'l1' ? 'category_l1' : 'category_l2'}
+      testID={testID}
+    >
       <Button
         testID={`${testID}-trigger`}
         size="sm"
@@ -194,6 +211,6 @@ export function CategoryCell({
           />
         ) : null}
       </Sheet>
-    </>
+    </CellFrame>
   );
 }

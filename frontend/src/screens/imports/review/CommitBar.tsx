@@ -32,6 +32,20 @@ import { Button, Card, ProgressBar, Text } from '@/ui';
 import type { ReviewEnv } from './ReviewRow';
 import { isCommittable, isUncategorized } from './useReviewSelection';
 
+/**
+ * The commit refusals whose `detail` really does name the offending row (03 §5.43), and are
+ * therefore the only ones worth reading a row number out of. Everything else either counts
+ * rows or talks about the batch as a whole.
+ */
+const ROW_NUMBERED_CODES: ReadonlySet<string> = new Set([
+  'pair_invalid',
+  'refund_target_invalid',
+  'category_invalid',
+  'category_kind_mismatch',
+  'same_source',
+  'validation_error',
+]);
+
 export interface CommitBlockers {
   uncategorized: ImportRow[];
   incomplete: ImportRow[];
@@ -124,17 +138,26 @@ export function CommitBar({
         // The global toast already named the failure (04 §3.9); our job is to put the row
         // it complained about in front of the user (04 §4.11.8).
         if (!(error instanceof ApiClientError)) return;
-        if (error.code === 'rows_uncategorized' && blockers.uncategorized.length > 0) {
-          onJumpTo(blockers.uncategorized[0].row_no);
+        // The two batch-wide refusals count rows, they do not name one (03 §5.43, 3 & 4a):
+        // "N row(s) still miss a date…" — reading N as a row number would scroll the user
+        // to an unrelated row. Both are blockers we compute ourselves anyway, so jump to
+        // the first row *we* know about.
+        if (error.code === 'rows_uncategorized') {
+          if (blockers.uncategorized.length > 0) onJumpTo(blockers.uncategorized[0].row_no);
           return;
         }
+        if (error.code === 'batch_not_ready') {
+          if (blockers.incomplete.length > 0) onJumpTo(blockers.incomplete[0].row_no);
+          return;
+        }
+        if (!ROW_NUMBERED_CODES.has(error.code)) return;
         const hit = /\d+/.exec(error.detail);
         if (hit) onJumpTo(Number(hit[0]));
       } finally {
         inFlight.current = false;
       }
     })();
-  }, [blocked, blockers.uncategorized, commit, onCommitted, onJumpTo]);
+  }, [blocked, blockers.incomplete, blockers.uncategorized, commit, onCommitted, onJumpTo]);
 
   const submitRef = React.useRef(onSubmit);
   submitRef.current = onSubmit;

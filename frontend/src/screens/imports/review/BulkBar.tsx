@@ -80,15 +80,22 @@ export function commonCategoryKind(rows: readonly ImportRow[]): TxKind | null {
  * (03 §5.41), and the edit is all-or-nothing (03 §5.42) — a single row that the server
  * refuses rolls the whole selection back. `out` / `plain` are the same defaults a single-row
  * kind change writes; the direction of an individual leg is corrected in its link cell.
+ *
+ * `matched_transaction_id` goes in either direction: a link belongs to the kind that made
+ * it (a refund's original expense, a transfer's opposite leg) and cannot survive the change
+ * — exactly what `kindChangePatch` does for a single row.
  */
 export function bulkKindPatch(kind: TxKind): ImportRowPatch {
-  if (kind !== 'transfer') return { kind };
+  if (kind !== 'transfer') return { kind, matched_transaction_id: null };
   return {
     kind,
     transfer_role: 'out',
     transfer_subtype: 'plain',
     category_l1: null,
     category_l2: null,
+    // 03 §5.41 / decision §14.52 B16: a transfer leg carries no merchant.
+    merchant: null,
+    matched_transaction_id: null,
   };
 }
 

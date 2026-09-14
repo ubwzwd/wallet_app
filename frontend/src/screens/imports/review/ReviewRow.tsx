@@ -17,11 +17,21 @@
  * an em dash and refuse input.
  */
 import React from 'react';
+import { View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, ImportBatch, ImportRow, Uuid } from '@/api/types';
+import type {
+  FinanceSource,
+  ImportBatch,
+  ImportRow,
+  ImportRowPatch,
+  Uuid,
+} from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import type { Lang } from '@/i18n';
-import { Text } from '@/ui';
+import { space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { Button, Icon, Text } from '@/ui';
 
 import type { ReviewRowsController } from './useReviewRows';
 
@@ -73,6 +83,59 @@ export function Dash({ testID }: { testID: string }): React.JSX.Element {
     <Text variant="caption" tone="muted" testID={testID}>
       {DASH}
     </Text>
+  );
+}
+
+/** A field a cell edits, and therefore a field whose refusal that cell has to own. */
+export type CellField = keyof ImportRowPatch & string;
+
+export interface CellFrameProps {
+  row: ImportRow;
+  env: ReviewEnv;
+  field: CellField;
+  testID: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Wraps a cell's body with the marker its own refused write earns (04 §4.11.5): a red
+ * exclamation and a retry, right where the value was typed. The row-number dot stays as the
+ * at-a-glance state of the whole row; this is the "which cell" half of the same fact.
+ *
+ * Nothing is wrapped while the cell is fine — the frame disappears completely, so the
+ * ordinary case keeps the exact layout (and the right-aligned amount column) it had.
+ */
+export function CellFrame({
+  row,
+  env,
+  field,
+  testID,
+  children,
+}: CellFrameProps): React.JSX.Element {
+  const { t } = useTranslation();
+  const colors = useColors();
+  const failed = field in env.ctrl.failedFieldsOf(row.id);
+  if (!failed) return <>{children}</>;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['1'] }}>
+      <View style={{ flexShrink: 1 }}>{children}</View>
+      <View
+        testID={`${testID}-error`}
+        accessibilityRole="text"
+        accessibilityLabel={t('import:review.save_state.failed')}
+      >
+        <Icon name="alert-triangle" size={14} color={colors['status.danger.fg']} />
+      </View>
+      <Button
+        testID={`${testID}-retry`}
+        size="sm"
+        variant="ghost"
+        icon="refresh-cw"
+        iconOnly
+        label={t('common:button.retry')}
+        onPress={() => env.ctrl.retry(row.id)}
+      />
+    </View>
   );
 }
 

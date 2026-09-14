@@ -225,7 +225,8 @@ export default function ImportBatchScreen(): React.JSX.Element {
 
   const batch = batchQuery.data;
   const ctrl = useReviewRows(ledgerId, bid ?? '', serverRows);
-  const selection = useReviewSelection(ctrl.rows);
+  // 04 §4.11.9: the phone opens on the "uncategorized" slice unconditionally.
+  const selection = useReviewSelection(ctrl.rows, { preferUncategorized: !wide });
   /** Rows the batch has but this screen has not read yet — a commit blocker (§4.11.8). */
   const unloadedRows = Math.max(0, total - serverRows.length);
 
@@ -347,6 +348,12 @@ export default function ImportBatchScreen(): React.JSX.Element {
             }),
           }))}
         />
+        {/* Why the phone opened where it did (04 §4.11.9). */}
+        {!wide && selection.slice === 'uncategorized' ? (
+          <Text variant="micro" tone="muted" testID="review-mobile-filter-hint">
+            {t('import:review.mobile_default_filter_hint')}
+          </Text>
+        ) : null}
         {wide ? bulkBar : null}
         {view}
         <CommitBar

@@ -245,6 +245,7 @@ export function ReviewTable({
     colCount: columns.length,
     focus,
     setFocus,
+    clearFocus: () => setFocus(null),
     editing: editing !== null,
     beginEdit: () => {
       if (focus === null) return;

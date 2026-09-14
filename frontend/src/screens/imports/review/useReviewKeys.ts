@@ -7,7 +7,7 @@
  * | ↑ / ↓ | previous / next row |
  * | ← / →, Tab / Shift+Tab | previous / next cell |
  * | Enter | edit this cell; while editing, save and drop one row |
- * | Esc | cancel this cell's edit, restore the original |
+ * | Esc | while editing: cancel and restore the original; otherwise: leave the grid |
  * | Space | select / deselect the row |
  * | Shift + ↑ / ↓ | extend the selection |
  * | S | skip / unskip the row |
@@ -15,6 +15,10 @@
  * | [ / ] | previous / next uncategorized row |
  * | ⌘/Ctrl + Enter | commit the batch (only when nothing blocks it) |
  * | ? | the shortcut sheet |
+ *
+ * `Tab` is the grid's only borrowed key, so it is borrowed narrowly: the table takes it
+ * while a cell has the focus and leaves it alone otherwise, which is what lets the keyboard
+ * reach the filter slices, the bulk bar and the submit button.
  *
  * As in the entry form (04 §4.6), the listener hangs off `document` and is guarded by
  * `typeof document` rather than a platform check, and plain characters are left alone while
@@ -31,6 +35,8 @@ export interface ReviewKeyHandlers {
   colCount: number;
   focus: DataTableCellPos | null;
   setFocus(pos: DataTableCellPos): void;
+  /** Hands focus back to the page: `Esc` outside an edit is how the grid is left. */
+  clearFocus(): void;
   /** `true` while a cell editor is open and owns Enter / Esc. */
   editing: boolean;
   beginEdit(): void;
@@ -102,12 +108,17 @@ export function useReviewKeys(handlers: ReviewKeyHandlers): void {
         return;
       }
 
+      if (isTypingTarget(event.target)) return;
+
+      // Tab only belongs to the grid once the grid has the focus, and it is given back by
+      // `Esc`: otherwise the table would swallow the one key that reaches the filter
+      // slices, the bulk bar and the submit button.
       if (event.key === 'Tab') {
+        if (h.focus === null) return;
         event.preventDefault();
         move(0, event.shiftKey ? -1 : 1);
         return;
       }
-      if (isTypingTarget(event.target)) return;
 
       switch (event.key) {
         case 'ArrowDown':
@@ -133,7 +144,9 @@ export function useReviewKeys(handlers: ReviewKeyHandlers): void {
           h.beginEdit();
           return;
         case 'Escape':
-          h.cancelEdit();
+          // Not editing: leave the grid altogether (04 §4.11.7 — the keyboard has to be
+          // able to get out of the table as well as around it).
+          h.clearFocus();
           return;
         case ' ':
           event.preventDefault();

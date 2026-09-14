@@ -17,6 +17,7 @@ import { Button, DateField, Text, TextField, trimMoney } from '@/ui';
 
 import {
   type CellProps,
+  CellFrame,
   DASH,
   Dash,
   strikeIfSkipped,
@@ -99,19 +100,11 @@ export function DateCell({
   });
   useEditorHandle(editing, registerEditor, flush, cancel);
 
-  if (!editing) {
-    return (
-      <Text
-        variant="caption"
-        mono
-        tone={row.date === null ? 'danger' : 'primary'}
-        testID={testID}
-      >
-        {row.date ?? t('import:review.missing_value')}
-      </Text>
-    );
-  }
-  return (
+  const body = !editing ? (
+    <Text variant="caption" mono tone={row.date === null ? 'danger' : 'primary'} testID={testID}>
+      {row.date ?? t('import:review.missing_value')}
+    </Text>
+  ) : (
     <DateField
       testID={`${testID}-input`}
       label={t('import:review.column.date')}
@@ -124,6 +117,11 @@ export function DateCell({
         }
       }}
     />
+  );
+  return (
+    <CellFrame row={row} env={env} field="date" testID={testID}>
+      {body}
+    </CellFrame>
   );
 }
 
@@ -151,23 +149,15 @@ export function AmountCell({
   });
   useEditorHandle(editing, registerEditor, flush, cancel);
 
-  if (!editing) {
-    return (
-      <Text
-        variant="caption"
-        mono
-        tone={row.amount === null ? 'danger' : 'primary'}
-        testID={testID}
-      >
-        {row.amount === null
-          ? t('import:review.missing_value')
-          : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
-              signDisplay: 'always',
-            })}
-      </Text>
-    );
-  }
-  return (
+  const body = !editing ? (
+    <Text variant="caption" mono tone={row.amount === null ? 'danger' : 'primary'} testID={testID}>
+      {row.amount === null
+        ? t('import:review.missing_value')
+        : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
+            signDisplay: 'always',
+          })}
+    </Text>
+  ) : (
     <TextField
       testID={`${testID}-input`}
       accessibilityLabel={t('import:review.column.amount')}
@@ -178,6 +168,11 @@ export function AmountCell({
       onChangeText={setDraft}
       onBlur={flush}
     />
+  );
+  return (
+    <CellFrame row={row} env={env} field="amount" testID={testID}>
+      {body}
+    </CellFrame>
   );
 }
 
@@ -207,20 +202,17 @@ export function TextCell({
   useEditorHandle(editing && !dead, registerEditor, flush, cancel);
 
   if (dead) return <Dash testID={testID} />;
-  if (!editing) {
-    return (
-      <Text
-        variant="caption"
-        numberOfLines={1}
-        tone={row[field] ? 'primary' : 'muted'}
-        style={strikeIfSkipped(row)}
-        testID={testID}
-      >
-        {row[field] ?? DASH}
-      </Text>
-    );
-  }
-  return (
+  const body = !editing ? (
+    <Text
+      variant="caption"
+      numberOfLines={1}
+      tone={row[field] ? 'primary' : 'muted'}
+      style={strikeIfSkipped(row)}
+      testID={testID}
+    >
+      {row[field] ?? DASH}
+    </Text>
+  ) : (
     <TextField
       testID={`${testID}-input`}
       accessibilityLabel={t(`import:review.column.${field}`)}
@@ -230,5 +222,10 @@ export function TextCell({
       onChangeText={setDraft}
       onBlur={flush}
     />
+  );
+  return (
+    <CellFrame row={row} env={env} field={field} testID={testID}>
+      {body}
+    </CellFrame>
   );
 }
