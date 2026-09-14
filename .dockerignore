@@ -1,0 +1,69 @@
+# Repo-root Docker build context ignore list.
+#
+# The production image's build context is the REPO ROOT (infra/docker-compose.prod.yml
+# `context: ..`, or `docker build -f infra/Dockerfile.api .`), because the image has to
+# carry both `backend/` (the app) and `skills/wallet-import/` (the import-skill
+# deliverables that GET /import-format serves — 05 §5.5 / 04 §4.10 step 0).
+# Moving the context up from `backend/` to the repo root means `backend/.dockerignore`
+# no longer applies, so every entry from it lives here, plus the new noise that only
+# the repo root has (frontend/, docs/, tooling state directories).
+#
+# Keep `backend/` and `skills/` out of this file — they are the image's payload.
+
+# ---- Secrets / runtime config — supplied via compose env_file:, never baked in.
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+**/*.pem
+**/*.key
+
+# ---- Local SQLite dev artefacts (wallet_dev.db etc.)
+*.db
+*.sqlite
+*.sqlite3
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# ---- Python build / cache / test artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/.tox/
+**/*.egg-info/
+**/.venv/
+**/venv/
+
+# ---- Editor / OS / VCS noise
+.git/
+.gitignore
+.markdownlint.json
+**/.vscode/
+**/.idea/
+**/.DS_Store
+
+# ---- Not needed at runtime: the whole frontend (node_modules alone is hundreds of MB),
+# the design docs, the infra sources themselves and every agent/tooling state directory.
+frontend/
+docs/
+infra/
+scripts/
+.claude/
+.orchestrate/
+.planning/
+**/node_modules/
+
+# ---- Docs / local-only files
+README.md
+SPEC.md
+backend/README.md
+backend/tests/
