@@ -278,7 +278,9 @@ test('a deep link, a sign-in, and the walk from home to the new-transaction form
   expect(screen.getByTestId('tx-submit')).toBeTruthy();
 });
 
-test('the import tab resolves to the placeholder instead of 404ing', async () => {
+test('the import tab reaches the batch history and its guide (04 §4.10)', async () => {
+  mockGet(`/ledgers/${LEDGER}/imports`, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
   const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/imports` });
 
   // No session yet, so the guard sends us through sign-in first — the same round trip as
@@ -289,12 +291,10 @@ test('the import tab resolves to the placeholder instead of 404ing', async () =>
   fireEvent.press(screen.getByTestId('login-submit'));
 
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports`));
-  expect(await screen.findByTestId('imports-coming-soon')).toBeTruthy();
-  expect(screen.getByTestId('imports-coming-soon-empty')).toHaveTextContent(
-    /导入功能在下一阶段上线/,
-  );
+  expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
+  expect(await screen.findByTestId('imports-empty')).toBeTruthy();
 
-  // And its one action goes back to the ledger's home page.
-  fireEvent.press(screen.getByTestId('imports-coming-soon-empty-primary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  // The empty state's action is the guide, which is the first step of the flow.
+  fireEvent.press(screen.getByTestId('imports-empty-primary'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/guide`));
 });
