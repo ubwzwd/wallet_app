@@ -378,3 +378,97 @@ test('Shift-clicking a row checkbox selects everything between it and the last o
     ).toBe(true);
   }
 });
+
+// ------------------------------- "set kind" in bulk: the impossible options, and the wording
+
+test("a bulk kind is only offered where the selection's signs allow it", async () => {
+  seed([
+    row({ id: 'row-1', row_no: 1, kind: 'expense', amount: '-128.5000' }),
+    row({
+      id: 'row-2', row_no: 2, kind: 'income', amount: '3000.0000',
+      category_l1: 'salary', category_l2: null,
+    }),
+  ]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  // Both rows at once: one patch cannot carry two signs, so no kind is possible at all.
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  expect(screen.getByTestId('review-bulk-kind-trigger').props.accessibilityState.disabled).toBe(
+    true,
+  );
+
+  // The negative row on its own: a patch carrying `kind` makes the server re-derive the
+  // sign from the row's own amount (03 §5.41), so income and refund could only 400.
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  expect(
+    screen.getByTestId('review-bulk-kind-trigger').props.accessibilityState.disabled,
+  ).toBeFalsy();
+  fireEvent.press(screen.getByTestId('review-bulk-kind-trigger'));
+  expect(await screen.findByTestId('review-bulk-kind-option-expense')).toBeTruthy();
+  expect(screen.getByTestId('review-bulk-kind-option-transfer')).toBeTruthy();
+  expect(screen.queryByTestId('review-bulk-kind-option-income')).toBeNull();
+  expect(screen.queryByTestId('review-bulk-kind-option-refund')).toBeNull();
+});
+
+test('a refused bulk kind change says nothing about categories and highlights the row', async () => {
+  const rows = [1, 2].map((n) => row({ id: `row-${n}`, row_no: n, amount: '-10.0000' }));
+  seed(rows);
+  api.mock
+    .onPatch(apiUrl(ROWS_PATH))
+    .reply(400, { detail: '第 2 行的符号与类型冲突', code: 'validation_error' });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  fireEvent.press(screen.getByTestId('review-bulk-kind-trigger'));
+  fireEvent.press(await screen.findByTestId('review-bulk-kind-option-transfer'));
+
+  const message = String((await screen.findByTestId('review-bulk-error')).props.children);
+  expect(message).toContain('2');
+  // The user pressed "set kind": blaming a category would be a lie about what happened.
+  expect(message).not.toContain('分类');
+  await waitFor(() =>
+    expect(screen.getByTestId('review-table-row-row-2').props.style.backgroundColor).toBe(
+      lightColors['status.warning.bg'],
+    ),
+  );
+});
+
+test('the bulk bar accepts no second command while one is in flight', async () => {
+  const rows = [1, 2].map((n) => row({ id: `row-${n}`, row_no: n }));
+  seed(rows);
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  api.mock.onPatch(apiUrl(ROWS_PATH)).reply(async () => {
+    await gate;
+    serverRows = rows.map((r) => ({ ...r, status: 'skipped' as const }));
+    return [200, { updated: serverRows.length, rows: serverRows }];
+  });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  fireEvent.press(screen.getByTestId('review-bulk-skip'));
+
+  // Every control, not only the three buttons: a second pick would send a second batch
+  // PATCH over rows the first one is still changing.
+  await waitFor(() =>
+    expect(screen.getByTestId('review-bulk-skip').props.accessibilityState.disabled).toBe(true),
+  );
+  expect(screen.getByTestId('review-bulk-kind-trigger').props.accessibilityState.disabled).toBe(
+    true,
+  );
+  expect(
+    screen.getByTestId('review-bulk-currency-trigger').props.accessibilityState.disabled,
+  ).toBe(true);
+  expect(screen.getByTestId('review-bulk-category').props.accessibilityState.disabled).toBe(true);
+
+  await act(async () => {
+    release();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(bulkCalls()).toHaveLength(1));
+});

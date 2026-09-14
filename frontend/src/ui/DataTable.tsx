@@ -13,8 +13,10 @@
  * height (`maxHeight`, or the viewport minus the page chrome) inside a horizontal one — so
  * the header can stick, `scrollToRow` can move and the focused cell can be kept in view.
  *
- * Rows are not virtualised: a batch is capped at 2000 rows server-side; a windowing layer
- * would fight the sticky header and the focus ring for no measurable gain at this size.
+ * TODO (row virtualisation): every row is rendered, and a batch may hold up to 2000 of them
+ * (`IMPORT_MAX_ROWS`), so the widest slice of a large import pays for all of it at once. A
+ * windowing layer has to keep the sticky header, the focus ring and `scrollToRow` working;
+ * it is a task of its own and is deliberately not attempted here.
  */
 import React from 'react';
 import {
@@ -117,6 +119,12 @@ export interface DataTableProps<Row> {
   /** Whenever this index changes to a number, that row is scrolled into view. */
   scrollToRow?: number | null;
   /**
+   * Bump this to repeat a scroll the index alone cannot express: "jump to the first
+   * uncategorized row" pressed twice is two requests for the *same* row, and both have to
+   * move the view (04 §4.11.8).
+   */
+  scrollSignal?: number;
+  /**
    * Height of the table's own scroll box. Defaults to the viewport minus the page chrome;
    * pass a measured value when the surrounding layout is known.
    */
@@ -141,6 +149,7 @@ export function DataTable<Row>({
   focus,
   onFocusCell,
   scrollToRow,
+  scrollSignal = 0,
   maxHeight,
   emptyLabel,
   style,
@@ -161,14 +170,16 @@ export function DataTable<Row>({
   const viewport = React.useRef(0);
 
   // "Scroll this row into view" is a one-shot request expressed as state: the caller sets
-  // an index, we move, and nothing else in the table depends on it.
+  // an index, we move, and nothing else in the table depends on it. `scrollSignal` is the
+  // second half of the request — it is in the dependencies precisely so that asking for the
+  // same index again asks again.
   React.useEffect(() => {
     if (scrollToRow === null || scrollToRow === undefined) return;
     scroller.current?.scrollTo({
       y: Math.max(0, scrollToRow * DATA_TABLE_ROW_HEIGHT - DATA_TABLE_ROW_HEIGHT),
       animated: true,
     });
-  }, [scrollToRow]);
+  }, [scrollToRow, scrollSignal]);
 
   // 04 §4.11.7: the focused cell stays in the viewport as the keyboard walks the grid —
   // but only when it would otherwise leave it, so arrowing around inside the visible rows

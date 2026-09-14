@@ -5,10 +5,9 @@
  * reviewed) and `committed`. There is no `reverted` — undoing an import deletes the batch,
  * so it simply leaves this list.
  *
- * Both destructive actions go through `useDeleteImport`. For a committed batch the delete
- * is asked twice: once with `?dry_run=true`, whose two refund counters are worded
- * *separately* in the confirmation because they mean different things (decision §14.52 B24),
- * and then for real.
+ * Both destructive actions go through `useDeleteImport`. Discarding a draft is asked once
+ * and right here; undoing a committed batch is the two-step flow of `undoBatch.ts`, shared
+ * verbatim with the batch screen's committed panel.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -35,6 +34,8 @@ import {
   confirm,
   toast,
 } from '@/ui';
+
+import { undoImportBatch } from './undoBatch';
 
 /** 04 §4.10: the history pages 20 batches at a time. */
 export const IMPORTS_PAGE_SIZE = 20;
@@ -98,46 +99,11 @@ function HistoryRow({ ledgerId, batch, uploader, lang }: HistoryRowProps): React
     })();
   }, [batch.row_count, remove, t]);
 
+  // The whole dry-run → confirm → delete → toast flow lives in one place (`undoBatch.ts`),
+  // shared with the committed panel of the batch screen. The list has nowhere to go
+  // afterwards: the batch simply leaves it (decision §14.22).
   const onUndo = React.useCallback((): void => {
-    void (async () => {
-      // Ask first: how much would this delete, and which refunds does it disturb?
-      let dry;
-      try {
-        dry = await remove.mutateAsync({ dry_run: true });
-      } catch {
-        return;
-      }
-      const lines = [
-        t('import:committed.undo_confirm_body', {
-          count: dry.would_delete_transactions ?? 0,
-        }),
-      ];
-      // The two counters are NOT the same thing, so they never share a sentence, and a
-      // zero counter contributes no line at all (decision §14.52 B24).
-      if (dry.orphaned_refunds > 0) {
-        lines.push(t('import:committed.undo_orphaned_refunds', { count: dry.orphaned_refunds }));
-      }
-      if (dry.refunds_in_batch > 0) {
-        lines.push(t('import:committed.undo_refunds_in_batch', { count: dry.refunds_in_batch }));
-      }
-      const ok = await confirm({
-        title: t('import:committed.undo_confirm_title'),
-        body: lines.join('\n\n'),
-        confirmLabel: t('import:history.undo'),
-        tone: 'danger',
-        doubleTap: true,
-      });
-      if (!ok) return;
-      let done;
-      try {
-        done = await remove.mutateAsync(undefined);
-      } catch {
-        return;
-      }
-      toast.success(
-        t('import:committed.undo_success_toast', { count: done.deleted_transactions ?? 0 }),
-      );
-    })();
+    void undoImportBatch({ remove: remove.mutateAsync, t });
   }, [remove, t]);
 
   return (

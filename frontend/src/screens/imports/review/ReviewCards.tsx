@@ -12,7 +12,13 @@
  * bar appears as soon as the selection is non-empty.
  */
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import {
+  type LayoutChangeEvent,
+  Pressable,
+  ScrollView,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportRow } from '@/api/types';
@@ -29,14 +35,27 @@ import type { ReviewViewProps } from './ReviewTable';
 const MERCHANT_MAX = 200;
 const NOTE_MAX = 500;
 
+/**
+ * The card flow is its own scroll box, for the same reason the wide grid is (04 §6.4): a
+ * list that simply grows inside the page's scroll view cannot be scrolled *by us*, and
+ * "jump to the row the server complained about" then moves nothing on a phone — the one
+ * device where the offending row is most likely several screens away (04 §4.11.8).
+ *
+ * The height is the viewport minus the page chrome above and below the list (the top bar,
+ * the screen header, the slice control and the commit bar).
+ */
+const CARDS_CHROME_HEIGHT = 300;
+const MIN_CARDS_HEIGHT = 240;
+
 export function ReviewCards({
   env,
   selection,
-  highlightRowNo,
+  highlight,
   testID,
 }: ReviewViewProps): React.JSX.Element {
   const { t } = useTranslation();
   const id = testID ?? 'review-cards';
+  const viewportSize = useWindowDimensions();
   const [detailFor, setDetailFor] = React.useState<string | null>(null);
   const [categoryOpen, setCategoryOpen] = React.useState<{ id: string; level: 'l1' | 'l2' } | null>(
     null,
@@ -45,9 +64,29 @@ export function ReviewCards({
   const rows = selection.visible;
   const detailRow = rows.find((row) => row.id === detailFor) ?? null;
   const selecting = selection.count > 0;
+  const highlightRowNo = highlight?.rowNo ?? null;
+
+  // Where each card ended up inside the scroll box, so the highlighted one can be brought
+  // into view whatever its height turned out to be (a card with a link cell is much taller
+  // than a plain one, so a nominal row height would not do).
+  const scroller = React.useRef<ScrollView | null>(null);
+  const cardTops = React.useRef(new Map<number, number>());
+  const highlightSeq = highlight?.seq ?? 0;
+  React.useEffect(() => {
+    if (highlightRowNo === null) return;
+    const top = cardTops.current.get(highlightRowNo);
+    if (top === undefined) return;
+    scroller.current?.scrollTo({ y: Math.max(0, top - space['2']), animated: true });
+    // `highlightSeq` is the point: the same row twice is a new request to scroll to it.
+  }, [highlightRowNo, highlightSeq]);
 
   return (
-    <View style={{ gap: space['2'] }} testID={id}>
+    <ScrollView
+      ref={scroller}
+      testID={id}
+      style={{ maxHeight: Math.max(MIN_CARDS_HEIGHT, viewportSize.height - CARDS_CHROME_HEIGHT) }}
+      contentContainerStyle={{ gap: space['2'] }}
+    >
       {rows.length === 0 ? (
         <Text variant="body" tone="muted" testID={`${id}-empty`}>
           {t('import:review.no_rows_in_slice')}
@@ -58,6 +97,9 @@ export function ReviewCards({
         <Pressable
           key={row.id}
           testID={`${id}-row-${row.row_no}`}
+          onLayout={(event: LayoutChangeEvent) =>
+            cardTops.current.set(row.row_no, event.nativeEvent.layout.y)
+          }
           onLongPress={() => selection.toggle(row, index)}
           accessibilityRole="button"
           accessibilityLabel={t('import:review.select_row', { row: row.row_no })}
@@ -207,6 +249,6 @@ export function ReviewCards({
           </View>
         ) : null}
       </Sheet>
-    </View>
+    </ScrollView>
   );
 }

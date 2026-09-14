@@ -33,18 +33,31 @@ import type { ReviewEnv } from './ReviewRow';
 import { isCommittable, isUncategorized } from './useReviewSelection';
 
 /**
- * The commit refusals whose `detail` really does name the offending row (03 §5.43), and are
- * therefore the only ones worth reading a row number out of. Everything else either counts
- * rows or talks about the batch as a whole.
+ * The per-row commit refusals of 03 §5.43. The server states their row numbers in the
+ * response body's `rows` (see below), so this set is only the fallback for a body that
+ * arrived without one — the prose of `detail` is all there is then. Everything not listed
+ * here either counts rows or talks about the batch as a whole.
  */
 const ROW_NUMBERED_CODES: ReadonlySet<string> = new Set([
   'pair_invalid',
   'refund_target_invalid',
   'category_invalid',
   'category_kind_mismatch',
+  'repayment_target_not_credit',
   'same_source',
+  'not_found',
   'validation_error',
 ]);
+
+/**
+ * The row numbers a commit refusal carries. 03 §5.43 / 05 §4.3: the body is the standard
+ * `{detail, code}` plus a `rows` array — `detail` itself holds no row number at all, so
+ * this is the only thing that can point at the offending row.
+ */
+function rejectedRows(error: ApiClientError): number[] {
+  const rows = (error.payload as { rows?: number[] } | undefined)?.rows;
+  return Array.isArray(rows) ? rows.filter((n) => typeof n === 'number') : [];
+}
 
 export interface CommitBlockers {
   uncategorized: ImportRow[];
@@ -141,15 +154,24 @@ export function CommitBar({
         // The two batch-wide refusals count rows, they do not name one (03 §5.43, 3 & 4a):
         // "N row(s) still miss a date…" — reading N as a row number would scroll the user
         // to an unrelated row. Both are blockers we compute ourselves anyway, so jump to
-        // the first row *we* know about.
-        if (error.code === 'rows_uncategorized') {
-          if (blockers.uncategorized.length > 0) onJumpTo(blockers.uncategorized[0].row_no);
+        // the first row *we* know about — and to the body's `rows` below when we know of
+        // none (a row edited in another tab).
+        if (error.code === 'rows_uncategorized' && blockers.uncategorized.length > 0) {
+          onJumpTo(blockers.uncategorized[0].row_no);
           return;
         }
-        if (error.code === 'batch_not_ready') {
-          if (blockers.incomplete.length > 0) onJumpTo(blockers.incomplete[0].row_no);
+        if (error.code === 'batch_not_ready' && blockers.incomplete.length > 0) {
+          onJumpTo(blockers.incomplete[0].row_no);
           return;
         }
+        // Everything else that names a row names it in the body (03 §5.43).
+        const rejected = rejectedRows(error);
+        if (rejected.length > 0) {
+          onJumpTo(rejected[0]);
+          return;
+        }
+        // Fallback only: a refusal that arrived without `rows` may still say the number
+        // in its prose.
         if (!ROW_NUMBERED_CODES.has(error.code)) return;
         const hit = /\d+/.exec(error.detail);
         if (hit) onJumpTo(Number(hit[0]));

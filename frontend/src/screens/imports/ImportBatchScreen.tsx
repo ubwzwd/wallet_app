@@ -5,11 +5,9 @@
  * the product — the content area drops the 1200px reading cap, 04 §1.4), `committed` paints
  * the result panel with its three actions.
  *
- * Undoing a committed batch asks twice: a `?dry_run=true` DELETE first, whose two refund
- * counters are worded *separately* in the confirmation because they say different things
- * (decision §14.52 B24), then the real DELETE. Afterwards the batch is gone from the history
- * altogether (decision §14.22), so the screen leaves for the history list rather than
- * staying on a URL that now 404s.
+ * Undoing a committed batch is `undoBatch.ts` — the flow the history list runs, to the
+ * letter. Afterwards the batch is gone from the history altogether (decision §14.22), so
+ * this screen leaves for the history list rather than staying on a URL that now 404s.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -39,17 +37,16 @@ import {
   SegmentedControl,
   Skeleton,
   Text,
-  confirm,
-  toast,
 } from '@/ui';
 
 import { BulkBar } from './review/BulkBar';
 import { CommitBar } from './review/CommitBar';
 import { ReviewCards } from './review/ReviewCards';
-import { ReviewTable } from './review/ReviewTable';
+import { ReviewTable, type ReviewHighlight } from './review/ReviewTable';
 import type { ReviewEnv } from './review/ReviewRow';
 import { useReviewRows } from './review/useReviewRows';
 import { REVIEW_SLICES, type ReviewSlice, useReviewSelection } from './review/useReviewSelection';
+import { undoImportBatch } from './undoBatch';
 
 /** Room under the phone's scroll content for the pinned bulk bar (04 §4.11.9). */
 const BULK_BAR_CLEARANCE = 96;
@@ -84,55 +81,15 @@ function CommittedPanel({ ledgerId, batch, result }: CommittedPanelProps): React
   const router = useRouter();
   const remove = useDeleteImport(ledgerId, batch.id);
 
+  // The same flow the history list runs (`undoBatch.ts`) — there is exactly one of it. The
+  // only difference is where it leaves the user: this screen's URL 404s once the batch is
+  // gone (decision §14.22), so it goes back to the history.
   const onUndo = React.useCallback((): void => {
-    void (async () => {
-      let dry;
-      try {
-        dry = await remove.mutateAsync({ dry_run: true });
-      } catch {
-        return; // the global error toast already explained it (04 §3.9)
-      }
-      const lines = [
-        t('import:committed.undo_confirm_body', {
-          count: dry.would_delete_transactions ?? 0,
-        }),
-      ];
-      // Two different facts, never one sentence; a zero counter contributes no line at all.
-      if (dry.orphaned_refunds > 0) {
-        lines.push(
-          t('import:committed.undo_orphaned_refunds', {
-            count: dry.orphaned_refunds,
-          }),
-        );
-      }
-      if (dry.refunds_in_batch > 0) {
-        lines.push(
-          t('import:committed.undo_refunds_in_batch', {
-            count: dry.refunds_in_batch,
-          }),
-        );
-      }
-      const ok = await confirm({
-        title: t('import:committed.undo_confirm_title'),
-        body: lines.join('\n\n'),
-        confirmLabel: t('import:history.undo'),
-        tone: 'danger',
-        doubleTap: true,
-      });
-      if (!ok) return;
-      let done;
-      try {
-        done = await remove.mutateAsync(undefined);
-      } catch {
-        return;
-      }
-      toast.success(
-        t('import:committed.undo_success_toast', {
-          count: done.deleted_transactions ?? 0,
-        }),
-      );
-      router.replace(routes.l(ledgerId).imports() as Href);
-    })();
+    void undoImportBatch({
+      remove: remove.mutateAsync,
+      t,
+      onDone: () => router.replace(routes.l(ledgerId).imports() as Href),
+    });
   }, [ledgerId, remove, router, t]);
 
   return (
@@ -231,8 +188,26 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const unloadedRows = Math.max(0, total - serverRows.length);
 
   const [committed, setCommitted] = React.useState<ImportCommitResult | null>(null);
-  const [highlight, setHighlight] = React.useState<number | null>(null);
+  const [highlight, setHighlight] = React.useState<ReviewHighlight | null>(null);
   const [submitSignal, setSubmitSignal] = React.useState(0);
+
+  /**
+   * "Put this row in front of the user" (04 §4.11.8), from the commit bar, a bulk failure
+   * or a "jump to the first one" link.
+   *
+   * The row the server (or a blocker) points at is very often *not* in the slice on screen
+   * — a refused pairing is neither uncategorized nor flagged — so the jump widens the view
+   * to "all" first, and the highlight carries a sequence number: pressing the same link
+   * twice has to scroll twice, which a bare row number could not express.
+   */
+  const jumpTo = React.useCallback(
+    (rowNo: number | null): void => {
+      if (rowNo === null) return;
+      selection.setSlice('all');
+      setHighlight((prev) => ({ rowNo, seq: (prev?.seq ?? 0) + 1 }));
+    },
+    [selection],
+  );
 
   useTopBar(batch ? batch.source_name : t('import:history.title'));
 
@@ -316,20 +291,20 @@ export default function ImportBatchScreen(): React.JSX.Element {
     <ReviewTable
       env={env}
       selection={selection}
-      highlightRowNo={highlight}
+      highlight={highlight}
       onCommitRequest={() => setSubmitSignal((n) => n + 1)}
     />
   ) : (
     <ReviewCards
       env={env}
       selection={selection}
-      highlightRowNo={highlight}
+      highlight={highlight}
       onCommitRequest={() => setSubmitSignal((n) => n + 1)}
     />
   );
 
   const bulkBar = (
-    <BulkBar env={env} selection={selection} onFailure={setHighlight} compact={!wide} />
+    <BulkBar env={env} selection={selection} onFailure={jumpTo} compact={!wide} />
   );
 
   return (
@@ -359,7 +334,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
         <CommitBar
           env={env}
           rows={ctrl.rows}
-          onJumpTo={setHighlight}
+          onJumpTo={jumpTo}
           onCommitted={(result) => {
             setCommitted(result);
             selection.clear();

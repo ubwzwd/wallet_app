@@ -9,7 +9,10 @@
  * it is opened: an expense category offered for a selection that contains an income row can
  * only end in a 400 that rolls the whole batch back, so the option never appears. If one
  * slips through anyway (a row edited in another tab, say), the failure names the row, and
- * the caller highlights and scrolls to it.
+ * the caller highlights and scrolls to it. The kind picker is filtered the same way and for
+ * the same reason: the server re-derives every row's sign from that row's own amount, which
+ * one bulk body cannot carry, so a kind that disagrees with any selected amount is offered
+ * to nobody (§4.11.6).
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -18,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiClientError } from '@/api';
 import type { ImportRow, ImportRowPatch, TxKind } from '@/api/types';
 import { kindOfCategoryTree } from '@/domain/kinds';
+import { cmpMoney } from '@/domain/money';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import {
@@ -99,6 +103,33 @@ export function bulkKindPatch(kind: TxKind): ImportRowPatch {
   };
 }
 
+/**
+ * The kinds the selection can actually be set to (04 §4.11.6: an option that can only end
+ * in a 400 is not offered at all).
+ *
+ * A patch carrying `kind` makes the server re-derive **every** row's sign from that row's
+ * own amount (03 §5.41, "符号与 kind 冲突" → 400 `validation_error`), and one bulk body
+ * cannot carry a per-row amount — so a kind only survives when every selected row's amount
+ * already has the sign that kind demands: positive for `income` and `refund`, negative for
+ * `expense`, and negative for `transfer` too, whose bulk patch always sends the default
+ * `transfer_role: 'out'`. A mixed selection, a zero amount or a missing one leaves nothing
+ * that could be set at all.
+ */
+export function bulkKindOptions(rows: readonly ImportRow[]): TxKind[] {
+  if (rows.length === 0) return [];
+  let positive = false;
+  let negative = false;
+  for (const row of rows) {
+    if (row.amount === null) return [];
+    const sign = cmpMoney(row.amount, '0');
+    if (sign > 0) positive = true;
+    else if (sign < 0) negative = true;
+    else return [];
+    if (positive && negative) return [];
+  }
+  return positive ? ['income', 'refund'] : ['expense', 'transfer'];
+}
+
 /** Which row a refused bulk edit is about — computed locally first, parsed from the
  *  server's `detail` as a fallback (03 §5.42 states the row number in prose). */
 export function offendingRow(
@@ -141,6 +172,7 @@ export function BulkBar({
   const rows = selection.selectedRows();
   const ids = rows.map((row) => row.id);
   const kind = commonCategoryKind(rows);
+  const kindOptions = bulkKindOptions(rows);
 
   if (selection.count === 0) return null;
 
@@ -150,13 +182,20 @@ export function BulkBar({
       await env.ctrl.bulk(ids, patch);
     } catch (error) {
       const failure = offendingRow(rows, patch, error, env.index);
+      // The category-specific wording is only true when a category really was the edit
+      // *and* the local pre-check found the row whose kind disagrees with it. Everything
+      // else — a currency, a kind, a skip — gets the neutral sentence: telling a user who
+      // pressed "set kind" that a category does not match would be a lie.
+      const mixedKind = patch.category_l1 !== undefined && failure.kind !== null;
       setMessage(
         failure.rowNo === null
           ? t('import:review.bulk.failed')
-          : t('import:review.bulk.mixed_kind_error', {
-              row: failure.rowNo,
-              kind: t(`transaction:kind.${failure.kind ?? 'income'}`),
-            }),
+          : mixedKind
+            ? t('import:review.bulk.mixed_kind_error', {
+                row: failure.rowNo,
+                kind: t(`transaction:kind.${failure.kind}`),
+              })
+            : t('import:review.bulk.failed_row', { row: failure.rowNo }),
       );
       onFailure(failure.rowNo);
     }
@@ -197,10 +236,9 @@ export function BulkBar({
           testID={`${id}-kind`}
           value={null}
           placeholder={t('import:review.bulk.set_kind')}
-          options={(['expense', 'income', 'refund', 'transfer'] as TxKind[]).map((k) => ({
-            value: k,
-            label: t(`transaction:kind.${k}`),
-          }))}
+          // Only the kinds the selection's amounts allow — the rest would be a certain 400.
+          options={kindOptions.map((k) => ({ value: k, label: t(`transaction:kind.${k}`) }))}
+          disabled={kindOptions.length === 0 || env.ctrl.bulkPending}
           onChange={(next) => {
             if (next !== null) void run(bulkKindPatch(next as TxKind));
           }}
@@ -212,6 +250,7 @@ export function BulkBar({
           names={env.currencyNames}
           value={null}
           label={t('import:review.bulk.set_currency')}
+          disabled={env.ctrl.bulkPending}
           onChange={(next) => void run({ currency: next })}
         />
         <Button

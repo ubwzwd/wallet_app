@@ -79,6 +79,7 @@
       "skip": "Skip selected",
       "unskip": "Unskip selected",
       "mixed_kind_error": "Row {{row}} is a {{kind}} row and doesn't match this category — nothing in this batch was changed",
+      "failed_row": "Row {{row}} did not pass validation — nothing in this batch was changed",
       "failed": "Nothing in this batch was changed — check the selected rows"
     },
     "column": {
