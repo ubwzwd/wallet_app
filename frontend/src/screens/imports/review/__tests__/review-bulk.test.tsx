@@ -1,0 +1,315 @@
+/**
+ * Bulk operations and keyboard navigation (04 §4.11.6, §4.11.7; §8.4 cases 9 and 12;
+ * decisions §14.52 A4 / A19).
+ */
+import React from 'react';
+import { Text as RNText } from 'react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import i18next from 'i18next';
+
+import { setAuthToken } from '@/api';
+import type { ImportRow } from '@/api/types';
+import { initI18n } from '@/i18n';
+import { TopBarProvider, TopBarSurface } from '@/navigation';
+import { AuthProvider, LedgerProvider } from '@/store';
+import { ThemeProvider } from '@/theme/ThemeProvider';
+import { lightColors } from '@/theme/tokens';
+import * as breakpoint from '@/theme/useBreakpoint';
+import { ConfirmHost, ToastHost, toast } from '@/ui';
+import {
+  BATCH_ID,
+  LEDGER_ID,
+  SOURCE_ID,
+  apiUrl,
+  makeCategoryTree,
+  makeCurrencyList,
+  makeImportBatch,
+  makeImportRow,
+  makeLedger,
+  makeSource,
+  makeTestQueryClient,
+  makeUser,
+  mockApi,
+  mockGet,
+  type MockApi,
+} from '@/test';
+
+import ImportBatchScreen from '../../ImportBatchScreen';
+
+let queryClient: QueryClient;
+let api: MockApi;
+/** What `GET .../rows` answers right now; a bulk edit swaps it before the refetch. */
+let serverRows: ImportRow[] = [];
+
+const LEDGER = makeLedger({ base_currency: 'CNY' });
+const SOURCE = makeSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
+const BATCH_PATH = `/ledgers/${LEDGER_ID}/imports/${BATCH_ID}`;
+const ROWS_PATH = `${BATCH_PATH}/rows`;
+const REVIEW_URL = `/l/${LEDGER_ID}/imports/${BATCH_ID}`;
+
+function row(over: Partial<ImportRow>): ImportRow {
+  return makeImportRow({ batch_id: BATCH_ID, ...over });
+}
+
+function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider initialPref="light">
+        <AuthProvider queryClient={queryClient}>
+          <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
+            <TopBarProvider>
+              <TopBarSurface onPressLedger={() => {}} />
+              {children}
+            </TopBarProvider>
+          </LedgerProvider>
+          <ToastHost />
+          <ConfirmHost
+            labels={{
+              confirm: i18next.t('common:button.confirm'),
+              cancel: i18next.t('common:button.cancel'),
+              confirmAgain: i18next.t('common:button.confirm_again'),
+            }}
+          />
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+}
+
+const ROUTES = {
+  index: () => <RNText>landing</RNText>,
+  'l/[ledgerId]/imports/[batchId]': ImportBatchScreen,
+};
+
+function seed(rows: ImportRow[], tree = makeCategoryTree()): void {
+  serverRows = rows;
+  mockGet('/me', makeUser({ base_currency: 'CNY' }));
+  mockGet('/categories', tree);
+  mockGet('/rates/currencies', makeCurrencyList());
+  mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE], total: 1 });
+  mockGet(BATCH_PATH, makeImportBatch({ status: 'ready', row_count: rows.length }));
+  api.mock
+    .onGet(apiUrl(ROWS_PATH))
+    .reply(() => [200, { items: serverRows, total: serverRows.length }]);
+}
+
+const bulkCalls = (): Array<{ row_ids: string[]; patch: Record<string, unknown> }> =>
+  api.mock.history.patch
+    .filter((r) => r.url === ROWS_PATH)
+    .map((r) => JSON.parse(String(r.data ?? '{}')));
+
+/** A `document` stand-in: the shortcut hook only ever touches add/removeEventListener. */
+function stubDocument(): { press(event: Record<string, unknown>): void; restore(): void } {
+  const registered = new Set<(event: unknown) => void>();
+  const host = globalThis as unknown as { document?: unknown };
+  const previous = host.document;
+  const had = 'document' in host;
+  host.document = {
+    addEventListener: (_type: string, fn: (event: unknown) => void) => registered.add(fn),
+    removeEventListener: (_type: string, fn: (event: unknown) => void) => registered.delete(fn),
+  };
+  return {
+    // Wrapped in `act`, because a shortcut sets state exactly like a press does.
+    press: (event) =>
+      act(() => {
+        registered.forEach((fn) =>
+          fn({ metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, target: null,
+               preventDefault: () => {}, ...event }),
+        );
+      }),
+    restore: () => {
+      if (had) host.document = previous;
+      else delete host.document;
+    },
+  };
+}
+
+/** The focus ring colour of a cell, whatever shape its style prop arrived in. */
+function borderColorOf(testID: string): unknown {
+  const style = screen.getByTestId(testID).props.style;
+  const flat = Array.isArray(style) ? Object.assign({}, ...style) : style;
+  return flat?.borderColor;
+}
+
+beforeEach(async () => {
+  api = mockApi();
+  await setAuthToken('test-token');
+  toast.clear();
+  queryClient = makeTestQueryClient();
+  await initI18n();
+  await i18next.changeLanguage('zh');
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+});
+
+afterEach(() => {
+  api.restore();
+  queryClient.clear();
+  toast.clear();
+  jest.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------- case 9
+
+test('setting a category on a selection is one request, and the answer lands in the table', async () => {
+  const rows = [1, 2, 3].map((n) =>
+    row({ id: `row-${n}`, row_no: n, category_l1: null, category_l2: null }),
+  );
+  seed(rows);
+  const updated = rows.map((r) => ({ ...r, category_l1: 'food', category_l2: 'lunch' }));
+  api.mock.onPatch(apiUrl(ROWS_PATH)).reply(() => {
+    serverRows = updated;
+    return [200, { updated: updated.length, rows: updated }];
+  });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  for (const n of [1, 2, 3]) {
+    fireEvent.press(await screen.findByTestId(`review-table-select-row-${n}`));
+  }
+  fireEvent.press(screen.getByTestId('review-bulk-category'));
+  fireEvent.press(await screen.findByTestId('review-bulk-category-l1-food'));
+  fireEvent.press(await screen.findByTestId('review-bulk-category-l2-lunch'));
+
+  await waitFor(() => expect(bulkCalls()).toHaveLength(1));
+  // One request for the whole selection — not one per row (decision §14.52 A4).
+  expect(api.mock.history.patch).toHaveLength(1);
+  expect(bulkCalls()[0].row_ids).toEqual(['row-1', 'row-2', 'row-3']);
+  expect(bulkCalls()[0].patch).toEqual({ category_l1: 'food', category_l2: 'lunch' });
+  // The rows come back categorized, so the blocker is gone.
+  await waitFor(() => expect(screen.queryByTestId('review-commit-block')).toBeNull());
+});
+
+test('a refused bulk edit changes nothing, names the row and highlights it', async () => {
+  const rows = [
+    row({ id: 'row-1', row_no: 1, category_l1: null, category_l2: null }),
+    row({ id: 'row-12', row_no: 12, category_l1: null, category_l2: null }),
+  ];
+  seed(rows);
+  api.mock
+    .onPatch(apiUrl(ROWS_PATH))
+    .reply(400, { detail: '第 12 行是收入行', code: 'category_kind_mismatch' });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-12'));
+  fireEvent.press(screen.getByTestId('review-bulk-category'));
+  fireEvent.press(await screen.findByTestId('review-bulk-category-l1-food'));
+  fireEvent.press(await screen.findByTestId('review-bulk-category-l2-lunch'));
+
+  const error = await screen.findByTestId('review-bulk-error');
+  expect(String(error.props.children)).toContain('12');
+  // Nothing was applied: no row-level PATCH, and both rows are still uncategorized.
+  expect(api.mock.history.patch.filter((r) => r.url !== ROWS_PATH)).toHaveLength(0);
+  expect(screen.getByTestId('review-commit-block').props.children).toContain('2');
+  expect(screen.getByTestId('review-1-l1-trigger')).toBeTruthy();
+});
+
+test('a selection that mixes category trees cannot even open the picker', async () => {
+  seed([
+    row({ id: 'row-1', row_no: 1, kind: 'expense' }),
+    row({ id: 'row-2', row_no: 2, kind: 'income', category_l1: 'salary', category_l2: null }),
+  ]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  expect(screen.getByTestId('review-bulk-category').props.accessibilityState.disabled).toBeFalsy();
+  // Adding an income row leaves no category both rows could take (03 §5.42).
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  expect(screen.getByTestId('review-bulk-category').props.accessibilityState.disabled).toBe(true);
+});
+
+test('bulk skip is one request and takes the rows out of the submit count', async () => {
+  const rows = [1, 2].map((n) => row({ id: `row-${n}`, row_no: n }));
+  seed(rows);
+  const updated = rows.map((r) => ({ ...r, status: 'skipped' as const }));
+  api.mock.onPatch(apiUrl(ROWS_PATH)).reply(() => {
+    serverRows = updated;
+    return [200, { updated: updated.length, rows: updated }];
+  });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  expect((await screen.findByTestId('review-commit-submit')).props.accessibilityLabel).toContain(
+    '2',
+  );
+  fireEvent.press(screen.getByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  fireEvent.press(screen.getByTestId('review-bulk-skip'));
+
+  await waitFor(() => expect(bulkCalls()).toHaveLength(1));
+  expect(bulkCalls()[0].patch).toEqual({ status: 'skipped' });
+  await waitFor(() =>
+    expect(screen.getByTestId('review-commit-submit').props.accessibilityLabel).toContain('0'),
+  );
+});
+
+// --------------------------------------------------------------------- case 12
+
+test('the keyboard moves, edits, cancels, skips, jumps and refuses to commit while blocked', async () => {
+  const doc = stubDocument();
+  const rows = [
+    row({ id: 'row-1', row_no: 1 }),
+    row({ id: 'row-2', row_no: 2, merchant: '京东' }),
+    row({ id: 'row-3', row_no: 3, category_l1: null, category_l2: null }),
+  ];
+  // A criterion that appears in no category name, so searching it proves the picker
+  // filters on `desc_*` too (decision §14.52 A19).
+  const tree = makeCategoryTree();
+  seed(rows, {
+    ...tree,
+    expense: tree.expense.map((c) =>
+      c.code === 'food' ? { ...c, desc_zh: '一日三餐、外卖、咖啡' } : c,
+    ),
+  });
+  api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-2`)).reply(() => [
+    200,
+    { ...rows[1], status: 'skipped' },
+  ]);
+  api.mock.onPost(apiUrl(`${BATCH_PATH}/commit`)).reply(200, {});
+  try {
+    renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+    // Row 3 has no category, so the table opens on the "uncategorized" slice; switch to
+    // "all" to navigate the whole batch.
+    fireEvent.press(await screen.findByText('全部 3'));
+    expect(await screen.findByTestId('review-table-row-row-1')).toBeTruthy();
+
+    // ↓ then → five times lands on row 2's merchant cell.
+    doc.press({ key: 'ArrowDown' });
+    for (let i = 0; i < 5; i += 1) doc.press({ key: 'ArrowRight' });
+    await waitFor(() =>
+      expect(borderColorOf('review-table-cell-row-2-merchant')).toBe(lightColors['border.focus']),
+    );
+
+    // Enter opens the editor, Esc puts the original value back.
+    doc.press({ key: 'Enter' });
+    const input = await screen.findByTestId('review-2-merchant-input');
+    fireEvent.changeText(input, '半句话');
+    doc.press({ key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('review-2-merchant-input')).toBeNull());
+    expect(screen.getByTestId('review-2-merchant').props.children).toBe('京东');
+
+    // `S` skips the focused row.
+    doc.press({ key: 's' });
+    await waitFor(() => expect(api.mock.history.patch).toHaveLength(1));
+    expect(JSON.parse(String(api.mock.history.patch[0].data))).toEqual({ status: 'skipped' });
+
+    // `]` jumps to the next uncategorized row (row 3).
+    doc.press({ key: ']' });
+    await waitFor(() =>
+      expect(borderColorOf('review-table-cell-row-3-merchant')).toBe(lightColors['border.focus']),
+    );
+
+    // `C` opens that row's category picker, and the search matches the criterion text.
+    doc.press({ key: 'c' });
+    const search = await screen.findByTestId('review-3-l1-search');
+    fireEvent.changeText(search, '一日三餐');
+    await waitFor(() => expect(screen.getByTestId('review-3-l1-l1-food')).toBeTruthy());
+    expect(screen.queryByTestId('review-3-l1-l1-transport')).toBeNull();
+
+    // ⌘+Enter is inert while a row is still uncategorized (04 §4.11.8).
+    doc.press({ key: 'Enter', metaKey: true });
+    await waitFor(() => expect(screen.getByTestId('review-commit-block')).toBeTruthy());
+    expect(api.mock.history.post.filter((r) => r.url === `${BATCH_PATH}/commit`)).toHaveLength(0);
+  } finally {
+    doc.restore();
+  }
+});
