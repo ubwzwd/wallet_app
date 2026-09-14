@@ -22,6 +22,7 @@ import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
+  apiUrl,
   makeCategoryTree,
   makeCurrencyList,
   makeLedger,
@@ -200,7 +201,7 @@ afterEach(() => {
   wideSpy?.mockRestore();
 });
 
-test('the two legs of a transfer render as one row, and "共 N 笔" counts it once', async () => {
+test('the two legs of a transfer render as one row, and the header counts the entries', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
@@ -215,8 +216,51 @@ test('the two legs of a transfer render as one row, and "共 N 笔" counts it on
   );
   expect(screen.getByTestId(`tx-row-${PAIR_ID}-badge-repayment`)).toHaveTextContent('还款');
 
-  // Six legs came back; five rows are shown, and the count follows the rows.
-  expect(screen.getByTestId('tx-count')).toHaveTextContent('共 5 笔');
+  // Six legs came back and five rows are shown, but the header counts what the *server*
+  // matched — a number that does not move as more pages arrive (see the paging test below).
+  expect(screen.getByTestId('tx-count')).toHaveTextContent('已加载 6 / 共 6 笔');
+});
+
+test('the header count does not drift when a second page is loaded', async () => {
+  const first = listResponse({ total: 8 });
+  const second = listResponse({
+    items: [
+      makeTransaction({
+        id: 'older',
+        source_id: 's1',
+        occurred_at: '2026-09-01',
+        amount: '-12.0000',
+        amount_base: '-12.0000',
+        category_l1: 'food',
+        category_l2: 'lunch',
+        merchant: '沙县',
+      }),
+    ],
+    total: 8,
+  });
+  api.mock.onGet(apiUrl(`/ledgers/${LEDGER}/transactions`)).replyOnce(200, first);
+  api.mock.onGet(apiUrl(`/ledgers/${LEDGER}/transactions`)).reply(200, second);
+
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-count')).toHaveTextContent('已加载 6 / 共 8 笔');
+
+  fireEvent.press(screen.getByTestId('tx-load-more'));
+
+  // The second page adds to what is loaded; the total it is measured against is the same
+  // number as before — merging the pair on page one may not eat into it.
+  await waitFor(() =>
+    expect(screen.getByTestId('tx-count')).toHaveTextContent('已加载 7 / 共 8 笔'),
+  );
+  expect(await screen.findByTestId('tx-row-older')).toBeTruthy();
+});
+
+test('the wide pager counts the whole filtered result, not the page', async () => {
+  setWide(true);
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ total: 42 }));
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 42 笔');
 });
 
 test('each day header carries that day\'s expense and income subtotal', async () => {

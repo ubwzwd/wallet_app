@@ -75,6 +75,7 @@
     "summary_net_hint": "不含转账",
     "summary_rate_missing_other": "{{count}} 笔因暂无汇率未计入",
     "count_other": "共 {{count}} 笔",
+    "count_loaded_other": "已加载 {{loaded}} / 共 {{count}} 笔",
     "rate_missing": "暂无汇率",
     "badge": {
       "repayment": "还款",
@@ -152,6 +153,7 @@
     "refund_only_refundable_toggle": "只看还有可退余额",
     "impact_preview": "{{label}} {{before}} → {{after}}",
     "impact_this_month": "本月{{category}}",
+    "copy_transfer_pair_unsupported": "两腿转账只复制了类型、子类型和备注：另一条腿不在这条记录里，两边账户和金额请重新选",
     "from_import": "这条来自导入 #{{batch}}",
     "archived_source_hint": "这个账户已归档：这条历史交易还能改，但不能改选到别的归档账户",
     "unlink_refund_first": "先取消关联原支出，才能把它改成别的类型",
@@ -170,7 +172,10 @@
       "amount_in": "转入金额",
       "currency_in": "转入币种",
       "to_source_id": "转入账户",
-      "subtype": "子类型"
+      "subtype": "子类型",
+      "counterparty": "对方",
+      "direction": "方向",
+      "refund_of": "关联原支出"
     },
     "keyboard_hint_title": "快捷键",
     "keyboard_hint": {
