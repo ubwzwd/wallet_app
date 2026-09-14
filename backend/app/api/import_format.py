@@ -13,22 +13,16 @@ checkout that skipped ``skills/``), the endpoint must not take the whole app
 down with it: a missing file degrades to an empty string plus a logged
 error, rather than raising at import time or on every request.
 
-ACTION ITEM for whoever owns ``infra/`` (out of scope for this module —
-``infra/`` is off-limits to this task): the production image's build context
-is ``backend/`` (``infra/docker-compose.prod.yml`` ``context: ../backend``,
-``infra/Dockerfile.api`` does ``COPY . .`` into ``/app``), so a plain
-``<repo-root>/skills/wallet-import`` lookup never ships inside that image —
-the whole import-guide page (04 §4.10 step 0's only data source) would
-render blank in production. ``SKILLS_DIR`` below tries both
-``<repo-root>/skills/wallet-import`` and ``backend/skills/wallet-import`` so
-that either of these infra fixes "just works" without touching this file
-again: (a) move the build context to the repo root and ``COPY skills/
-./skills/``, or (b) copy ``skills/wallet-import`` into the backend build
-context (e.g. ``backend/skills/wallet-import``) before/while building the
-image. Until one of those lands, this endpoint serves empty
-``sample_csv`` / ``skill_text`` / ``skill_markdown`` in production and logs
-an ``error`` (not just a ``warning``) on every process start so the gap is
-visible in ops rather than silent.
+Where the deliverables come from in production: the API image ships
+``skills/`` (its build context is the repo root), so the plain
+``<repo-root>/skills/wallet-import`` lookup resolves inside the image the
+same way it does in a checkout. ``SKILLS_DIR`` below still probes
+``backend/skills/wallet-import`` as a second candidate, and a missing file
+still degrades to an empty string plus a logged ``error`` (not a
+``warning``) on process start: both are the safety net for the day the
+image layout changes again — an import-guide page (04 §4.10 step 0's only
+data source) that renders blank must show up in ops rather than take the
+app down or fail silently.
 
 Caching: unlike ``GET /categories`` this is *not* ``immutable`` — its
 ``version`` changes on ordinary deploys (whenever ``CATEGORY_VERSION``
@@ -37,11 +31,17 @@ forever could hand the user a stale skill text well past its expiry. 03
 §5.7's own example prescribes ``public, max-age=86400`` (one day) plus an
 ``ETag``; that is short enough to bound staleness to about a day while still
 saving a full re-fetch on every guide-page visit within that window, and the
-``ETag`` (the version string) makes a same-day revisit after a same-day
-deploy a cheap 304 instead of a stale hit.
+``ETag`` makes a same-day revisit after a same-day deploy a cheap 304
+instead of a stale hit. The tag is a digest of the whole body, not just
+``CATEGORY_VERSION``: the three skill texts are re-generated on ordinary
+deploys and a release that only rewords them leaves the version untouched,
+so a version-only tag would answer every one of those cached clients 304
+for as long as they keep revalidating — precisely the staleness §5.7 is
+worried about.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import pathlib
 from typing import Optional
@@ -50,19 +50,18 @@ from fastapi import APIRouter, Header, Response
 
 from app.core.categories import CATEGORY_VERSION
 from app.schemas.import_format import ImportFormat, ImportFormatColumn
+from app.services.importing.drafts import COLUMNS as FILE_COLUMNS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import-format", tags=["Import"])
 
-# Normally repo_root/skills/wallet-import (three parents up from this file:
-# api -> app -> backend -> repo root) — that's where the checked-out repo and
-# local dev both have it. But the production image is built with `backend/`
-# as its Docker build context (infra/docker-compose.prod.yml), so a plain
-# repo-root lookup would silently miss inside that image. Until infra copies
-# skills/ into the backend build context (tracked as a follow-up — see the
-# module docstring), also try backend/skills/wallet-import so a future fix
-# on the infra side "just works" without a code change here too.
+# repo_root/skills/wallet-import (three parents up from this file: api -> app
+# -> backend -> repo root) — where a checkout, local dev and the API image
+# (built from the repo root) all have it. backend/skills/wallet-import is
+# tried as well so that a build context narrowed to `backend/` again, which
+# would copy the deliverables in there instead, still resolves without a
+# code change here (see the module docstring).
 _HERE = pathlib.Path(__file__).resolve()
 _REPO_ROOT = _HERE.parents[3]  # api -> app -> backend -> repo root
 _BACKEND_DIR = _HERE.parents[2]  # api -> app -> backend
@@ -75,20 +74,13 @@ else:
 
 CACHE_CONTROL = "public, max-age=86400"
 
-# Fixed 11-column header, in file order (05 §1.1, decision §5/§14.47).
-HEADERS: list[str] = [
-    "date",
-    "amount",
-    "currency",
-    "kind",
-    "transfer_role",
-    "transfer_subtype",
-    "merchant",
-    "note",
-    "category_l1",
-    "category_l2",
-    "source_ref",
-]
+# Fixed 11-column header, in file order (05 §1.1, decision §5/§14.47). Not a
+# second copy: this is *the* header the upload validator compares against
+# (`services/importing/drafts.COLUMNS`, 05 §2.2), so what the guide page and
+# the skill teach cannot drift from what an upload accepts — a divergence
+# would get files exported straight from the guide rejected with 400
+# `import_format_invalid`.
+HEADERS: list[str] = list(FILE_COLUMNS)
 
 # Column reference table (05 §1.2 / 03 §5.7). Order matches HEADERS.
 COLUMNS: list[ImportFormatColumn] = [
@@ -213,9 +205,21 @@ _RESPONSE = ImportFormat(
 
 _BODY = _RESPONSE.model_dump_json().encode("utf-8")
 
-# The ETag is the category table's version, quoted as HTTP requires — same
-# convention as categories.py, since the two are meant to travel together.
-ETAG = f'"{CATEGORY_VERSION}"'
+
+def _etag_for(body: bytes) -> str:
+    """This body's ETag, quoted as HTTP requires: the version, then a digest.
+
+    The digest — not the version alone — is what makes the tag move.
+    ``sample_csv`` / ``skill_text`` / ``skill_markdown`` are re-generated on
+    ordinary deploys and a release may reword them while ``CATEGORY_VERSION``
+    stays put; a version-only tag would answer every client that cached the
+    old wording 304 forever (03 §5.7). The version is kept as a prefix purely
+    so a tag is still recognisable in a log or a ``curl -I``.
+    """
+    return f'"{CATEGORY_VERSION}-{hashlib.sha256(body).hexdigest()[:16]}"'
+
+
+ETAG = _etag_for(_BODY)
 
 
 def _etag_matches(if_none_match: Optional[str]) -> bool:
