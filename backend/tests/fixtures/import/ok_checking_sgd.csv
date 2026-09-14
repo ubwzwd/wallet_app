@@ -1,0 +1,10 @@
+# version: 2026-09-10
+date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref
+2026-08-01,-1850.00,SGD,expense,,,"Propnex Realty","八月房租",housing,rent,p1:3
+2026-08-02,-62.40,SGD,expense,,,"NTUC FairPrice",,groceries,fresh_food,p1:4
+2026-08-06,-31.90,SGD,expense,,,"Grab","Grab 打车",transport,taxi,p1:5
+2026-08-09,-184.20,SGD,expense,,,"Apple Store","原值 138.00 USD",shopping,electronics,p1:6
+2026-08-15,6200.00,SGD,income,,,"ACME PTE LTD","八月工资",salary,base_salary,p1:7
+2026-08-20,-560.00,SGD,transfer,out,repayment,,"还中国的信用卡，那边账单是 3000.00 CNY",,,p1:8
+2026-08-22,-500.00,SGD,transfer,out,plain,,"转到另一张卡",,,p1:9
+2026-08-25,-800.00,SGD,transfer,out,plain,,"转给老婆",,,p1:10

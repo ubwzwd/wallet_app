@@ -1,0 +1,12 @@
+
+```csv
+# version: 2026-09-10
+date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref
+2026-09-01,-19.90,CNY,expense,,,"美团外卖","午饭，备注写着 ""少放辣""",food,lunch,20260901-0007
+2026-09-01,-19.90,CNY,expense,,,"美团外卖","同一天点了两次",food,lunch,20260901-0019
+2026-09-02,-6.00,CNY,expense,,,"北京地铁",,transport,public_transit,20260902-0002
+2026-09-03,-899.00,CNY,expense,,,"Shopee","看不出品类",,,20260903-0011
+2026-09-05,899.00,CNY,refund,,,"Shopee","整单退",,,20260905-0004
+2026-09-06,200.00,CNY,income,,,"张三","还我上次垫的电影票",social_income,transfer_in,20260906-0001
+```
+
