@@ -418,19 +418,28 @@ NEW_STATS_OPERATIONS = {
     ("GET", "/api/v1/ledgers/{id}/stats/trend"),
 }
 
+# The one route the v3.0 import phase (§5.7) has added since: public, no
+# request body, no ledger prefix — see test_import_format_api.py for its
+# actual behaviour.
+NEW_IMPORT_FORMAT_OPERATIONS = {
+    ("GET", "/api/v1/import-format"),
+}
+
 EXPECTED_OPERATIONS = (
     PHASE_TWO_OPERATIONS
     | NEW_SOURCE_OPERATIONS
     | NEW_TRANSACTION_OPERATIONS
     | NEW_STATS_OPERATIONS
+    | NEW_IMPORT_FORMAT_OPERATIONS
 )
 
 
 def test_openapi_route_inventory_is_exactly_phase_three(client):
-    """Phase two's 23 routes plus exactly the 17 this phase adds — no more.
+    """Phase two's 23 routes, this phase's 17, plus §5.7's ``/import-format`` — no more.
 
-    In particular: no ``/imports`` endpoint yet (§5.37 is out of scope for
-    this phase) and no ``/import-format`` (§5.7, a later phase).
+    In particular: no ``/imports`` batch endpoints yet (§5.37 is a later
+    phase, still out of scope here) — only the standalone, public
+    ``/import-format`` that phase six added.
     """
     response = client.get("/openapi.json")
     assert response.status_code == 200
@@ -441,9 +450,10 @@ def test_openapi_route_inventory_is_exactly_phase_three(client):
     }
 
     assert len(PHASE_TWO_OPERATIONS) == 23
-    assert len(EXPECTED_OPERATIONS) == 23 + 18  # +1: GET transfer/{pair_id} (03 §5.30a)
+    # +1: GET transfer/{pair_id} (03 §5.30a); +1: GET /import-format (§5.7, phase six)
+    assert len(EXPECTED_OPERATIONS) == 23 + 18 + 1
     assert actual_operations == EXPECTED_OPERATIONS
 
     all_paths = set(paths)
     assert not any("/imports" in path for path in all_paths)
-    assert "/api/v1/import-format" not in all_paths
+    assert "/api/v1/import-format" in all_paths
