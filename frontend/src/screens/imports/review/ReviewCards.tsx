@@ -22,14 +22,8 @@ import { Button, Card, Checkbox, Divider, Sheet, Text } from '@/ui';
 
 import { FlagBadges, SkipToggle } from './FlagBadges';
 import { LinkCell } from './LinkCell';
-import {
-  AmountCell,
-  CategoryCell,
-  CurrencyCell,
-  DateCell,
-  KindCell,
-  TextCell,
-} from './ReviewRow';
+import { CategoryCell, CurrencyCell, KindCell } from './ReviewCells.picker';
+import { AmountCell, DateCell, RowNoCell, TextCell } from './ReviewCells.text';
 import type { ReviewViewProps } from './ReviewTable';
 
 const MERCHANT_MAX = 200;
@@ -88,9 +82,15 @@ export function ReviewCards({
                   onChange={() => selection.toggle(row, index)}
                 />
               ) : null}
-              <Text variant="caption" tone="secondary" mono testID={`${id}-no-${row.row_no}`}>
-                {`#${row.row_no}`}
-              </Text>
+              {/* The same cell the wide grid uses: the save-state dot and, when a cell
+                  edit was refused, the retry button (04 §4.11.5 — the phone is not
+                  allowed to be a dead end for a failed save). */}
+              <RowNoCell
+                row={row}
+                state={env.ctrl.saveStateOf(row.id)}
+                onRetry={() => env.ctrl.retry(row.id)}
+                testID={`review-${row.row_no}-row-no`}
+              />
               <Text variant="caption" tone="secondary" mono>
                 {row.date ?? t('import:review.missing_value')}
               </Text>

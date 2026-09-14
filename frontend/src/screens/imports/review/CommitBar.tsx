@@ -6,8 +6,11 @@
  * underneath. It is disabled while anything blocks the commit:
  *  - a row still has no level-1 category (the derived "uncategorized" of §4.11.4) — with a
  *    standing notice and a "jump to the first one" link;
- *  - a row that is going to be committed has no date or no amount;
- *  - an inline edit is still failing to save.
+ *  - a row that is going to be committed is missing something the server insists on
+ *    (03 §5.43, 4a): a date, an amount, a zero amount, a currency or a kind;
+ *  - every row is skipped, which the server answers 409 `rows_all_skipped` (03 §5.43, 3);
+ *  - an inline edit is still failing to save — named by row, with its own jump link;
+ *  - the batch is not fully loaded yet, so none of the counts above can be trusted.
  * Transfer rows never block: an unpaired one is committed as a single leg (decision §1.2).
  *
  * `POST .../commit` takes no request body at all (decision §14.18) and repeated submits are
@@ -20,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ApiClientError } from '@/api';
 import type { ImportCommitResult, ImportRow } from '@/api/types';
+import { cmpMoney } from '@/domain/money';
 import { useCommitImport } from '@/queries';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -31,16 +35,34 @@ import { isCommittable, isUncategorized } from './useReviewSelection';
 export interface CommitBlockers {
   uncategorized: ImportRow[];
   incomplete: ImportRow[];
-  failures: boolean;
+  /** The rows whose last inline edit is still refused (04 §4.11.5). */
+  failed: ImportRow[];
+  /** Every row is skipped, so the commit would create nothing (03 §5.43, 3). */
+  allSkipped: boolean;
 }
 
-export function commitBlockers(rows: readonly ImportRow[], hasFailures: boolean): CommitBlockers {
+/** A row the server would refuse on 4a grounds: a missing or meaningless value. */
+function isIncomplete(row: ImportRow): boolean {
+  return (
+    isCommittable(row) &&
+    (row.date === null ||
+      row.amount === null ||
+      row.currency === null ||
+      row.kind === null ||
+      cmpMoney(row.amount, '0') === 0)
+  );
+}
+
+export function commitBlockers(
+  rows: readonly ImportRow[],
+  failedRowIds: readonly string[],
+): CommitBlockers {
+  const failing = new Set(failedRowIds);
   return {
     uncategorized: rows.filter(isUncategorized),
-    incomplete: rows.filter(
-      (row) => isCommittable(row) && (row.date === null || row.amount === null),
-    ),
-    failures: hasFailures,
+    incomplete: rows.filter(isIncomplete),
+    failed: rows.filter((row) => failing.has(row.id)),
+    allSkipped: rows.length > 0 && rows.every((row) => !isCommittable(row)),
   };
 }
 
@@ -52,6 +74,12 @@ export interface CommitBarProps {
   onCommitted(result: ImportCommitResult): void;
   /** Incremented by `⌘/Ctrl + Enter` (04 §4.11.7); a blocked commit still does nothing. */
   submitSignal?: number;
+  /**
+   * How many of the batch's rows are not in `rows` yet. Nothing may be submitted while
+   * this is above zero: every blocker below is counted over the rows at hand, and a
+   * half-loaded batch would let a commit through that the server then refuses.
+   */
+  unloadedRows?: number;
   testID?: string;
 }
 
@@ -61,6 +89,7 @@ export function CommitBar({
   onJumpTo,
   onCommitted,
   submitSignal = 0,
+  unloadedRows = 0,
   testID,
 }: CommitBarProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -68,13 +97,17 @@ export function CommitBar({
   const id = testID ?? 'review-commit';
   const commit = useCommitImport(env.ledgerId, env.batch.id);
 
-  const blockers = commitBlockers(rows, env.ctrl.hasFailures);
+  const blockers = commitBlockers(rows, env.ctrl.failedRowIds);
   const submitCount = rows.filter(isCommittable).length;
   const pairCount = rows.filter(
     (row) => row.kind === 'transfer' && row.matched_transaction_id !== null,
   ).length;
   const blocked =
-    blockers.uncategorized.length > 0 || blockers.incomplete.length > 0 || blockers.failures;
+    unloadedRows > 0 ||
+    blockers.uncategorized.length > 0 ||
+    blockers.incomplete.length > 0 ||
+    blockers.failed.length > 0 ||
+    blockers.allSkipped;
 
   // A ref, not `commit.isPending`: two clicks in the same tick both see the old render's
   // pending flag, and 04 §4.11.8 wants one commit per press, not one 409 per press.
@@ -142,10 +175,48 @@ export function CommitBar({
         </Text>
       ) : null}
 
-      {blockers.failures ? (
-        <Text variant="caption" tone="danger" testID={`${id}-block-failed`}>
-          {t('import:review.block_failed_saves')}
+      {blockers.allSkipped ? (
+        <Text variant="caption" tone="warning" testID={`${id}-block-all-skipped`}>
+          {t('import:review.block_all_skipped')}
         </Text>
+      ) : null}
+
+      {unloadedRows > 0 ? (
+        <Text variant="caption" tone="warning" testID={`${id}-block-loading`}>
+          {t('import:review.block_rows_loading', { rows: unloadedRows })}
+        </Text>
+      ) : null}
+
+      {/* Which row failed to save, not just "something did" — the retry button lives on
+          that row, and on a phone it is several screens away (04 §4.11.5). */}
+      {blockers.failed.length > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: space['2'],
+          }}
+        >
+          <Text
+            variant="caption"
+            tone="danger"
+            style={{ flexShrink: 1 }}
+            testID={`${id}-block-failed`}
+          >
+            {t('import:review.block_failed_saves', {
+              rows: blockers.failed.length,
+              row: blockers.failed[0].row_no,
+            })}
+          </Text>
+          <Button
+            testID={`${id}-jump-failed`}
+            size="sm"
+            variant="ghost"
+            label={t('import:review.jump_to_first')}
+            onPress={() => onJumpTo(blockers.failed[0].row_no)}
+          />
+        </View>
       ) : null}
 
       <View

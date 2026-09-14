@@ -6,8 +6,9 @@
  *    edit (04 §4.11.5) — that is what makes a failed PATCH safe to roll back;
  *  - applies the change locally first (the optimistic layer below) and hands the row back
  *    to the table on the next render;
- *  - on failure puts the row back the way it was and remembers the patch, so the cell can
- *    offer "retry" instead of silently losing the edit.
+ *  - on failure puts the row back the way it was and remembers the refused *fields*, so the
+ *    cell can offer "retry" instead of silently losing the edit, and a later successful
+ *    edit of a neighbouring field does not bury the one that never landed.
  *
  * The optimistic layer is a per-row overlay rather than a cache rewrite: the query cache
  * stays the server's answer, `useImports`'s `patchCachedRow` writes the real row into it on
@@ -28,9 +29,12 @@ export type RowSaveState = 'saved' | 'saving' | 'failed';
 
 type Overlay = Partial<Record<Uuid, ImportRowPatch>>;
 
-interface FailedEdit {
-  patch: ImportRowPatch;
-}
+/**
+ * The fields of one row whose last write was refused, and the value that was refused.
+ * Per *field*, not per row: a merchant that failed to save must keep its red dot (and keep
+ * blocking the commit) even when the date next to it saves fine a second later.
+ */
+type FailedFields = Partial<Record<Uuid, ImportRowPatch>>;
 
 export interface ReviewRowsController {
   /** The batch's rows with any in-flight edit applied, in `row_no` order. */
@@ -42,8 +46,11 @@ export interface ReviewRowsController {
    * nothing else would tell a half-typed cell that its value is gone (04 §4.11.5).
    */
   revisionOf(rowId: Uuid): number;
-  /** `true` while at least one row failed to save — a commit blocker (04 §4.11.8). */
-  hasFailures: boolean;
+  /**
+   * The rows whose last write was refused — a commit blocker, and the list the commit bar
+   * names and jumps to (04 §4.11.8).
+   */
+  failedRowIds: readonly Uuid[];
   patch(row: ImportRow, patch: ImportRowPatch): void;
   retry(rowId: Uuid): void;
   bulk(rowIds: readonly Uuid[], patch: ImportRowPatch): Promise<ImportRowsBulkResult>;
@@ -76,7 +83,7 @@ export function useReviewRows(
 
   const [overlay, setOverlay] = React.useState<Overlay>({});
   const [saving, setSaving] = React.useState<ReadonlySet<Uuid>>(() => new Set<Uuid>());
-  const [failed, setFailed] = React.useState<Partial<Record<Uuid, FailedEdit>>>({});
+  const [failed, setFailed] = React.useState<FailedFields>({});
   const [rollbacks, setRollbacks] = React.useState<Partial<Record<Uuid, number>>>({});
 
   const rows = React.useMemo(() => {
@@ -87,18 +94,27 @@ export function useReviewRows(
     return [...merged].sort((a, b) => a.row_no - b.row_no);
   }, [serverRows, overlay]);
 
+  /** Forget the failures of `keys` on `rowId` — they are being retried, or are moot. */
+  const forgetFailed = React.useCallback((rowId: Uuid, keys: readonly string[]): void => {
+    setFailed((prev) => {
+      const entry = prev[rowId];
+      if (!entry) return prev;
+      const rest = withoutKeys(entry, [...keys]);
+      const next = { ...prev };
+      if (Object.keys(rest).length === 0) delete next[rowId];
+      else next[rowId] = rest;
+      return next;
+    });
+  }, []);
+
   const send = React.useCallback(
     (rowId: Uuid, fields: ImportRowPatch): void => {
       const keys = Object.keys(fields);
       if (keys.length === 0) return;
       setOverlay((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...fields } }));
       setSaving((prev) => new Set(prev).add(rowId));
-      setFailed((prev) => {
-        if (!prev[rowId]) return prev;
-        const next = { ...prev };
-        delete next[rowId];
-        return next;
-      });
+      // Only the fields this request carries stop being failures; the others keep theirs.
+      forgetFailed(rowId, keys);
       patchRow.mutate(
         { row_id: rowId, patch: fields },
         {
@@ -109,7 +125,7 @@ export function useReviewRows(
           onError: () => {
             // Roll back exactly what this request tried to change (04 §4.11.5).
             setOverlay((prev) => ({ ...prev, [rowId]: withoutKeys(prev[rowId], keys) }));
-            setFailed((prev) => ({ ...prev, [rowId]: { patch: fields } }));
+            setFailed((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...fields } }));
             setRollbacks((prev) => ({ ...prev, [rowId]: (prev[rowId] ?? 0) + 1 }));
           },
           onSettled: () => {
@@ -122,29 +138,41 @@ export function useReviewRows(
         },
       );
     },
-    [patchRow],
+    [forgetFailed, patchRow],
   );
 
   const patch = React.useCallback(
     (row: ImportRow, fields: ImportRowPatch): void => {
-      send(row.id, changedFields(row, fields));
+      const changed = changedFields(row, fields);
+      // A field the user re-entered at the value the row already holds sends nothing — but
+      // it is no longer an unsaved edit either, so its failure is cleared rather than kept
+      // forever (there would otherwise be no way to clear it at all).
+      const settled = Object.keys(fields).filter((key) => !(key in changed));
+      if (settled.length > 0) forgetFailed(row.id, settled);
+      send(row.id, changed);
     },
-    [send],
+    [forgetFailed, send],
   );
 
   const retry = React.useCallback(
     (rowId: Uuid): void => {
       const entry = failed[rowId];
       if (!entry) return;
-      send(rowId, entry.patch);
+      // Everything this row still owes the server, as one request.
+      send(rowId, entry);
     },
     [failed, send],
+  );
+
+  const failedRowIds = React.useMemo(
+    () => Object.keys(failed).filter((id) => Object.keys(failed[id] ?? {}).length > 0),
+    [failed],
   );
 
   const saveStateOf = React.useCallback(
     (rowId: Uuid): RowSaveState => {
       if (saving.has(rowId)) return 'saving';
-      if (failed[rowId]) return 'failed';
+      if (Object.keys(failed[rowId] ?? {}).length > 0) return 'failed';
       return 'saved';
     },
     [saving, failed],
@@ -162,7 +190,7 @@ export function useReviewRows(
     rows,
     saveStateOf,
     revisionOf,
-    hasFailures: Object.keys(failed).length > 0,
+    failedRowIds,
     patch,
     retry,
     bulk,

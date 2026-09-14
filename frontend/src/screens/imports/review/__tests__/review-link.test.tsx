@@ -279,3 +279,23 @@ test('a refund candidate shows its prefilled origin, and re-picking or clearing 
   await waitFor(() => expect(patchBodies()).toHaveLength(2));
   expect(patchBodies()[1]).toEqual({ matched_transaction_id: 'tx-origin' });
 });
+
+// ------------------------------------------------- the leg that was taken (04 §4.11.3)
+
+test('a transfer whose opposite leg is already paired says so in the cell', async () => {
+  const transfer = row({
+    id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
+    merchant: null, amount: '1000.0000', transfer_role: 'out', date: '2026-08-05',
+    // The server found the other side, saw it was already half of a transfer, and flagged
+    // the row instead of pairing it.
+    flags: ['duplicate'], matched_transaction_id: null,
+    hint: '对方那笔已经配过对了',
+  });
+  seed([transfer]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  const line = await screen.findByTestId('review-3-link-already-paired');
+  expect(String(line.props.children)).toContain('配过对');
+  // The counterparty controls are still there — this row can name its other side by hand.
+  expect(screen.getByTestId('review-3-link-counterpart-trigger')).toBeTruthy();
+});

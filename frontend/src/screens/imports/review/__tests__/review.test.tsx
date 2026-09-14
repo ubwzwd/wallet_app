@@ -207,7 +207,14 @@ test('changing kind rewrites the sign, clears the category and wakes the link ce
   fireEvent.press(await screen.findByTestId('review-2-kind-option-transfer'));
   await waitFor(() => expect(patchBodies()).toHaveLength(2));
   // `category_l2` was already null, so it is not in the body — only what changed is sent.
-  expect(patchBodies()[1]).toEqual({ kind: 'transfer', category_l1: null });
+  // The two transfer fields *are*: 03 §5.41 refuses a transfer row with either one null,
+  // and the row has no way to set them before it is a transfer.
+  expect(patchBodies()[1]).toEqual({
+    kind: 'transfer',
+    category_l1: null,
+    transfer_role: 'out',
+    transfer_subtype: 'plain',
+  });
   expect(await screen.findByTestId('review-2-link-role')).toBeTruthy();
   expect(screen.getByTestId('review-2-l1').props.children).toBe('—');
 });
@@ -418,4 +425,181 @@ test('a narrow viewport renders the card flow, with kind, category and the pairi
   // The prefilled pairing checkbox has to be visible (and clearable) without opening anything.
   const pair = screen.getByTestId('review-3-link-pair');
   expect(pair.props.accessibilityState.checked).toBe(true);
+});
+
+// ------------------------------------------------- the batch is not one page (03 §5.40)
+
+test('a batch bigger than the first page fetches the rest, and holds the commit until it has', async () => {
+  const all = Array.from({ length: 128 }, (_, i) =>
+    row({ id: `row-${i + 1}`, row_no: i + 1 }),
+  );
+  seed(all);
+  // Registered after `seed`, which replaces the handler it installed for this URL: this
+  // one pages the way the server does (03 §5.40) and holds the follow-up page back.
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  api.mock.onGet(apiUrl(ROWS_PATH)).reply(async (config) => {
+    const params = (config.params ?? {}) as { offset?: number; limit?: number };
+    const offset = Number(params.offset ?? 0);
+    // The server's own default — the parameterless first request gets 100 rows.
+    const limit = Number(params.limit ?? 100);
+    if (offset > 0) await gate;
+    return [200, { items: all.slice(offset, offset + limit), total: all.length }];
+  });
+  renderReview();
+
+  // The first page paints, but 28 rows are still missing, so the commit is held back:
+  // every blocker is counted over the rows at hand (04 §4.11.8).
+  expect(await screen.findByTestId('review-table-row-row-100')).toBeTruthy();
+  expect(screen.queryByTestId('review-table-row-row-128')).toBeNull();
+  expect(screen.getByTestId('review-commit-block-loading')).toBeTruthy();
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBe(true);
+  // The header counts the batch, not the page.
+  expect(String(screen.getByTestId('import-batch-summary').props.children)).toContain('128');
+
+  await act(async () => {
+    release();
+    await Promise.resolve();
+  });
+
+  // The follow-up page asked for the rest, and every row is now editable.
+  await waitFor(() => expect(screen.getByTestId('review-table-row-row-128')).toBeTruthy());
+  const offsets = api.mock.history.get
+    .filter((r) => r.url === ROWS_PATH)
+    .map((r) => Number((r.params as { offset?: number } | undefined)?.offset ?? 0));
+  expect(offsets).toContain(100);
+  await waitFor(() => expect(screen.queryByTestId('review-commit-block-loading')).toBeNull());
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBeFalsy();
+});
+
+// ----------------------------------------------------- failures are per cell, not per row
+
+test('a cell that failed to save keeps its dot when the cell next to it saves fine', async () => {
+  const expense = row({ id: 'row-1', row_no: 1, merchant: '星巴克', note: null });
+  seed([expense]);
+  // The merchant is refused; anything else is accepted.
+  api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-1`)).reply((config) => {
+    const body = JSON.parse(String(config.data ?? '{}')) as Record<string, unknown>;
+    if ('merchant' in body) return [400, { detail: 'nope', code: 'validation_error' }];
+    return [200, { ...expense, ...body, status: 'edited' }];
+  });
+  renderReview();
+
+  fireEvent.press(await screen.findByTestId('review-table-cell-row-1-merchant'));
+  const merchant = await screen.findByTestId('review-1-merchant-input');
+  fireEvent.changeText(merchant, '打错了');
+  fireEvent(merchant, 'blur');
+  await waitFor(() => expect(screen.getByTestId('review-1-row-no-save-failed')).toBeTruthy());
+
+  fireEvent.press(screen.getByTestId('review-table-cell-row-1-note'));
+  const note = await screen.findByTestId('review-1-note-input');
+  fireEvent.changeText(note, '记一下');
+  fireEvent(note, 'blur');
+  await waitFor(() => expect(patchBodies()).toHaveLength(2));
+  expect(patchBodies()[1]).toEqual({ note: '记一下' });
+
+  // The successful note did not bury the merchant that never landed.
+  expect(screen.getByTestId('review-1-row-no-save-failed')).toBeTruthy();
+  expect(screen.getByTestId('review-1-row-no-retry')).toBeTruthy();
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBe(true);
+  expect(String(screen.getByTestId('review-commit-block-failed').props.children)).toContain('1');
+});
+
+// ---------------------------------------------------- the first slice is chosen only once
+
+test('the uncategorized slice is picked on the first paint and then left alone', async () => {
+  const first = row({ id: 'row-1', row_no: 1, category_l1: null, category_l2: null });
+  const second = row({ id: 'row-2', row_no: 2, category_l1: null, category_l2: null });
+  seed([first, second]);
+  api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-1`)).reply(() => [
+    200,
+    { ...first, category_l1: 'food', status: 'edited' },
+  ]);
+  api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-2`)).reply(() => [
+    200,
+    { ...second, category_l1: 'food', status: 'edited' },
+  ]);
+  renderReview();
+
+  expect(await screen.findByTestId('review-table-row-row-1')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('review-1-l1-trigger'));
+  fireEvent.press(await screen.findByTestId('review-1-l1-l1-food'));
+
+  // Row 1 leaves the slice; the slice itself does not move.
+  await waitFor(() => expect(screen.queryByTestId('review-table-row-row-1')).toBeNull());
+  expect(screen.getByTestId('review-table-row-row-2')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('review-2-l1-trigger'));
+  fireEvent.press(await screen.findByTestId('review-2-l1-l1-food'));
+
+  // …not even when the last one is done: the list empties, it does not jump back to "all".
+  await waitFor(() => expect(screen.queryByTestId('review-table-row-row-2')).toBeNull());
+  expect(screen.queryByTestId('review-table-row-row-1')).toBeNull();
+  expect(screen.getByTestId('review-table-empty')).toBeTruthy();
+});
+
+// --------------------------------------------- the server's other commit refusals (§5.43)
+
+test('a batch with every row skipped cannot be submitted', async () => {
+  seed([
+    row({ id: 'row-1', row_no: 1, status: 'skipped' }),
+    row({ id: 'row-2', row_no: 2, status: 'skipped' }),
+  ]);
+  renderReview();
+
+  const submit = await screen.findByTestId('review-commit-submit');
+  expect(screen.getByTestId('review-commit-block-all-skipped')).toBeTruthy();
+  expect(submit.props.accessibilityState.disabled).toBe(true);
+  fireEvent.press(submit);
+  expect(api.mock.history.post.filter((r) => r.url === `${BATCH_PATH}/commit`)).toHaveLength(0);
+});
+
+test('a row with a zero amount or no currency blocks the commit', async () => {
+  seed([
+    row({ id: 'row-1', row_no: 1, amount: '0.0000' }),
+    row({ id: 'row-2', row_no: 2, currency: null }),
+  ]);
+  renderReview();
+
+  expect(String((await screen.findByTestId('review-commit-block-incomplete')).props.children))
+    .toContain('2');
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBe(true);
+});
+
+// ------------------------------------------------ the phone is not a dead end (§4.11.9)
+
+test('a failed edit on the phone shows the dot and the retry button on the card', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  const expense = row({ id: 'row-1', row_no: 1, merchant: '星巴克' });
+  seed([expense]);
+  let fail = true;
+  api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-1`)).reply(() =>
+    fail
+      ? [400, { detail: 'nope', code: 'validation_error' }]
+      : [200, { ...expense, merchant: '瑞幸', status: 'edited' }],
+  );
+  renderReview();
+
+  fireEvent.press(await screen.findByTestId('review-cards-details-1'));
+  const input = await screen.findByTestId('review-detail-merchant-input');
+  fireEvent.changeText(input, '瑞幸');
+  fireEvent(input, 'blur');
+
+  // The card carries the same save-state cell as the wide grid.
+  await waitFor(() => expect(screen.getByTestId('review-1-row-no-retry')).toBeTruthy());
+  expect(screen.getByTestId('review-1-row-no-save-failed')).toBeTruthy();
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBe(true);
+  expect(String(screen.getByTestId('review-commit-block-failed').props.children)).toContain('1');
+
+  // Retrying resends exactly the same body, and the batch can be submitted again.
+  fail = false;
+  fireEvent.press(screen.getByTestId('review-1-row-no-retry'));
+  await waitFor(() => expect(patchBodies()).toHaveLength(2));
+  expect(patchBodies()[1]).toEqual({ merchant: '瑞幸' });
+  await waitFor(() =>
+    expect(screen.queryByTestId('review-commit-block-failed')).toBeNull(),
+  );
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBeFalsy();
 });

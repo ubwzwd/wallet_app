@@ -72,6 +72,26 @@ export function commonCategoryKind(rows: readonly ImportRow[]): TxKind | null {
   return kind;
 }
 
+/**
+ * The whole patch a bulk "set kind" has to carry (04 §4.11.6).
+ *
+ * One patch is applied to every selected row, so it has to be valid for all of them on its
+ * own: a transfer row must carry a direction and a subtype and must *not* carry a category
+ * (03 §5.41), and the edit is all-or-nothing (03 §5.42) — a single row that the server
+ * refuses rolls the whole selection back. `out` / `plain` are the same defaults a single-row
+ * kind change writes; the direction of an individual leg is corrected in its link cell.
+ */
+export function bulkKindPatch(kind: TxKind): ImportRowPatch {
+  if (kind !== 'transfer') return { kind };
+  return {
+    kind,
+    transfer_role: 'out',
+    transfer_subtype: 'plain',
+    category_l1: null,
+    category_l2: null,
+  };
+}
+
 /** Which row a refused bulk edit is about — computed locally first, parsed from the
  *  server's `detail` as a fallback (03 §5.42 states the row number in prose). */
 export function offendingRow(
@@ -175,7 +195,7 @@ export function BulkBar({
             label: t(`transaction:kind.${k}`),
           }))}
           onChange={(next) => {
-            if (next !== null) void run({ kind: next as TxKind });
+            if (next !== null) void run(bulkKindPatch(next as TxKind));
           }}
         />
         <CurrencyPicker

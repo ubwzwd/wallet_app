@@ -14,7 +14,14 @@
  * no measurable gain at this size.
  */
 import React from 'react';
-import { Pressable, ScrollView, type StyleProp, View, type ViewStyle } from 'react-native';
+import {
+  type GestureResponderEvent,
+  Pressable,
+  ScrollView,
+  type StyleProp,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -43,6 +50,19 @@ export interface DataTableColumn<Row> {
   render(row: Row, ctx: DataTableCellContext): React.ReactNode;
 }
 
+export interface DataTableToggleOpts {
+  /** The row checkbox was clicked with Shift held: select the range, do not toggle. */
+  extend: boolean;
+}
+
+/** Whether a press event carries the Shift modifier, in either place a platform puts it. */
+function isShiftPress(event: GestureResponderEvent | undefined): boolean {
+  const flat = event as unknown as
+    | { shiftKey?: boolean; nativeEvent?: { shiftKey?: boolean } }
+    | undefined;
+  return flat?.shiftKey === true || flat?.nativeEvent?.shiftKey === true;
+}
+
 /** A cell address: indexes into `rows` and into `columns` (the select column is not one). */
 export interface DataTableCellPos {
   row: number;
@@ -59,7 +79,12 @@ export interface DataTableProps<Row> {
   rowKey(row: Row): string;
   /** Presence of this set turns the selection column on. */
   selected?: ReadonlySet<string>;
-  onToggleRow?(row: Row, index: number): void;
+  /**
+   * `extend` is the Shift modifier of the click (04 §4.11.2: "Shift-click selects a
+   * range"). It is only ever true where the platform reports modifier keys — a touch
+   * press carries none, and the caller falls back to a plain toggle.
+   */
+  onToggleRow?(row: Row, index: number, opts: DataTableToggleOpts): void;
   onToggleAll?(next: boolean): void;
   selectAllLabel?: string;
   rowSelectLabel?(row: Row): string;
@@ -194,12 +219,26 @@ export function DataTable<Row>({
                 gap: space['1'],
               }}
             >
-              <Checkbox
+              {/* The press target is this wrapper rather than the Checkbox itself: only a
+                  press handler sees the event, and the event is where Shift lives. The
+                  box inside is the plain visual, with its own press target switched off. */}
+              <Pressable
                 testID={`${id}-select-${key}`}
-                checked={selected.has(key)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected.has(key) }}
                 accessibilityLabel={rowSelectLabel?.(row)}
-                onChange={() => onToggleRow?.(row, rowIndex)}
-              />
+                onPress={(event) =>
+                  onToggleRow?.(row, rowIndex, { extend: isShiftPress(event) })
+                }
+              >
+                <View
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Checkbox checked={selected.has(key)} onChange={() => {}} />
+                </View>
+              </Pressable>
               {rowLead?.(row)}
             </View>
           ) : null}

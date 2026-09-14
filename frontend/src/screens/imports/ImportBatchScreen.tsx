@@ -16,7 +16,7 @@ import { View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatch, ImportCommitResult, ImportFlag, Uuid } from '@/api/types';
+import type { ImportBatch, ImportCommitResult, ImportFlag, ImportRow, Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
@@ -53,6 +53,20 @@ import { REVIEW_SLICES, type ReviewSlice, useReviewSelection } from './review/us
 
 /** Room under the phone's scroll content for the pinned bulk bar (04 §4.11.9). */
 const BULK_BAR_CLEARANCE = 96;
+
+/**
+ * Paging the draft rows (03 §5.40, §5.37).
+ *
+ * `GET .../rows` answers 100 rows by default and 500 at most, while one batch holds up to
+ * 2000 (`IMPORT_MAX_ROWS`) — so the unparameterised first page is not the batch. The first
+ * query stays parameterless on purpose: that is the exact cache key a successful upload
+ * seeds with every row it parsed (04 §8.5, case 2), and giving it params would cost the
+ * review screen a request it must not need. The rest of the batch is fetched by a fixed
+ * number of follow-up pages (hook counts cannot vary between renders), each switched off by
+ * passing no batch id until the first page says there is more to read.
+ */
+const ROWS_PAGE_LIMIT = 500;
+const REST_OFFSETS = [100, 600, 1100, 1600] as const;
 
 interface CommittedPanelProps {
   ledgerId: Uuid;
@@ -176,9 +190,44 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const currencies = useCurrencies();
   const sources = useSources(ledgerId);
 
+  // The first page decides whether there is anything else to fetch: an upload seeds the
+  // whole batch under this key, in which case `total` equals what is already here.
+  const firstPage = rowsQuery.data;
+  const total = firstPage?.total ?? 0;
+  const firstCount = firstPage?.items.length ?? 0;
+  const restId = (offset: number): Uuid | undefined =>
+    firstCount > 0 && total > firstCount && total > offset ? bid : undefined;
+  const page2 = useImportRows(ledgerId, restId(REST_OFFSETS[0]), {
+    limit: ROWS_PAGE_LIMIT,
+    offset: REST_OFFSETS[0],
+  });
+  const page3 = useImportRows(ledgerId, restId(REST_OFFSETS[1]), {
+    limit: ROWS_PAGE_LIMIT,
+    offset: REST_OFFSETS[1],
+  });
+  const page4 = useImportRows(ledgerId, restId(REST_OFFSETS[2]), {
+    limit: ROWS_PAGE_LIMIT,
+    offset: REST_OFFSETS[2],
+  });
+  const page5 = useImportRows(ledgerId, restId(REST_OFFSETS[3]), {
+    limit: ROWS_PAGE_LIMIT,
+    offset: REST_OFFSETS[3],
+  });
+
+  // Pages overlap only if the batch changed size under us, so `id` settles the duplicates.
+  const serverRows = React.useMemo(() => {
+    const byId = new Map<Uuid, ImportRow>();
+    for (const page of [firstPage, page2.data, page3.data, page4.data, page5.data]) {
+      for (const item of page?.items ?? []) byId.set(item.id, item);
+    }
+    return [...byId.values()];
+  }, [firstPage, page2.data, page3.data, page4.data, page5.data]);
+
   const batch = batchQuery.data;
-  const ctrl = useReviewRows(ledgerId, bid ?? '', rowsQuery.data?.items ?? []);
+  const ctrl = useReviewRows(ledgerId, bid ?? '', serverRows);
   const selection = useReviewSelection(ctrl.rows);
+  /** Rows the batch has but this screen has not read yet — a commit blocker (§4.11.8). */
+  const unloadedRows = Math.max(0, total - serverRows.length);
 
   const [committed, setCommitted] = React.useState<ImportCommitResult | null>(null);
   const [highlight, setHighlight] = React.useState<number | null>(null);
@@ -232,7 +281,8 @@ export default function ImportBatchScreen(): React.JSX.Element {
       <Text variant="caption" tone="secondary" testID="import-batch-summary">
         {[
           t('import:review.summary', {
-            rows: ctrl.rows.length,
+            // The batch's own count, not the page at hand (03 §5.40).
+            rows: batch.row_count,
             uncategorized: selection.counts.uncategorized,
           }),
           ...flagCounts,
@@ -308,6 +358,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
             selection.clear();
           }}
           submitSignal={submitSignal}
+          unloadedRows={unloadedRows}
         />
       </Page>
       {/* The phone keeps bulk actions on a bar pinned to the bottom (04 §4.11.9). */}

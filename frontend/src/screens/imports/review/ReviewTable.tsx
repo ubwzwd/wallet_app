@@ -20,17 +20,9 @@ import { DataTable, type DataTableCellPos, type DataTableColumn, KeyboardHint, T
 
 import { FlagBadges, SkipToggle } from './FlagBadges';
 import { LinkCell } from './LinkCell';
-import {
-  AmountCell,
-  CategoryCell,
-  CurrencyCell,
-  DateCell,
-  type EditorHandle,
-  KindCell,
-  type ReviewEnv,
-  RowNoCell,
-  TextCell,
-} from './ReviewRow';
+import { CategoryCell, CurrencyCell, KindCell } from './ReviewCells.picker';
+import { AmountCell, DateCell, RowNoCell, TextCell } from './ReviewCells.text';
+import type { EditorHandle, ReviewEnv } from './ReviewRow';
 import { useReviewKeys } from './useReviewKeys';
 import { isUncategorized, type ReviewSelection } from './useReviewSelection';
 
@@ -305,7 +297,10 @@ export function ReviewTable({
         columns={columns}
         rowKey={(row) => row.id}
         selected={selection.selected}
-        onToggleRow={(row, index) => selection.toggle(row, index)}
+        onToggleRow={(row, index, opts) =>
+          // Shift-click reaches from the last row touched to this one (04 §4.11.2).
+          opts.extend ? selection.extendTo(index) : selection.toggle(row, index)
+        }
         onToggleAll={(next) => selection.toggleAll(next)}
         selectAllLabel={t('import:review.select_all')}
         rowSelectLabel={(row) => t('import:review.select_row', { row: row.row_no })}

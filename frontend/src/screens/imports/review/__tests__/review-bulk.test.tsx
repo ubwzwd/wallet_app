@@ -313,3 +313,64 @@ test('the keyboard moves, edits, cancels, skips, jumps and refuses to commit whi
     doc.restore();
   }
 });
+
+// ------------------------------------------- the kind a bulk edit has to spell out in full
+
+test('setting the kind to transfer in bulk carries the transfer fields and drops the category', async () => {
+  const rows = [1, 2].map((n) =>
+    row({ id: `row-${n}`, row_no: n, category_l1: 'food', category_l2: 'lunch' }),
+  );
+  seed(rows);
+  const updated = rows.map((r) => ({
+    ...r,
+    kind: 'transfer' as const,
+    merchant: null,
+    category_l1: null,
+    category_l2: null,
+    transfer_role: 'out' as const,
+    transfer_subtype: 'plain' as const,
+  }));
+  api.mock.onPatch(apiUrl(ROWS_PATH)).reply(() => {
+    serverRows = updated;
+    return [200, { updated: updated.length, rows: updated }];
+  });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-2'));
+  fireEvent.press(screen.getByTestId('review-bulk-kind-trigger'));
+  fireEvent.press(await screen.findByTestId('review-bulk-kind-option-transfer'));
+
+  await waitFor(() => expect(bulkCalls()).toHaveLength(1));
+  // One patch for every selected row, so it has to be valid on its own: a transfer leg
+  // needs its two fields (03 §5.41) and must shed the category it is carrying.
+  expect(bulkCalls()[0].patch).toEqual({
+    kind: 'transfer',
+    transfer_role: 'out',
+    transfer_subtype: 'plain',
+    category_l1: null,
+    category_l2: null,
+  });
+  // …and a bulk edit is never applied row by row (decision §14.52 A4).
+  expect(api.mock.history.patch.filter((r) => r.url !== ROWS_PATH)).toHaveLength(0);
+});
+
+// ------------------------------------------------------ Shift-click selects a range (§4.11.2)
+
+test('Shift-clicking a row checkbox selects everything between it and the last one clicked', async () => {
+  const rows = [1, 2, 3, 4, 5].map((n) => row({ id: `row-${n}`, row_no: n }));
+  seed(rows);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-table-select-row-1'));
+  fireEvent.press(screen.getByTestId('review-table-select-row-5'), {
+    nativeEvent: { shiftKey: true },
+  });
+
+  expect(String(screen.getByTestId('review-bulk-count').props.children)).toContain('5');
+  for (const n of [1, 2, 3, 4, 5]) {
+    expect(
+      screen.getByTestId(`review-table-select-row-${n}`).props.accessibilityState.checked,
+    ).toBe(true);
+  }
+});

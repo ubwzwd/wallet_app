@@ -76,14 +76,21 @@ export function useReviewSelection(rows: readonly ImportRow[]): ReviewSelection 
   const [slice, setSliceState] = React.useState<ReviewSlice | null>(null);
   const [selected, setSelected] = React.useState<ReadonlySet<Uuid>>(() => new Set<Uuid>());
   const anchor = React.useRef<number | null>(null);
+  const didInit = React.useRef(false);
 
   const counts = React.useMemo(() => sliceCounts(rows), [rows]);
 
-  // 04 §4.11.6: the first paint lands on "uncategorized" when there is anything to fix,
-  // and on "all" otherwise. Only the *first* — once the user has chosen a slice (or has
-  // emptied the uncategorized list) the choice is theirs.
-  const initial: ReviewSlice = counts.uncategorized > 0 ? 'uncategorized' : 'all';
-  const current = slice ?? initial;
+  // 04 §4.11.6: the *first* paint with rows in it lands on "uncategorized" when there is
+  // anything to fix, and on "all" otherwise — then it is settled. Deriving it from the
+  // counts on every render instead would yank the user back to "all" the instant they
+  // categorize the last row, which is the opposite of what the spec asks for.
+  React.useEffect(() => {
+    if (didInit.current || rows.length === 0) return;
+    didInit.current = true;
+    setSliceState(counts.uncategorized > 0 ? 'uncategorized' : 'all');
+  }, [rows.length, counts.uncategorized]);
+
+  const current = slice ?? 'all';
 
   const visible = React.useMemo(
     () => rows.filter((row) => matchesSlice(row, current)),

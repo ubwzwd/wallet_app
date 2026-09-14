@@ -211,6 +211,15 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
         </>
       ) : null}
 
+      {/* The server found the opposite leg but it is already half of another transfer, so
+          it re-flagged the row `duplicate` instead of pairing it (04 §4.11.3, last case).
+          Say so in the cell — the row's `hint` alone is too easy to miss. */}
+      {!paired && row.flags.includes('duplicate') ? (
+        <Text variant="micro" tone="muted" testID={`${testID}-already-paired`}>
+          {t('import:review.linked.transfer_already_paired')}
+        </Text>
+      ) : null}
+
       {!paired ? (
         <>
           <SourcePicker
@@ -245,6 +254,10 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
         </>
       ) : null}
 
+      {/* Both are non-null on any transfer row (03 §5.41): the server guarantees it for the
+          rows it parsed, and `kindChangePatch` fills them in for a row the user turned into
+          a transfer. The fallbacks below are the same defaults that patch writes, so what
+          is painted here is never a value the server has not been told about. */}
       <SegmentedControl<TransferRole>
         testID={`${testID}-role`}
         value={row.transfer_role ?? 'out'}

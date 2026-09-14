@@ -19,11 +19,7 @@
     "copy_csv": "复制 CSV",
     "download_sample": "下载示例.csv",
     "footer_version": "分类表版本：{{version}}",
-    "table": {
-      "name": "列名",
-      "desc": "含义",
-      "required": "必填"
-    },
+    "table": { "name": "列名", "desc": "含义", "required": "必填" },
     "required_yes": "必填",
     "required_no": "可空",
     "copied_toast": "已复制到剪贴板",
@@ -33,10 +29,7 @@
     "title": "新建导入",
     "source_label": "目标账户",
     "source_hint": "文件里 currency 留空的行会按 {{currency}} 入账",
-    "mode": {
-      "file": "上传文件",
-      "paste": "粘贴 CSV"
-    },
+    "mode": { "file": "上传文件", "paste": "粘贴 CSV" },
     "dropzone_hint": "选一个 skill 生成的 CSV 文件（不超过 2 MB）",
     "choose_file": "选择文件",
     "paste_placeholder": "粘贴 CSV 文本…",
@@ -113,7 +106,8 @@
       "transfer_pick_single": "选一条",
       "transfer_pick_none": "对方那笔已经配过对了",
       "counterpart_source_label": "对手账户",
-      "counterpart_text_label": "对方文本"
+      "counterpart_text_label": "对方文本",
+      "transfer_already_paired": "对方那笔已经配过对了"
     },
     "hint_duplicate_row": "本批内有相同的行（第 {{row}} 行）",
     "skip_row": "跳过",
@@ -123,11 +117,7 @@
     "submit_button": "提交 {{count}} 行",
     "submit_pairs_hint_other": "其中 {{count}} 对转账会合并成 {{count}} 笔",
     "keyboard_help_title": "键盘快捷键",
-    "save_state": {
-      "saved": "已保存",
-      "saving": "保存中",
-      "failed": "保存失败"
-    },
+    "save_state": { "saved": "已保存", "saving": "保存中", "failed": "保存失败" },
     "edit_details": "编辑详情",
     "mobile_default_filter_hint": "手机上建议先把待归类的补完，剩下的回电脑上处理",
     "error_retry": "这批导入没能加载出来，重试一下",
@@ -138,8 +128,10 @@
     "pick_category_l2": "选择二级",
     "no_rows_in_slice": "这一片没有行",
     "committing": "正在提交这批导入…",
-    "block_incomplete_other": "还有 {{count}} 行缺日期或金额，补齐后才能提交",
-    "block_failed_saves": "有单元格没保存成功，重试后才能提交",
+    "block_incomplete_other": "还有 {{count}} 行缺日期、金额或币种，补齐后才能提交",
+    "block_all_skipped": "这一批的行全都跳过了，至少留一行才能提交",
+    "block_rows_loading": "还有 {{rows}} 行没加载出来，加载完才能提交",
+    "block_failed_saves": "有 {{rows}} 处没保存成功（第 {{row}} 行起），重试后才能提交",
     "keyboard": {
       "rows": "上一行 / 下一行",
       "cells": "左一格 / 右一格",
@@ -179,10 +171,7 @@
       "net_amount": "净额",
       "flags": "标记"
     },
-    "status": {
-      "ready": "待提交",
-      "committed": "已提交"
-    },
+    "status": { "ready": "待提交", "committed": "已提交" },
     "pasted_filename": "粘贴的 CSV 文本",
     "pasted_badge": "粘贴",
     "continue_review": "继续 review",
@@ -196,11 +185,7 @@
     "discard_confirm_body": "这批还没提交，丢弃会删掉这 {{count}} 行草稿，不影响已有交易。",
     "discarded_toast": "已丢弃这批草稿",
     "error_retry": "导入历史没能加载出来，重试一下",
-    "pagination": {
-      "prev": "上一页",
-      "next": "下一页",
-      "page": "第 {{page}} / {{pages}} 页"
-    },
+    "pagination": { "prev": "上一页", "next": "下一页", "page": "第 {{page}} / {{pages}} 页" },
     "empty": {
       "title": "还没有导入过账单",
       "body": "账单交给你的 ChatGPT / Claude 整理成 CSV，再传进来",
