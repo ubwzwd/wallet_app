@@ -1,2 +1,2 @@
-/** `/l/:ledgerId/imports/new` — upload a CSV (04 §4.10 step 1). Placeholder until the import phase. */
-export { default } from '@/screens/imports/ComingSoonScreen';
+/** `/l/:ledgerId/imports/new` — upload or paste a CSV (04 §4.10 step 1). */
+export { default } from '@/screens/imports/NewImportScreen';

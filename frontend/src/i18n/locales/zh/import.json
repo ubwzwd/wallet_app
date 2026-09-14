@@ -11,6 +11,7 @@
     "tab_chatgpt": "ChatGPT",
     "copy": "复制",
     "download_skill": "下载 SKILL.md",
+    "download_instructions": "下载指令文本",
     "step2_title": "让它读你的账单",
     "step2_body": "把 PDF、图片、Excel、CSV 直接丢给它，说「整理成钱包导入 CSV」。它会输出一个 CSV 文件或代码块。",
     "step2_privacy_hint": "账单内容只经过你自己的聊天工具，不经过这个应用的服务器。",
@@ -22,16 +23,23 @@
     "sample_title": "示例文件",
     "copy_csv": "复制 CSV",
     "download_sample": "下载示例.csv",
-    "footer_version": "分类表版本：{{version}}"
+    "footer_version": "分类表版本：{{version}}",
+    "table": { "name": "列名", "desc": "含义", "required": "必填" },
+    "required_yes": "必填",
+    "required_no": "可空",
+    "copied_toast": "已复制到剪贴板",
+    "error_retry": "导入格式没能加载出来，重试一下"
   },
   "upload": {
     "title": "新建导入",
     "source_label": "目标账户",
     "source_hint": "文件里 currency 留空的行会按 {{currency}} 入账",
     "mode": { "file": "上传文件", "paste": "粘贴 CSV" },
-    "dropzone_hint": "把 CSV 文件拖到这里，或者",
+    "dropzone_hint": "选一个 skill 生成的 CSV 文件（不超过 2 MB）",
     "choose_file": "选择文件",
     "paste_placeholder": "粘贴 CSV 文本…",
+    "paste_label": "CSV 文本",
+    "selected_file": "{{name}}（{{size}}）",
     "guide_link": "怎么生成这个文件？",
     "submit": "上传并校验",
     "uploading": "正在上传并校验…",
@@ -48,7 +56,9 @@
       "go_to_guide": "去导入指南更新 skill →",
       "file_too_large": "文件超过 2 MB。一份月账单通常只有几十 KB，请确认传的是 CSV 而不是原始 PDF。",
       "rows_exceed_limit": "这份文件有 {{rows}} 行，超过单批 2000 行上限，请让 skill 按月分批输出。",
-      "rate_limited": "这一小时的导入次数已用完（10 批），请稍后再试。"
+      "rate_limited": "这一小时的导入次数已用完（10 批），请稍后再试。",
+      "generic_title": "这次没能传上去",
+      "copied_toast": "错误清单已复制"
     }
   },
   "review": {
@@ -146,6 +156,12 @@
     "undo": "撤销",
     "new_import": "导入新账单",
     "guide_link": "导入指南",
+    "flags_value": "⚑ {{n}}",
+    "discard_confirm_title": "丢弃这批草稿？",
+    "discard_confirm_body": "这批还没提交，丢弃会删掉这 {{count}} 行草稿，不影响已有交易。",
+    "discarded_toast": "已丢弃这批草稿",
+    "error_retry": "导入历史没能加载出来，重试一下",
+    "pagination": { "prev": "上一页", "next": "下一页", "page": "第 {{page}} / {{pages}} 页" },
     "empty": {
       "title": "还没有导入过账单",
       "body": "账单交给你的 ChatGPT / Claude 整理成 CSV，再传进来",
