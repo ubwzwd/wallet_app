@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next';
 
 import { routes } from '@/domain/routes';
 import { useTopBar } from '@/navigation';
-import { useBottomTabInset } from '@/navigation/AppShell';
 import { useLedgerContext } from '@/store';
 import { EmptyState, Page } from '@/ui';
 
@@ -32,7 +31,7 @@ export default function ComingSoonScreen(): React.JSX.Element {
   );
 
   return (
-    <Page testID="imports-coming-soon" bottomInset={useBottomTabInset()}>
+    <Page testID="imports-coming-soon">
       <EmptyState
         icon="upload"
         title={t('import:coming_soon.title')}

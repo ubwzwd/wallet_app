@@ -179,6 +179,7 @@ export function EventTimeline({
                 accessibilityRole="button"
                 onPress={() => setExpanded((prev) => ({ ...prev, [event.id]: true }))}
                 testID={`${id}-expand-${event.id}`}
+                hitSlop={space['3']}
               >
                 <Text variant="caption" tone="accent">
                   {t('transaction:detail.events_collapsed', { count: lines.length })}
@@ -195,6 +196,7 @@ export function EventTimeline({
                   accessibilityLabel={batchLabel}
                   onPress={() => onPressBatch(batchId)}
                   testID={`${id}-batch-${event.id}`}
+                  hitSlop={space['3']}
                   style={({ pressed }) => [
                     styles.batch,
                     { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },

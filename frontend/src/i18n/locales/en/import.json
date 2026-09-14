@@ -28,10 +28,7 @@
     "title": "New import",
     "source_label": "Target account",
     "source_hint": "Rows with a blank currency will be recorded in {{currency}}",
-    "mode": {
-      "file": "Upload a file",
-      "paste": "Paste CSV"
-    },
+    "mode": { "file": "Upload a file", "paste": "Paste CSV" },
     "dropzone_hint": "Drag a CSV file here, or",
     "choose_file": "Choose a file",
     "paste_placeholder": "Paste CSV text…",
@@ -121,11 +118,7 @@
     "submit_pairs_hint_one": "{{count}} transfer pair will be merged into {{count}} transaction",
     "submit_pairs_hint_other": "{{count}} transfer pairs will be merged into {{count}} transactions",
     "keyboard_help_title": "Keyboard shortcuts",
-    "save_state": {
-      "saved": "Saved",
-      "saving": "Saving",
-      "failed": "Failed to save"
-    },
+    "save_state": { "saved": "Saved", "saving": "Saving", "failed": "Failed to save" },
     "edit_details": "Edit details",
     "mobile_default_filter_hint": "On mobile, it's usually easiest to finish the uncategorized rows here and handle the rest on a computer"
   },
@@ -154,10 +147,7 @@
       "net_amount": "Net amount",
       "flags": "Flags"
     },
-    "status": {
-      "ready": "Ready",
-      "committed": "Committed"
-    },
+    "status": { "ready": "Ready", "committed": "Committed" },
     "pasted_filename": "Pasted CSV text",
     "pasted_badge": "Pasted",
     "continue_review": "Continue review",

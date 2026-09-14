@@ -17,6 +17,9 @@
  *    `/l/xxx/transactions` rendered the offline page even while online.
  *  - `navigateFallbackDenylist: [/^\/api/]` so API calls are never answered with HTML.
  *  - dontCacheBustURLsMatching trusts Expo's content-hashed filenames.
+ *  - maximumFileSizeToCacheInBytes is raised past Workbox's 2 MiB default so the ~4 MB
+ *    Expo entry bundle is precached — without it the precached shell has no script and
+ *    an offline navigation is a blank page.
  *  - runtimeCaching, in match order (the Workbox router takes the FIRST matching route):
  *      1. app shell — NetworkFirst, so a freshly deployed shell reaches the user.
  *      2. the three immutable, ledger-independent GETs (`/api/v1/categories`,
@@ -49,6 +52,11 @@ module.exports = {
   navigateFallback: '/index.html',
   navigateFallbackDenylist: [/^\/api/],
   dontCacheBustURLsMatching: /\.[0-9a-f]{20,}\./,
+  // Workbox's default cap is 2 MiB, and Expo's single entry bundle is ~4 MB — with the
+  // default the app shell precaches without its only <script>, so an offline navigation
+  // (which `navigateFallback` now answers with /index.html) renders a blank page and
+  // `offline.html` can never be reached. 6 MiB keeps the whole shell installable.
+  maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
   runtimeCaching: [
     {
       // App shell — always try network first so a freshly deployed /index.html reaches
@@ -70,7 +78,7 @@ module.exports = {
       handler: 'CacheFirst',
       options: {
         cacheName: 'api-cache',
-        expiration: { maxAgeSeconds: 60 * 60 * 24 * 30 },
+        expiration: { maxAgeSeconds: THIRTY_DAYS },
         cacheableResponse: { statuses: [0, 200] },
       },
     },

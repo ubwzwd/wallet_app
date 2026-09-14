@@ -70,6 +70,11 @@ export function SegmentedControl<T extends string = string>({
             disabled={option.disabled}
             onPress={() => onChange(option.value)}
             testID={testID ? `${testID}-${option.value}` : undefined}
+            // The track is 44 high but has `padding: space['1']`, so the segment itself is
+            // only 36. The vertical slop takes the tap target back to 44 without changing
+            // the control's drawn height (04 §6.4: height 44). Vertical only — a
+            // horizontal slop would overlap the neighbouring segment across the gap.
+            hitSlop={{ top: space['1'], bottom: space['1'] }}
             style={({ pressed }) => ({
               flex: 1,
               flexDirection: 'row',

@@ -264,6 +264,7 @@ export function TransactionPicker({
               accessibilityLabel={t('common:button.close')}
               onPress={onClose}
               testID={`${id}-close`}
+              hitSlop={space['3']}
             >
               <Text variant="body" tone="secondary">
                 {t('common:button.close')}

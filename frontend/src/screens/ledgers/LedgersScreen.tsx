@@ -47,6 +47,7 @@ function LedgerCard({ ledger, onPress }: { ledger: Ledger; onPress(): void }): R
       onPress={onPress}
       testID={`ledger-card-${ledger.id}`}
       style={({ pressed }) => ({
+        minHeight: 44,
         borderRadius: radius.lg,
         backgroundColor: pressed ? colors['bg.hover'] : 'transparent',
       })}

@@ -28,10 +28,7 @@
     "title": "新建导入",
     "source_label": "目标账户",
     "source_hint": "文件里 currency 留空的行会按 {{currency}} 入账",
-    "mode": {
-      "file": "上传文件",
-      "paste": "粘贴 CSV"
-    },
+    "mode": { "file": "上传文件", "paste": "粘贴 CSV" },
     "dropzone_hint": "把 CSV 文件拖到这里，或者",
     "choose_file": "选择文件",
     "paste_placeholder": "粘贴 CSV 文本…",
@@ -113,11 +110,7 @@
     "submit_button": "提交 {{count}} 行",
     "submit_pairs_hint_other": "其中 {{count}} 对转账会合并成 {{count}} 笔",
     "keyboard_help_title": "键盘快捷键",
-    "save_state": {
-      "saved": "已保存",
-      "saving": "保存中",
-      "failed": "保存失败"
-    },
+    "save_state": { "saved": "已保存", "saving": "保存中", "failed": "保存失败" },
     "edit_details": "编辑详情",
     "mobile_default_filter_hint": "手机上建议先把待归类的补完，剩下的回电脑上处理"
   },
@@ -144,10 +137,7 @@
       "net_amount": "净额",
       "flags": "标记"
     },
-    "status": {
-      "ready": "待提交",
-      "committed": "已提交"
-    },
+    "status": { "ready": "待提交", "committed": "已提交" },
     "pasted_filename": "粘贴的 CSV 文本",
     "pasted_badge": "粘贴",
     "continue_review": "继续 review",

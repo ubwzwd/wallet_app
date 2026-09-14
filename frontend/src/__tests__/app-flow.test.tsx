@@ -2,10 +2,11 @@
  * One pass through the whole application, on the real route tree (04 §8.3).
  *
  * Every other integration test mounts the routes it needs and stubs the rest. This one
- * stubs nothing: the map below is the actual `app/` directory, module for module, so the
- * root layout's provider stack, both group layouts, the ledger layout, the three guards,
- * the shell chrome and the five screens under test all run exactly as they do in the
- * browser. Only the server is fake.
+ * stubs nothing: the map below is the actual `app/` directory, every route module of it,
+ * so the root layout's provider stack, both group layouts, the ledger layout, the three
+ * guards, the shell chrome and the five screens under test all run exactly as they do in
+ * the browser. Only the server is fake. (Keep it that way: a tab or sidebar link whose
+ * module is missing from the map lands on `+not-found` instead of failing loudly.)
  *
  * The journey is the one a new user takes on their first deep link:
  *
@@ -40,6 +41,17 @@ import TransactionsRoute from '../../app/(app)/l/[ledgerId]/transactions/index';
 import NewTransactionRoute from '../../app/(app)/l/[ledgerId]/transactions/new';
 import SourcesRoute from '../../app/(app)/l/[ledgerId]/sources/index';
 import ImportsRoute from '../../app/(app)/l/[ledgerId]/imports/index';
+import ImportsGuideRoute from '../../app/(app)/l/[ledgerId]/imports/guide';
+import NewImportRoute from '../../app/(app)/l/[ledgerId]/imports/new';
+import LedgerSettingsRoute from '../../app/(app)/l/[ledgerId]/settings';
+import NewSourceRoute from '../../app/(app)/l/[ledgerId]/sources/new';
+import EditSourceRoute from '../../app/(app)/l/[ledgerId]/sources/[sourceId]/edit';
+import TransactionDetailRoute from '../../app/(app)/l/[ledgerId]/transactions/[txId]/index';
+import EditTransactionRoute from '../../app/(app)/l/[ledgerId]/transactions/[txId]/edit';
+import TransferDetailRoute from '../../app/(app)/l/[ledgerId]/transfers/[pairId]/index';
+import EditTransferRoute from '../../app/(app)/l/[ledgerId]/transfers/[pairId]/edit';
+import JoinLedgerRoute from '../../app/(app)/ledgers/join';
+import NewLedgerRoute from '../../app/(app)/ledgers/new';
 
 import { clearAuthToken } from '@/api/client';
 import type { Transaction, TransactionListResponse } from '@/api/types';
@@ -91,6 +103,17 @@ const APP_ROUTES = {
   '(app)/l/[ledgerId]/transactions/new': NewTransactionRoute,
   '(app)/l/[ledgerId]/sources/index': SourcesRoute,
   '(app)/l/[ledgerId]/imports/index': ImportsRoute,
+  '(app)/l/[ledgerId]/imports/guide': ImportsGuideRoute,
+  '(app)/l/[ledgerId]/imports/new': NewImportRoute,
+  '(app)/l/[ledgerId]/settings': LedgerSettingsRoute,
+  '(app)/l/[ledgerId]/sources/new': NewSourceRoute,
+  '(app)/l/[ledgerId]/sources/[sourceId]/edit': EditSourceRoute,
+  '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
+  '(app)/l/[ledgerId]/transactions/[txId]/edit': EditTransactionRoute,
+  '(app)/l/[ledgerId]/transfers/[pairId]/index': TransferDetailRoute,
+  '(app)/l/[ledgerId]/transfers/[pairId]/edit': EditTransferRoute,
+  '(app)/ledgers/join': JoinLedgerRoute,
+  '(app)/ledgers/new': NewLedgerRoute,
 };
 
 const CHECKING = makeSource({
