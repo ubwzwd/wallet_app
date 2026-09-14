@@ -11,7 +11,24 @@ memory for the rest of the process's life — same shape as ``categories.py``'s
 ``_body()`` cache. If a deliverable is missing (a broken build, a repo
 checkout that skipped ``skills/``), the endpoint must not take the whole app
 down with it: a missing file degrades to an empty string plus a logged
-warning, rather than raising at import time or on every request.
+error, rather than raising at import time or on every request.
+
+ACTION ITEM for whoever owns ``infra/`` (out of scope for this module —
+``infra/`` is off-limits to this task): the production image's build context
+is ``backend/`` (``infra/docker-compose.prod.yml`` ``context: ../backend``,
+``infra/Dockerfile.api`` does ``COPY . .`` into ``/app``), so a plain
+``<repo-root>/skills/wallet-import`` lookup never ships inside that image —
+the whole import-guide page (04 §4.10 step 0's only data source) would
+render blank in production. ``SKILLS_DIR`` below tries both
+``<repo-root>/skills/wallet-import`` and ``backend/skills/wallet-import`` so
+that either of these infra fixes "just works" without touching this file
+again: (a) move the build context to the repo root and ``COPY skills/
+./skills/``, or (b) copy ``skills/wallet-import`` into the backend build
+context (e.g. ``backend/skills/wallet-import``) before/while building the
+image. Until one of those lands, this endpoint serves empty
+``sample_csv`` / ``skill_text`` / ``skill_markdown`` in production and logs
+an ``error`` (not just a ``warning``) on every process start so the gap is
+visible in ops rather than silent.
 
 Caching: unlike ``GET /categories`` this is *not* ``immutable`` — its
 ``version`` changes on ordinary deploys (whenever ``CATEGORY_VERSION``
@@ -38,8 +55,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import-format", tags=["Import"])
 
-# repo_root/skills/wallet-import — three parents up from this file: api -> app -> backend.
-SKILLS_DIR = pathlib.Path(__file__).resolve().parents[3] / "skills" / "wallet-import"
+# Normally repo_root/skills/wallet-import (three parents up from this file:
+# api -> app -> backend -> repo root) — that's where the checked-out repo and
+# local dev both have it. But the production image is built with `backend/`
+# as its Docker build context (infra/docker-compose.prod.yml), so a plain
+# repo-root lookup would silently miss inside that image. Until infra copies
+# skills/ into the backend build context (tracked as a follow-up — see the
+# module docstring), also try backend/skills/wallet-import so a future fix
+# on the infra side "just works" without a code change here too.
+_HERE = pathlib.Path(__file__).resolve()
+_REPO_ROOT = _HERE.parents[3]  # api -> app -> backend -> repo root
+_BACKEND_DIR = _HERE.parents[2]  # api -> app -> backend
+for _candidate in (_REPO_ROOT / "skills" / "wallet-import", _BACKEND_DIR / "skills" / "wallet-import"):
+    if _candidate.is_dir():
+        SKILLS_DIR = _candidate
+        break
+else:
+    SKILLS_DIR = _REPO_ROOT / "skills" / "wallet-import"
 
 CACHE_CONTROL = "public, max-age=86400"
 
@@ -148,15 +180,17 @@ INSTRUCTIONS_EN = (
 def _read_deliverable(filename: str) -> str:
     """Read one generated file from ``skills/wallet-import/``.
 
-    Missing file: a broken checkout must not take the whole app down over a
-    guide page, so this logs a warning and degrades to an empty string
-    instead of raising (notes: no other endpoint depends on this content).
+    Missing file: a broken checkout or a build whose image never shipped
+    ``skills/`` must not take the whole app down over a guide page, so this
+    logs an error (loud enough to page on, since it means the import guide
+    is serving blank) and degrades to an empty string instead of raising
+    (notes: no other endpoint depends on this content).
     """
     path = SKILLS_DIR / filename
     try:
         return path.read_text(encoding="utf-8")
     except OSError:
-        logger.warning("import-format: missing skill deliverable %s", path)
+        logger.error("import-format: missing skill deliverable %s", path)
         return ""
 
 

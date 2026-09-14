@@ -58,7 +58,6 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
     分期付款按账单上实际扣的那一期记一行。
 14. **只输出这一份 CSV**：不要在 CSV 里加统计行、小计行、空行、说明行。想说的话写在 CSV 外面。
 
-
 【分类清单】
 | 一级 code | 名称 | 判据 | 二级 code |
 |---|---|---|---|
@@ -98,4 +97,3 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 
 如果应用提示 `skill_outdated`，说明分类表更新了，让用户到应用的「导入指南」页重新复制一份新的
 skill 文本，再让你重新整理一次。
-

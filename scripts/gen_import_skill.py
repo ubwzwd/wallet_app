@@ -28,13 +28,23 @@ def render_group(cats) -> str:
 
 def render(template_name: str) -> str:
     text = (TPL / template_name).read_text(encoding="utf-8")
+    # _rules.md / _delivery.md each end with a trailing newline of their own;
+    # rstrip it before substituting so the surrounding template's own blank
+    # lines aren't doubled up (they already provide the separator).
+    rules = (TPL / "_rules.md").read_text(encoding="utf-8").rstrip("\n")
+    delivery = (TPL / "_delivery.md").read_text(encoding="utf-8").rstrip("\n")
     return (text
             .replace("{{CATEGORY_VERSION}}", CATEGORY_VERSION)
+            # Counts come from the same frozen tables as the rows below them,
+            # so an added/removed top-level category can't drift the count
+            # in the shipped skill text out from under --check's notice.
+            .replace("{{EXPENSE_COUNT}}", str(len(EXPENSE_CATEGORIES)))
+            .replace("{{INCOME_COUNT}}", str(len(INCOME_CATEGORIES)))
             .replace("{{EXPENSE_TABLE}}", render_group(EXPENSE_CATEGORIES))
             .replace("{{INCOME_TABLE}}", render_group(INCOME_CATEGORIES))
             # 规则与交付说明是两份包装共用的片段（§5.1），"逐字相同"靠这两行保证
-            .replace("{{RULES}}", (TPL / "_rules.md").read_text(encoding="utf-8"))
-            .replace("{{DELIVERY}}", (TPL / "_delivery.md").read_text(encoding="utf-8")))
+            .replace("{{RULES}}", rules)
+            .replace("{{DELIVERY}}", delivery))
 
 
 TARGETS = {

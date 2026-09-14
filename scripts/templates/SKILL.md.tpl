@@ -62,11 +62,11 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 
 一级分类带了判据，按判据归类；判据都对不上就留空。
 
-**支出（16 个一级）**
+**支出（{{EXPENSE_COUNT}} 个一级）**
 
 {{EXPENSE_TABLE}}
 
-**收入（6 个一级）**
+**收入（{{INCOME_COUNT}} 个一级）**
 
 {{INCOME_TABLE}}
 
