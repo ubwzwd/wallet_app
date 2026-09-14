@@ -1,0 +1,2 @@
+date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref
+2026-08-03,-128.00,CNY,expense,,,盒马鲜生,,groceries,fresh_food,p1:5

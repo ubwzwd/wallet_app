@@ -1,0 +1,16 @@
+# version: 2026-09-10
+date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref
+03/08/2026,-50.00,CNY,expense,,,超市,,groceries,fresh_food,p1:1
+2026-08-04,¥128.00,CNY,expense,,,京东,,shopping,electronics,p1:2
+2026-08-10,-30.00,CNY,expense,,,美团外卖,午饭,food,lunch,p1:d
+2026-08-05,0,CNY,expense,,,便利店,,groceries,fresh_food,p1:4
+2026-08-06,-12.00,rmb,expense,,,北京地铁,,transport,public_transit,p1:5
+2026-08-07,-88.00,CNY,payment,,,加油站,"卡号 6225880212341235",transport,fuel,p1:6
+2026-08-10,-30.00,CNY,expense,,,美团外卖,午饭,food,lunch,p1:d
+2026-08-08,32.00,CNY,expense,,,书店,,culture,books,p1:8
+2026-08-09,-500.00,CNY,transfer,,plain,,转到另一张卡,,,p1:9
+2026-08-11,-66.00,CNY,expense,,,饭馆,,dining,,p1:11
+2026-08-12,-25.00,CNY,expense,,,小吃店,,food,taxi,p1:12
+2026-08-13,200.00,CNY,income,,,张三,还我上次垫的钱,food,lunch,p1:13
+2026-08-14,-800.00,CNY,transfer,out,plain,,转给老婆,social,transfer_out,p1:14
+2026-08-15,-9.90,人民币,expense,,,超市,,groceries,fresh_food,p1:15

@@ -10,6 +10,12 @@ import type {
   CategoryTree,
   CurrencyList,
   FinanceSource,
+  ImportBatch,
+  ImportCommitResult,
+  ImportDeleteResult,
+  ImportFormat,
+  ImportRow,
+  ImportUploadResult,
   Ledger,
   Money,
   StatsSummary,
@@ -24,6 +30,8 @@ export const LEDGER_ID: Uuid = '8f0f7b2e-1111-4222-8333-444455556666';
 export const USER_ID: Uuid = '4ee1c8fa-2222-4333-8444-555566667777';
 export const SOURCE_ID: Uuid = '5b6c7d8e-3333-4444-8555-666677778888';
 export const TX_ID: Uuid = '9a8b7c6d-4444-4555-8666-777788889999';
+export const BATCH_ID: Uuid = 'd1e2f3a4-5566-4778-899a-bbccddeeff00';
+export const IMPORT_ROW_ID: Uuid = 'e5f6a7b8-6666-4777-8888-999900001111';
 export const CATEGORY_VERSION = '2026-09-10';
 
 export function makeUser(over: Partial<User> = {}): User {
@@ -260,6 +268,119 @@ export function makeStatsTrend(over: Partial<StatsTrend> = {}): StatsTrend {
     { month: '2026-09', expense: '8421.6600' },
   ];
   return { base_currency: 'CNY', months, rate_missing_count: 0, ...over };
+}
+
+// ---------------------------------------------------------------- imports (03 §5.37–§5.44)
+
+/** The 11 fixed columns, in file order (05 §1). */
+export const IMPORT_HEADERS: string[] = [
+  'date', 'amount', 'currency', 'kind', 'transfer_role', 'transfer_subtype',
+  'merchant', 'note', 'category_l1', 'category_l2', 'source_ref',
+];
+
+const SAMPLE_CSV =
+  `# version: ${CATEGORY_VERSION}\n${IMPORT_HEADERS.join(',')}\n` +
+  '2026-08-03,-128.50,CNY,expense,,,全家便利店,,food,snacks_drinks,\n';
+
+export function makeImportBatch(over: Partial<ImportBatch> = {}): ImportBatch {
+  return {
+    id: BATCH_ID,
+    ledger_id: LEDGER_ID,
+    source_id: SOURCE_ID,
+    source_name: '招商 信用卡',
+    source: 'csv',
+    filename: '2026-08-cmb-credit.csv',
+    size_bytes: 18432,
+    skill_version: CATEGORY_VERSION,
+    status: 'ready',
+    row_count: 128,
+    net_amount: '-4210.5500',
+    base_currency: 'CNY',
+    flags_summary: { duplicate: 3, refund_candidate: 1, transfer_candidate: 2, needs_review: 7 },
+    row_status_summary: { pending: 121, edited: 5, skipped: 2 },
+    uncategorized_count: 5,
+    created_by: USER_ID,
+    created_at: '2026-09-09T07:00:00.000000Z',
+    updated_at: '2026-09-09T07:12:00.000000Z',
+    committed_at: null,
+    ...over,
+  };
+}
+
+export function makeImportRow(over: Partial<ImportRow> = {}): ImportRow {
+  return {
+    id: IMPORT_ROW_ID,
+    batch_id: BATCH_ID,
+    row_no: 1,
+    status: 'pending',
+    date: '2026-08-03',
+    amount: '-128.5000',
+    currency: 'CNY',
+    kind: 'expense',
+    merchant: '全家便利店',
+    note: 'FAMILYMART 3521',
+    category_l1: 'food',
+    category_l2: 'snacks_drinks',
+    source_ref: 'p1:l14',
+    flags: [],
+    matched_transaction_id: null,
+    counterpart_source_id: null,
+    counterparty: null,
+    transfer_role: null,
+    transfer_subtype: null,
+    hint: null,
+    transaction_id: null,
+    ...over,
+  };
+}
+
+/** A 201 from POST /imports: the batch plus every draft row (decision §5). */
+export function makeImportUploadResult(over: Partial<ImportUploadResult> = {}): ImportUploadResult {
+  const batch = over.batch ?? makeImportBatch({ row_count: 2 });
+  const second = makeImportRow({
+    id: 'f6a7b8c9-7777-4888-8999-000011112222', row_no: 2, date: '2026-08-05',
+    amount: '3000.0000', kind: 'income', merchant: '公司', note: null,
+    category_l1: 'salary', category_l2: null, source_ref: 'p1:l15',
+  });
+  const rows = over.rows ?? [makeImportRow({ batch_id: batch.id }), { ...second, batch_id: batch.id }];
+  return { batch, rows };
+}
+
+export function makeImportFormat(over: Partial<ImportFormat> = {}): ImportFormat {
+  return {
+    version: CATEGORY_VERSION,
+    headers: [...IMPORT_HEADERS],
+    columns: IMPORT_HEADERS.map((name) => ({
+      name,
+      required: name === 'date' || name === 'amount' || name === 'currency' || name === 'kind',
+      desc_zh: `${name} 列说明`,
+      desc_en: `The ${name} column`,
+    })),
+    sample_csv: SAMPLE_CSV,
+    skill_text: 'Export the statement as the standard CSV described below.',
+    skill_markdown: `# wallet-import\n\nversion: ${CATEGORY_VERSION}\n`,
+    instructions_zh: '一、装 skill；二、让模型导出 CSV；三、回来上传。',
+    instructions_en: '1. Install the skill. 2. Ask for the CSV. 3. Upload it here.',
+    ...over,
+  };
+}
+
+export function makeImportCommitResult(over: Partial<ImportCommitResult> = {}): ImportCommitResult {
+  return {
+    batch_id: BATCH_ID, status: 'committed', created_transactions: 121,
+    created_transfer_pairs: 2, paired_existing_transfers: 1, linked_refunds: 3,
+    skipped_rows: 7, committed_at: '2026-09-09T07:20:31.000000Z',
+    ...over,
+  };
+}
+
+/** Defaults to the `dry_run` answer; pass `{deleted: true}` for the real deletion. */
+export function makeImportDeleteResult(over: Partial<ImportDeleteResult> = {}): ImportDeleteResult {
+  return {
+    batch_id: BATCH_ID, mode: 'revert', deleted: false, would_delete_transactions: 123,
+    orphaned_refunds: 2, refunds_in_batch: 4,
+    ...over,
+  };
 }
 
 export function makeCurrencyList(over: Partial<CurrencyList> = {}): CurrencyList {

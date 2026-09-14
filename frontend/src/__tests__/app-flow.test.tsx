@@ -14,6 +14,13 @@
  *       →  bottom tab 交易  →  /l/<id>/transactions
  *       →  bottom tab ＋     →  /l/<id>/transactions/new
  *
+ * The second journey is the import flow of 04 §4.10 / §8.5, every step of it on the same
+ * real route tree:
+ *
+ *   /l/<id>/imports  (history, empty)  →  /l/<id>/imports/guide  →  /l/<id>/imports/new
+ *       →  pick the account, paste a CSV  →  /l/<id>/imports/<batch>  (review)
+ *       →  fill the one blank category in  →  commit  →  the committed panel
+ *
  * The assertions are on what the server was asked for (POST /auth/login, GET /me,
  * GET /ledgers), which URL the router ended up at, and what actually rendered.
  */
@@ -55,7 +62,7 @@ import JoinLedgerRoute from '../../app/(app)/ledgers/join';
 import NewLedgerRoute from '../../app/(app)/ledgers/new';
 
 import { clearAuthToken } from '@/api/client';
-import type { Transaction, TransactionListResponse } from '@/api/types';
+import type { ImportRow, Transaction, TransactionListResponse } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { resetLedgerGone } from '@/navigation';
 import { queryClient } from '@/queries';
@@ -64,6 +71,10 @@ import {
   apiUrl,
   makeCategoryTree,
   makeCurrencyList,
+  makeImportBatch,
+  makeImportCommitResult,
+  makeImportFormat,
+  makeImportRow,
   makeLedger,
   makeSource,
   makeStatsSummary,
@@ -72,6 +83,7 @@ import {
   makeUser,
   mockApi,
   mockGet,
+  mockPatch,
   mockPost,
   type MockApi,
 } from '@/test';
@@ -163,6 +175,50 @@ const TX_PAGE: TransactionListResponse = {
     rate_missing_count: 0,
   },
 };
+
+// ── the import journey's server state ─────────────────────────────────────────────
+const BATCH = 'batch-app-flow';
+const IMPORTS_PATH = `/ledgers/${LEDGER}/imports`;
+const BATCH_PATH = `${IMPORTS_PATH}/${BATCH}`;
+
+/**
+ * The two rows the pasted text below parses into. Deliberately tiny: `DataTable` windows
+ * its rows, so a long batch would mount only the visible slice and this journey is about
+ * the route tree, not about scrolling.
+ */
+const PASTED_CSV = [
+  '# version: 2026-09-10',
+  'date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref',
+  '2026-09-01,-45.00,CNY,expense,,,瑞幸咖啡,,food,lunch,p1:2',
+  '2026-09-02,-238.00,CNY,expense,,,淘宝,,,,p1:3',
+].join('\n');
+
+function draftRows(): ImportRow[] {
+  return [
+    makeImportRow({
+      id: 'draft-coffee', batch_id: BATCH, row_no: 1, date: '2026-09-01',
+      amount: '-45.0000', merchant: '瑞幸咖啡', note: null,
+      category_l1: 'food', category_l2: 'lunch', source_ref: 'p1:2',
+    }),
+    // The one row the user has to finish by hand (04 §4.11.4).
+    makeImportRow({
+      id: 'draft-taobao', batch_id: BATCH, row_no: 2, date: '2026-09-02',
+      amount: '-238.0000', merchant: '淘宝', note: null,
+      category_l1: null, category_l2: null, source_ref: 'p1:3',
+    }),
+  ];
+}
+
+function uploadedBatch(over: Parameters<typeof makeImportBatch>[0] = {}) {
+  return makeImportBatch({
+    id: BATCH, source_id: CREDIT.id, source_name: CREDIT.name, source: 'paste',
+    filename: null, size_bytes: PASTED_CSV.length, status: 'ready', row_count: 2,
+    net_amount: '-283.0000', uncategorized_count: 1,
+    flags_summary: { duplicate: 0, refund_candidate: 0, transfer_candidate: 0, needs_review: 0 },
+    row_status_summary: { pending: 2, edited: 0, skipped: 0 },
+    ...over,
+  });
+}
 
 let api: MockApi;
 let wideSpy: jest.SpyInstance;
@@ -278,23 +334,93 @@ test('a deep link, a sign-in, and the walk from home to the new-transaction form
   expect(screen.getByTestId('tx-submit')).toBeTruthy();
 });
 
-test('the import tab resolves to the placeholder instead of 404ing', async () => {
+test('the import tab walks guide → paste → review → commit (04 §4.10, §8.5)', async () => {
+  const rows = draftRows();
+  mockGet(IMPORTS_PATH, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
+  mockGet('/import-format', makeImportFormat());
+  // The 201 seeds batch and rows into the cache, so review needs no follow-up request;
+  // these two answer anyway, because this journey must not depend on cache retention.
+  mockGet(BATCH_PATH, uploadedBatch());
+  mockGet(`${BATCH_PATH}/rows`, { items: rows, total: rows.length });
+  mockPost(IMPORTS_PATH, { batch: uploadedBatch(), rows }, 201);
+  mockPatch(`${BATCH_PATH}/rows/draft-taobao`, {
+    ...rows[1], category_l1: 'shopping', category_l2: null, status: 'edited',
+  });
+  mockPost(
+    `${BATCH_PATH}/commit`,
+    makeImportCommitResult({
+      batch_id: BATCH, created_transactions: 2, created_transfer_pairs: 0,
+      paired_existing_transfers: 0, linked_refunds: 0, skipped_rows: 0,
+    }),
+  );
   const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/imports` });
 
-  // No session yet, so the guard sends us through sign-in first — the same round trip as
-  // above, which is what makes `/imports` reachable at all from a cold deep link.
+  // ── 1. no session yet, so the guard sends us through sign-in first ────────────────
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
   fireEvent.changeText(await screen.findByTestId('login-email'), EMAIL);
   fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
   fireEvent.press(screen.getByTestId('login-submit'));
 
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports`));
-  expect(await screen.findByTestId('imports-coming-soon')).toBeTruthy();
-  expect(screen.getByTestId('imports-coming-soon-empty')).toHaveTextContent(
-    /导入功能在下一阶段上线/,
+  expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
+  expect(await screen.findByTestId('imports-empty')).toBeTruthy();
+
+  // ── 2. the empty state's action is the guide, step one of the flow ────────────────
+  fireEvent.press(screen.getByTestId('imports-empty-primary'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/guide`));
+  expect(await screen.findByTestId('guide-sample-table')).toBeTruthy();
+
+  // ── 3. the guide hands over to the upload page ────────────────────────────────────
+  fireEvent.press(await screen.findByTestId('guide-go-upload'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/new`));
+
+  // ── 4. pick the target account, paste the statement, send it ─────────────────────
+  fireEvent.press(await screen.findByTestId('upload-source-picker-trigger'));
+  fireEvent.press(await screen.findByTestId(`upload-source-picker-option-${CREDIT.id}`));
+  fireEvent.press(screen.getByTestId('upload-mode-paste'));
+  fireEvent.changeText(await screen.findByTestId('upload-paste-input'), PASTED_CSV);
+  fireEvent.press(screen.getByTestId('upload-submit'));
+
+  // ── 5. review, on the batch the 201 came back with ────────────────────────────────
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`));
+  expect(requestedPaths('post')).toEqual(['/auth/login', IMPORTS_PATH]);
+  expect(JSON.parse(String(api.mock.history.post[1].data))).toEqual({
+    source_id: CREDIT.id,
+    text: PASTED_CSV,
+  });
+  expect(await screen.findByTestId('import-batch-screen')).toBeTruthy();
+  expect(await screen.findByTestId('review-cards-row-2')).toHaveTextContent(/淘宝/);
+
+  // The blank category blocks the commit until it is filled in (04 §4.11.8).
+  expect(screen.getByTestId('review-commit-block')).toBeTruthy();
+  expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBe(
+    true,
   );
 
-  // And its one action goes back to the ledger's home page.
-  fireEvent.press(screen.getByTestId('imports-coming-soon-empty-primary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  // ── 6. fill the category in — one PATCH, and the blocker goes away ───────────────
+  // The category picker only wakes up once `GET /categories` has landed.
+  fireEvent.press(await screen.findByTestId('review-2-l1-trigger'));
+  fireEvent.press(await screen.findByTestId('review-2-l1-l1-shopping'));
+  await waitFor(() => expect(api.mock.history.patch).toHaveLength(1));
+  // Only what changed goes on the wire — `category_l2` was already null (04 §4.11.5).
+  expect(JSON.parse(String(api.mock.history.patch[0].data))).toEqual({
+    category_l1: 'shopping',
+  });
+  await waitFor(() => expect(screen.queryByTestId('review-commit-block')).toBeNull());
+
+  // ── 7. commit, and land on the committed panel (step three of 04 §4.10) ──────────
+  fireEvent.press(screen.getByTestId('review-commit-submit'));
+  expect(await screen.findByTestId('import-committed')).toBeTruthy();
+  // The detailed sentence, built from the commit response's five counters — not the
+  // shorter fallback a page opened later has to settle for.
+  expect(screen.getByTestId('import-committed-summary')).toHaveTextContent(
+    i18next.t('import:committed.summary', {
+      created: 2, pairs: 0, paired: 0, refunds: 0, skipped: 0,
+    }),
+  );
+  expect(requestedPaths('post')).toContain(`${BATCH_PATH}/commit`);
+  // The review table is gone; the URL is the same batch it always was.
+  expect(screen.queryByTestId('review-commit-submit')).toBeNull();
+  expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`);
 });

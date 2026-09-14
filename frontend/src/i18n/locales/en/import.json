@@ -1,9 +1,4 @@
 {
-  "coming_soon": {
-    "title": "Import ships in the next phase",
-    "body": "Statement import isn't ready yet — it arrives in the next phase. Until then, add transactions by hand with “New transaction”.",
-    "back_home": "Back to home"
-  },
   "guide": {
     "title": "Import guide",
     "step1_title": "Install the skill in your ChatGPT or Claude",
@@ -11,6 +6,7 @@
     "tab_chatgpt": "ChatGPT",
     "copy": "Copy",
     "download_skill": "Download SKILL.md",
+    "download_instructions": "Download the instructions",
     "step2_title": "Have it read your statement",
     "step2_body": "Hand it a PDF, image, spreadsheet or CSV and say \"turn this into a wallet import CSV.\" It'll output a CSV file or a code block.",
     "step2_privacy_hint": "Your statement only ever goes through your own chat tool — it never touches this app's server.",
@@ -22,16 +18,23 @@
     "sample_title": "Sample file",
     "copy_csv": "Copy CSV",
     "download_sample": "Download sample.csv",
-    "footer_version": "Category table version: {{version}}"
+    "footer_version": "Category table version: {{version}}",
+    "table": { "name": "Column", "desc": "Meaning", "required": "Required" },
+    "required_yes": "Required",
+    "required_no": "Optional",
+    "copied_toast": "Copied to the clipboard",
+    "error_retry": "The import format didn't load — try again"
   },
   "upload": {
     "title": "New import",
     "source_label": "Target account",
     "source_hint": "Rows with a blank currency will be recorded in {{currency}}",
     "mode": { "file": "Upload a file", "paste": "Paste CSV" },
-    "dropzone_hint": "Drag a CSV file here, or",
+    "dropzone_hint": "Choose the CSV your skill generated (2 MB max)",
     "choose_file": "Choose a file",
     "paste_placeholder": "Paste CSV text…",
+    "paste_label": "CSV text",
+    "selected_file": "{{name}} ({{size}})",
     "guide_link": "How do I generate this file?",
     "submit": "Upload and validate",
     "uploading": "Uploading and validating…",
@@ -49,7 +52,9 @@
       "go_to_guide": "Update the skill in the import guide →",
       "file_too_large": "The file is larger than 2 MB. A month's statement is usually only a few dozen KB — make sure you uploaded a CSV, not a raw PDF.",
       "rows_exceed_limit": "This file has {{rows}} rows, over the 2000-row-per-batch limit — have the skill split it by month.",
-      "rate_limited": "You've used up this hour's imports (10). Try again later."
+      "rate_limited": "You've used up this hour's imports (10). Try again later.",
+      "generic_title": "That upload didn't go through",
+      "copied_toast": "Error list copied"
     }
   },
   "review": {
@@ -70,10 +75,13 @@
     "bulk": {
       "set_category": "Set category in bulk",
       "set_kind": "Set type in bulk",
+      "kind_mixed_signs": "The selected rows mix positive and negative amounts — set their type in separate batches",
       "set_currency": "Set currency in bulk",
       "skip": "Skip selected",
       "unskip": "Unskip selected",
-      "mixed_kind_error": "Row {{row}} is a {{kind}} row and doesn't match this category — nothing in this batch was changed"
+      "mixed_kind_error": "Row {{row}} is a {{kind}} row and doesn't match this category — nothing in this batch was changed",
+      "failed_row": "Row {{row}} did not pass validation — nothing in this batch was changed",
+      "failed": "Nothing in this batch was changed — check the selected rows"
     },
     "column": {
       "row_no": "Row",
@@ -106,7 +114,8 @@
       "transfer_pick_single": "Pick one",
       "transfer_pick_none": "That one is already paired",
       "counterpart_source_label": "Counterparty account",
-      "counterpart_text_label": "Counterparty text"
+      "counterpart_text_label": "Counterparty text",
+      "transfer_already_paired": "The other side is already paired with something else"
     },
     "hint_duplicate_row": "There's an identical row in this batch (row {{row}})",
     "skip_row": "Skip",
@@ -120,7 +129,34 @@
     "keyboard_help_title": "Keyboard shortcuts",
     "save_state": { "saved": "Saved", "saving": "Saving", "failed": "Failed to save" },
     "edit_details": "Edit details",
-    "mobile_default_filter_hint": "On mobile, it's usually easiest to finish the uncategorized rows here and handle the rest on a computer"
+    "mobile_default_filter_hint": "On mobile, it's usually easiest to finish the uncategorized rows here and handle the rest on a computer",
+    "error_retry": "This import didn't load — try again",
+    "missing_value": "Missing",
+    "select_all": "Select all rows shown",
+    "select_row": "Select row {{row}}",
+    "pick_category": "Pick a category",
+    "pick_category_l2": "Pick a subcategory",
+    "no_rows_in_slice": "No rows in this slice",
+    "committing": "Committing this import…",
+    "block_incomplete_one": "{{count}} row still has no date, amount or currency",
+    "block_incomplete_other": "{{count}} rows still have no date, amount or currency",
+    "block_all_skipped": "Every row in this batch is skipped — keep at least one to submit",
+    "block_rows_loading": "{{rows}} more rows are still loading — you can submit once they are here",
+    "block_failed_saves": "{{rows}} edits failed to save (from row {{row}}) — retry them before submitting",
+    "keyboard": {
+      "rows": "Previous / next row",
+      "cells": "Previous / next cell",
+      "edit": "Edit this cell; while editing, save and move down",
+      "cancel": "Cancel the edit and restore the original; outside an edit, leave the table",
+      "select": "Select / deselect this row",
+      "extend": "Extend the selection",
+      "skip": "Skip / unskip this row",
+      "category": "Open this row's category picker",
+      "jump": "Previous / next uncategorized row",
+      "commit": "Commit the whole batch",
+      "help": "Show keyboard shortcuts"
+    },
+    "summary_flag": "⚑{{label}} {{count}}"
   },
   "committed": {
     "summary": "Imported {{created}} transactions ({{pairs}} paired transfers created together, {{paired}} paired with an existing transfer, {{refunds}} linked to an original expense, {{skipped}} rows skipped)",
@@ -133,7 +169,8 @@
     "undo_orphaned_refunds_other": "{{count}} refunds outside this batch point to expenses in it — after deleting, they will become refunds with no original expense (the refunds themselves are kept).",
     "undo_refunds_in_batch_one": "This batch has {{count}} refund — deleting it will restore the refundable balance on the expense it reduced.",
     "undo_refunds_in_batch_other": "This batch has {{count}} refunds — deleting them will restore the refundable balance on the expenses they reduced.",
-    "undo_success_toast": "Undone — deleted {{count}} transactions"
+    "undo_success_toast": "Undone — deleted {{count}} transactions",
+    "summary_fallback": "This import has been committed — {{rows}} rows"
   },
   "history": {
     "title": "Import history",
@@ -156,6 +193,12 @@
     "undo": "Undo",
     "new_import": "New import",
     "guide_link": "Import guide",
+    "flags_value": "⚑ {{n}}",
+    "discard_confirm_title": "Discard this draft?",
+    "discard_confirm_body": "This batch hasn't been submitted — discarding it deletes its {{count}} draft rows and leaves your existing transactions alone.",
+    "discarded_toast": "Draft discarded",
+    "error_retry": "The import history didn't load — try again",
+    "pagination": { "prev": "Previous", "next": "Next", "page": "Page {{page}} / {{pages}}" },
     "empty": {
       "title": "No imports yet",
       "body": "Have your ChatGPT/Claude turn a statement into a CSV, then bring it in here",

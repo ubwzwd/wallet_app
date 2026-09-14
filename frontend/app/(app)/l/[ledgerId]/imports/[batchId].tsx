@@ -1,2 +1,2 @@
-/** `/l/:ledgerId/imports/:batchId` — one import batch (04 §4.10 step 2/3). Placeholder until the import phase. */
-export { default } from '@/screens/imports/ComingSoonScreen';
+/** `/l/:ledgerId/imports/:batchId` — one batch: the review table, or the committed result (04 §4.10). */
+export { default } from '@/screens/imports/ImportBatchScreen';

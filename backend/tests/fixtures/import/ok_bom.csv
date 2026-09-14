@@ -1,0 +1,4 @@
+﻿# version: 2026-09-10
+date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_l1,category_l2,source_ref
+2026-08-03,-128.00,CNY,expense,,,盒马鲜生,,groceries,fresh_food,p1:5
+2026-08-11,299.00,CNY,refund,,,京东,"退了键盘",shopping,electronics,p1:9
