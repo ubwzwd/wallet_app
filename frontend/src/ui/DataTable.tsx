@@ -13,10 +13,15 @@
  * height (`maxHeight`, or the viewport minus the page chrome) inside a horizontal one — so
  * the header can stick, `scrollToRow` can move and the focused cell can be kept in view.
  *
- * TODO (row virtualisation): every row is rendered, and a batch may hold up to 2000 of them
- * (`IMPORT_MAX_ROWS`), so the widest slice of a large import pays for all of it at once. A
- * windowing layer has to keep the sticky header, the focus ring and `scrollToRow` working;
- * it is a task of its own and is deliberately not attempted here.
+ * Rows are windowed (04 §6.4). A batch may hold up to 2000 of them (`IMPORT_MAX_ROWS`) and
+ * each row is eleven cells, so mounting the whole slice would cost twenty thousand
+ * components at once. Only the rows around the scroll offset are mounted — one viewport
+ * above and one below — and the rest of the scroll range is held open by a spacer at each
+ * end, so the scrollbar's length and position are the ones the full grid would have. The
+ * window is aimed by *index*, never by "the row is already mounted": `scrollToRow` and the
+ * keyboard both move it first and scroll second, so a jump to row 1500 works from row 1.
+ * Row heights are assumed to be the nominal 44 — a row carrying a hint line is taller,
+ * which costs the mapping a few pixels and nothing else.
  */
 import React from 'react';
 import {
@@ -37,6 +42,7 @@ import { useColors } from '@/theme/ThemeProvider';
 
 import { Checkbox } from './Checkbox';
 import { Text } from './Text';
+import { useRowWindow } from './useRowWindow';
 
 /** 04 §6.4: the review grid is tighter than the 56px list row. */
 export const DATA_TABLE_ROW_HEIGHT = 44;
@@ -163,45 +169,16 @@ export function DataTable<Row>({
   const boxHeight =
     maxHeight ?? Math.max(MIN_TABLE_HEIGHT, viewportSize.height - CHROME_HEIGHT);
 
-  // Where the scroll box is and how tall it turned out, so "keep the focused cell in view"
-  // can tell whether it already is. Row heights are the nominal 44 — a row carrying a hint
-  // line is taller, which costs the scroll a few pixels of accuracy and nothing else.
-  const offset = React.useRef(0);
-  const viewport = React.useRef(0);
-
-  // "Scroll this row into view" is a one-shot request expressed as state: the caller sets
-  // an index, we move, and nothing else in the table depends on it. `scrollSignal` is the
-  // second half of the request — it is in the dependencies precisely so that asking for the
-  // same index again asks again.
-  React.useEffect(() => {
-    if (scrollToRow === null || scrollToRow === undefined) return;
-    scroller.current?.scrollTo({
-      y: Math.max(0, scrollToRow * DATA_TABLE_ROW_HEIGHT - DATA_TABLE_ROW_HEIGHT),
-      animated: true,
-    });
-  }, [scrollToRow, scrollSignal]);
-
-  // 04 §4.11.7: the focused cell stays in the viewport as the keyboard walks the grid —
-  // but only when it would otherwise leave it, so arrowing around inside the visible rows
-  // never yanks the view.
-  const focusRow = focus?.row ?? null;
-  React.useEffect(() => {
-    if (focusRow === null) return;
-    const height = viewport.current;
-    if (height <= 0) return;
-    const top = focusRow * DATA_TABLE_ROW_HEIGHT;
-    const bottom = top + DATA_TABLE_ROW_HEIGHT;
-    // The header sits on top of the first visible row, so a row is only really visible one
-    // row height below the current offset.
-    if (top < offset.current + DATA_TABLE_ROW_HEIGHT) {
-      scroller.current?.scrollTo({
-        y: Math.max(0, top - DATA_TABLE_ROW_HEIGHT),
-        animated: true,
-      });
-    } else if (bottom > offset.current + height) {
-      scroller.current?.scrollTo({ y: bottom - height, animated: true });
-    }
-  }, [focusRow]);
+  // Which rows are mounted, and everything that moves that window: the scroll offset, the
+  // measured height of the box, `scrollToRow` and the focused row (see `useRowWindow`).
+  const { first, last, topPad, bottomPad, onScroll, onLayout } = useRowWindow({
+    count: rows.length,
+    rowHeight: DATA_TABLE_ROW_HEIGHT,
+    scroller,
+    scrollToRow,
+    scrollSignal,
+    focusRow: focus?.row ?? null,
+  });
 
   const totalWidth =
     (selectable ? SELECT_WIDTH : 0) + columns.reduce((sum, c) => sum + c.width, 0);
@@ -255,7 +232,10 @@ export function DataTable<Row>({
     return colors['bg.surface'];
   }
 
-  const body = rows.map((row, rowIndex) => {
+  // Only the window is mounted; `rowIndex` stays the index into `rows`, because that is
+  // what selection, focus and every caller callback speak in.
+  const body = rows.slice(first, last).map((row, sliceIndex) => {
+    const rowIndex = first + sliceIndex;
     const key = rowKey(row);
     const tone = rowTone?.(row) ?? 'default';
     const below = rowBelow?.(row);
@@ -364,10 +344,10 @@ export function DataTable<Row>({
         style={{ maxHeight: boxHeight }}
         scrollEventThrottle={16}
         onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-          offset.current = event.nativeEvent.contentOffset.y;
+          onScroll(event.nativeEvent.contentOffset.y);
         }}
         onLayout={(event: LayoutChangeEvent) => {
-          viewport.current = event.nativeEvent.layout.height;
+          onLayout(event.nativeEvent.layout.height);
         }}
         contentContainerStyle={{ width: totalWidth, minWidth: '100%' }}
       >
@@ -379,7 +359,13 @@ export function DataTable<Row>({
             </Text>
           </View>
         ) : (
-          body
+          <>
+            {/* The two spacers stand in for the rows that are not mounted, so the content
+                is as tall as the whole grid and the scrollbar behaves as if it were. */}
+            <View testID={`${id}-spacer-top`} style={{ height: topPad }} />
+            {body}
+            <View testID={`${id}-spacer-bottom`} style={{ height: bottomPad }} />
+          </>
         )}
       </ScrollView>
     </ScrollView>
