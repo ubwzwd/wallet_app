@@ -7,7 +7,7 @@
  * disabled button; this is the one that explains and offers the way out.
  */
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, type StyleProp, View, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { radius, space } from '@/theme/tokens';
@@ -19,12 +19,14 @@ export interface ReviewBannerProps {
   count: number;
   /** Focus (and scroll to) the first of them. */
   onJump(): void;
+  style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 
 export function ReviewBanner({
   count,
   onJump,
+  style,
   testID,
 }: ReviewBannerProps): React.JSX.Element | null {
   const { t } = useTranslation();
@@ -35,16 +37,19 @@ export function ReviewBanner({
   return (
     <View
       testID={id}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: space['3'],
-        paddingVertical: space['3'],
-        paddingHorizontal: space['4'],
-        borderRadius: radius.md,
-        backgroundColor: colors['status.warning.bg'],
-      }}
+      style={[
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: space['3'],
+          paddingVertical: space['3'],
+          paddingHorizontal: space['4'],
+          borderRadius: radius.md,
+          backgroundColor: colors['status.warning.bg'],
+        },
+        style,
+      ]}
     >
       <Icon name="alert-triangle" size={18} color={colors['status.warning.fg']} />
       <Text variant="body" weight={600} tone="warning" style={{ flex: 1, minWidth: 0 }}>

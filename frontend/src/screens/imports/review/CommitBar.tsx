@@ -113,6 +113,14 @@ export interface CommitBarProps {
    * half-loaded batch would let a commit through that the server then refuses.
    */
   unloadedRows?: number;
+  /**
+   * The bulk strip of 屏幕稿 03's merged bottom bar: 「已选 5 / 10 行」 and the bulk actions
+   * sit at the *left end of this very bar*, not on a second card above it. Wide puts it
+   * beside the submit button; the phone stacks it above.
+   */
+  leading?: React.ReactNode;
+  /** Render the contents only — the caller supplies the card (the merged bottom bar). */
+  bare?: boolean;
   testID?: string;
 }
 
@@ -123,6 +131,8 @@ export function CommitBar({
   onCommitted,
   submitSignal = 0,
   unloadedRows = 0,
+  leading,
+  bare = false,
   testID,
 }: CommitBarProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -142,13 +152,6 @@ export function CommitBar({
     blockers.incomplete.length > 0 ||
     blockers.failed.length > 0 ||
     blockers.allSkipped;
-
-  const submitLabel =
-    !wide && blockers.uncategorized.length > 0
-      ? `${t('import:review.submit')} · ${t('import:review.submit_blocked_suffix', {
-          count: blockers.uncategorized.length,
-        })}`
-      : t('import:review.submit');
 
   // A ref, not `commit.isPending`: two clicks in the same tick both see the old render's
   // pending flag, and 04 §4.11.8 wants one commit per press, not one 409 per press.
@@ -204,8 +207,9 @@ export function CommitBar({
     submitRef.current();
   }, [submitSignal]);
 
-  return (
-    <Card variant="raised" testID={id} style={{ gap: space['2'] }}>
+
+  const blockLines = (
+    <>
       {blockers.incomplete.length > 0 ? (
         <Text variant="caption" tone="warning" testID={`${id}-block-incomplete`}>
           {t('import:review.block_incomplete', { count: blockers.incomplete.length })}
@@ -255,76 +259,121 @@ export function CommitBar({
           />
         </View>
       ) : null}
+    </>
+  );
 
-      {/* 屏幕稿 03's submit bar: what is still in the way, in grey, right beside the button
-          that it is disabling — the sand banner above the table is where it is explained.
-          屏幕稿「03 导入 review 375」 has no room for that grey line beside a right-aligned
-          button, so the phone bar stretches the button across the card and carries the
-          blocker inside its own label instead. The spoken name is the same in both. */}
-      <View
-        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['3'] }}
-      >
-        {wide ? (
-          <>
-            <View style={{ flex: 1, minWidth: 0, gap: space['1'] }}>
-              {pairCount > 0 ? (
-                <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
-                  {t('import:review.submit_pairs_hint', { count: pairCount })}
-                </Text>
-              ) : null}
-            </View>
-            {blockers.uncategorized.length > 0 ? (
-              <Text variant="body" tone="warning" testID={`${id}-block`}>
-                {t('import:review.block_uncategorized_short', {
-                  count: blockers.uncategorized.length,
-                })}
-              </Text>
-            ) : null}
-          </>
-        ) : pairCount > 0 ? (
-          <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
-            {t('import:review.submit_pairs_hint', { count: pairCount })}
-          </Text>
-        ) : null}
-        <Button
-          testID={`${id}-submit`}
-          size="lg"
-          style={wide ? undefined : { width: '100%' }}
-          label={submitLabel}
-          accessibilityLabel={t('import:review.submit_button', { count: submitCount })}
-          disabled={blocked}
-          loading={commit.isPending}
-          onPress={onSubmit}
-        />
-      </View>
+  const pairsHint =
+    pairCount > 0 ? (
+      <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
+        {t('import:review.submit_pairs_hint', { count: pairCount })}
+      </Text>
+    ) : null;
 
-      <Modal visible={commit.isPending} transparent animationType="fade">
+  /* 屏幕稿 03's bottom bar: what is still in the way, in grey, right beside the button it
+     is disabling — the sand banner under the page header is where it is explained at
+     length. 屏幕稿「03 导入 review 375」 has no room for that line beside a full-width
+     button, so the phone puts the very same sentence on its own caption line directly
+     above it. It is never nowhere: it is the only thing that explains a dead button, to a
+     reader and to a screen reader alike. */
+  const blockUncategorized =
+    blockers.uncategorized.length > 0 ? (
+      <Text variant={wide ? 'body' : 'caption'} tone="warning" testID={`${id}-block`}>
+        {t('import:review.block_uncategorized_short', {
+          count: blockers.uncategorized.length,
+        })}
+      </Text>
+    ) : null;
+
+  const submit = (
+    <Button
+      testID={`${id}-submit`}
+      size="lg"
+      style={wide ? undefined : { width: '100%' }}
+      label={t('import:review.submit')}
+      accessibilityLabel={t('import:review.submit_button', { count: submitCount })}
+      disabled={blocked}
+      loading={commit.isPending}
+      onPress={onSubmit}
+    />
+  );
+
+  /* The merged bottom bar of 屏幕稿 03: the bulk strip at the left end, the blocker and the
+     submit button at the right. The phone stacks the same three, in the same order. */
+  const bar = (
+    <>
+      {blockLines}
+      {wide ? (
         <View
-          testID={`${id}-overlay`}
           style={{
-            flex: 1,
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            padding: space['6'],
-            backgroundColor: colors['bg.canvas'],
-            opacity: 0.96,
+            flexWrap: 'wrap',
+            gap: space['3'],
           }}
         >
-          <View
-            style={{
-              gap: space['3'],
-              alignSelf: 'stretch',
-              maxWidth: 360,
-              padding: space['4'],
-              borderRadius: radius.lg,
-              backgroundColor: colors['bg.raised'],
-            }}
-          >
-            <Text variant="body">{t('import:review.committing')}</Text>
-            <ProgressBar value={0.6} accessibilityLabel={t('import:review.committing')} />
+          <View style={{ flex: 1, minWidth: 0, gap: space['1'] }}>
+            {leading}
+            {pairsHint}
           </View>
+          {blockUncategorized}
+          {submit}
         </View>
-      </Modal>
+      ) : (
+        <>
+          {leading}
+          {pairsHint}
+          {blockUncategorized}
+          {submit}
+        </>
+      )}
+    </>
+  );
+
+  const overlay = (
+    <Modal visible={commit.isPending} transparent animationType="fade">
+      <View
+        testID={`${id}-overlay`}
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: space['6'],
+          backgroundColor: colors['bg.canvas'],
+          opacity: 0.96,
+        }}
+      >
+        <View
+          style={{
+            gap: space['3'],
+            alignSelf: 'stretch',
+            maxWidth: 360,
+            padding: space['4'],
+            borderRadius: radius.lg,
+            backgroundColor: colors['bg.raised'],
+          }}
+        >
+          <Text variant="body">{t('import:review.committing')}</Text>
+          <ProgressBar value={0.6} accessibilityLabel={t('import:review.committing')} />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // `bare` hands the bar's contents straight to the merged footer card the screen draws;
+  // on its own it still wears a card, the way every other blocker strip does.
+  if (bare) {
+    return (
+      <>
+        {bar}
+        {overlay}
+      </>
+    );
+  }
+
+  return (
+    <Card variant="raised" testID={id} style={{ gap: space['2'] }}>
+      {bar}
+      {overlay}
     </Card>
   );
 }

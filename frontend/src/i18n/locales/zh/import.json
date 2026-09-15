@@ -76,8 +76,13 @@
     }
   },
   "review": {
-    "title": "{{filename}} → {{source}}",
-    "summary": "{{rows}} 行 · 待归类 {{uncategorized}}",
+    "page_title": "逐行确认",
+    "stat_rows_other": "{{count}} 行",
+    "stat_uncategorized_other": "{{count}} 行待归类",
+    "stat_skipped_other": "{{count}} 行已跳过",
+    "batch_line": "{{filename}} · 目标账户 {{source}}",
+    "change_file": "换个文件",
+    "discard": "放弃本次导入",
     "filter": {
       "all_other": "全部 {{count}}",
       "uncategorized_other": "待归类 {{count}}",
@@ -143,7 +148,6 @@
     "block_uncategorized_short_other": "{{count}} 行待归类，无法提交",
     "jump_to_first": "定位第一行",
     "submit": "提交入账",
-    "submit_blocked_suffix_other": "{{count}} 行待归类",
     "submit_button": "提交 {{count}} 行",
     "submit_pairs_hint_other": "其中 {{count}} 对转账会合并成 {{count}} 笔",
     "keyboard_help_title": "键盘快捷键",

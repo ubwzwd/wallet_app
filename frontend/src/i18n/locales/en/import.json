@@ -78,8 +78,16 @@
     }
   },
   "review": {
-    "title": "{{filename}} → {{source}}",
-    "summary": "{{rows}} rows · {{uncategorized}} uncategorized",
+    "page_title": "Row-by-row check",
+    "stat_rows_one": "{{count}} row",
+    "stat_rows_other": "{{count}} rows",
+    "stat_uncategorized_one": "{{count}} row uncategorized",
+    "stat_uncategorized_other": "{{count}} rows uncategorized",
+    "stat_skipped_one": "{{count}} row skipped",
+    "stat_skipped_other": "{{count}} rows skipped",
+    "batch_line": "{{filename}} · into {{source}}",
+    "change_file": "Use another file",
+    "discard": "Discard this import",
     "filter": {
       "all_one": "All {{count}}",
       "all_other": "All {{count}}",
@@ -152,8 +160,6 @@
     "block_uncategorized_short_other": "{{count}} rows uncategorized — cannot submit",
     "jump_to_first": "Go to the first one",
     "submit": "Submit import",
-    "submit_blocked_suffix_one": "{{count}} row uncategorized",
-    "submit_blocked_suffix_other": "{{count}} rows uncategorized",
     "submit_button": "Submit {{count}} rows",
     "submit_pairs_hint_one": "{{count}} transfer pair will be merged into {{count}} transaction",
     "submit_pairs_hint_other": "{{count}} transfer pairs will be merged into {{count}} transactions",

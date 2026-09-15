@@ -11,6 +11,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 import type { ImportRow, ImportRowPatch } from '@/api/types';
 import { applySign } from '@/domain/kinds';
@@ -22,9 +23,9 @@ import { Button, DateField, KIND_AMOUNT_TONE, Text, TextField, trimMoney } from 
 
 import {
   type CellProps,
+  type ReviewEnv,
   CellFrame,
   DASH,
-  Dash,
   strikeIfSkipped,
   useDraft,
   useEditorHandle,
@@ -220,6 +221,23 @@ export function AmountCell({
 
 // --------------------------------------------------------------------- merchant / note
 
+/**
+ * A transfer row has no merchant (decision §14.52 B16), and 屏幕稿 03 puts the two ends of
+ * the leg in the 商户 column instead of an em dash — 「招行储蓄卡 → 建行信用卡」 — in both
+ * the 1440 grid and the 375 card flow. §14.45 makes the mockup the source of truth here;
+ * 04 §4.11.2's 「—」 is the wording that has to change.
+ */
+export function transferTitle(row: ImportRow, env: ReviewEnv, t: TFunction): string {
+  const other =
+    env.sources.find((s) => s.id === row.counterpart_source_id)?.name ??
+    row.counterparty ??
+    t('import:review.missing_value');
+  const mine = env.batch.source_name;
+  return row.transfer_role === 'in'
+    ? t('import:review.transfer_title', { from: other, to: mine })
+    : t('import:review.transfer_title', { from: mine, to: other });
+}
+
 export interface TextCellProps extends CellProps {
   field: 'merchant' | 'note';
   maxLength: number;
@@ -243,7 +261,20 @@ export function TextCell({
   });
   useEditorHandle(editing && !dead, registerEditor, flush, cancel);
 
-  if (dead) return <Dash testID={testID} />;
+  if (dead) {
+    return (
+      <Text
+        variant="body"
+        weight={500}
+        tone="secondary"
+        numberOfLines={1}
+        style={strikeIfSkipped(row)}
+        testID={testID}
+      >
+        {transferTitle(row, env, t)}
+      </Text>
+    );
+  }
   const body = !editing ? (
     <Text
       variant="body"

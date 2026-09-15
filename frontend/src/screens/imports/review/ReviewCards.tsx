@@ -15,15 +15,8 @@
  * appears as soon as the selection is non-empty.
  */
 import React from 'react';
-import {
-  type LayoutChangeEvent,
-  Pressable,
-  ScrollView,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { type LayoutChangeEvent, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 
 import type { ImportRow } from '@/api/types';
 import { formatMoney } from '@/i18n/format';
@@ -35,8 +28,14 @@ import { FlagBadges, SkipToggle } from './FlagBadges';
 import { LinkCell } from './LinkCell';
 import { LinkPanel, hasLinkPanel } from './LinkPanel';
 import { CategoryCell, CurrencyCell, KindCell } from './ReviewCells.picker';
-import { AmountCell, DateCell, RowNoCell, TextCell, shortDate } from './ReviewCells.text';
-import { ReviewBanner } from './ReviewBanner';
+import {
+  AmountCell,
+  DateCell,
+  RowNoCell,
+  TextCell,
+  shortDate,
+  transferTitle,
+} from './ReviewCells.text';
 import type { ReviewViewProps } from './ReviewTable';
 
 const MERCHANT_MAX = 200;
@@ -51,31 +50,17 @@ const NOTE_MAX = 500;
  * The height is the viewport minus the page chrome above and below the list (the top bar,
  * the screen header, the slice control and the commit bar).
  */
-// 300 is the measured phone chrome at the C2 density, not a computed value; the row
+// 380 is the measured phone chrome at the C2 density (the top bar, the page header, the
+// banner, the slices and 屏幕稿 03 · 375's bottom bar), not a computed value; the row
 // virtualisation task that reworks this file replaces it with a measured height.
-const CARDS_CHROME_HEIGHT = 300;
+const CARDS_CHROME_HEIGHT = 380;
 const MIN_CARDS_HEIGHT = 240;
-
-/**
- * A transfer row has no merchant (decision §14.52 B16), so 屏幕稿 03 titles the card with
- * the two ends of the leg instead: the batch's account and whatever the row knows about the
- * other side, in the direction `transfer_role` states.
- */
-function transferTitle(row: ImportRow, env: ReviewViewProps['env'], t: TFunction): string {
-  const other =
-    env.sources.find((s) => s.id === row.counterpart_source_id)?.name ??
-    row.counterparty ??
-    t('import:review.missing_value');
-  const mine = env.batch.source_name;
-  return row.transfer_role === 'in'
-    ? t('import:review.transfer_title', { from: other, to: mine })
-    : t('import:review.transfer_title', { from: mine, to: other });
-}
 
 export function ReviewCards({
   env,
   selection,
   highlight,
+  bannerJumpSignal = 0,
   testID,
 }: ReviewViewProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -145,6 +130,18 @@ export function ReviewCards({
     // `highlightSeq` is the point: the same row twice is a new request to scroll to it.
   }, [highlightRowNo, highlightSeq, scrollToTop]);
 
+  // The page's blocking banner asked for the first uncategorized row (04 §4.11.8): on a
+  // phone that is the uncategorized slice, whose first card is exactly that row.
+  const sliceRef = React.useRef(selection.setSlice);
+  sliceRef.current = selection.setSlice;
+  const firstBannerJump = React.useRef(bannerJumpSignal);
+  React.useEffect(() => {
+    if (bannerJumpSignal === firstBannerJump.current) return;
+    firstBannerJump.current = bannerJumpSignal;
+    sliceRef.current('uncategorized');
+    scroller.current?.scrollTo({ y: 0, animated: true });
+  }, [bannerJumpSignal]);
+
   return (
     <ScrollView
       ref={scroller}
@@ -152,17 +149,6 @@ export function ReviewCards({
       style={{ maxHeight: Math.max(MIN_CARDS_HEIGHT, viewportSize.height - CARDS_CHROME_HEIGHT) }}
       contentContainerStyle={{ gap: space['3'] }}
     >
-      {/* The blocker, and the way to the first row it is about (04 §4.11.8): on a phone
-          that is the uncategorized slice, which is where the first such row is the first
-          card. */}
-      <ReviewBanner
-        count={selection.counts.uncategorized}
-        onJump={() => {
-          selection.setSlice('uncategorized');
-          scroller.current?.scrollTo({ y: 0, animated: true });
-        }}
-      />
-
       {rows.length === 0 ? (
         <Text variant="body" tone="muted" testID={`${id}-empty`}>
           {t('import:review.no_rows_in_slice')}
@@ -170,9 +156,11 @@ export function ReviewCards({
       ) : null}
 
       {rows.map((row, index) => (
-        // touch-target-exempt: wraps a whole card, which is never shorter than one row of
-        // fields plus its padding — far past 44 at any density.
-        <Pressable
+        // 屏幕稿 03 · 375 draws the card body as plain surface: the checkbox selects, the
+        // ⋯ button opens the details sheet, and nothing else on the card is pressable. A
+        // Pressable here would also nest the checkbox and the button inside a <button>,
+        // which the browser refuses outright.
+        <View
           key={row.id}
           testID={`${id}-row-${row.row_no}`}
           ref={(node: View | null) => {
@@ -186,9 +174,6 @@ export function ReviewCards({
             pendingScroll.current = null;
             scrollToTop(y);
           }}
-          onLongPress={() => selection.toggle(row, index)}
-          accessibilityRole="button"
-          accessibilityLabel={t('import:review.select_row', { row: row.row_no })}
         >
           <Card
             variant="raised"
@@ -306,7 +291,7 @@ export function ReviewCards({
               </Text>
             ) : null}
           </Card>
-        </Pressable>
+        </View>
       ))}
 
       <Sheet

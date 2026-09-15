@@ -2,7 +2,7 @@
  * The review table (04 §4.11, §8.4 cases 1–5, 8, 10, 11, 13, 14).
  */
 import React from 'react';
-import { ScrollView, Text as RNText } from 'react-native';
+import { ScrollView, StyleSheet, Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import i18next from 'i18next';
@@ -165,7 +165,7 @@ test('uncategorized rows block the commit; skipping or filling one unblocks it, 
   expect(screen.getByTestId('review-commit-submit').props.accessibilityState.disabled).toBeFalsy();
 });
 
-test('a transfer row has no merchant cell and no category cell, and neither accepts input', async () => {
+test('a transfer row names its two legs instead of a merchant, and takes no input', async () => {
   const transfer = row({
     id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
     merchant: null, amount: '1000.0000',
@@ -173,10 +173,15 @@ test('a transfer row has no merchant cell and no category cell, and neither acce
   seed([transfer]);
   renderReview();
 
-  // Both cells render the em dash, and pressing the merchant cell opens no editor.
-  expect((await screen.findByTestId('review-3-merchant')).props.children).toBe('—');
-  // 屏幕稿 03 draws the dead cell as a pill, so the dash is the pill's text.
+  // A transfer has no merchant (decision §14.52 B16). 屏幕稿 03 fills the column with the
+  // two ends of the leg instead of an em dash — the batch's account and whatever this row
+  // knows about the other side — in the grid exactly as in the phone's card flow.
+  expect((await screen.findByTestId('review-3-merchant')).props.children).toBe(
+    '招商 信用卡 → 缺失',
+  );
+  // The category cell stays the dead one: 屏幕稿 03 draws it as a pill, dash and all.
   expect(within(screen.getByTestId('review-3-l1')).getByText('—')).toBeTruthy();
+  // Neither cell accepts input: pressing the merchant cell opens no editor.
   fireEvent.press(screen.getByTestId('review-table-cell-row-3-merchant'));
   expect(screen.queryByTestId('review-3-merchant-input')).toBeNull();
 });
@@ -403,6 +408,70 @@ test('the four slices count correctly and switching them keeps the selection', a
   );
 });
 
+// -------------------------------------------- the page header and its two ways out (屏幕稿 03)
+
+test('the wide header names the step, counts the batch and leads back to the upload page', async () => {
+  seed(
+    [
+      row({ id: 'row-1', row_no: 1 }),
+      row({ id: 'row-2', row_no: 2, category_l1: null, category_l2: null }),
+      row({ id: 'row-3', row_no: 3, status: 'skipped' }),
+    ],
+    { row_count: 3 },
+  );
+  const router = renderReview();
+
+  // 屏幕稿 03: 「逐行确认」 + 「N 行 · N 行待归类 · N 行已跳过」 on the same baseline.
+  expect(await screen.findByTestId('import-batch-header-title')).toHaveTextContent('逐行确认');
+  const stats = String(screen.getByTestId('import-batch-summary').props.children);
+  expect(stats).toContain('3 行');
+  expect(stats).toContain('1 行待归类');
+  expect(stats).toContain('1 行已跳过');
+
+  // 「换个文件」 is step one of the flow again (04 §4.10).
+  fireEvent.press(screen.getByTestId('import-batch-change-file'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
+});
+
+test('「放弃本次导入」 confirms once, deletes the draft and leaves for the history', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  api.mock
+    .onDelete(apiUrl(BATCH_PATH))
+    .reply(200, makeImportDeleteResult({ batch_id: BATCH_ID, mode: 'discard', deleted: true }));
+  const router = renderReview();
+
+  fireEvent.press(await screen.findByTestId('import-batch-discard'));
+  // The draft wording of the history list, not the undo dialog's (decision §14.22).
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  expect(screen.getByText('丢弃这批草稿？')).toBeTruthy();
+  expect(api.mock.history.delete).toEqual([]);
+
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+  await waitFor(() => expect(api.mock.history.delete).toHaveLength(1));
+  // This URL 404s once the batch is gone, so the screen does not stay on it.
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+});
+
+test('the bulk strip and the submit button share one bar inside the grid card (屏幕稿 03)', async () => {
+  seed([row({ id: 'row-1', row_no: 1 }), row({ id: 'row-2', row_no: 2 })]);
+  renderReview();
+
+  // One bar, not two cards: the count, the bulk actions and 「提交入账」 are all in the
+  // footer the grid's own card carries.
+  const footer = await screen.findByTestId('review-table-footer');
+  expect(within(footer).getByTestId('review-bulk-count')).toBeTruthy();
+  expect(within(footer).getByTestId('review-bulk-category')).toBeTruthy();
+  expect(within(footer).getByTestId('review-commit-submit')).toBeTruthy();
+
+  // With nothing ticked the strip stays put and only greys out — the bar must not jump
+  // in height as rows are selected.
+  expect(screen.getByTestId('review-bulk-category').props.accessibilityState.disabled).toBe(true);
+  fireEvent.press(screen.getByTestId('review-table-select-row-1'));
+  expect(
+    screen.getByTestId('review-bulk-category').props.accessibilityState.disabled,
+  ).toBeFalsy();
+});
+
 // ------------------------------------ the standing blocker banner (04 §4.11.8, 屏幕稿 03)
 
 test('the banner names the blocker and its link widens the slice and focuses the first row', async () => {
@@ -533,7 +602,7 @@ test('a narrow viewport renders the card flow, with kind, category and the pairi
   expect(pair.props.accessibilityState.checked).toBe(true);
 });
 
-test('the phone submit button is full width and carries the blocker in its own label', async () => {
+test('the phone submit button is full width and the blocker is on its own line', async () => {
   jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
   seed([
     row({ id: 'row-1', row_no: 1, category_l1: null, category_l2: null, merchant: '星巴克' }),
@@ -541,12 +610,14 @@ test('the phone submit button is full width and carries the blocker in its own l
   ]);
   renderReview();
 
-  // 屏幕稿「03 导入 review 375」: one stretched primary button, the blocker inside its
-  // label — there is no room beside it for the grey line the 1440 bar carries.
+  // 屏幕稿「03 导入 review 375」: one stretched primary button. There is no room beside it
+  // for the grey line the 1440 bar carries, so the very same sentence goes on its own
+  // caption line above — a dead button must always say why it is dead, in both layouts.
   const submit = await screen.findByTestId('review-commit-submit');
   expect(submit.props.accessibilityState.disabled).toBe(true);
-  expect(screen.queryByTestId('review-commit-block')).toBeNull();
-  expect(within(submit).getByText('提交入账 · 1 行待归类')).toBeTruthy();
+  expect(String(screen.getByTestId('review-commit-block').props.children)).toContain('1');
+  expect(within(submit).getByText('提交入账')).toBeTruthy();
+  expect(StyleSheet.flatten(submit.props.style).width).toBe('100%');
   // The spoken name still counts the rows that would be committed, as it does when wide.
   expect(submit.props.accessibilityLabel).toContain('2');
 });

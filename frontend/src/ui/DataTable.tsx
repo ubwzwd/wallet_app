@@ -3,15 +3,15 @@
  * a sticky header, 52px rows (tighter than the C2 list density), a selection column with
  * select-all, an inline-edit slot per cell and a controlled keyboard focus ring.
  *
- * The frame is 屏幕稿 03's: one card with a rounded top, a tinted sticky header of small
- * grey column titles, hairline row separators and a full-width slot under a row for what
- * belongs to the row but not to any one cell (the server's `hint`, the link panel).
+ * The frame is 屏幕稿 03's: one card with a tinted sticky header of small grey column
+ * titles, hairline row separators, a full-width slot under a row for what belongs to the
+ * row but not to any one cell (the server's `hint`, the link panel), and — at the bottom
+ * of the same card, below both scroll boxes — the optional `footer` bar.
  *
  * It is presentation-only: it knows nothing about imports, the API or i18n. Every label
  * arrives as a prop, every piece of state (selection, focus, the row to scroll to) is
- * owned by the caller, and a cell's content is whatever `column.render` returns — that is
- * the "inline editing slot": the caller decides when a cell renders a value and when it
- * renders an editor.
+ * owned by the caller, and a cell's content is whatever `column.render` returns — the
+ * "inline editing slot", where the caller decides value or editor.
  *
  * The table is its own scroll container in both directions — a vertical box of a bounded
  * height (`maxHeight`, or the viewport minus the page chrome) inside a horizontal one — so
@@ -24,13 +24,11 @@
  * end, so the scrollbar's length and position are the ones the full grid would have. The
  * window is aimed by *index*, never by "the row is already mounted": `scrollToRow` and the
  * keyboard both move it first and scroll second, so a jump to row 1500 works from row 1.
- * The window is aimed with the nominal 52 as every row's height, and that is a lower
- * bound, not a measurement: a row carrying the server's hint line, or the link band of a
- * refund or transfer, is two to three times taller. The offset→anchor mapping degrades in
- * proportion — on a batch where most rows carry one, a given scroll offset lands several
- * rows below the one the nominal arithmetic names. The overscan of a viewport at each end
- * absorbs it, and the index-aimed jumps (`scrollToRow`, the keyboard) are exact regardless,
- * so the cost is mounted rows, never a blank grid.
+ * The window is aimed with the nominal 52 as every row's height — a lower bound, not a
+ * measurement: a row carrying a hint line or a link band is two to three times taller, so
+ * the offset→anchor mapping degrades in proportion. The overscan of a viewport at each end
+ * absorbs it, and the index-aimed jumps are exact regardless, so the cost is mounted rows,
+ * never a blank grid.
  */
 import React from 'react';
 import {
@@ -60,18 +58,16 @@ export const DATA_TABLE_ROW_HEIGHT = 52;
 
 /** Width of the leading selection column. */
 const SELECT_WIDTH = 40;
-
-/** The card's own side padding, applied to the header and to every row alike. */
+/** The card's own side padding, applied to the header, every row and the footer alike. */
 const EDGE_PADDING = space['4'];
 
 /**
  * How much of the viewport the page keeps for everything that is not the table (the top
- * bar, the screen header, the filter slices, the bulk bar and the submit bar). The table's
- * own scroll box is what is left, unless the caller measures better and passes `maxHeight`.
- *
- * A height matters: the vertical ScrollView is nested inside the page's own scroll view, so
- * without one it grows to its content and *nothing* scrolls inside it — the sticky header
- * would not stick and `scrollTo` would be a no-op.
+ * bar, the page header, the slices and the bottom bar); the table's own scroll box is what
+ * is left, unless the caller measures better and passes `maxHeight`. A height matters: the
+ * vertical ScrollView is nested inside the page's own, so without one it grows to its
+ * content and nothing scrolls inside it — the header would not stick and `scrollTo` would
+ * be a no-op.
  */
 const CHROME_HEIGHT = 320;
 const MIN_TABLE_HEIGHT = 240;
@@ -98,9 +94,8 @@ export interface DataTableToggleOpts {
 
 /** Whether a press event carries the Shift modifier, in either place a platform puts it. */
 function isShiftPress(event: GestureResponderEvent | undefined): boolean {
-  const flat = event as unknown as
-    | { shiftKey?: boolean; nativeEvent?: { shiftKey?: boolean } }
-    | undefined;
+  type WithShift = { shiftKey?: boolean; nativeEvent?: { shiftKey?: boolean } };
+  const flat = event as unknown as WithShift | undefined;
   return flat?.shiftKey === true || flat?.nativeEvent?.shiftKey === true;
 }
 
@@ -110,8 +105,7 @@ export interface DataTableCellPos {
   col: number;
 }
 
-/** How a whole row is painted; `muted` is the skipped row, `highlight` the one an error
- *  pointed at. */
+/** How a row is painted: `muted` is skipped, `highlight` the one an error pointed at. */
 export type DataTableRowTone = 'default' | 'muted' | 'highlight';
 
 export interface DataTableProps<Row> {
@@ -120,35 +114,28 @@ export interface DataTableProps<Row> {
   rowKey(row: Row): string;
   /** Presence of this set turns the selection column on. */
   selected?: ReadonlySet<string>;
-  /**
-   * `extend` is the Shift modifier of the click (04 §4.11.2: "Shift-click selects a
-   * range"). It is only ever true where the platform reports modifier keys — a touch
-   * press carries none, and the caller falls back to a plain toggle.
-   */
+  /** `extend` is the Shift modifier of the click (04 §4.11.2: "Shift-click selects a
+   *  range"); it is only ever true where the platform reports modifier keys. */
   onToggleRow?(row: Row, index: number, opts: DataTableToggleOpts): void;
   onToggleAll?(next: boolean): void;
   selectAllLabel?: string;
   rowSelectLabel?(row: Row): string;
   /** Rendered inside the selection column, under the checkbox (the save-state dot). */
   rowLead?(row: Row): React.ReactNode;
-  /** A full-width band below the row — the server's read-only `hint`, and the link panel
-   *  of a refund or transfer row (屏幕稿 03). */
+  /** A full-width band below the row — the server's `hint`, the link panel (屏幕稿 03). */
   rowBelow?(row: Row): React.ReactNode;
+  /** The bar at the bottom of the card, outside both scroll boxes: 屏幕稿 03 draws the
+   *  grid and its action bar as one card, not as two with a gap between them. */
+  footer?: React.ReactNode;
   rowTone?(row: Row): DataTableRowTone;
   focus?: DataTableCellPos | null;
   onFocusCell?(pos: DataTableCellPos): void;
   /** Whenever this index changes to a number, that row is scrolled into view. */
   scrollToRow?: number | null;
-  /**
-   * Bump this to repeat a scroll the index alone cannot express: "jump to the first
-   * uncategorized row" pressed twice is two requests for the *same* row, and both have to
-   * move the view (04 §4.11.8).
-   */
+  /** Bump this to repeat a scroll the index alone cannot express: the same row twice is
+   *  two requests, and both have to move the view (04 §4.11.8). */
   scrollSignal?: number;
-  /**
-   * Height of the table's own scroll box. Defaults to the viewport minus the page chrome;
-   * pass a measured value when the surrounding layout is known.
-   */
+  /** Height of the table's own scroll box; defaults to the viewport minus the chrome. */
   maxHeight?: number;
   emptyLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -167,6 +154,7 @@ export function DataTable<Row>({
   rowLead,
   rowBelow,
   rowTone,
+  footer,
   focus,
   onFocusCell,
   scrollToRow,
@@ -247,7 +235,7 @@ export function DataTable<Row>({
 
   function rowBackground(tone: DataTableRowTone): string {
     if (tone === 'highlight') return colors['status.warning.bg'];
-    return colors['bg.surface'];
+    return colors['bg.raised'];
   }
 
   // Only the window is mounted; `rowIndex` stays the index into `rows`, because that is
@@ -350,7 +338,8 @@ export function DataTable<Row>({
   return (
     <View
       style={[
-        { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors['bg.surface'] },
+        // §14.58: the content card of the mockups is `bg.raised`; `bg.surface` is chrome.
+        { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors['bg.raised'] },
         raisedShadow(colors, scheme),
         style,
       ]}
@@ -393,6 +382,19 @@ export function DataTable<Row>({
           )}
         </ScrollView>
       </ScrollView>
+      {footer !== undefined ? (
+        <View
+          testID={`${id}-footer`}
+          style={{
+            borderTopWidth: 1,
+            borderColor: colors['border.default'],
+            paddingHorizontal: EDGE_PADDING,
+            paddingVertical: space['3'],
+          }}
+        >
+          {footer}
+        </View>
+      ) : null}
     </View>
   );
 }

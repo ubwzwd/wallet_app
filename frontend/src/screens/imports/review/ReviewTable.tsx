@@ -22,7 +22,6 @@ import { space } from '@/theme/tokens';
 import { DataTable, type DataTableCellPos, KeyboardHint, Text } from '@/ui';
 
 import { LinkPanel, hasLinkPanel } from './LinkPanel';
-import { ReviewBanner } from './ReviewBanner';
 import { type CategoryOpen, TEXT_COLUMNS, useReviewColumns } from './ReviewColumns';
 import type { EditorHandle, ReviewEnv } from './ReviewRow';
 import { useReviewKeys } from './useReviewKeys';
@@ -46,6 +45,15 @@ export interface ReviewViewProps {
   highlight: ReviewHighlight | null;
   /** `⌘/Ctrl + Enter` asks the screen's commit bar to submit. */
   onCommitRequest(): void;
+  /**
+   * Bumped by the page's blocking banner: "put the first uncategorized row in front of
+   * me". The banner is drawn by the screen (屏幕稿 03 puts it under the page header,
+   * above the slices), but only the view knows how to get there — the grid widens the
+   * slice and moves the keyboard focus, the card flow switches to its own slice.
+   */
+  bannerJumpSignal?: number;
+  /** The bar 屏幕稿 03 draws inside the grid's own card (the screen's merged footer). */
+  footer?: React.ReactNode;
   testID?: string;
 }
 
@@ -54,6 +62,8 @@ export function ReviewTable({
   selection,
   highlight,
   onCommitRequest,
+  bannerJumpSignal = 0,
+  footer,
   testID,
 }: ReviewViewProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -105,9 +115,20 @@ export function ReviewTable({
     [focus, rows],
   );
 
-  // The banner's link: widen to the whole batch first — the row it points at is very often
-  // not in the slice on screen — then focus the first uncategorized row of the new slice,
-  // which is what brings it into the window (`DataTable` keeps the focused row in view).
+  // The banner's link (the banner itself is the page's, above the slices): widen to the
+  // whole batch first — the row it points at is very often not in the slice on screen —
+  // then focus the first uncategorized row of the new slice, which is what brings it into
+  // the window (`DataTable` keeps the focused row in view).
+  const sliceRef = React.useRef(selection.setSlice);
+  sliceRef.current = selection.setSlice;
+  const firstBannerJump = React.useRef(bannerJumpSignal);
+  React.useEffect(() => {
+    if (bannerJumpSignal === firstBannerJump.current) return;
+    firstBannerJump.current = bannerJumpSignal;
+    sliceRef.current('all');
+    setPendingJump(true);
+  }, [bannerJumpSignal]);
+
   React.useEffect(() => {
     if (!pendingJump) return;
     const index = rows.findIndex(isUncategorized);
@@ -171,14 +192,6 @@ export function ReviewTable({
 
   return (
     <View style={{ gap: space['3'] }} testID={`${id}-wrap`}>
-      <ReviewBanner
-        count={selection.counts.uncategorized}
-        onJump={() => {
-          selection.setSlice('all');
-          setPendingJump(true);
-        }}
-      />
-
       <DataTable<ImportRow>
         testID={id}
         rows={rows}
@@ -219,6 +232,7 @@ export function ReviewTable({
         scrollToRow={highlightIndex !== null && highlightIndex >= 0 ? highlightIndex : null}
         scrollSignal={highlight?.seq ?? 0}
         emptyLabel={t('import:review.no_rows_in_slice')}
+        footer={footer}
       />
 
       <KeyboardHint

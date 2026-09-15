@@ -47,8 +47,10 @@ export interface BulkBarProps {
   selection: ReviewSelection;
   /** Told which row to highlight and scroll to when a bulk edit is refused. */
   onFailure(rowNo: number | null): void;
-  /** Narrow layout pins the bar to the bottom of the screen (04 §4.11.9). */
+  /** Narrow layout scrolls the action strip sideways instead of wrapping it (04 §4.11.9). */
   compact?: boolean;
+  /** Render the contents only — the caller supplies the card (the merged bottom bar). */
+  bare?: boolean;
   testID?: string;
 }
 
@@ -159,8 +161,9 @@ export function BulkBar({
   selection,
   onFailure,
   compact = false,
+  bare = false,
   testID,
-}: BulkBarProps): React.JSX.Element | null {
+}: BulkBarProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   const id = testID ?? 'review-bulk';
@@ -173,8 +176,11 @@ export function BulkBar({
   const ids = rows.map((row) => row.id);
   const kind = commonCategoryKind(rows);
   const kindOptions = bulkKindOptions(rows);
-
-  if (selection.count === 0) return null;
+  // 屏幕稿 03 draws 「已选 5 / 10 行」 and the bulk buttons as a permanent part of the bottom
+  // bar, so an empty selection greys the actions out rather than removing the strip — the
+  // bar must not change height as rows are ticked.
+  const empty = selection.count === 0;
+  const off = empty || env.ctrl.bulkPending;
 
   async function run(patch: ImportRowPatch): Promise<void> {
     setMessage(null);
@@ -215,7 +221,7 @@ export function BulkBar({
         variant="soft"
         icon="tag"
         label={t('import:review.bulk.set_category')}
-        disabled={kind === null || env.index === null || env.ctrl.bulkPending}
+        disabled={kind === null || env.index === null || off}
         onPress={() => setCategoryOpen(true)}
       />
       <Select
@@ -224,7 +230,7 @@ export function BulkBar({
         placeholder={t('import:review.bulk.set_kind')}
         // Only the kinds the selection's amounts allow — the rest would be a certain 400.
         options={kindOptions.map((k) => ({ value: k, label: t(`transaction:kind.${k}`) }))}
-        disabled={kindOptions.length === 0 || env.ctrl.bulkPending}
+        disabled={kindOptions.length === 0 || off}
         onChange={(next) => {
           if (next !== null) void run(bulkKindPatch(next as TxKind));
         }}
@@ -245,7 +251,7 @@ export function BulkBar({
           label: code,
           hint: env.currencyNames[code],
         }))}
-        disabled={env.ctrl.bulkPending}
+        disabled={off}
         onChange={(next) => {
           if (next !== null) void run({ currency: next });
         }}
@@ -256,7 +262,7 @@ export function BulkBar({
         variant="soft"
         icon="chevron-right"
         label={t('import:review.bulk.skip')}
-        disabled={env.ctrl.bulkPending}
+        disabled={off}
         onPress={() => void run({ status: 'skipped' })}
       />
       <Button
@@ -264,7 +270,7 @@ export function BulkBar({
         size="sm"
         variant="soft"
         label={t('import:review.bulk.unskip')}
-        disabled={env.ctrl.bulkPending}
+        disabled={off}
         onPress={() => void run({ status: 'pending' })}
       />
     </>
@@ -272,7 +278,7 @@ export function BulkBar({
 
   /* Dropping the selection must never be the thing that scrolled off the end of a phone
      bar, so it is pinned beside the strip rather than carried inside it. */
-  const clear = (
+  const clear = empty ? null : (
     <Button
       testID={`${id}-clear`}
       size="sm"
@@ -290,15 +296,8 @@ export function BulkBar({
     </Text>
   );
 
-  return (
-    <Card
-      variant="raised"
-      testID={id}
-      style={{
-        gap: space['2'],
-        ...(compact ? { borderRadius: 0 } : {}),
-      }}
-    >
+  const body = (
+    <>
       {/* 屏幕稿 03's action bar: how many rows are selected, a hairline, then the actions —
           the two the mockup names first, and the rest of §4.11.6 after them. On a phone the
           row scrolls sideways instead of wrapping into three lines over the cards. */}
@@ -338,7 +337,7 @@ export function BulkBar({
 
       {/* A greyed picker with no reason is the weakest form of "block the impossible
           option" (§4.11.6), so say why it is out. */}
-      {kindOptions.length === 0 && !env.ctrl.bulkPending ? (
+      {!empty && kindOptions.length === 0 && !env.ctrl.bulkPending ? (
         <Text variant="caption" tone="muted" testID={`${id}-kind-hint`}>
           {t('import:review.bulk.kind_mixed_signs')}
         </Text>
@@ -374,6 +373,18 @@ export function BulkBar({
           />
         ) : null}
       </Sheet>
+    </>
+  );
+
+  // `bare` hands the strip straight to the merged bottom bar the screen draws (屏幕稿 03);
+  // on its own it still wears a card.
+  return bare ? (
+    <View testID={id} style={{ gap: space['2'], minWidth: 0 }}>
+      {body}
+    </View>
+  ) : (
+    <Card variant="raised" testID={id} style={{ gap: space['2'] }}>
+      {body}
     </Card>
   );
 }
