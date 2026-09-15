@@ -1,31 +1,46 @@
 {
-  "title": "个人设置",
+  "title": "我的",
+  "subtitle": "只影响你自己，不影响账本里的其他人",
   "email_label": "邮箱",
   "created_at_label": "注册时间",
   "display_name_label": "显示名",
-  "display_name_hint": "账本成员列表、记账人、操作记录里显示它；留空就显示你邮箱 @ 前面的部分（{{fallback}}）",
+  "display_name_placeholder": "如「我」或「老公」",
+  "display_name_hint": "账本里的其他人看到的就是这个名字；留空就显示 {{fallback}}",
+  "display_name_empty": "我",
   "base_currency_label": "默认币种",
-  "base_currency_hint": "只影响新建账本时的默认值；已有账本的基准币种在各自的账本设置里改",
+  "base_currency_hint": "新建账本和新建账户时的默认值，不改已有的",
   "language_label": "语言",
   "language": {
     "system": "跟随系统",
     "zh": "中文",
     "en": "English"
   },
+  "language_sub": {
+    "system": "当前跟到：{{name}}",
+    "zh": "简体中文",
+    "en": "英文"
+  },
+  "language_note": "语言只影响界面文字。金额格式、千分位、日期一律按账本的基准币种与地区走，不随语言变。",
   "appearance_label": "外观",
   "appearance": {
     "system": "跟随系统",
     "light": "浅色",
     "dark": "深色"
   },
+  "appearance_hint": "只改这台设备上的显示，不影响别人。",
+  "about_label": "关于",
   "entry": {
     "ledger_settings": "账本设置",
     "switch_ledger": "切换账本",
-    "logout": "登出"
+    "logout": "退出登录"
   },
+  "logout_hint": "退出后本地缓存会清掉，账本数据留在云端。下次用同一个邮箱登录就能回来。",
   "section": {
     "profile": "关于我",
-    "device": "这台设备",
+    "prefs": "偏好",
+    "language": "语言",
+    "appearance": "外观",
+    "session": "登录",
     "entries": "入口"
   },
   "save": "保存",

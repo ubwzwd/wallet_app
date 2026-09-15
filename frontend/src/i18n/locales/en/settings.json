@@ -1,31 +1,46 @@
 {
-  "title": "Settings",
+  "title": "Profile",
+  "subtitle": "Only affects you, not the other people in the ledger",
   "email_label": "Email",
   "created_at_label": "Joined",
   "display_name_label": "Display name",
-  "display_name_hint": "Shown in the member list, as the recorder of an entry, and in the activity log; leave it blank to show the part of your email before @ ({{fallback}})",
+  "display_name_placeholder": "e.g. \"Wang\"",
+  "display_name_hint": "This is what others in the ledger see; leave it blank to show {{fallback}}",
+  "display_name_empty": "Me",
   "base_currency_label": "Default currency",
-  "base_currency_hint": "Only affects the default when you create a new ledger; an existing ledger's base currency is changed in its own settings",
+  "base_currency_hint": "The default when you create a ledger or an account; existing ones are unchanged",
   "language_label": "Language",
   "language": {
     "system": "Follow system",
     "zh": "中文",
     "en": "English"
   },
+  "language_sub": {
+    "system": "Currently {{name}}",
+    "zh": "Simplified Chinese",
+    "en": "English (US)"
+  },
+  "language_note": "Language affects interface text only. Number formatting, thousands separators and dates always follow the ledger's base currency and locale.",
   "appearance_label": "Appearance",
   "appearance": {
     "system": "Follow system",
     "light": "Light",
     "dark": "Dark"
   },
+  "appearance_hint": "Applies to this device only, not to anyone else.",
+  "about_label": "About",
   "entry": {
     "ledger_settings": "Ledger settings",
     "switch_ledger": "Switch ledger",
-    "logout": "Log out"
+    "logout": "Sign out"
   },
+  "logout_hint": "Signing out clears the local cache. Ledger data stays in the cloud — sign in with the same email to come back.",
   "section": {
     "profile": "About me",
-    "device": "This device",
+    "prefs": "Preferences",
+    "language": "Language",
+    "appearance": "Appearance",
+    "session": "Session",
     "entries": "Go to"
   },
   "save": "Save",
