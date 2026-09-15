@@ -30,7 +30,6 @@ export * from './SegmentedControl';
 export * from './Select';
 export * from './Sheet';
 export * from './Skeleton';
-export * from './StatTile';
 export * from './Switch';
 export * from './Text';
 export * from './TextField';
@@ -39,7 +38,6 @@ export * from './Toast';
 
 export * from './AmountField';
 export * from './BarChart';
-export * from './BarList';
 export * from './CategoryPicker';
 // Named, not `export *`: the panel module also owns `CategoryValue` / `orderByRecent`,
 // which `CategoryPicker` already re-exports above.
@@ -52,6 +50,4 @@ export * from './KeyboardHint';
 export * from './KindBadge';
 export * from './KindIcon';
 export * from './MoneyText';
-export * from './MonthSwitcher';
 export * from './SourcePicker';
-export * from './TrendChart';

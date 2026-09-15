@@ -1,4 +1,11 @@
-/** Card (04 §6.4): radius 18, three depths. Dark mode layers by lightness, not shadow. */
+/**
+ * Card (04 §6.4): radius 18, three depths.
+ *
+ * There is exactly one white in the kit: every card — flat, outlined or raised — is
+ * `bg.surface`, and `raised` differs only by the mockups' hairline lift. `bg.raised` is
+ * reserved for what genuinely floats over a surface (a popover panel, the segmented
+ * control's thumb), so two cards side by side can never read as two different whites.
+ */
 import React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { type ColorScheme, type Palette, density, radius, space } from '@/theme/tokens';
@@ -45,7 +52,7 @@ export function Card({
   const base: ViewStyle = {
     borderRadius: radius.lg,
     padding: padded ? density.rowInnerPadding : 0,
-    backgroundColor: raised ? colors['bg.raised'] : colors['bg.surface'],
+    backgroundColor: colors['bg.surface'],
     borderWidth: variant === 'outlined' ? 1 : 0,
     borderColor: variant === 'outlined' ? colors['border.default'] : undefined,
   };

@@ -28,6 +28,7 @@ import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import { TAB_BAR_HEIGHT } from '../BottomTabBar';
 import { resetLedgerGone } from '../RequireLedger';
+import { showsLedgerManageCard } from '../Sidebar';
 import { useSwUpdateToast } from '../useSwUpdateToast';
 
 const LEDGER_A = 'ledger-a';
@@ -338,22 +339,33 @@ describe('wide (>=1024)', () => {
     expect(router.queryByLabelText('登出')).toBeNull();
   });
 
-  test('/settings marks 我的 selected and keeps the ledger entries usable', async () => {
+  test('/settings keeps the ledger card and the ledger entries usable', async () => {
     // The user was in a ledger a moment ago, so the ledger-scoped entries still lead there.
     await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockGet(`/ledgers/${LEDGER_B}/members`, { items: [], total: 4 });
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
     expect(await router.findByText('settings-page')).toBeTruthy();
     expect(router.getByTestId('sidebar-settings').props.accessibilityState.selected).toBe(true);
     expect(router.getByTestId('sidebar-home').props.accessibilityState.selected).toBe(false);
-    // No ledger context: screen 13's "ledger management" card replaces the switcher.
-    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
-    expect(router.getByTestId('sidebar-ledgers-link')).toBeTruthy();
-    expect(router.getByText('账本管理')).toBeTruthy();
-    expect(router.getByText('2 本')).toBeTruthy();
+    // Mockup 14 at 1440: the chrome does not change identity when 「我的」 opens — the card
+    // still names the ledger the user was last in, not 「账本管理」.
+    expect(await router.findByText('旅行账本')).toBeTruthy();
+    expect(router.getByTestId('sidebar-ledger')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledgers-link')).toBeNull();
 
     fireEvent.press(router.getByTestId('sidebar-transactions'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/transactions`));
+  });
+
+  test('only the ledger pages swap the card for 「账本管理 · N 本」 (mockups 13 / 14)', () => {
+    const ledger = makeLedger({ id: LEDGER_A });
+    expect(showsLedgerManageCard('/settings', ledger)).toBe(false);
+    expect(showsLedgerManageCard(`/l/${LEDGER_A}`, ledger)).toBe(false);
+    expect(showsLedgerManageCard('/ledgers', ledger)).toBe(true);
+    expect(showsLedgerManageCard('/ledgers/new', ledger)).toBe(true);
+    // Nothing to name is the other way in — a device that never opened a ledger.
+    expect(showsLedgerManageCard('/settings', undefined)).toBe(true);
   });
 
   test('without a remembered ledger the sidebar sends every ledger entry to /ledgers', async () => {
@@ -362,6 +374,8 @@ describe('wide (>=1024)', () => {
 
     expect(await router.findByText('settings-page')).toBeTruthy();
     expect(router.queryByTestId('sidebar-add')).toBeNull();
+    // Nothing to name in the card, so screen 13's list card is the fallback.
+    expect(router.getByTestId('sidebar-ledgers-link')).toBeTruthy();
 
     fireEvent.press(router.getByTestId('sidebar-home'));
     await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));

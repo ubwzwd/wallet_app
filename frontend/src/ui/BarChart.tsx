@@ -177,7 +177,18 @@ export function BarChart({
         })}
       </View>
 
-      <View style={[styles.row, { gap, marginTop: space['2'] }]}>
+      {/* Wide: one label under every column, centred in its slot. Narrow: only the five
+          milestone months, spread edge to edge — the mockup's `space-between` row, not
+          five labels squeezed into twelve flex slots, which wraps 「10 月」 onto two
+          lines (屏幕 01 · 首页.dc.html:138). */}
+      <View
+        testID={`${id}-axis`}
+        style={[
+          styles.row,
+          { marginTop: space['2'] },
+          wide ? { gap } : styles.axisRowNarrow,
+        ]}
+      >
         {months.map((m, i) =>
           labelled.has(i) ? (
             <Text
@@ -186,14 +197,15 @@ export function BarChart({
               mono
               weight={m.month === selected ? 500 : 400}
               tone={m.month === selected ? 'accent' : 'muted'}
-              style={styles.axisLabel}
+              numberOfLines={1}
+              style={wide ? styles.axisLabel : null}
               testID={`${id}-month-${m.month}`}
             >
               {monthAbbrev(m.month, l)}
             </Text>
-          ) : (
+          ) : wide ? (
             <View key={m.month} style={styles.axisSpacer} />
-          ),
+          ) : null,
         )}
       </View>
     </View>
@@ -207,4 +219,5 @@ const styles = StyleSheet.create({
   valueLabel: { textAlign: 'center' },
   axisLabel: { flex: 1, textAlign: 'center' },
   axisSpacer: { flex: 1 },
+  axisRowNarrow: { justifyContent: 'space-between', alignItems: 'center' },
 });

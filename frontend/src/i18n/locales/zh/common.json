@@ -12,7 +12,8 @@
     "back": "返回",
     "loading": "加载中",
     "refresh": "刷新",
-    "confirm_again": "再点一次确认"
+    "confirm_again": "再点一次确认",
+    "pick_date": "选择日期"
   },
   "nav": {
     "home": "首页",

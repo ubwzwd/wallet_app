@@ -19,7 +19,6 @@ import { ProgressBar } from '@/ui/ProgressBar';
 import { SegmentedControl } from '@/ui/SegmentedControl';
 import { Select } from '@/ui/Select';
 import { Skeleton } from '@/ui/Skeleton';
-import { StatTile, monoTextWidth, stepForWidth } from '@/ui/StatTile';
 import { Text } from '@/ui/Text';
 import { TextField } from '@/ui/TextField';
 
@@ -499,27 +498,6 @@ describe('smaller pieces', () => {
     expect(styleOf(screen.getByTestId('p-fill')).width).toBe('100%');
   });
 
-  test('a stat tile renders its big number in mono and never clips it', () => {
-    renderThemed(<StatTile label="净资产" value="34,627.10" sub="CNY" testID="tile" />);
-    const value = screen.getByText('34,627.10');
-    expect(styleOf(value).fontFamily).toContain('IBMPlexMono');
-    // `numberOfLines` + `adjustsFontSizeToFit` used to eat the tail of a long number on
-    // the web, where the second prop does nothing at all.
-    expect(value.props.numberOfLines).toBeUndefined();
-    expect(value.props.adjustsFontSizeToFit).toBeUndefined();
-  });
-
-  test('a stat tile steps the number down instead of overflowing its box', () => {
-    // A roomy tile keeps the 40 display step; a long number in a narrow one falls through
-    // 28 to 20 until it fits.
-    expect(stepForWidth('0.00', 300)).toBe('display');
-    expect(stepForWidth('¥223,649.49', 200)).toBe('title');
-    expect(stepForWidth('−¥1,234,567.89', 200)).toBe('heading');
-    expect(monoTextWidth('12345', 40)).toBeCloseTo(120);
-    // A full-width CJK glyph takes two cells, so '欠 …' is not measured as narrow ASCII.
-    expect(monoTextWidth('欠', 40)).toBeCloseTo(48);
-  });
-
   test('an empty state wires both actions', () => {
     const primary = jest.fn();
     const secondary = jest.fn();
@@ -552,6 +530,23 @@ describe('smaller pieces', () => {
     expect(screen.getByTestId('empty-ghost-rows')).toBeTruthy();
     expect(screen.getByTestId('empty-ghost-chart')).toBeTruthy();
     expect(screen.getByText('记满一个月之后')).toBeTruthy();
+  });
+
+  test('every card variant is the same white; only the lift tells them apart', () => {
+    renderThemed(
+      <>
+        <Card testID="flat" />
+        <Card variant="outlined" testID="outlined" />
+        <Card variant="raised" testID="raised" />
+      </>,
+    );
+    for (const id of ['flat', 'outlined', 'raised']) {
+      expect(styleOf(screen.getByTestId(id)).backgroundColor).toBe(lightColors['bg.surface']);
+    }
+    // `bg.raised` is for what floats over a surface (the segmented control's thumb, a
+    // popover panel), never for a card — two cards must not read as two whites.
+    expect(styleOf(screen.getByTestId('raised')).shadowOpacity).toBeCloseTo(0.07);
+    expect(styleOf(screen.getByTestId('flat')).shadowOpacity).toBeUndefined();
   });
 
   test('a card rounds to the container radius; a page fills unless it asks to be capped', () => {

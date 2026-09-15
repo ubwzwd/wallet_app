@@ -158,7 +158,9 @@ export function DateField({
         suffix={
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={fieldLabel}
+            // Not `fieldLabel`: the box already answers to 「日期」, and a second control
+            // with the same name tells a screen reader nothing about what it does.
+            accessibilityLabel={t('common:button.pick_date')}
             disabled={disabled}
             onPress={openPicker}
             hitSlop={iconButtonHitSlop}

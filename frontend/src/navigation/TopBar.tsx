@@ -16,11 +16,10 @@ import { useTranslation } from 'react-i18next';
 import { routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { Icon, Text } from '@/ui';
+import { Avatar, Icon, Text } from '@/ui';
 import { useAuth } from '@/store/AuthContext';
 import { useLedgerContext } from '@/store/LedgerContext';
 
-import { LetterAvatar } from './LetterAvatar';
 import { userLabel } from './Sidebar';
 
 interface TopBarState {
@@ -107,7 +106,7 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
           testID="top-bar-me"
           style={({ pressed }) => [styles.me, pressed ? { opacity: 0.7 } : null]}
         >
-          <LetterAvatar name={me} size={40} shape="round" tone="surface" />
+          <Avatar name={me} size={40} shape="circle" tone="surface" />
         </Pressable>
       </View>
 

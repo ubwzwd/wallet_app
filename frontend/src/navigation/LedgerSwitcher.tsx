@@ -3,22 +3,25 @@
  * the two ways to get another one. Picking a ledger keeps the page you are on — that is
  * `LedgerContext.switchTo` (04 §2.2), not a jump home.
  *
- * Screen 01 draws it as a small overlay: a square letter tile, the ledger's name, its base
- * currency and member count beneath, a tick on the current one, then "create a ledger".
+ * Two shells over one list of rows, because screen 01 draws two:
+ *   wide   → `LedgerSwitcherPopover`, a small panel anchored under the sidebar's ledger
+ *            card (屏幕 01 · 首页.dc.html:183)
+ *   narrow → `LedgerSwitcher`, the shared bottom `Sheet`
+ *
+ * A row is a square letter tile, the ledger's name, its base currency and member count
+ * beneath, and a tick on the current one; then "create a ledger" and "join a ledger".
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { Ledger } from '@/api/types';
+import type { Ledger, Uuid } from '@/api/types';
 import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useLedgerContext } from '@/store/LedgerContext';
-import { Divider, Icon, type IconName, Sheet, Text } from '@/ui';
-
-import { LetterAvatar } from './LetterAvatar';
+import { Avatar, Divider, Icon, type IconName, Popover, Sheet, Text } from '@/ui';
 
 export interface LedgerSwitcherProps {
   open: boolean;
@@ -54,7 +57,7 @@ function LedgerRow({
         },
       ]}
     >
-      <LetterAvatar name={ledger.name} size={26} shape="square" tone={current ? 'accent' : 'subtle'} />
+      <Avatar name={ledger.name} size={26} shape="square" tone={current ? 'accent' : 'muted'} />
       <View style={styles.rowText}>
         <Text weight={current ? 600 : 500} style={styles.rowName} numberOfLines={1}>
           {ledger.name}
@@ -98,15 +101,55 @@ function ActionRow({
   );
 }
 
+/** The rows themselves — the same list whichever shell is around them. */
+function SwitcherRows({
+  ledgers,
+  currentId,
+  onPick,
+  onNavigate,
+  scroll,
+}: {
+  ledgers: readonly Ledger[];
+  currentId: Uuid | null;
+  onPick(id: Uuid): void;
+  onNavigate(href: RouteHref): void;
+  /** The sheet lets a long list scroll; the anchored panel is already capped by `Popover`. */
+  scroll: boolean;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const rows = ledgers.map((ledger) => (
+    <LedgerRow
+      key={ledger.id}
+      ledger={ledger}
+      current={ledger.id === currentId}
+      onPress={() => onPick(ledger.id)}
+    />
+  ));
+  return (
+    <>
+      {scroll ? <ScrollView style={styles.list}>{rows}</ScrollView> : <View>{rows}</View>}
+      <Divider style={styles.divider} />
+      <ActionRow
+        label={t('ledger:list.empty.create_button')}
+        icon="plus"
+        onPress={() => onNavigate(routes.ledgersNew())}
+        testID="ledger-switcher-new"
+      />
+      <ActionRow
+        label={t('ledger:list.empty.join_button')}
+        icon="key-round"
+        onPress={() => onNavigate(routes.ledgersJoin())}
+        testID="ledger-switcher-join"
+      />
+    </>
+  );
+}
+
+/** Narrow layouts: the shared bottom sheet, driven by the ledger context. */
 export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const { ledgerId, ledgers, switchTo } = useLedgerContext();
-
-  const go = (href: RouteHref): void => {
-    onClose();
-    router.navigate(href);
-  };
 
   return (
     <Sheet
@@ -116,33 +159,68 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
       closeLabel={t('common:button.close')}
       testID="ledger-switcher"
     >
-      <ScrollView style={styles.list}>
-        {ledgers.map((ledger) => (
-          <LedgerRow
-            key={ledger.id}
-            ledger={ledger}
-            current={ledger.id === ledgerId}
-            onPress={() => {
-              onClose();
-              switchTo(ledger.id);
-            }}
-          />
-        ))}
-      </ScrollView>
-      <Divider style={styles.divider} />
-      <ActionRow
-        label={t('ledger:list.empty.create_button')}
-        icon="plus"
-        onPress={() => go(routes.ledgersNew())}
-        testID="ledger-switcher-new"
-      />
-      <ActionRow
-        label={t('ledger:list.empty.join_button')}
-        icon="key-round"
-        onPress={() => go(routes.ledgersJoin())}
-        testID="ledger-switcher-join"
+      <SwitcherRows
+        scroll
+        ledgers={ledgers}
+        currentId={ledgerId}
+        onPick={(id) => {
+          onClose();
+          switchTo(id);
+        }}
+        onNavigate={(href) => {
+          onClose();
+          router.navigate(href);
+        }}
       />
     </Sheet>
+  );
+}
+
+export interface LedgerSwitcherPopoverProps {
+  open: boolean;
+  onClose(): void;
+  /** The sidebar's ledger card; the panel opens flush under it. */
+  anchorRef: React.RefObject<View | null>;
+  ledgers: readonly Ledger[];
+  currentId: Uuid | null;
+  onPick(id: Uuid): void;
+}
+
+/**
+ * Wide layouts: mockup 01's small dropdown under the ledger card. It takes its list as a
+ * prop rather than reading the ledger context, because `/settings` renders the sidebar
+ * outside any ledger and still shows the card (mockup 14).
+ */
+export function LedgerSwitcherPopover({
+  open,
+  onClose,
+  anchorRef,
+  ledgers,
+  currentId,
+  onPick,
+}: LedgerSwitcherPopoverProps): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const router = useRouter();
+  return (
+    <Popover
+      open={open}
+      onClose={onClose}
+      anchorRef={anchorRef}
+      closeLabel={t('common:button.close')}
+      testID="ledger-switcher"
+      style={styles.panel}
+    >
+      <SwitcherRows
+        scroll={false}
+        ledgers={ledgers}
+        currentId={currentId}
+        onPick={onPick}
+        onNavigate={(href) => {
+          onClose();
+          router.navigate(href);
+        }}
+      />
+    </Popover>
   );
 }
 
@@ -158,7 +236,9 @@ const styles = StyleSheet.create({
     borderRadius: 11,
   },
   rowText: { flex: 1, minWidth: 0 },
-  rowName: { fontSize: 15, lineHeight: 20 },
-  rowMeta: { fontSize: 12, lineHeight: 16 },
+  // 屏幕 01 · 首页.dc.html:184-186: the overlay's rows are a step smaller than the card's.
+  rowName: { fontSize: 14, lineHeight: 19 },
+  rowMeta: { fontSize: 11, lineHeight: 15 },
   divider: { marginVertical: space['1'], marginHorizontal: density.rowInnerPadding },
+  panel: { borderRadius: radius.md },
 });

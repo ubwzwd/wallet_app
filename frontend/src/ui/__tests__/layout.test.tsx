@@ -13,7 +13,7 @@ import { initReactI18next } from 'react-i18next';
 import { namespaces, resources } from '@/i18n/resources';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { darkColors, density, lightColors, radius, type } from '@/theme/tokens';
-import { Avatar, avatarGlyph } from '@/ui/Avatar';
+import { Avatar, avatarGlyph, avatarGlyphSize } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { KeyValueRows, KEY_COLUMN_WIDTH } from '@/ui/KeyValueRows';
 import { KindIcon, SourceTypeIcon } from '@/ui/KindIcon';
@@ -126,6 +126,8 @@ describe('SectionHeader', () => {
     );
     expect(screen.getByTestId('sh-title')).toHaveTextContent('近 12 个月支出');
     expect(styleOf(screen.getByTestId('sh-meta')).fontFamily).toContain('IBMPlexMono');
+    // Mockup 01 draws the trailing stat at 13/19, a step above `caption`.
+    expect(styleOf(screen.getByTestId('sh-meta')).fontSize).toBe(13);
     fireEvent.press(screen.getByTestId('sh-link'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
@@ -280,6 +282,19 @@ describe('Avatar', () => {
     expect(styleOf(screen.getByTestId('ledger')).borderRadius).toBe(10);
     expect(styleOf(screen.getByTestId('me')).backgroundColor).toBe(lightColors['bg.subtle']);
     expect(styleOf(screen.getByTestId('me')).borderRadius).toBe(radius.pill);
+  });
+
+  test('the narrow top bar gets its own tone: the page white, not the tint', () => {
+    renderThemed(<Avatar name="wang" shape="circle" size={40} tone="surface" testID="disc" />);
+    expect(styleOf(screen.getByTestId('disc')).backgroundColor).toBe(lightColors['bg.surface']);
+  });
+
+  test('the glyph follows the mockups’ ladder and never drops below the caption step', () => {
+    // 32 → 13 and 64 → 24 are the mockups' own sizes (01 / 14); a 26px menu tile would
+    // land on 10 at a flat 0.4 ratio, which stops reading as a letter, so it floors at 12.
+    expect(avatarGlyphSize(32)).toBe(13);
+    expect(avatarGlyphSize(64)).toBe(26);
+    expect(avatarGlyphSize(26)).toBe(12);
   });
 
   test('only the first character is drawn, upper-cased', () => {

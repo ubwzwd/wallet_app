@@ -16,7 +16,6 @@ import { lightColors } from '@/theme/tokens';
 import { AmountField, trimMoney } from '@/ui/AmountField';
 import { DateField, ISO_DATE_PATTERN, dateFieldErrorKey } from '@/ui/DateField';
 import { MoneyText } from '@/ui/MoneyText';
-import { MonthSwitcher } from '@/ui/MonthSwitcher';
 
 beforeAll(async () => {
   if (!i18next.isInitialized) {
@@ -290,6 +289,10 @@ describe('DateField', () => {
     renderThemed(<DateHarness initial="2026-09-08" />);
     const picker = screen.getByTestId('date-picker');
     expect(picker.props.accessibilityRole).toBe('button');
+    // Its own name, from the pack: two controls both called 「日期」 tell a screen reader
+    // nothing about which one opens the calendar.
+    expect(picker.props.accessibilityLabel).toBe('选择日期');
+    expect(screen.getByTestId('date').props.accessibilityLabel).toBe('日期');
     // Native has no date wheel this phase: pressing it focuses the box instead of throwing.
     fireEvent.press(picker);
     expect(screen.getByTestId('date').props.value).toBe('2026-09-08');
@@ -315,33 +318,6 @@ describe('DateField', () => {
     expect(dateFieldErrorKey('2026-07-20', '2026-09-11', '2026-08-01')).toEqual([
       'validation:date_too_early',
     ]);
-  });
-});
-
-describe('MonthSwitcher', () => {
-  test('it steps back a month and never past the ceiling', () => {
-    const onChange = jest.fn();
-    renderThemed(
-      <MonthSwitcher value="2026-08" max="2026-09" onChange={onChange} lang="zh" testID="ms" />,
-    );
-    expect(screen.getByTestId('ms-label')).toHaveTextContent('2026 年 8 月');
-
-    fireEvent.press(screen.getByTestId('ms-prev'));
-    expect(onChange).toHaveBeenCalledWith('2026-07');
-
-    fireEvent.press(screen.getByTestId('ms-next'));
-    expect(onChange).toHaveBeenLastCalledWith('2026-09');
-  });
-
-  test('the next arrow is disabled on the ceiling month', () => {
-    const onChange = jest.fn();
-    renderThemed(
-      <MonthSwitcher value="2026-09" max="2026-09" onChange={onChange} lang="zh" testID="ms" />,
-    );
-    const next = screen.getByTestId('ms-next');
-    expect(next.props.accessibilityState).toMatchObject({ disabled: true });
-    fireEvent.press(next);
-    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
