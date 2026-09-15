@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { Ledger } from '@/api/types';
-import { routes } from '@/domain/routes';
+import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useLedgerContext } from '@/store/LedgerContext';
@@ -71,7 +71,7 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
   const router = useRouter();
   const { ledgerId, ledgers, switchTo } = useLedgerContext();
 
-  const go = (href: string): void => {
+  const go = (href: RouteHref): void => {
     onClose();
     router.navigate(href);
   };

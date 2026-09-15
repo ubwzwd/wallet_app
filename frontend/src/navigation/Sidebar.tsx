@@ -12,7 +12,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { User } from '@/api/types';
-import { routes } from '@/domain/routes';
+import { type RouteHref, routes } from '@/domain/routes';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
@@ -35,7 +35,7 @@ export interface NavDestination {
   key: string;
   label: string;
   icon: IconName;
-  href: string;
+  href: RouteHref;
   /** A separator is drawn above this entry. */
   dividerBefore?: boolean;
 }
@@ -73,7 +73,7 @@ export function useLastLedgerId(): string | null {
 export function useSidebarDestinations(ledgerId: string | null): NavDestination[] {
   const { t } = useTranslation();
   const l = ledgerId === null ? null : routes.l(ledgerId);
-  const inLedger = (href: string | undefined): string => href ?? routes.ledgers();
+  const inLedger = (href: RouteHref | undefined): RouteHref => href ?? routes.ledgers();
   return [
     { key: 'home', label: t('common:nav.home'), icon: 'home', href: inLedger(l?.home()) },
     {

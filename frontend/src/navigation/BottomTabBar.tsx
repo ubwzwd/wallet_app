@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { TxKind } from '@/api/types';
 import { KINDS } from '@/domain/kinds';
-import { routes } from '@/domain/routes';
+import { type RouteHref, routes } from '@/domain/routes';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
@@ -30,7 +30,7 @@ interface TabSpec {
   key: string;
   label: string;
   icon: IconName;
-  href: string;
+  href: RouteHref;
   exact: boolean;
 }
 
@@ -255,7 +255,8 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
             key: 'me',
             label: t('common:nav.me'),
             icon: 'user',
-            href: '',
+            // Opens the "me" sheet rather than navigating; the href only names where it leads.
+            href: routes.settings(),
             exact: true,
           }}
           active={meOpen}
