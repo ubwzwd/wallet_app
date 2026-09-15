@@ -501,10 +501,14 @@ describe('smaller pieces', () => {
   });
 
   test('a stat tile steps the number down instead of overflowing its box', () => {
-    // A roomy tile keeps the 40 display step; a long number in a narrow one drops to 28.
+    // A roomy tile keeps the 40 display step; a long number in a narrow one falls through
+    // 28 to 20 until it fits.
     expect(stepForWidth('0.00', 300)).toBe('display');
-    expect(stepForWidth('−¥1,234,567.89', 200)).toBe('title');
+    expect(stepForWidth('¥223,649.49', 200)).toBe('title');
+    expect(stepForWidth('−¥1,234,567.89', 200)).toBe('heading');
     expect(monoTextWidth('12345', 40)).toBeCloseTo(120);
+    // A full-width CJK glyph takes two cells, so '欠 …' is not measured as narrow ASCII.
+    expect(monoTextWidth('欠', 40)).toBeCloseTo(48);
   });
 
   test('an empty state wires both actions', () => {

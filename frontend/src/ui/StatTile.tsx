@@ -4,8 +4,8 @@
  *
  * It used to clamp the value to one line and lean on `adjustsFontSizeToFit`, which does
  * nothing on the web: 「−¥1,234,567.89」 simply lost its tail. Instead the tile measures
- * itself and steps the number down from `display` (40) to `title` (28) when the wider step
- * would not fit, and lets it wrap as a last resort.
+ * itself and steps the number down through `display` (40) → `title` (28) → `heading` (20)
+ * until it fits, and lets it wrap only when even the smallest step is too wide.
  */
 import React from 'react';
 import {
@@ -21,18 +21,32 @@ import { Text, type TextTone } from './Text';
 
 /**
  * IBM Plex Mono's advance width is 0.6em, and tabular figures make every glyph that wide,
- * so a mono string's width is a multiplication rather than a measurement.
+ * so a mono string's width is a multiplication rather than a measurement. CJK glyphs come
+ * from the fallback stack and are full-width, so they count double ('欠 ¥23,772.50').
  */
 export const MONO_ADVANCE = 0.6;
+const WIDE_GLYPH = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
 
 export function monoTextWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * MONO_ADVANCE;
+  let units = 0;
+  for (const ch of text) units += WIDE_GLYPH.test(ch) ? 2 : 1;
+  return units * fontSize * MONO_ADVANCE;
 }
 
-/** The step a value of this length gets in a box this wide. */
-export function stepForWidth(value: string, available: number): 'display' | 'title' {
+/** The steps a big number may fall through, widest first. */
+export type StatStep = 'display' | 'title' | 'heading';
+const STEPS: readonly StatStep[] = ['display', 'title', 'heading'];
+
+/**
+ * The widest step whose rendering still fits the box. Nothing below `heading` — a number
+ * that will not fit even there wraps, which is still better than losing its tail.
+ */
+export function stepForWidth(value: string, available: number): StatStep {
   if (available <= 0) return 'display';
-  return monoTextWidth(value, type.display.size) <= available ? 'display' : 'title';
+  for (const step of STEPS) {
+    if (monoTextWidth(value, type[step].size) <= available) return step;
+  }
+  return 'heading';
 }
 
 export interface StatTileProps {
