@@ -1,7 +1,8 @@
 /**
  * `/l/:ledgerId/sources/new` and `/l/:ledgerId/sources/:sourceId/edit` (04 §4.9), drawn as
- * 屏幕稿 09 draws it: a centred 620-wide dialog card on wide screens (title + × back to the
- * list, the fields, an action bar), the same blocks full-width on narrow ones.
+ * 屏幕稿 09 draws it: on wide screens a centred 620-wide dialog card (title + × back to the
+ * list, the fields, an action bar) laid over the dimmed account list; on narrow ones the
+ * same blocks full-width under the app's top bar.
  *
  * One component for both routes: the presence of the `sourceId` route parameter decides
  * whether it creates or edits. Three rules make this form different from the others:
@@ -43,6 +44,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, EmptyState, Page, Skeleton, Switch, confirm, toast } from '@/ui';
 
 import { FormDialog } from './FormDialog';
+import SourcesScreen from './SourcesScreen';
 import { SourceFormFields } from './SourceFormFields';
 import {
   openingBalanceInput,
@@ -352,17 +354,20 @@ export default function SourceFormScreen(): React.JSX.Element {
     );
   }
 
+  // 屏幕稿 09 draws the wide form as a modal over the dimmed account list, not as a page
+  // of its own; `FormDialog` owns that overlay and takes the list behind as a prop.
   return (
-    <Page testID="source-form-screen" contentStyle={{ alignItems: 'center' }}>
+    <View style={{ flex: 1 }} testID="source-form-screen">
       <FormDialog
         testID="source-form"
         title={title}
         closeLabel={t('source:form.close_label')}
         onClose={goBack}
         actions={actions}
+        behind={<SourcesScreen />}
       >
         {fields}
       </FormDialog>
-    </Page>
+    </View>
   );
 }

@@ -169,7 +169,7 @@ export function TransferAmount({
             <View style={styles.crossRow}>
               <View style={styles.grow}>{out}</View>
               <View style={styles.arrowSlot}>
-                <Icon name="chevron-right" size={18} color={colors['fg.muted']} />
+                <Icon name="arrow-right" size={18} color={colors['fg.muted']} />
               </View>
               <View style={styles.grow}>{inbound}</View>
             </View>

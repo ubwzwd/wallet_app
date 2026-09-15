@@ -230,7 +230,8 @@ export function TransferFields({
     <View style={styles.arrowSlot}>
       <View style={[styles.arrow, { backgroundColor: colors['bg.subtle'] }]}>
         <Icon
-          name={wide ? 'chevron-right' : 'chevron-down'}
+          // 屏幕稿 05: a real arrow in the disc, pointing the way the two fields sit.
+          name={wide ? 'arrow-right' : 'arrow-down'}
           size={18}
           color={colors['fg.secondary']}
         />

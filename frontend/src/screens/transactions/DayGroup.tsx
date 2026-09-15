@@ -15,7 +15,7 @@ import type { CategoryIndex } from '@/domain/categories';
 import { parseMoney } from '@/domain/money';
 import type { DayGroup as DayGroupData, ListRow } from '@/domain/transfers';
 import { type Lang } from '@/i18n';
-import { formatMoney, parseLocalDate } from '@/i18n/format';
+import { formatDateShort, formatMoney, parseLocalDate } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { ListCard, Text } from '@/ui';
 
@@ -73,7 +73,7 @@ export function DayGroup(props: DayGroupProps): React.JSX.Element {
         }}
       >
         <Text variant="caption" tone="secondary" mono weight={600} testID={`${id}-date`}>
-          {`${group.date.slice(5)} ${weekday}`}
+          {`${formatDateShort(group.date)} ${weekday}`}
         </Text>
         {subtotal === null ? null : (
           <Text variant="micro" tone="muted" mono testID={`${id}-total`}>

@@ -20,8 +20,8 @@ import { useTranslation } from 'react-i18next';
 import type { User } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { applyLanguage, useLang, type Lang } from '@/i18n';
-import { useTopBar } from '@/navigation';
-import { useCurrencies, useMe, useUpdateMe } from '@/queries';
+import { pickLandingLedger, useLastLedgerId, useTopBar } from '@/navigation';
+import { useCurrencies, useLedgers, useMe, useUpdateMe } from '@/queries';
 import { useAuth, useOptionalLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
@@ -68,6 +68,13 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   // 屏幕稿 14 reads 「CNY 人民币」, not the server's English ISO name (see `currencyNames`).
   const currencyNames = useCurrencyNames(currencies.names);
   const ledgerContext = useOptionalLedgerContext();
+  // Outside a ledger route the chrome picks one from the preference plus the cached list;
+  // the 「账本设置」 row has to agree with it, or the page would send the user somewhere
+  // other than the ledger its own sidebar is showing.
+  const lastLedgerId = useLastLedgerId();
+  const ledgerList = useLedgers();
+  const settingsLedgerId =
+    pickLandingLedger(ledgerList.data?.items ?? [], lastLedgerId ?? null)?.id ?? null;
   const me = useMe();
   const update = useUpdateMe();
   // 04 §1.4: the narrow shell's top bar is the title (`AppShell` renders it for a page
@@ -129,10 +136,13 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
     void theme.setPref(next);
   };
 
+  // 屏幕稿 14: the row opens 「账本设置」 for the ledger the sidebar beside it is naming —
+  // which, off a ledger route, is the remembered one (the same answer `/` would land on).
+  // Only a user with no ledger at all has nothing to open, and then the row leads to the
+  // list, where they can make one.
   const goLedgerSettings = (): void => {
-    router.push(
-      (ledgerContext ? routes.l(ledgerContext.ledgerId).settings() : routes.ledgers()) as Href,
-    );
+    const target = ledgerContext?.ledgerId ?? settingsLedgerId;
+    router.push((target === null ? routes.ledgers() : routes.l(target).settings()) as Href);
   };
 
   const signOut = (): void => {

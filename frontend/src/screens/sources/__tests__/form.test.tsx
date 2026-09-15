@@ -336,6 +336,28 @@ test('the wide dialog closes back to the list with its × (屏幕稿 09)', async
   expect(api.mock.history.post.length).toBe(0);
 });
 
+test('the wide dialog sits over the account list, and the backdrop closes it (屏幕稿 09)', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  const router = renderForm(NEW_URL);
+
+  // 屏幕稿 09 draws the form as a modal over the dimmed list, not as a page of its own:
+  // the list the route came from is still on screen behind it.
+  expect(await screen.findByTestId('source-form-dialog')).toBeTruthy();
+  // The layer behind is `aria-hidden`, so it has to be asked for explicitly — which is
+  // itself the point: the pointer and the screen reader stay inside the dialog.
+  const behind = screen.getByTestId('source-form-behind', { includeHiddenElements: true });
+  expect(within(behind).getByTestId('sources-screen', { includeHiddenElements: true })).toBeTruthy();
+  expect(
+    within(behind).getByTestId('source-row-src-checking', { includeHiddenElements: true }),
+  ).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('source-form-backdrop', { includeHiddenElements: true }));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(api.mock.history.post.length).toBe(0);
+});
+
 // ----------------------------------------------------------- the title (04 §1.4)
 
 test('the narrow layout puts the title in the top bar and not on the page as well', async () => {

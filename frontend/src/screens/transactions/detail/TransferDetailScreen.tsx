@@ -29,7 +29,7 @@ import { monthOf } from '@/domain/dates';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
-import { formatDate } from '@/i18n/format';
+import { formatDateShort } from '@/i18n/format';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import {
@@ -87,7 +87,7 @@ export default function TransferDetailScreen(): React.JSX.Element {
   const crumb = pair
     ? [
         t('transaction:list.title'),
-        formatDate(pair.occurred_at, lang),
+        formatDateShort(pair.occurred_at),
         t('transaction:list.row.transfer_pair', {
           from: sourceNames[pair.out.source_id] ?? pair.out.source_id,
           to: sourceNames[pair.in.source_id] ?? pair.in.source_id,

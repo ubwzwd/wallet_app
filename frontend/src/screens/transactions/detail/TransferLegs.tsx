@@ -235,7 +235,7 @@ export function TransferLegs({
               { backgroundColor: colors['status.info.bg'] },
             ]}
           >
-            <Icon name="chevron-right" size={wide ? 20 : 18} color={colors['status.info.fg']} />
+            <Icon name="arrow-right" size={wide ? 20 : 18} color={colors['status.info.fg']} />
           </View>
         </View>
         {tile(into, 'in')}

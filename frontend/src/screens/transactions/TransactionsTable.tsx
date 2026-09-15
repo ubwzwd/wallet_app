@@ -20,7 +20,7 @@ import type { CategoryIndex } from '@/domain/categories';
 import { absMoney } from '@/domain/money';
 import type { ListRow } from '@/domain/transfers';
 import { type Lang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
+import { formatDateShort, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { KindBadge, ListCard, MoneyText, Text } from '@/ui';
@@ -268,7 +268,7 @@ function TableRow({
   const cells: Record<string, React.ReactNode> = {
     date: (
       <Text variant="body" tone="secondary" mono numberOfLines={1} testID={`${rowId}-date`}>
-        {tx.occurred_at.slice(5)}
+        {formatDateShort(tx.occurred_at)}
       </Text>
     ),
     kind: <KindBadge kind={tx.kind} testID={`${rowId}-kind`} />,

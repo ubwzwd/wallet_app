@@ -219,6 +219,11 @@ export function Sidebar(): React.JSX.Element {
   // Mockup 13 keeps the role line on `/ledgers`, where there is no ledger context to ask:
   // it is the role in the ledger the three entries above lead to.
   const role = ledgerContext?.myRole ?? (manage ? chrome.ledger?.role : undefined);
+  // Mockup 14: on `/settings` there is no ledger to take a role from, and the second line
+  // is the signed-in email instead — the row never shrinks to one line mid-navigation.
+  const userSubtitle = role
+    ? t(role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member')
+    : (user?.email ?? '');
 
   const manageCard = (
     <LedgerManageCard
@@ -291,9 +296,9 @@ export function Sidebar(): React.JSX.Element {
           <Text weight={500} style={styles.userName} numberOfLines={1}>
             {me}
           </Text>
-          {role ? (
+          {userSubtitle ? (
             <Text tone="muted" style={styles.userRole} numberOfLines={1}>
-              {t(role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member')}
+              {userSubtitle}
             </Text>
           ) : null}
         </View>

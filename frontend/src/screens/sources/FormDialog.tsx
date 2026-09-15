@@ -3,13 +3,22 @@
  * white card with a titled head strip, a × that goes back to the list, the fields, and an
  * action bar on the tinted foot.
  *
+ * The mockup draws it as a modal laid over the dimmed account list, vertically centred —
+ * not as a card at the top of an empty page. The route is still a page of its own (04 §1.2
+ * owns the route table), so the list behind arrives as the `behind` prop and is rendered
+ * as the backdrop, the same shape `JoinDialogFrame` uses for 屏幕稿 13: RN `Modal` portals
+ * the dialog and traps focus in it, while `pointerEvents="none"` + `aria-hidden` keep the
+ * pointer and the screen reader out of the layer behind.
+ *
  * It is only the frame — what is inside it, and what the buttons do, belongs to
  * `SourceFormScreen`. Narrow layouts do not use it: there the same blocks run full width
  * under the app's own top bar.
  */
 import React from 'react';
-import { Pressable, View } from 'react-native';
-import { radius, space } from '@/theme/tokens';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+
+import { radius, space, z } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Card, Icon, Text } from '@/ui';
 
@@ -25,6 +34,8 @@ export interface FormDialogProps {
   onClose(): void;
   actions: React.ReactNode;
   children: React.ReactNode;
+  /** The page the mockup dims behind the dialog — the account list this route came from. */
+  behind?: React.ReactNode;
   testID?: string;
 }
 
@@ -34,12 +45,14 @@ export function FormDialog({
   onClose,
   actions,
   children,
+  behind,
   testID,
 }: FormDialogProps): React.JSX.Element {
+  const { t } = useTranslation();
   const colors = useColors();
   const id = testID ?? 'source-form';
 
-  return (
+  const card = (
     <Card
       variant="raised"
       padded={false}
@@ -102,4 +115,40 @@ export function FormDialog({
       </View>
     </Card>
   );
+
+  return (
+    <View style={overlay.root} testID={`${id}-overlay`}>
+      <View style={overlay.behind} pointerEvents="none" aria-hidden testID={`${id}-behind`}>
+        {behind}
+      </View>
+      <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+        <View style={[overlay.centre, { zIndex: z.overlay }]}>
+          {/* touch-target-exempt: the backdrop fills the screen behind the dialog. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common:button.close')}
+            onPress={onClose}
+            testID={`${id}-backdrop`}
+            style={[overlay.backdrop, { backgroundColor: colors['fg.primary'], opacity: 0.3 }]}
+          />
+          <ScrollView
+            style={overlay.scroll}
+            contentContainerStyle={overlay.scrollBody}
+            accessibilityViewIsModal
+          >
+            {card}
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
+  );
 }
+
+const overlay = StyleSheet.create({
+  root: { flex: 1 },
+  behind: { ...StyleSheet.absoluteFillObject },
+  backdrop: { ...StyleSheet.absoluteFillObject },
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scroll: { width: '100%', flexGrow: 0, maxHeight: '100%' },
+  scrollBody: { alignItems: 'center', padding: space['5'] },
+});

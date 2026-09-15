@@ -482,6 +482,38 @@ describe('wide (>=1024)', () => {
     }
   });
 
+  test('a user with no ledger at all gets no column: 屏幕稿 15 is full-bleed', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    mockGet('/me', makeUser({ display_name: '阿狸', ledger_count: 0 }));
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+
+    expect(await router.findByText('ledgers-page')).toBeTruthy();
+    await waitFor(() => expect(router.queryByTestId('sidebar')).toBeNull());
+    // Still the wide branch of the shell — it is the column that is gone, not the layout.
+    expect(router.getByTestId('app-shell-wide')).toBeTruthy();
+  });
+
+  test('personal settings keeps the column even with no ledger — it is the way back', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    mockGet('/me', makeUser({ display_name: '阿狸', ledger_count: 0 }));
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    expect(await router.findByTestId('sidebar')).toBeTruthy();
+  });
+
+  test('the member row names the signed-in email where there is no role (屏幕稿 14)', async () => {
+    mockGet('/me', makeUser({ display_name: '阿狸', email: 'ali@example.com' }));
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    const row = await router.findByTestId('sidebar-user');
+    expect(row).toHaveTextContent(/阿狸/);
+    // `/settings` is outside every ledger, so the second line falls back to the email
+    // rather than collapsing the row to one line mid-navigation.
+    expect(row).toHaveTextContent(/ali@example\.com/);
+  });
+
   test('only the ledger pages swap the card for 「账本管理 · N 本」 (mockups 13 / 14)', () => {
     const ledger = makeLedger({ id: LEDGER_A });
     expect(showsLedgerManageCard('/settings', ledger)).toBe(false);
