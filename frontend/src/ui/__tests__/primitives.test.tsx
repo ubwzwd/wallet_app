@@ -216,6 +216,20 @@ describe('TextField', () => {
     expect(screen.getByTestId('text-field-counter')).toHaveTextContent('3/40');
   });
 
+  test('focus rings the wrapper, and the native input draws no ring of its own', () => {
+    renderThemed(<TextField value="" onChangeText={() => undefined} testID="f" />, 'dark');
+    const input = screen.getByTestId('f');
+    expect(styleOf(screen.getByTestId('f-field')).borderColor).toBe('transparent');
+
+    fireEvent(input, 'focus');
+    expect(styleOf(screen.getByTestId('f-field')).borderColor).toBe(darkColors['border.focus']);
+    // Two rings would show: the wrapper's, plus the browser's own around the text box.
+    expect(styleOf(input).outlineWidth).toBe(0);
+
+    fireEvent(input, 'blur');
+    expect(styleOf(screen.getByTestId('f-field')).borderColor).toBe('transparent');
+  });
+
   test('the field is 52 high with radius 14', () => {
     renderThemed(<TextField value="" onChangeText={() => undefined} testID="f" />);
     const style = styleOf(screen.getByTestId('f-field'));

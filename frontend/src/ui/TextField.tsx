@@ -1,6 +1,11 @@
 /**
  * TextField (04 §6.4): 52 high, radius 14, tinted fill with no border at rest, a 1.5px
  * `border.focus` ring on focus, and an error state that tints the field (not the whole row).
+ *
+ * The ring is drawn by the wrapper, so the native input inside must not draw its own: on the
+ * web a focused `<input>` gets the browser's two-tone outline hugging its text box, which on
+ * a dark page reads as a black bar with a white edge sitting inside our ring (the mockups
+ * put `outline: none` on every input for the same reason).
  */
 import React from 'react';
 import {
@@ -188,7 +193,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space['3'],
     borderWidth: 1.5,
   },
-  input: { flex: 1, padding: 0 },
+  // A zero-width solid outline is the typed way to say `outline: none` on the web; native
+  // ignores both keys.
+  input: { flex: 1, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
   tabular: { fontVariant: ['tabular-nums'] },
   footer: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
   footerText: { flex: 1 },
