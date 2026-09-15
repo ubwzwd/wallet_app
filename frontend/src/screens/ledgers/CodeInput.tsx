@@ -1,7 +1,12 @@
 /**
- * The six-cell invite-code input of 04 §4.3: digits only, auto-advance, backspace steps
- * back, a pasted string fans out across the cells, and a full six digits calls
- * `onComplete` exactly once per entry.
+ * The six-cell invite-code input of 04 §4.3 and screen 13: digits only, auto-advance,
+ * backspace steps back, a pasted string fans out across the cells, and a full six digits
+ * calls `onComplete` exactly once per entry.
+ *
+ * Screen 13 draws big standalone squares — 46×58 on a phone, 56×68 in the wide card — and
+ * gives the group three colours: filled cells sit on `bg.selected`, a complete code turns
+ * `status.success.bg`, a rejected one `status.danger.bg`. Empty cells are the page's own
+ * canvas, so the row reads as "six holes" rather than six inputs.
  *
  * `shakeToken` is a counter, not a boolean: the parent bumps it on every rejected code so
  * a second identical failure still shakes. Reduce-motion users get the same state change
@@ -14,10 +19,12 @@ import {
   StyleSheet,
   type TextInput as RNTextInput,
   TextInput,
+  type TextStyle,
   View,
 } from 'react-native';
-import { controls, radius, space, type } from '@/theme/tokens';
+import { type ColorToken, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
 import { fontFamilyFor } from '@/theme/fonts';
 
 export const CODE_LENGTH = 6;
@@ -25,6 +32,27 @@ export const CODE_LENGTH = 6;
 /** One shake cycle, in device-independent pixels. */
 const SHAKE_OFFSET = 8;
 const SHAKE_STEP_MS = 45;
+
+/** Screen 13: 46×58 / 26px glyph on 375, 56×68 / 30px in the 520 card. */
+const METRICS = {
+  narrow: { width: 46, height: 58, radius: 12, font: 26, gap: 6 },
+  wide: { width: 56, height: 68, radius: radius.md, font: 30, gap: space['2'] },
+} as const;
+
+/** How the whole row is tinted: neutral while typing, green when accepted, red when not. */
+export type CodeInputState = 'default' | 'success' | 'error';
+
+const FILLED_BG: Readonly<Record<CodeInputState, ColorToken>> = {
+  default: 'bg.selected',
+  success: 'status.success.bg',
+  error: 'status.danger.bg',
+};
+
+const FILLED_FG: Readonly<Record<CodeInputState, ColorToken>> = {
+  default: 'fg.primary',
+  success: 'status.success.fg',
+  error: 'status.danger.fg',
+};
 
 /**
  * The single digit one keystroke leaves in a cell. Depending on the platform, typing over
@@ -50,6 +78,8 @@ export interface CodeInputProps {
   onComplete(code: string): void;
   /** Bump to play the rejection shake. */
   shakeToken?: number;
+  /** Tints the row: the server's verdict on the code that was just submitted. */
+  state?: CodeInputState;
   disabled?: boolean;
   autoFocus?: boolean;
   /** Accessible name of the whole group (each cell reuses it with its position). */
@@ -62,12 +92,15 @@ export function CodeInput({
   onChange,
   onComplete,
   shakeToken = 0,
+  state = 'default',
   disabled = false,
   autoFocus = false,
   accessibilityLabel,
   testID = 'code-input',
 }: CodeInputProps): React.JSX.Element {
   const colors = useColors();
+  const wide = useIsWide();
+  const metrics = wide ? METRICS.wide : METRICS.narrow;
   const cells = React.useRef<Array<RNTextInput | null>>([]);
   const translateX = React.useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = React.useState(false);
@@ -113,12 +146,20 @@ export function CodeInput({
     cells.current[Math.max(0, Math.min(CODE_LENGTH - 1, index))]?.focus();
   }, []);
 
+  /**
+   * `onComplete` belongs to the keystroke that *completes* the row, not to every keystroke
+   * over a row that happens to be full. 屏幕稿 13 · 失效 leaves six editable digits on screen
+   * after a rejection, so without this guard the first correcting keystroke would post a
+   * half-corrected code — and `/ledgers/join` is rate limited to 1 QPS (§14.35), so two
+   * corrections in a row would strand the user in a countdown mid-edit. An explicit paste
+   * passes `force`: filling all six at once is a complete entry however full the row was.
+   */
   const commit = React.useCallback(
-    (next: string): void => {
+    (next: string, force = false): void => {
       onChange(next);
-      if (next.length === CODE_LENGTH) onComplete(next);
+      if (next.length === CODE_LENGTH && (force || value.length < CODE_LENGTH)) onComplete(next);
     },
-    [onChange, onComplete],
+    [onChange, onComplete, value.length],
   );
 
   const handleChangeText = React.useCallback(
@@ -131,7 +172,7 @@ export function CodeInput({
       // code. A shorter jump is ambiguous (autocorrect, a fast typist, a selected cell
       // being typed over), so it is treated as ordinary typing below.
       if (text.length - previous.length >= 2 && digits.length === CODE_LENGTH) {
-        commit(digits);
+        commit(digits, true);
         focus(CODE_LENGTH - 1);
         return;
       }
@@ -162,56 +203,77 @@ export function CodeInput({
     [focus, onChange, value],
   );
 
+  /**
+   * A cell is "lit" when it holds a digit — or, once the server has spoken, always.
+   * 屏幕稿 13 · 失效 keeps the refused digits in place and paints the six cells red *around*
+   * them, so the user can read back what was rejected; 「重新输入」 (or the next keystroke)
+   * is what clears both the digits and the red.
+   */
+  const paint = (filled: boolean): TextStyle => {
+    const lit = filled || state !== 'default';
+    return {
+      backgroundColor: lit ? colors[FILLED_BG[state]] : colors['bg.canvas'],
+      borderColor: state === 'error' ? colors['status.danger.fg'] : 'transparent',
+      borderWidth: state === 'error' ? 1.5 : 0,
+    };
+  };
+
   return (
     <Animated.View
       accessibilityLabel={accessibilityLabel}
       testID={testID}
-      style={[styles.row, { transform: [{ translateX }] }]}
+      style={[styles.row, { gap: metrics.gap, transform: [{ translateX }] }]}
     >
-      {Array.from({ length: CODE_LENGTH }, (_, index) => (
-        <TextInput
-          key={index}
-          ref={(node) => {
-            cells.current[index] = node;
-          }}
-          testID={`${testID}-${index}`}
-          accessibilityLabel={`${accessibilityLabel} ${index + 1}`}
-          value={value[index] ?? ''}
-          editable={!disabled}
-          autoFocus={autoFocus && index === 0}
-          keyboardType="number-pad"
-          inputMode="numeric"
-          textContentType="oneTimeCode"
-          autoComplete="one-time-code"
-          maxLength={CODE_LENGTH}
-          selectTextOnFocus
-          onChangeText={(text) => handleChangeText(index, text)}
-          onKeyPress={(e) => handleKeyPress(index, e.nativeEvent.key)}
-          style={[
-            styles.cell,
-            {
-              borderRadius: radius.md,
-              height: controls.textField.height,
-              backgroundColor: colors['bg.subtle'],
-              borderColor: colors['border.default'],
-              color: disabled ? colors['fg.muted'] : colors['fg.primary'],
-              fontFamily: fontFamilyFor(type.title.weight, true),
-              fontSize: type.title.size,
-            },
-          ]}
-        />
-      ))}
+      {Array.from({ length: CODE_LENGTH }, (_, index) => {
+        const char = value[index] ?? '';
+        return (
+          <View key={index} style={[styles.cellWrap, { width: metrics.width }]}>
+            <TextInput
+              ref={(node) => {
+                cells.current[index] = node;
+              }}
+              testID={`${testID}-${index}`}
+              accessibilityLabel={`${accessibilityLabel} ${index + 1}`}
+              value={char}
+              editable={!disabled}
+              autoFocus={autoFocus && index === 0}
+              keyboardType="number-pad"
+              inputMode="numeric"
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
+              maxLength={CODE_LENGTH}
+              selectTextOnFocus
+              onChangeText={(text) => handleChangeText(index, text)}
+              onKeyPress={(e) => handleKeyPress(index, e.nativeEvent.key)}
+              style={[
+                styles.cell,
+                paint(char !== ''),
+                {
+                  height: metrics.height,
+                  borderRadius: metrics.radius,
+                  color: disabled ? colors['fg.muted'] : colors[FILLED_FG[state]],
+                  fontFamily: fontFamilyFor(500, true),
+                  fontSize: metrics.font,
+                },
+              ]}
+            />
+          </View>
+        );
+      })}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: space['2'], alignSelf: 'stretch' },
+  row: { flexDirection: 'row', justifyContent: 'center' },
+  cellWrap: { flexShrink: 1 },
   cell: {
-    flex: 1,
-    minWidth: 40,
-    borderWidth: 1.5,
+    width: '100%',
     textAlign: 'center',
     padding: 0,
+    // A zero-width solid outline is the typed way to say `outline: none` on the web.
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+    fontVariant: ['tabular-nums'],
   },
 });

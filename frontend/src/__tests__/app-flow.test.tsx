@@ -366,23 +366,18 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
   expect(await screen.findByTestId('imports-empty')).toBeTruthy();
 
-  // ── 2. the empty state's action is the guide, step one of the flow ────────────────
+  // ── 2. the empty state's action is the import page, step one of the flow ─────────
   fireEvent.press(screen.getByTestId('imports-empty-primary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/guide`));
-  expect(await screen.findByTestId('guide-sample-table')).toBeTruthy();
-
-  // ── 3. the guide hands over to the upload page ────────────────────────────────────
-  fireEvent.press(await screen.findByTestId('guide-go-upload'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/new`));
+  expect(await screen.findByTestId('guide-skill-text')).toBeTruthy();
 
-  // ── 4. pick the target account, paste the statement, send it ─────────────────────
+  // ── 3. pick the target account, paste the statement, send it ─────────────────────
   fireEvent.press(await screen.findByTestId('upload-source-picker-trigger'));
   fireEvent.press(await screen.findByTestId(`upload-source-picker-option-${CREDIT.id}`));
-  fireEvent.press(screen.getByTestId('upload-mode-paste'));
   fireEvent.changeText(await screen.findByTestId('upload-paste-input'), PASTED_CSV);
   fireEvent.press(screen.getByTestId('upload-submit'));
 
-  // ── 5. review, on the batch the 201 came back with ────────────────────────────────
+  // ── 4. review, on the batch the 201 came back with ────────────────────────────────
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`));
   expect(requestedPaths('post')).toEqual(['/auth/login', IMPORTS_PATH]);
   expect(JSON.parse(String(api.mock.history.post[1].data))).toEqual({
@@ -398,7 +393,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
     true,
   );
 
-  // ── 6. fill the category in — one PATCH, and the blocker goes away ───────────────
+  // ── 5. fill the category in — one PATCH, and the blocker goes away ───────────────
   // The category picker only wakes up once `GET /categories` has landed.
   fireEvent.press(await screen.findByTestId('review-2-l1-trigger'));
   fireEvent.press(await screen.findByTestId('review-2-l1-l1-shopping'));
@@ -409,7 +404,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   });
   await waitFor(() => expect(screen.queryByTestId('review-commit-block')).toBeNull());
 
-  // ── 7. commit, and land on the committed panel (step three of 04 §4.10) ──────────
+  // ── 6. commit, and land on the committed panel (step three of 04 §4.10) ──────────
   fireEvent.press(screen.getByTestId('review-commit-submit'));
   expect(await screen.findByTestId('import-committed')).toBeTruthy();
   // The detailed sentence, built from the commit response's five counters — not the
@@ -423,4 +418,71 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   // The review table is gone; the URL is the same batch it always was.
   expect(screen.queryByTestId('review-commit-submit')).toBeNull();
   expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`);
+});
+
+test('the wide shell walks its five destinations, the ledger card and 「＋ 记一笔」', async () => {
+  // 屏幕稿 01 / 09 / 12 / 14 at 1440 (决策 §14.56): no general top bar, one sidebar carrying
+  // the ledger card, 首页 / 交易 / 账户 / 导入 / 我的, the permanent add button and the
+  // signed-in member — the shell the narrow journeys above never see.
+  wideSpy.mockReturnValue(true);
+  mockGet(IMPORTS_PATH, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}`, {
+    ...makeLedger({ id: LEDGER, name: '家庭账本', base_currency: 'CNY' }),
+    counts: { transactions: 1, sources: 2, import_batches: 0 },
+  });
+
+  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
+
+  // ── sign in first: the shell only exists behind the session guard ────────────────
+  await waitFor(() => expect(router.getPathname()).toBe('/login'));
+  fireEvent.changeText(await screen.findByTestId('login-email'), EMAIL);
+  fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
+  fireEvent.press(screen.getByTestId('login-submit'));
+
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+
+  // ── the wide chrome, not the narrow one ─────────────────────────────────────────
+  expect(await screen.findByTestId('app-shell-wide')).toBeTruthy();
+  expect(screen.getByTestId('sidebar')).toBeTruthy();
+  expect(screen.queryByTestId('bottom-tab-bar')).toBeNull();
+  expect(screen.queryByTestId('top-bar')).toBeNull();
+  expect(screen.getByTestId('sidebar-ledger')).toHaveTextContent(/家庭账本/);
+  expect(screen.getByTestId('sidebar-user')).toBeTruthy();
+  expect(await screen.findByTestId('home-networth')).toBeTruthy();
+
+  // ── the ledger card's chevron: 账本设置 is not a nav entry (§14.56) ──────────────
+  fireEvent.press(screen.getByTestId('sidebar-ledger-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  expect(await screen.findByTestId('ledger-settings-screen')).toBeTruthy();
+
+  // ── 交易 ─────────────────────────────────────────────────────────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-transactions'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
+
+  // ── 账户: its own destination since this phase (屏幕稿 09) ───────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-sources'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources`));
+  expect(await screen.findByTestId('sources-screen')).toBeTruthy();
+
+  // ── 导入 ─────────────────────────────────────────────────────────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-imports'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports`));
+  expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
+
+  // ── 「＋ 记一笔」 is permanent chrome on every ledger page ────────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-add'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  expect(await screen.findByTestId('tx-new')).toBeTruthy();
+
+  // ── 我的 = personal settings, the only nav entry that leaves the ledger ──────────
+  fireEvent.press(screen.getByTestId('sidebar-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe('/settings'));
+  expect(await screen.findByTestId('personal-settings-screen')).toBeTruthy();
+  // 04 §1.4: the column survives the trip outside the ledger, so nothing strands there,
+  // and its 「账本设置」 row leads back to the ledger the column is still naming.
+  expect(screen.getByTestId('sidebar')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('settings-ledger-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
 });

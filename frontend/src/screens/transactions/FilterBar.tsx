@@ -1,39 +1,41 @@
 /**
- * The transaction list's filter bar (04 §4.5).
+ * The transaction list's filter bar (04 §4.5, 屏幕稿 02).
  *
- * One set of controls, two placements: always on screen above the list on a wide layout,
- * behind a "筛选" button with a count badge in a `Sheet` on a narrow one. The split is by
- * viewport width (`useIsWide`), never by platform. Every control writes to the URL;
- * nothing here keeps a copy of the filter state — except the two amount boxes, which
- * commit on blur so a half-typed `12.` is not parsed as a filter.
+ * Two frames for one set of controls (`FilterFields.tsx` owns the fields themselves):
+ *  - **wide** — the 「筛选」 white card: a title row with 「重置全部」, a three-column grid of
+ *    labelled fields, a rule, the 种类 pills, another rule, and the 「已选条件」 chip strip.
+ *  - **narrow** — the search box plus a square filter button carrying the active-condition
+ *    count, the chip strip under it, and every field behind `FilterSheet`.
+ *
+ * The split is by viewport width (`useIsWide`), never by platform. Every control writes to
+ * the URL; nothing here keeps a copy of the filter state.
  */
 import React from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
-import type { FinanceSource, TransactionListParams, TxKind, Uuid } from '@/api/types';
+import type { FinanceSource, TransactionListParams, Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
-import { dateRangePreset } from '@/domain/dates';
 import { filterChips, type FilterChip as DomainFilterChip } from '@/domain/filters';
-import { KINDS } from '@/domain/kinds';
 import { categoryName } from '@/i18n/category';
 import { type Lang } from '@/i18n';
 import { formatAmountPlain, formatDate } from '@/i18n/format';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
+import { Button, Card, Divider, FilterChips, Icon, Text, TextField } from '@/ui';
+
 import {
-  Button,
-  Chip,
-  DateField,
-  FilterChips,
-  MultiSelect,
-  Select,
-  Sheet,
-  Text,
-  TextField,
-  type SelectOption,
-} from '@/ui';
+  AmountRangeField,
+  CategoryField,
+  CurrencyChips,
+  DateRangeField,
+  KeywordField,
+  KindChips,
+  type FilterFieldProps,
+} from './FilterFields';
+import { FilterSheet, SourceField } from './FilterSheet';
 
 /** Everything the chip / suggestion labels need to turn a raw query value into words. */
 export interface FilterLabelCtx {
@@ -83,24 +85,6 @@ export function filterChipLabel(chip: DomainFilterChip, ctx: FilterLabelCtx): st
   }
 }
 
-/**
- * Which category tree the level-1 column may offer (decision §1.3): the income tree only
- * when the kind filter says income and nothing else; the expense tree otherwise, which is
- * also what "no kind filter at all" gets.
- */
-export function categoryKindOf(kinds: readonly TxKind[] | undefined): TxKind {
-  if (kinds && kinds.length > 0 && kinds.every((k) => k === 'income')) return 'income';
-  return 'expense';
-}
-
-type DatePreset = 'this_month' | 'last_month' | 'last_3_months' | 'this_year';
-const DATE_PRESETS: readonly DatePreset[] = [
-  'this_month',
-  'last_month',
-  'last_3_months',
-  'this_year',
-];
-
 export interface FilterBarProps {
   filters: TransactionListParams;
   activeCount: number;
@@ -111,17 +95,59 @@ export interface FilterBarProps {
   onClear(): void;
   sources: readonly FinanceSource[];
   index: CategoryIndex | null;
-  currencyCodes: readonly string[];
-  currencyNames?: Readonly<Record<string, string>>;
   baseCurrency: string;
   lang: Lang;
+  /** Entries the current filters match — the sheet's 「应用 · N 笔」 number. */
+  total: number;
   testID?: string;
 }
 
+/**
+ * The currency pills offer what this ledger's accounts actually hold (屏幕稿 02), plus the
+ * base currency and whatever a shared URL already asks for, so an inherited filter is
+ * always visible as a pill that can be switched off again.
+ */
+function currencyCodesOf(props: FilterBarProps): string[] {
+  const codes = new Set<string>([props.baseCurrency]);
+  for (const source of props.sources) codes.add(source.default_currency);
+  if (props.filters.currency) codes.add(props.filters.currency);
+  return [...codes].sort();
+}
+
+/**
+ * Whether the narrow drawer is open, kept outside the component on purpose: every control
+ * in it writes the URL, expo-router remounts the screen for the replaced URL (04 §1.3), and
+ * component state would not survive that — the drawer would slam shut on the first pill the
+ * user touched. 屏幕稿 02 has them set several conditions and then press 「应用」, so the flag
+ * outlives the remount; it is cleared when the drawer is closed and when the screen is left
+ * for good, so coming back to /transactions never reopens it by itself.
+ */
+let drawerOpen = false;
+/** Pending reset of `drawerOpen`, armed on unmount and cancelled by a remount in the same tick. */
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function FilterBar(props: FilterBarProps): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
   const wide = useIsWide();
-  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [sheetOpen, setSheetOpen] = React.useState(drawerOpen);
+  const setDrawer = React.useCallback((open: boolean): void => {
+    drawerOpen = open;
+    setSheetOpen(open);
+  }, []);
+  // A filter change remounts the screen, and the drawer must survive that; leaving the
+  // screen must close it. Unmount arms a reset, a remount in the same tick cancels it.
+  React.useEffect(() => {
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    return () => {
+      closeTimer = setTimeout(() => {
+        drawerOpen = false;
+      }, 0);
+    };
+  }, []);
   const id = props.testID ?? 'tx-filter-bar';
 
   const sourceName = React.useCallback(
@@ -143,55 +169,137 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     label: filterChipLabel(chip, labelCtx),
   }));
 
-  const controls = (
-    <FilterControls
-      {...props}
-      onCloseSheet={() => setSheetOpen(false)}
-      inSheet={!wide}
-      testID={id}
-    />
+  const fields: FilterFieldProps = {
+    filters: props.filters,
+    onPatch: props.onPatch,
+    index: props.index,
+    sources: props.sources,
+    currencyCodes: currencyCodesOf(props),
+    baseCurrency: props.baseCurrency,
+    lang: props.lang,
+    id,
+  };
+
+  const chipStrip = (
+    <View
+      testID={`${id}-applied`}
+      style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+    >
+      <Text variant="caption" tone="secondary" weight={600}>
+        {t('transaction:list.filter.applied_label')}
+      </Text>
+      {chips.length === 0 ? (
+        <Text variant="body" tone="muted">
+          {t('transaction:list.filter.no_filters')}
+        </Text>
+      ) : (
+        <FilterChips
+          chips={chips}
+          clearFrom={1}
+          onRemove={(key, value) => props.onRemove(key as keyof TransactionListParams, value)}
+          onClear={props.onClear}
+          testID={`${id}-chips`}
+        />
+      )}
+    </View>
   );
+
+  if (wide) {
+    return (
+      <Card testID={id} style={{ padding: space['5'], gap: space['4'] }}>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space['4'] }}
+        >
+          <Text variant="subheading" weight={700}>
+            {t('transaction:list.filter.title')}
+          </Text>
+          <Button
+            variant="ghost"
+            size="sm"
+            label={t('transaction:list.filter.reset_all')}
+            onPress={props.onClear}
+            testID={`${id}-reset`}
+          />
+        </View>
+
+        <View
+          testID={`${id}-controls`}
+          style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['5'] }}
+        >
+          {[
+            <KeywordField key="q" value={props.qDraft} onChange={props.onQChange} id={`${id}-q`} />,
+            <SourceField key="source" {...fields} />,
+            <CurrencyChips key="currency" {...fields} />,
+            <AmountRangeField key="amount" {...fields} />,
+            <DateRangeField key="date" {...fields} presetsInLabel />,
+            <CategoryField key="l1" {...fields} level={1} />,
+            <CategoryField key="l2" {...fields} level={2} />,
+            // Two blanks so the last row's single field keeps a column's width instead of
+            // stretching across the card (屏幕稿 02: 二级分类 sits under 金额区间).
+            null,
+            null,
+          ].map((cell, i) => (
+            <View key={i} style={{ flexBasis: '30%', flexGrow: 1, minWidth: 220 }}>
+              {cell}
+            </View>
+          ))}
+        </View>
+
+        <Divider />
+        <KindChips {...fields} />
+        <Divider />
+        {chipStrip}
+      </Card>
+    );
+  }
 
   return (
     <View testID={id} style={{ gap: space['3'] }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space['2'] }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['3'] }}>
         <View style={{ flex: 1 }}>
           <TextField
             value={props.qDraft}
             onChangeText={props.onQChange}
             placeholder={t('transaction:list.filter.search_placeholder')}
             accessibilityLabel={t('transaction:list.filter.search_placeholder')}
+            prefix={<Icon name="search" size={18} color={colors['fg.muted']} />}
             testID={`${id}-q`}
           />
         </View>
-        {wide ? null : (
+        <View>
           <Button
-            variant="secondary"
+            variant={props.activeCount > 0 ? 'primary' : 'secondary'}
+            size="lg"
             icon="filter"
-            label={
-              props.activeCount > 0
-                ? `${t('transaction:list.filter.open')} · ${props.activeCount}`
-                : t('transaction:list.filter.open')
-            }
-            onPress={() => setSheetOpen(true)}
+            iconOnly
+            accessibilityLabel={t('transaction:list.filter.open')}
+            onPress={() => setDrawer(true)}
             testID={`${id}-open`}
           />
-        )}
+          {props.activeCount > 0 ? (
+            <View
+              testID={`${id}-open-count`}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                minWidth: 20,
+                height: 20,
+                paddingHorizontal: space['1'],
+                borderRadius: radius.pill,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors['kind.expense'],
+              }}
+            >
+              <Text variant="micro" mono weight={600} style={{ color: colors['accent.fg'] }}>
+                {String(props.activeCount)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
-
-      {wide ? (
-        controls
-      ) : (
-        <Sheet
-          open={sheetOpen}
-          onClose={() => setSheetOpen(false)}
-          title={t('transaction:list.filter.title')}
-          closeLabel={t('common:button.close')}
-          testID={`${id}-sheet`}
-        >
-          {controls}
-        </Sheet>
-      )}
 
       <FilterChips
         chips={chips}
@@ -200,255 +308,16 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
         onClear={props.onClear}
         testID={`${id}-chips`}
       />
-    </View>
-  );
-}
 
-// --------------------------------------------------------------------- controls
-
-interface FilterControlsProps extends FilterBarProps {
-  inSheet: boolean;
-  onCloseSheet(): void;
-}
-
-function FilterControls(props: FilterControlsProps): React.JSX.Element {
-  const { t } = useTranslation();
-  const { filters, onPatch, index, sources } = props;
-  const id = props.testID ?? 'tx-filter-bar';
-
-  const kinds = filters.kind ?? [];
-  const categoryKind = categoryKindOf(kinds);
-
-  const l1Options: SelectOption[] = (index?.kindAllows(categoryKind) ?? []).map((c) => ({
-    value: c.code,
-    label: categoryName(c, props.lang),
-  }));
-  const l2Options: SelectOption[] = (
-    filters.category_l1 ? (index?.l2Of(filters.category_l1) ?? []) : []
-  ).map((c) => ({ value: c.code, label: categoryName(c, props.lang) }));
-
-  const sourceOptions: SelectOption[] = sources.map((s) => ({
-    value: s.id,
-    label: s.name,
-    hint: s.default_currency,
-  }));
-
-  const currencyOptions: SelectOption[] = props.currencyCodes.map((code) => ({
-    value: code,
-    label: code,
-    hint: props.currencyNames?.[code],
-  }));
-
-  // The amount boxes keep a draft: a filter must not be rebuilt (and refetched) on every
-  // keystroke, and "12." is not a number yet.
-  const [minDraft, setMinDraft] = React.useState(
-    filters.min_amount === undefined ? '' : String(filters.min_amount),
-  );
-  const [maxDraft, setMaxDraft] = React.useState(
-    filters.max_amount === undefined ? '' : String(filters.max_amount),
-  );
-  React.useEffect(() => {
-    setMinDraft(filters.min_amount === undefined ? '' : String(filters.min_amount));
-  }, [filters.min_amount]);
-  React.useEffect(() => {
-    setMaxDraft(filters.max_amount === undefined ? '' : String(filters.max_amount));
-  }, [filters.max_amount]);
-
-  const commitAmount = (which: 'min_amount' | 'max_amount', raw: string): void => {
-    const trimmed = raw.trim();
-    if (trimmed === '') {
-      if (filters[which] !== undefined) onPatch({ [which]: undefined });
-      return;
-    }
-    const value = Number(trimmed);
-    if (!Number.isFinite(value)) return;
-    if (filters[which] === value) return;
-    onPatch({ [which]: value });
-  };
-
-  function toggleKind(kind: TxKind): void {
-    const next = kinds.includes(kind) ? kinds.filter((k) => k !== kind) : [...kinds, kind];
-    // Switching to an income-only filter would leave an expense category behind, which
-    // can never match anything (decision §1.3).
-    const nextCategoryKind = categoryKindOf(next);
-    const keepCategory = nextCategoryKind === categoryKind;
-    onPatch({
-      kind: next.length > 0 ? next : undefined,
-      category_l1: keepCategory ? filters.category_l1 : undefined,
-      category_l2: keepCategory ? filters.category_l2 : undefined,
-    });
-  }
-
-  return (
-    <View testID={`${id}-controls`} style={{ gap: space['4'] }}>
-      <Field label={t('transaction:list.filter.kind_label')} hint={t('transaction:list.filter.kind_hint')}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
-          {KINDS.map((kind) => (
-            <Chip
-              key={kind}
-              label={t(`transaction:kind.${kind}`)}
-              selected={kinds.includes(kind)}
-              onPress={() => toggleKind(kind)}
-              testID={`${id}-kind-${kind}`}
-            />
-          ))}
-        </View>
-      </Field>
-
-      <MultiSelect
-        label={t('transaction:list.filter.source_label')}
-        placeholder={t('transaction:list.filter.source_placeholder')}
-        closeLabel={t('common:button.close')}
-        options={sourceOptions}
-        values={filters.source_id ?? []}
-        selectedLabel={(count) => t('transaction:list.filter.source_selected', { count })}
-        onChange={(next) => onPatch({ source_id: next.length > 0 ? next : undefined })}
-        searchable
-        testID={`${id}-source`}
+      <FilterSheet
+        {...fields}
+        open={sheetOpen}
+        onClose={() => setDrawer(false)}
+        onClear={props.onClear}
+        qDraft={props.qDraft}
+        onQChange={props.onQChange}
+        total={props.total}
       />
-
-      <Field label={t('transaction:list.filter.date_range_label')}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
-          {DATE_PRESETS.map((preset) => (
-            <Chip
-              key={preset}
-              label={t(`transaction:list.filter.date_preset.${preset}`)}
-              onPress={() => onPatch(dateRangePreset(preset))}
-              testID={`${id}-date-${preset}`}
-            />
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', gap: space['2'] }}>
-          <View style={{ flex: 1 }}>
-            <DateField
-              label={t('transaction:list.filter.date_from')}
-              value={filters.from ?? ''}
-              onChange={(next) => onPatch({ from: next === '' ? undefined : next })}
-              testID={`${id}-from`}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <DateField
-              label={t('transaction:list.filter.date_to')}
-              value={filters.to ?? ''}
-              onChange={(next) => onPatch({ to: next === '' ? undefined : next })}
-              testID={`${id}-to`}
-            />
-          </View>
-        </View>
-      </Field>
-
-      <Field label={t('transaction:list.filter.category_label')}>
-        <Select
-          label={t('transaction:form.category_l1')}
-          placeholder={t('transaction:list.filter.category_l1_placeholder')}
-          closeLabel={t('common:button.close')}
-          options={l1Options}
-          value={filters.category_l1 ?? null}
-          onChange={(next) =>
-            onPatch({ category_l1: next ?? undefined, category_l2: undefined })
-          }
-          searchable
-          testID={`${id}-category-l1`}
-        />
-        <Select
-          label={t('transaction:form.category_l2')}
-          placeholder={t('transaction:list.filter.category_l2_placeholder')}
-          closeLabel={t('common:button.close')}
-          options={l2Options}
-          value={filters.category_l2 ?? null}
-          disabled={l2Options.length === 0}
-          onChange={(next) => onPatch({ category_l2: next ?? undefined })}
-          testID={`${id}-category-l2`}
-        />
-      </Field>
-
-      <Field
-        label={t('transaction:list.filter.amount_range_label')}
-        hint={t('transaction:list.filter.amount_range_hint', { currency: props.baseCurrency })}
-      >
-        <View style={{ flexDirection: 'row', gap: space['2'] }}>
-          <View style={{ flex: 1 }}>
-            <TextField
-              value={minDraft}
-              onChangeText={setMinDraft}
-              onBlur={() => commitAmount('min_amount', minDraft)}
-              onSubmitEditing={() => commitAmount('min_amount', minDraft)}
-              placeholder={t('transaction:list.filter.amount_min_placeholder')}
-              accessibilityLabel={t('transaction:list.filter.amount_min_placeholder')}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              mono
-              testID={`${id}-min-amount`}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <TextField
-              value={maxDraft}
-              onChangeText={setMaxDraft}
-              onBlur={() => commitAmount('max_amount', maxDraft)}
-              onSubmitEditing={() => commitAmount('max_amount', maxDraft)}
-              placeholder={t('transaction:list.filter.amount_max_placeholder')}
-              accessibilityLabel={t('transaction:list.filter.amount_max_placeholder')}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              mono
-              testID={`${id}-max-amount`}
-            />
-          </View>
-        </View>
-      </Field>
-
-      <Select
-        label={t('transaction:list.filter.currency_label')}
-        placeholder={t('transaction:list.filter.currency_placeholder')}
-        closeLabel={t('common:button.close')}
-        options={currencyOptions}
-        value={filters.currency ?? null}
-        onChange={(next) => onPatch({ currency: next ?? undefined })}
-        searchable
-        testID={`${id}-currency`}
-      />
-
-      <View style={{ flexDirection: 'row', gap: space['2'], flexWrap: 'wrap' }}>
-        <Button
-          variant="ghost"
-          label={t('transaction:list.filter.clear_filters')}
-          onPress={props.onClear}
-          testID={`${id}-reset`}
-        />
-        {props.inSheet ? (
-          <Button
-            label={t('transaction:list.filter.done')}
-            onPress={props.onCloseSheet}
-            testID={`${id}-done`}
-          />
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <View style={{ gap: space['2'] }}>
-      <Text variant="caption" tone="secondary">
-        {label}
-      </Text>
-      {children}
-      {hint ? (
-        <Text variant="micro" tone="muted">
-          {hint}
-        </Text>
-      ) : null}
     </View>
   );
 }

@@ -14,7 +14,7 @@ import { View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatch, ImportCommitResult, ImportFlag, ImportRow, Uuid } from '@/api/types';
+import type { ImportBatch, ImportCommitResult, ImportRow, Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
@@ -29,27 +29,20 @@ import {
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import {
-  Button,
-  Card,
-  EmptyState,
-  Page,
-  SegmentedControl,
-  Skeleton,
-  Text,
-} from '@/ui';
+import { Card, EmptyState, Page, PageHeader, SegmentedControl, Skeleton, Text } from '@/ui';
 
 import { BulkBar } from './review/BulkBar';
 import { CommitBar } from './review/CommitBar';
 import { ReviewCards } from './review/ReviewCards';
+import { ReviewBanner } from './review/ReviewBanner';
+import { ReviewHeader, reviewSubtitle } from './review/ReviewHeader';
 import { ReviewTable, type ReviewHighlight } from './review/ReviewTable';
 import type { ReviewEnv } from './review/ReviewRow';
 import { useReviewRows } from './review/useReviewRows';
 import { REVIEW_SLICES, type ReviewSlice, useReviewSelection } from './review/useReviewSelection';
+import { CommittedPanel } from './CommittedPanel';
+import { UndoDialogHost } from './UndoDialog';
 import { undoImportBatch } from './undoBatch';
-
-/** Room under the phone's scroll content for the pinned bulk bar (04 §4.11.9). */
-const BULK_BAR_CLEARANCE = 96;
 
 /**
  * Paging the draft rows (03 §5.40, §5.37).
@@ -65,70 +58,51 @@ const BULK_BAR_CLEARANCE = 96;
 const ROWS_PAGE_LIMIT = 500;
 const REST_OFFSETS = [100, 600, 1100, 1600] as const;
 
-interface CommittedPanelProps {
+/**
+ * The committed panel is its own module (屏幕稿 11's language); this screen only wires it to
+ * the batch, to `undoBatch.ts` — the very flow the history list runs — and to where the
+ * user lands afterwards: this URL 404s once the batch is gone (decision §14.22), so it
+ * goes back to the history.
+ */
+function CommittedView({
+  ledgerId,
+  batch,
+  result,
+}: {
   ledgerId: Uuid;
   batch: ImportBatch;
   result: ImportCommitResult | null;
-}
-
-/**
- * Step 3 (04 §4.10). The detailed sentence needs the commit response's five counters; a
- * page opened later (a link, a refresh) only has the batch, so it says the shorter thing
- * rather than inventing numbers.
- */
-function CommittedPanel({ ledgerId, batch, result }: CommittedPanelProps): React.JSX.Element {
+}): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  const lang = useLang();
   const remove = useDeleteImport(ledgerId, batch.id);
 
-  // The same flow the history list runs (`undoBatch.ts`) — there is exactly one of it. The
-  // only difference is where it leaves the user: this screen's URL 404s once the batch is
-  // gone (decision §14.22), so it goes back to the history.
   const onUndo = React.useCallback((): void => {
     void undoImportBatch({
       remove: remove.mutateAsync,
+      batch,
       t,
+      lang,
       onDone: () => router.replace(routes.l(ledgerId).imports() as Href),
     });
-  }, [ledgerId, remove, router, t]);
+  }, [batch, lang, ledgerId, remove, router, t]);
 
   return (
-    <Card variant="outlined" style={{ gap: space['3'] }} testID="import-committed">
-      <Text variant="body" testID="import-committed-summary">
-        {result
-          ? t('import:committed.summary', {
-              created: result.created_transactions,
-              pairs: result.created_transfer_pairs,
-              paired: result.paired_existing_transfers,
-              refunds: result.linked_refunds,
-              skipped: result.skipped_rows,
-            })
-          : t('import:committed.summary_fallback', { rows: batch.row_count })}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
-        <Button
-          testID="import-committed-view"
-          label={t('import:committed.view_transactions')}
-          onPress={() =>
-            router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href)
-          }
-        />
-        <Button
-          testID="import-committed-again"
-          variant="secondary"
-          label={t('import:committed.import_another')}
-          onPress={() => router.push(routes.l(ledgerId).importsNew() as Href)}
-        />
-        <Button
-          testID="import-committed-undo"
-          variant="danger"
-          icon="undo-2"
-          label={t('import:committed.undo')}
-          loading={remove.isPending}
-          onPress={onUndo}
-        />
-      </View>
-    </Card>
+    <>
+      <CommittedPanel
+        batch={batch}
+        result={result}
+        undoing={remove.isPending}
+        onUndo={onUndo}
+        onViewTransactions={() =>
+          router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href)
+        }
+        onImportAnother={() => router.push(routes.l(ledgerId).importsNew() as Href)}
+      />
+      {/* 屏幕稿 11 · 撤销确认 lives with the screen that can undo (see `UndoDialog.tsx`). */}
+      <UndoDialogHost />
+    </>
   );
 }
 
@@ -190,6 +164,10 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const [committed, setCommitted] = React.useState<ImportCommitResult | null>(null);
   const [highlight, setHighlight] = React.useState<ReviewHighlight | null>(null);
   const [submitSignal, setSubmitSignal] = React.useState(0);
+  // The blocking banner's 「定位第一行」: only the layout on screen knows how to get there
+  // (the grid widens the slice and moves the focus, the card flow switches slice), so the
+  // banner — which 屏幕稿 03 draws above them both — asks by signal.
+  const [bannerJump, setBannerJump] = React.useState(0);
 
   /**
    * "Put this row in front of the user" (04 §4.11.8), from the commit bar, a bulk failure
@@ -214,7 +192,15 @@ export default function ImportBatchScreen(): React.JSX.Element {
     [selection],
   );
 
-  useTopBar(batch ? batch.source_name : t('import:history.title'));
+  // The phone's top bar carries the page title 屏幕稿 03 · 375 draws (the wide layout has
+  // no top bar at all — decision §14.56 — and reads it off the page header instead).
+  useTopBar(
+    batch === undefined
+      ? t('import:history.title')
+      : batch.status === 'committed'
+        ? batch.source_name
+        : t('import:review.page_title'),
+  );
 
   if (batchQuery.isPending || rowsQuery.isPending) {
     return (
@@ -240,43 +226,25 @@ export default function ImportBatchScreen(): React.JSX.Element {
     );
   }
 
-  const filename =
-    batch.source === 'paste' ? t('import:history.pasted_filename') : (batch.filename ?? '');
-
-  // 04 §4.11.1: the header names the file, the target account, the row count, how many
-  // rows still need a category, and each flag the server raised at all.
-  const flagCounts = (Object.keys(batch.flags_summary) as ImportFlag[])
-    .filter((flag) => (batch.flags_summary[flag] ?? 0) > 0)
-    .map((flag) =>
-      t('import:review.summary_flag', {
-        label: t(`import:review.flag.${flag}`),
-        count: batch.flags_summary[flag],
-      }),
-    );
-
   const header = (
-    <View style={{ gap: space['1'] }}>
-      <Text variant="title" accessibilityRole="header" testID="import-batch-title">
-        {t('import:review.title', { filename, source: batch.source_name })}
-      </Text>
-      <Text variant="caption" tone="secondary" testID="import-batch-summary">
-        {[
-          t('import:review.summary', {
-            // The batch's own count, not the page at hand (03 §5.40).
-            rows: batch.row_count,
-            uncategorized: selection.counts.uncategorized,
-          }),
-          ...flagCounts,
-        ].join(' · ')}
-      </Text>
-    </View>
+    <ReviewHeader
+      ledgerId={ledgerId}
+      batch={batch}
+      lang={lang}
+      uncategorized={selection.counts.uncategorized}
+      skipped={selection.counts.skipped}
+    />
   );
 
   if (batch.status === 'committed' || committed !== null) {
     return (
-      <Page wide testID="import-batch-screen">
-        {header}
-        <CommittedPanel ledgerId={ledgerId} batch={batch} result={committed} />
+      <Page testID="import-batch-screen">
+        <PageHeader
+          testID="import-batch-header"
+          title={batch.source_name}
+          subtitle={reviewSubtitle(batch, t)}
+        />
+        <CommittedView ledgerId={ledgerId} batch={batch} result={committed} />
       </Page>
     );
   }
@@ -292,12 +260,38 @@ export default function ImportBatchScreen(): React.JSX.Element {
     sources: sources.data?.items ?? [],
   };
 
+  /**
+   * 屏幕稿 03's one bottom bar, not two: 「已选 5 / 10 行」 and the bulk actions at the left
+   * end, the blocker and 「提交入账」 at the right, all inside the same white card as the
+   * grid (the mockup rounds the grid's top corners and the bar's bottom ones). The phone
+   * stacks the same pieces in the same order.
+   */
+  const footer = (
+    <CommitBar
+      env={env}
+      rows={ctrl.rows}
+      onJumpTo={jumpTo}
+      onCommitted={(result) => {
+        setCommitted(result);
+        selection.clear();
+      }}
+      submitSignal={submitSignal}
+      unloadedRows={unloadedRows}
+      bare
+      leading={
+        <BulkBar env={env} selection={selection} onFailure={jumpTo} compact={!wide} bare />
+      }
+    />
+  );
+
   const view = wide ? (
     <ReviewTable
       env={env}
       selection={selection}
       highlight={highlight}
       onCommitRequest={() => setSubmitSignal((n) => n + 1)}
+      bannerJumpSignal={bannerJump}
+      footer={footer}
     />
   ) : (
     <ReviewCards
@@ -305,58 +299,63 @@ export default function ImportBatchScreen(): React.JSX.Element {
       selection={selection}
       highlight={highlight}
       onCommitRequest={() => setSubmitSignal((n) => n + 1)}
+      bannerJumpSignal={bannerJump}
     />
   );
 
-  const bulkBar = (
-    <BulkBar env={env} selection={selection} onFailure={jumpTo} compact={!wide} />
+  const slices = (
+    <SegmentedControl<ReviewSlice>
+      testID="review-slices"
+      size="sm"
+      value={selection.slice}
+      onChange={selection.setSlice}
+      accessibilityLabel={t('import:review.column.flags')}
+      options={REVIEW_SLICES.map((slice) => ({
+        value: slice,
+        label: t(`import:review.filter.${slice}`, {
+          count: selection.counts[slice],
+        }),
+      }))}
+    />
   );
 
   return (
-    <View style={{ flex: 1 }}>
-      <Page wide testID="import-batch-screen" bottomInset={wide ? 0 : BULK_BAR_CLEARANCE}>
-        {header}
-        <SegmentedControl<ReviewSlice>
-          testID="review-slices"
-          value={selection.slice}
-          onChange={selection.setSlice}
-          accessibilityLabel={t('import:review.column.flags')}
-          options={REVIEW_SLICES.map((slice) => ({
-            value: slice,
-            label: t(`import:review.filter.${slice}`, {
-              count: selection.counts[slice],
-            }),
-          }))}
+    <Page testID="import-batch-screen">
+      {header}
+
+      {/* 屏幕稿 03: the standing blocker sits directly under the header, with the small
+          slice segments beside it — on a phone, on the line below (屏幕稿 03 · 375). */}
+      <View
+        style={
+          wide
+            ? { flexDirection: 'row', alignItems: 'center', gap: space['3'] }
+            : { gap: space['3'], alignItems: 'flex-start' }
+        }
+      >
+        <ReviewBanner
+          count={selection.counts.uncategorized}
+          onJump={() => setBannerJump((n) => n + 1)}
+          style={wide ? { flex: 1, minWidth: 0 } : { alignSelf: 'stretch' }}
         />
-        {/* Why the phone opened where it did (04 §4.11.9). */}
-        {!wide && selection.slice === 'uncategorized' ? (
-          <Text variant="micro" tone="muted" testID="review-mobile-filter-hint">
-            {t('import:review.mobile_default_filter_hint')}
-          </Text>
-        ) : null}
-        {wide ? bulkBar : null}
-        {view}
-        <CommitBar
-          env={env}
-          rows={ctrl.rows}
-          onJumpTo={jumpTo}
-          onCommitted={(result) => {
-            setCommitted(result);
-            selection.clear();
-          }}
-          submitSignal={submitSignal}
-          unloadedRows={unloadedRows}
-        />
-      </Page>
-      {/* The phone keeps bulk actions on a bar pinned to the bottom (04 §4.11.9). */}
-      {!wide && selection.count > 0 ? (
-        <View
-          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
-          testID="review-bulk-dock"
-        >
-          {bulkBar}
-        </View>
+        {slices}
+      </View>
+
+      {/* Why the phone opened where it did (04 §4.11.9). */}
+      {!wide && selection.slice === 'uncategorized' ? (
+        <Text variant="micro" tone="muted" testID="review-mobile-filter-hint">
+          {t('import:review.mobile_default_filter_hint')}
+        </Text>
       ) : null}
-    </View>
+
+      {view}
+
+      {/* The grid carries the bar inside its own card; the card flow cannot, so the phone
+          gets it as the card under the list. */}
+      {wide ? null : (
+        <Card variant="raised" testID="review-footer" style={{ gap: space['2'] }}>
+          {footer}
+        </Card>
+      )}
+    </Page>
   );
 }

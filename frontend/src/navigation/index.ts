@@ -3,7 +3,12 @@ export { AppShell, type AppShellProps } from './AppShell';
 export { BottomTabBar, TAB_BAR_HEIGHT, type BottomTabBarProps } from './BottomTabBar';
 export { LandingRedirect, pickLandingLedger } from './LandingRedirect';
 export { LedgerGone, type LedgerGoneProps } from './LedgerGone';
-export { LedgerSwitcher, type LedgerSwitcherProps } from './LedgerSwitcher';
+export {
+  LedgerSwitcher,
+  LedgerSwitcherPopover,
+  type LedgerSwitcherPopoverProps,
+  type LedgerSwitcherProps,
+} from './LedgerSwitcher';
 export { AppSkeleton, RequireAuth, useCurrentUrl, type RequireAuthProps } from './RequireAuth';
 export {
   RequireLedger,
@@ -13,15 +18,16 @@ export {
   useLedgerGone,
   type RequireLedgerProps,
 } from './RequireLedger';
+export { isActivePath } from './isActivePath';
 export {
   SIDEBAR_WIDTH,
   Sidebar,
-  isActivePath,
   useSidebarDestinations,
   userLabel,
   type NavDestination,
-  type SidebarProps,
 } from './Sidebar';
+export { showsLedgerManageCard } from './SidebarCards';
+export { useLastLedgerId } from './useLastLedgerId';
 export {
   TopBar,
   TopBarProvider,

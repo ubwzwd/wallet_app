@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
 
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
@@ -146,6 +146,52 @@ test('picking a kind writes it to the URL, and nothing empty goes with it', asyn
       true,
     ),
   );
+});
+
+test('the narrow layout puts the same controls behind a counted filter button', async () => {
+  setWide(false);
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const router = renderRouter(ROUTES, {
+    initialUrl: `/l/${LEDGER}/transactions?kind=expense&currency=SGD`,
+  });
+
+  // 屏幕稿 02 · 375: the button carries how many conditions are on; the fields are inside.
+  expect(await screen.findByTestId('tx-filter-bar-open-count')).toHaveTextContent('2');
+  expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-open'));
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-kind-income'));
+  await waitFor(() => expect(searchOf(router).kind).toEqual(['expense', 'income']));
+  // A filter change replaces the URL and remounts the screen; the drawer has to survive
+  // that, or no one could ever set a second condition.
+  expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
+
+  // 「应用」 only closes the drawer: the URL is already the filter state (04 §1.3).
+  fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
+  await waitFor(() => expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull());
+  expect(searchOf(router).kind).toEqual(['expense', 'income']);
+});
+
+test('leaving the screen for good closes the narrow drawer; coming back never reopens it', async () => {
+  setWide(false);
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const first = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.press(await screen.findByTestId('tx-filter-bar-open'));
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+
+  // Unlike the remount a filter change causes, this is a real departure: one tick passes
+  // with nothing mounted, so the drawer flag is dropped.
+  first.unmount();
+  act(() => {
+    jest.advanceTimersByTime(1);
+  });
+
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  expect(await screen.findByTestId('tx-filter-bar-open')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
 });
 
 test('typing in the search box writes `q` once, 300ms after the last keystroke', async () => {

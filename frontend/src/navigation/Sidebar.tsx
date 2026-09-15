@@ -1,26 +1,48 @@
 /**
- * The wide-layout sidebar (04 §1.4, screen 01 at 1440): ledger switcher on top, "add a
- * transaction" as the permanent primary button, six destinations, and the signed-in member
- * at the foot.
+ * The wide-layout sidebar (screens 01 / 09 / 12 / 13 / 14 at 1440, decisions §14.45, §14.56).
  *
- * There is deliberately no "reports" and no "members" entry (decision §14.52 A21):
- * statistics live on the home page, members inside the ledger's own settings page.
+ * Top to bottom: the ledger card (its body opens the switcher, its chevron goes to the
+ * ledger's own settings), five destinations, the permanent "add a transaction" button, and
+ * — pushed to the foot — the signed-in member.
+ *
+ * `/ledgers*` is the one place that column is different (mockup 13): the card names the
+ * ledger *list*, the nav shrinks to the three ledger-scoped entries that still have somewhere
+ * to go, and there is no 「＋ 记一笔」 — no ledger is open, so there is nothing to add to.
+ *
+ * "Ledger settings" is deliberately not a destination (§14.56): the card's chevron and the
+ * personal-settings page are the two ways in. Neither is "reports" or "members" (§14.52
+ * A21): statistics live on the home page, members inside the ledger's settings. Logging out
+ * lives on the personal-settings page, not in this chrome.
  */
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { User } from '@/api/types';
-import { routes } from '@/domain/routes';
-import { radius, space } from '@/theme/tokens';
+import type { Ledger, User, Uuid } from '@/api/types';
+import { type RouteHref, routes } from '@/domain/routes';
+import { useLedgers } from '@/queries';
+import { density, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
 import { useOptionalLedgerContext } from '@/store/LedgerContext';
-import { Button, Divider, Icon, type IconName, Text } from '@/ui';
-import { PREF_NAMES, getPref, getPrefSync } from '@/utils/prefs';
+import { Avatar, Button, Icon, type IconName, Text } from '@/ui';
 
-export const SIDEBAR_WIDTH = 240;
+import { isActivePath } from './isActivePath';
+import { pickLandingLedger } from './LandingRedirect';
+import { LedgerSwitcherPopover } from './LedgerSwitcher';
+import { LedgerCard, LedgerCardPlaceholder, LedgerManageCard } from './SidebarCards';
+import { useLastLedgerId } from './useLastLedgerId';
+
+// Re-exported so the shell's tests and `src/navigation/index.ts` keep one import site.
+export { showsLedgerManageCard } from './SidebarCards';
+
+/**
+ * Screen 01 at 1440. The mockup's column is `width:252px;padding:20px 14px` with no
+ * border-box reset, so the white band it paints is 252 + 2×14 = 280 wide; RN's box model
+ * is border-box, so the same 14 of padding needs the outer 280 here.
+ */
+export const SIDEBAR_WIDTH = 280;
 
 /** How a signed-in user is named in the chrome: display name, else the email's local part. */
 export function userLabel(user: Pick<User, 'display_name' | 'email'> | null): string {
@@ -31,67 +53,59 @@ export function userLabel(user: Pick<User, 'display_name' | 'email'> | null): st
   return at > 0 ? user.email.slice(0, at) : user.email;
 }
 
+// -------------------------------------------------------------------- destinations
+
 export interface NavDestination {
   key: string;
   label: string;
   icon: IconName;
-  href: string;
-  /** A separator is drawn above this entry. */
-  dividerBefore?: boolean;
-}
-
-/** `/l/<id>` matches only itself; every other entry also owns its sub-paths. */
-export function isActivePath(pathname: string, href: string, exact: boolean): boolean {
-  if (pathname === href) return true;
-  return !exact && pathname.startsWith(`${href}/`);
+  href: RouteHref;
 }
 
 /**
- * The ledger the sidebar's ledger-scoped entries point at when the page itself is outside
- * any ledger (`/settings`): the one the user last had open. `null` while nothing is known,
- * and forever on a device that never opened one.
+ * The sidebar destinations, in order (§14.56): home, transactions, accounts, imports, me.
+ * Without a ledger to scope them to, the four ledger-scoped entries all lead to the ledger
+ * list — which is where the user has to pick one anyway.
+ *
+ * `manage` is mockup 13's own column (`/ledgers*`): only 首页 / 交易 / 导入, pointing at the
+ * ledger the user last had open, and nothing at all when there is no such ledger — a link
+ * from the ledger list back to the ledger list is not a destination.
  */
-export function useLastLedgerId(): string | null {
-  const [id, setId] = React.useState<string | null>(() => getPrefSync(PREF_NAMES.lastLedgerId));
-  React.useEffect(() => {
-    let alive = true;
-    void getPref(PREF_NAMES.lastLedgerId).then((value) => {
-      if (alive && value) setId(value);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return id;
-}
-
-/**
- * The six sidebar destinations, in order (04 §1.4). Without a ledger to scope them to,
- * the five ledger-scoped entries all lead to the ledger list — which is where the user
- * has to pick one anyway.
- */
-export function useSidebarDestinations(ledgerId: string | null): NavDestination[] {
+export function useSidebarDestinations(ledgerId: string | null, manage = false): NavDestination[] {
   const { t } = useTranslation();
   const l = ledgerId === null ? null : routes.l(ledgerId);
-  const inLedger = (href: string | undefined): string => href ?? routes.ledgers();
+  const inLedger = (href: RouteHref | undefined): RouteHref => href ?? routes.ledgers();
+  const home: NavDestination = {
+    key: 'home',
+    label: t('common:nav.home'),
+    icon: 'home',
+    href: inLedger(l?.home()),
+  };
+  const transactions: NavDestination = {
+    key: 'transactions',
+    label: t('common:nav.transactions'),
+    icon: 'list',
+    href: inLedger(l?.transactions()),
+  };
+  const imports: NavDestination = {
+    key: 'imports',
+    label: t('common:nav.imports'),
+    icon: 'upload',
+    href: inLedger(l?.imports()),
+  };
+  if (manage) return l === null ? [] : [home, transactions, imports];
   return [
-    { key: 'home', label: t('common:nav.home'), icon: 'home', href: inLedger(l?.home()) },
+    home,
+    transactions,
     {
-      key: 'transactions',
-      label: t('common:nav.transactions'),
-      icon: 'list',
-      href: inLedger(l?.transactions()),
+      key: 'sources',
+      label: t('common:nav.sources'),
+      icon: 'wallet',
+      href: inLedger(l?.sources()),
     },
-    { key: 'sources', label: t('common:nav.sources'), icon: 'wallet', href: inLedger(l?.sources()) },
-    { key: 'imports', label: t('common:nav.imports'), icon: 'upload', href: inLedger(l?.imports()) },
-    {
-      key: 'ledger-settings',
-      label: t('common:nav.ledger_settings'),
-      icon: 'users',
-      href: inLedger(l?.settings()),
-      dividerBefore: true,
-    },
-    { key: 'settings', label: t('common:nav.settings'), icon: 'settings', href: routes.settings() },
+    imports,
+    // Personal settings — labelled "me", the same word the narrow tab bar uses.
+    { key: 'settings', label: t('common:nav.me'), icon: 'user', href: routes.settings() },
   ];
 }
 
@@ -124,124 +138,171 @@ function NavRow({
       ]}
     >
       <Icon name={item.icon} size={18} color={fg} />
-      <Text variant="subheading" style={{ color: fg }} numberOfLines={1}>
+      <Text weight={active ? 600 : 500} style={[styles.navLabel, { color: fg }]} numberOfLines={1}>
         {item.label}
       </Text>
     </Pressable>
   );
 }
 
-export interface SidebarProps {
-  onOpenSwitcher(): void;
+// -------------------------------------------------------------------------- sidebar
+
+interface ChromeLedger {
+  ledgerId: string | null;
+  ledger: Ledger | null;
+  /** Every ledger the user belongs to — what the switcher popover lists. */
+  ledgers: readonly Ledger[];
+  pending: boolean;
 }
 
-export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
+/**
+ * Which ledger the chrome names outside a ledger route (`/settings`, `/ledgers*`), and
+ * whether that answer is known yet.
+ *
+ * Cold-opening `/settings` — a bookmark, a reload — has neither the preference nor the
+ * ledger list in hand on the first frame. Guessing there is what made the card flicker
+ * 「账本管理」 before swapping to the ledger, so while either answer is outstanding this
+ * reports `pending` and the column holds its card slot empty. Once both have landed the
+ * remembered ledger wins, and `pickLandingLedger` falls back to the first one — the same
+ * ledger `/` would have opened.
+ */
+function useChromeLedger(): ChromeLedger {
+  const ledgerContext = useOptionalLedgerContext();
+  const lastLedgerId = useLastLedgerId();
+  // Outside a ledger route the list has to come from the cache; inside one the context
+  // already holds it, and this is the same query key, so it costs nothing extra.
+  const { data, isPending } = useLedgers();
+  const known = data?.items;
+
+  if (ledgerContext) {
+    return {
+      ledgerId: ledgerContext.ledgerId,
+      ledger: ledgerContext.ledger,
+      ledgers: ledgerContext.ledgers,
+      pending: false,
+    };
+  }
+  const pending = lastLedgerId === undefined || (known === undefined && isPending);
+  const ledger = pending ? null : pickLandingLedger(known ?? [], lastLedgerId ?? null);
+  return { ledgerId: ledger?.id ?? null, ledger, ledgers: known ?? [], pending };
+}
+
+export function Sidebar(): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
-  // `/settings` renders the shell without a ledger context (04 §1.4): the chrome then
-  // aims at the ledger the user last had open, and at the ledger list when there is none.
+  const { user } = useAuth();
   const ledgerContext = useOptionalLedgerContext();
-  const lastLedgerId = useLastLedgerId();
-  const ledgerId = ledgerContext?.ledgerId ?? lastLedgerId;
-  const destinations = useSidebarDestinations(ledgerId);
+
+  // Mockup 13's pages are about the list, not about one ledger; everywhere else the column
+  // names a ledger (mockup 14 keeps it even on `/settings`).
+  const manage = isActivePath(pathname, routes.ledgers(), false);
+  const chrome = useChromeLedger();
+  const ledger = chrome.ledger ?? undefined;
+  const ledgerId = chrome.ledgerId;
+  const destinations = useSidebarDestinations(ledgerId, manage);
   const homeHref = ledgerId === null ? null : routes.l(ledgerId).home();
 
-  const signOut = async (): Promise<void> => {
-    await logout();
-    router.replace(routes.login());
+  const cardRef = React.useRef<View | null>(null);
+  const [switcherOpen, setSwitcherOpen] = React.useState(false);
+
+  const pickLedger = (id: Uuid): void => {
+    setSwitcherOpen(false);
+    // Inside a ledger, switching keeps the page you are on (04 §2.2). Outside one there is
+    // no page to keep, so picking a ledger opens it.
+    if (ledgerContext) ledgerContext.switchTo(id);
+    else router.navigate(routes.l(id).home());
   };
 
+  const me = userLabel(user);
+  // Mockup 13 keeps the role line on `/ledgers`, where there is no ledger context to ask:
+  // it is the role in the ledger the three entries above lead to.
+  const role = ledgerContext?.myRole ?? (manage ? chrome.ledger?.role : undefined);
+  // Mockup 14: on `/settings` there is no ledger to take a role from, and the second line
+  // is the signed-in email instead — the row never shrinks to one line mid-navigation.
+  const userSubtitle = role
+    ? t(role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member')
+    : (user?.email ?? '');
+
+  const manageCard = (
+    <LedgerManageCard
+      count={user?.ledger_count ?? 0}
+      onPress={() => router.navigate(routes.ledgers())}
+    />
+  );
+
   return (
-    <View
-      testID="sidebar"
-      style={[
-        styles.root,
-        { backgroundColor: colors['bg.surface'], borderRightColor: colors['border.default'] },
-      ]}
-    >
-      {ledgerContext ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common:nav.switch_ledger')}
-          onPress={onOpenSwitcher}
-          testID="sidebar-ledger"
-          style={({ pressed }) => [
-            styles.ledgerRow,
-            { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
-          ]}
-        >
-          <View style={styles.ledgerText}>
-            <Text variant="subheading" numberOfLines={1}>
-              {ledgerContext.ledger.name}
-            </Text>
-            <Text variant="micro" tone="muted" mono numberOfLines={1}>
-              {ledgerContext.ledger.base_currency}
-            </Text>
-          </View>
-          <Icon name="chevron-down" size={16} color={colors['fg.secondary']} />
-        </Pressable>
+    <View testID="sidebar" style={[styles.root, { backgroundColor: colors['bg.surface'] }]}>
+      {manage ? (
+        manageCard
+      ) : ledger !== undefined ? (
+        <View ref={cardRef} collapsable={false}>
+          <LedgerCard
+            ledger={ledger}
+            onOpenSwitcher={() => setSwitcherOpen(true)}
+            onOpenSettings={() => router.navigate(routes.l(ledger.id).settings())}
+          />
+          <LedgerSwitcherPopover
+            open={switcherOpen}
+            onClose={() => setSwitcherOpen(false)}
+            anchorRef={cardRef}
+            ledgers={chrome.ledgers}
+            currentId={ledger.id}
+            onPick={pickLedger}
+          />
+        </View>
+      ) : chrome.pending ? (
+        <LedgerCardPlaceholder />
       ) : (
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={t('ledger:list.title')}
-          onPress={() => router.navigate(routes.ledgers())}
-          testID="sidebar-ledgers-link"
-          style={({ pressed }) => [
-            styles.ledgerRow,
-            { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
-          ]}
-        >
-          <View style={styles.ledgerText}>
-            <Text variant="subheading" numberOfLines={1}>
-              {t('ledger:list.title')}
-            </Text>
-          </View>
-          <Icon name="chevron-right" size={16} color={colors['fg.secondary']} />
-        </Pressable>
+        manageCard
       )}
 
-      {ledgerId === null ? null : (
+      <View style={styles.nav}>
+        {destinations.map((item) => (
+          <NavRow
+            key={item.key}
+            item={item}
+            active={isActivePath(pathname, item.href, item.href === homeHref)}
+            onPress={() => router.navigate(item.href)}
+          />
+        ))}
+      </View>
+
+      {/* Mockup 13 draws no primary button: there is no open ledger to add a transaction to. */}
+      {ledgerId === null || manage ? null : (
         <Button
           label={t('common:nav.add')}
           icon="plus"
+          size="lg"
           fullWidth
           onPress={() => router.navigate(routes.l(ledgerId).transactionNew())}
           testID="sidebar-add"
         />
       )}
 
-      <ScrollView style={styles.nav} contentContainerStyle={styles.navContent}>
-        {destinations.map((item) => (
-          <React.Fragment key={item.key}>
-            {item.dividerBefore ? <Divider style={styles.divider} /> : null}
-            <NavRow
-              item={item}
-              active={isActivePath(pathname, item.href, item.href === homeHref)}
-              onPress={() => router.navigate(item.href)}
-            />
-          </React.Fragment>
-        ))}
-      </ScrollView>
-
-      <Divider />
-      <View style={styles.footer}>
-        <Icon name="user" size={18} color={colors['fg.secondary']} />
-        <Text variant="caption" tone="secondary" numberOfLines={1} style={styles.footerName}>
-          {userLabel(user)}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common:nav.logout')}
-          onPress={() => void signOut()}
-          hitSlop={space['2']}
-          testID="sidebar-logout"
-        >
-          <Icon name="log-out" size={18} color={colors['fg.secondary']} />
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={me}
+        onPress={() => router.navigate(routes.settings())}
+        testID="sidebar-user"
+        style={({ pressed }) => [
+          styles.userRow,
+          { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+        ]}
+      >
+        <Avatar name={me} size={32} shape="circle" tone="muted" />
+        <View style={styles.userText}>
+          <Text weight={500} style={styles.userName} numberOfLines={1}>
+            {me}
+          </Text>
+          {userSubtitle ? (
+            <Text tone="muted" style={styles.userRole} numberOfLines={1}>
+              {userSubtitle}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -249,30 +310,31 @@ export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
 const styles = StyleSheet.create({
   root: {
     width: SIDEBAR_WIDTH,
-    borderRightWidth: 1,
-    paddingHorizontal: space['3'],
-    paddingVertical: space['4'],
-    gap: space['3'],
+    paddingHorizontal: density.rowInnerPadding,
+    paddingVertical: space['5'],
+    gap: space['5'],
   },
-  ledgerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space['2'],
-    padding: space['2'],
-    borderRadius: radius.md,
-  },
-  ledgerText: { flex: 1 },
-  nav: { flex: 1 },
-  navContent: { gap: space['1'] },
+  nav: { gap: 2 },
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space['3'],
+    gap: 11,
     height: 44,
     paddingHorizontal: space['3'],
-    borderRadius: radius.md,
+    borderRadius: 12,
   },
-  divider: { marginVertical: space['2'] },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
-  footerName: { flex: 1 },
+  navLabel: { fontSize: 15, lineHeight: 20 },
+  userRow: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 48,
+    paddingVertical: space['2'],
+    paddingHorizontal: space['3'],
+    borderRadius: 12,
+  },
+  userText: { flex: 1, minWidth: 0 },
+  userName: { fontSize: 14, lineHeight: 19 },
+  userRole: { fontSize: 11, lineHeight: 15 },
 });

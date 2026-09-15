@@ -1,13 +1,14 @@
 /**
- * The home page (04 §4.4, §4.2's one-shot card; decisions §7, §8, §14.50, §14.52 A21/B20).
+ * The home page (screen 01 / 15, 04 §4.4; decisions §7, §8, §14.50, §14.52 A21/B20, §14.56).
  *
  * The whole route tree is mounted (root layout → app group → ledger layout) so the screen
- * runs against the real guards, the real `LedgerContext` and the real top bar, and the
+ * runs against the real guards, the real `LedgerContext` and the real shell, and the
  * assertions are on what the server was asked for and what ended up on screen.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
 import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
+import { within } from '@testing-library/react-native';
 import i18next from 'i18next';
 
 // `expo-font` reaches for `expo-asset`; fonts never gate rendering, so the root layout's
@@ -25,6 +26,7 @@ import type {
   StatsCategoryNode,
   StatsSummary,
   StatsTrend,
+  Transaction,
 } from '@/api/types';
 import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
@@ -37,11 +39,13 @@ import {
   makeSource,
   makeStatsSummary,
   makeStatsTrend,
+  makeTransaction,
+  makeTransferPair,
   makeUser,
 } from '@/test/fixtures';
 import { apiUrl, mockApi, mockGet, type MockApi } from '@/test/mockApi';
 import { toast } from '@/ui';
-import { PREF_NAMES, getPref, setJsonPref, setPref } from '@/utils/prefs';
+import { PREF_NAMES, setJsonPref, setPref } from '@/utils/prefs';
 
 import { resolveMonth } from '../HomeScreen';
 import { trendStats } from '../TrendSection';
@@ -52,6 +56,7 @@ const HOME_URL = `/l/${LEDGER}?month=${MONTH}`;
 const SOURCES_PATH = `/ledgers/${LEDGER}/sources`;
 const SUMMARY_PATH = `/ledgers/${LEDGER}/stats/summary`;
 const TREND_PATH = `/ledgers/${LEDGER}/stats/trend`;
+const TX_PATH = `/ledgers/${LEDGER}/transactions`;
 
 const SERVER_ERROR = { detail: 'boom', code: 'internal_error' };
 
@@ -64,8 +69,12 @@ const ROUTES = {
   '(app)/l/[ledgerId]/index': HomeRoute,
   '(app)/l/[ledgerId]/transactions/index': () => <RNText>transactions-page</RNText>,
   '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
+  '(app)/l/[ledgerId]/transactions/[txId]/index': () => <RNText>transaction-page</RNText>,
+  '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
   '(app)/l/[ledgerId]/sources/index': () => <RNText>sources-page</RNText>,
   '(app)/l/[ledgerId]/sources/new': () => <RNText>new-source-page</RNText>,
+  '(app)/l/[ledgerId]/imports/new': () => <RNText>new-import-page</RNText>,
+  '(app)/l/[ledgerId]/settings/index': () => <RNText>ledger-settings-page</RNText>,
 };
 
 let api: MockApi;
@@ -111,8 +120,24 @@ function mixedSources(): FinanceSource[] {
   ];
 }
 
+/** `GET /transactions` as the home page's 「最近」 block asks for it. */
+function txList(items: Transaction[]): unknown {
+  return {
+    items,
+    total: items.length,
+    summary: {
+      base_currency: 'CNY',
+      expense: '0.0000',
+      income: '0.0000',
+      net: '0.0000',
+      count: items.length,
+      rate_missing_count: 0,
+    },
+  };
+}
+
 /**
- * The three home-page endpoints. Handlers are registered per test rather than in
+ * The four home-page endpoints. Handlers are registered per test rather than in
  * `beforeEach` because axios-mock-adapter keeps the FIRST handler that matches a URL — a
  * second registration would be ignored, not an override.
  */
@@ -123,6 +148,8 @@ function mockHome(
     summary?: StatsSummary;
     summaryStatus?: number;
     trend?: StatsTrend;
+    recent?: Transaction[];
+    recentStatus?: number;
   } = {},
 ): void {
   if (opts.sourcesStatus !== undefined) {
@@ -139,6 +166,12 @@ function mockHome(
   }
 
   mockGet(TREND_PATH, opts.trend ?? makeStatsTrend());
+
+  if (opts.recentStatus !== undefined) {
+    mockGet(TX_PATH, SERVER_ERROR, opts.recentStatus);
+  } else {
+    mockGet(TX_PATH, txList(opts.recent ?? []));
+  }
 }
 
 function node(code: string, amount: Money, share: number): StatsCategoryNode {
@@ -179,6 +212,11 @@ function containing(text: string): RegExp {
   return new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 }
 
+/** The mockups give the wide layout a different composition, not different behaviour. */
+function useWideLayout(): void {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+}
+
 beforeEach(async () => {
   api = mockApi();
   queryClient.clear();
@@ -193,7 +231,6 @@ beforeEach(async () => {
   await initI18n();
   await i18next.changeLanguage('zh');
   await setPref(PREF_NAMES.lastLedgerId, null);
-  await setPref(PREF_NAMES.onboardingHint, null);
   await setJsonPref(PREF_NAMES.categories, null);
   await setAuthToken('test-access-token');
 
@@ -210,7 +247,6 @@ afterEach(async () => {
   queryClient.clear();
   toast.clear();
   jest.restoreAllMocks();
-  await setPref(PREF_NAMES.onboardingHint, null);
   await setJsonPref(PREF_NAMES.categories, null);
 });
 
@@ -244,7 +280,7 @@ describe('trendStats', () => {
   });
 });
 
-// ------------------------------------------------------------- block 1: the three numbers
+// ------------------------------------------------- the header: net worth, assets, liabilities
 
 test('assets, liabilities and net worth follow the sumSources rules', async () => {
   mockHome();
@@ -253,13 +289,33 @@ test('assets, liabilities and net worth follow the sumSources rules', async () =
   // Credit cards go to liabilities and are shown as a positive "owed" figure; the archived
   // account is in none of the three numbers; the unconvertible one is not read as 0.
   expect(await router.findByTestId('home-assets')).toHaveTextContent(containing('¥1,000.00'));
-  expect(router.getByTestId('home-liabilities')).toHaveTextContent(containing('欠 ¥400.00'));
+  expect(router.getByTestId('home-liabilities')).toHaveTextContent(containing('负债 ¥400.00'));
   expect(router.getByTestId('home-net-worth')).toHaveTextContent(containing('¥600.00'));
   expect(router.getByTestId('home-archived-hint')).toHaveTextContent('不含 1 个已归档账户');
   expect(router.getByTestId('home-unconvertible-hint')).toHaveTextContent(
     '有 1 个账户暂时无法折算',
   );
-  expect(router.getByTestId('top-bar-title')).toHaveTextContent('首页');
+});
+
+test('the month totals sit in the header, expense first (screen 01)', async () => {
+  mockHome();
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  // `expense_total` already has the month's refunds deducted (decision §7).
+  expect(await router.findByTestId('home-expense-total')).toHaveTextContent(
+    containing('¥8,421.66'),
+  );
+  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('9月支出'));
+  expect(router.getByTestId('home-income-total')).toHaveTextContent(containing('¥23,500.00'));
+});
+
+test('the narrow shell keeps its ledger pill and adds no page title (screen 01 at 375)', async () => {
+  mockHome();
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  await router.findByTestId('home-assets');
+  expect(router.getByTestId('top-bar-ledger')).toHaveTextContent('家庭账本');
+  expect(router.queryByTestId('top-bar-title')).toBeNull();
 });
 
 test('the archived line opens the account list with the archived group expanded', async () => {
@@ -280,44 +336,64 @@ test('the account list is requested with the archived accounts included', async 
   expect(getsFor(SOURCES_PATH)).toEqual([{ include_archived: true }]);
 });
 
-// -------------------------------------------------------------- block 2: the balance cards
+// ------------------------------------------------------------------ block: the accounts
 
-test('a balance card links to the transaction list filtered to that account', async () => {
+test('an account row links to the transaction list filtered to that account', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  const card = await router.findByTestId('home-balance-src-checking');
-  expect(router.getByTestId('home-balance-amount-src-checking')).toHaveTextContent('¥1,000.00');
-  // The archived account never shows up as a card.
+  const row = await router.findByTestId('home-balance-src-checking');
+  expect(router.getByTestId('home-balance-src-checking-amount')).toHaveTextContent('¥1,000.00');
+  // The archived account never shows up as a row.
   expect(router.queryByTestId('home-balance-src-archived')).toBeNull();
 
-  fireEvent.press(card);
+  fireEvent.press(row);
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
   expect(router.getSearchParams().source_id).toBe('src-checking');
+});
+
+/**
+ * The home card and 04 §4.8's account page list the same accounts, so they list them in the
+ * same order: the frozen §14.48 type order 储蓄卡 → 信用卡 → 现金 → 其他, whatever order the
+ * server happened to send.
+ */
+test('the accounts card reads in the frozen type order, not the order the server sent', async () => {
+  mockHome({
+    sources: [
+      makeSource({ id: 'src-cash', name: '钱包现金', type: 'cash', balance: '100.0000' }),
+      makeSource({ id: 'src-other', name: '其他账户', type: 'other', balance: '100.0000' }),
+      makeSource({ id: 'src-credit', name: '信用卡', type: 'credit', balance: '-100.0000' }),
+      makeSource({ id: 'src-checking', name: '储蓄卡', type: 'checking', balance: '100.0000' }),
+    ],
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  await router.findByTestId('home-balance-src-checking');
+  const order = ['src-checking', 'src-credit', 'src-cash', 'src-other'];
+  order.forEach((id, i) => {
+    const slot = router.getByTestId(`home-balances-card-slot-${i}`);
+    expect(within(slot).getByTestId(`home-balance-${id}`)).toBeTruthy();
+  });
 });
 
 test('a foreign-currency account without a rate says so instead of showing a converted 0', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  expect(await router.findByTestId('home-balance-amount-src-no-rate-base')).toHaveTextContent(
+  expect(await router.findByTestId('home-balance-src-no-rate-amount-sub')).toHaveTextContent(
     '暂无汇率',
   );
 });
 
-test('no accounts at all: the balances block offers to create one', async () => {
-  mockHome({ sources: [] });
+test('the accounts header links to the account list', async () => {
+  mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  expect(await router.findByTestId('home-balances-empty')).toHaveTextContent(
-    containing('先添加一个账户'),
-  );
-  fireEvent.press(router.getByTestId('home-balances-empty-primary'));
-
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
+  fireEvent.press(await router.findByTestId('home-accounts-header-link'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources`));
 });
 
-// ------------------------------------------------------------- block 3: the month summary
+// ------------------------------------------------------------ block: the month's categories
 
 test('the ranking shows the top 8 level-1 categories plus one "N more" row', async () => {
   const many = Array.from({ length: 10 }, (_, i) =>
@@ -334,7 +410,7 @@ test('the ranking shows the top 8 level-1 categories plus one "N more" row', asy
   expect(router.getByTestId('home-categories-rest')).toHaveTextContent(containing('其他 2 项'));
 });
 
-test('a level-1 bar carries the category cache’s classification hint', async () => {
+test('a level-1 row carries the category cache’s classification hint', async () => {
   mockHome({
     summary: makeStatsSummary({
       month: MONTH,
@@ -359,14 +435,15 @@ test('a level-1 bar carries the category cache’s classification hint', async (
   expect(router.getByText('午餐')).toBeTruthy();
 });
 
-test('the expense total, the deducted refunds and the missing-rate count are all shown', async () => {
+test('the month total, the deducted refunds and the missing-rate count are all shown', async () => {
   mockHome({
     summary: makeStatsSummary({ month: MONTH, refund_total: '82.9800', rate_missing_count: 3 }),
   });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  expect(await router.findByTestId('home-expense-total')).toHaveTextContent('¥8,421.66');
-  expect(router.getByTestId('home-income-total')).toHaveTextContent('¥23,500.00');
+  expect(await router.findByTestId('home-categories-total')).toHaveTextContent(
+    containing('¥8,421.66'),
+  );
   expect(router.getByTestId('home-refund-note')).toHaveTextContent('其中已冲减退款 ¥82.98');
   expect(router.getByTestId('home-summary-rate-missing')).toHaveTextContent(
     '3 笔因暂无汇率未计入',
@@ -380,16 +457,55 @@ test('a month with no transactions offers "add a transaction" prefilled as an ex
   expect(await router.findByTestId('home-summary-empty')).toHaveTextContent(
     containing('这个月还没有记账'),
   );
+  // Screen 15: the striped placeholder shows what will grow here instead of a blank card.
+  expect(router.getByTestId('home-summary-empty-ghost')).toBeTruthy();
   fireEvent.press(router.getByTestId('home-summary-empty-primary'));
 
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
   expect(router.getSearchParams().kind).toBe('expense');
 });
 
+/**
+ * 「N 月支出 · 按分类」 only ever draws expense rows, so a month that holds nothing but a
+ * salary has nothing to put in the card: it gets the same empty block as a month with no
+ * entries at all, not a bare white sliver headed 「共 ¥0.00」.
+ */
+test('a month with income but no expenses still shows the empty block, not an empty card', async () => {
+  mockHome({
+    summary: makeStatsSummary({
+      month: MONTH,
+      expense_total: '0.0000',
+      expense: [],
+      income_total: '18000.0000',
+      income: [
+        {
+          code: 'salary',
+          name_zh: '工资',
+          name_en: 'Salary',
+          amount: '18000.0000',
+          share: 1,
+          count: 1,
+          children: [],
+        },
+      ],
+      refund_total: '0.0000',
+    }),
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  // ...and it says 「这个月还没有支出」, not 「这个月还没有记账」, which the 「9月收入 ¥18,000.00」
+  // in the header right above it would contradict.
+  expect(await router.findByTestId('home-summary-empty')).toHaveTextContent(
+    containing('这个月还没有支出'),
+  );
+  expect(router.queryByTestId('home-categories')).toBeNull();
+  expect(router.queryByTestId('home-categories-rest')).toBeNull();
+});
+
 test('switching the month rewrites ?month= and refetches the summary for it', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
-  await router.findByTestId('home-expense-total');
+  await router.findByTestId('home-categories-total');
   expect(getsFor(SUMMARY_PATH)).toEqual([{ month: '2026-09' }]);
 
   fireEvent.press(router.getByTestId('home-month-prev'));
@@ -400,9 +516,18 @@ test('switching the month rewrites ?month= and refetches the summary for it', as
   expect(getsFor(TREND_PATH)).toEqual([{ months: 12 }]);
 });
 
-// ------------------------------------------------------------------- block 4: the trend
+test('the month switcher never walks past the current month', async () => {
+  mockHome();
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-test('the trend keeps the monthly average and the peak, and a point switches the month', async () => {
+  const next = await router.findByTestId('home-month-next');
+  expect(next).toBeDisabled();
+});
+
+// ------------------------------------------------------------------- block: the trend
+
+test('the trend keeps the monthly average and the peak, and a column switches the month', async () => {
+  useWideLayout();
   const months = Array.from({ length: 12 }, (_, i) => ({
     month: `2026-${String(i + 1).padStart(2, '0')}`,
     expense: (i === 3 ? '3600.0000' : '1200.0000') as Money,
@@ -418,7 +543,51 @@ test('the trend keeps the monthly average and the peak, and a point switches the
   await waitFor(() => expect(getsFor(SUMMARY_PATH)).toContainEqual({ month: '2026-04' }));
 });
 
-// ------------------------------------------------------- the four blocks load independently
+test('the narrow trend header keeps the average alone (screen 01 at 375)', async () => {
+  mockHome();
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-trend-average')).toBeTruthy();
+  expect(router.queryByTestId('home-trend-peak')).toBeNull();
+});
+
+// ------------------------------------------------------------------ block: 「最近」
+
+test('the recent block asks for five transactions and merges a transfer into one row', async () => {
+  const pair = makeTransferPair();
+  mockHome({
+    recent: [
+      makeTransaction({ id: 'tx-coffee', merchant: '瑞幸咖啡', source_id: 'src-checking' }),
+      pair.out,
+      pair.in,
+    ],
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  const row = await router.findByTestId('home-recent-tx-coffee');
+  expect(row).toHaveTextContent(containing('瑞幸咖啡'));
+  expect(router.getByTestId('home-recent-tx-coffee-amount')).toHaveTextContent('−¥128.50');
+  // One row for the pair, not two legs.
+  expect(router.getByTestId(`home-recent-${pair.pair_id}`)).toBeTruthy();
+  expect(router.queryByTestId(`home-recent-${pair.out.id}`)).toBeNull();
+  expect(getsFor(TX_PATH)).toEqual([{ limit: 5 }]);
+
+  fireEvent.press(row);
+  await waitFor(() =>
+    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/tx-coffee`),
+  );
+});
+
+test('the recent header links to the full transaction list', async () => {
+  mockHome({ recent: [makeTransaction({ id: 'tx-1' })] });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  fireEvent.press(await router.findByTestId('home-recent-header-link'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  expect(router.getSearchParams().source_id).toBeUndefined();
+});
+
+// ------------------------------------------------------- the blocks load independently
 
 test('a failing stats request only breaks its own block', async () => {
   mockHome({ summaryStatus: 500 });
@@ -428,7 +597,7 @@ test('a failing stats request only breaks its own block', async () => {
     containing('加载失败，请重试'),
   );
   expect(router.getByTestId('home-summary-error-primary')).toBeTruthy();
-  // The balances and the three numbers came from a different request and are unaffected.
+  // The balances and the header numbers came from a different request and are unaffected.
   expect(router.getByTestId('home-balance-src-checking')).toBeTruthy();
   expect(router.getByTestId('home-assets')).toHaveTextContent(containing('¥1,000.00'));
   expect(router.getByTestId('home-trend')).toBeTruthy();
@@ -442,10 +611,20 @@ test('a failing accounts request leaves the summary and the trend readable', asy
 
   expect(await router.findByTestId('home-networth-error')).toBeTruthy();
   expect(router.getByTestId('home-balances-error')).toBeTruthy();
-  expect(router.getByTestId('home-expense-total')).toHaveTextContent('¥8,421.66');
+  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('¥8,421.66'));
+  expect(router.getByTestId('home-trend')).toBeTruthy();
 });
 
-test('the refresh button refetches all three queries', async () => {
+test('a failing recent request only breaks its own block', async () => {
+  mockHome({ recentStatus: 500 });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-recent-error')).toBeTruthy();
+  expect(router.getByTestId('home-balance-src-checking')).toBeTruthy();
+  expect(router.getByTestId('home-categories-row-food')).toBeTruthy();
+});
+
+test('the refresh button refetches every block', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
   await router.findByTestId('home-assets');
@@ -458,51 +637,97 @@ test('the refresh button refetches all three queries', async () => {
   await waitFor(() => expect(getsFor(SOURCES_PATH).length).toBe(2));
   expect(getsFor(SUMMARY_PATH).length).toBe(2);
   expect(getsFor(TREND_PATH).length).toBe(2);
+  expect(getsFor(TX_PATH).length).toBe(2);
 });
 
-test('the wide layout drops the top bar and puts the title on the page', async () => {
-  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+test('the wide layout drops the top bar and lays the blocks out in two columns', async () => {
+  useWideLayout();
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   await router.findByTestId('home-assets');
   expect(router.queryByTestId('top-bar')).toBeNull();
   expect(router.getByTestId('app-shell-wide')).toBeTruthy();
+  expect(router.getByTestId('home-balances')).toBeTruthy();
+  expect(router.getByTestId('home-recent')).toBeTruthy();
 });
 
-// ---------------------------------------------------- the one-shot card of 04 §4.2
+// ------------------------------------------- an empty ledger (screen 15 A), both widths
 
-test('the onboarding card shows only while the pref is set and the ledger has no account', async () => {
-  await setPref(PREF_NAMES.onboardingHint, '1');
+test('no accounts at all: the narrow home offers the three ways in', async () => {
   mockHome({ sources: [] });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  expect(await router.findByTestId('home-onboarding')).toHaveTextContent(
-    containing('先去添加一个账户'),
+  // The net worth still reads zero, in grey — the ledger is empty, the page did not fail.
+  expect(await router.findByTestId('home-net-worth')).toHaveTextContent('¥0.00');
+  expect(router.getByTestId('home-empty-month')).toBeTruthy();
+  expect(router.getByTestId('home-empty-transactions')).toHaveTextContent(
+    containing('还没有交易'),
   );
+  // The account rows and the category ranking are gone: there is nothing to rank yet.
+  expect(router.queryByTestId('home-balances')).toBeNull();
+  expect(router.queryByTestId('home-categories')).toBeNull();
 
-  fireEvent.press(router.getByTestId('home-onboarding-dismiss'));
-
-  await waitFor(() => expect(router.queryByTestId('home-onboarding')).toBeNull());
-  await waitFor(async () => expect(await getPref(PREF_NAMES.onboardingHint)).toBeNull());
+  fireEvent.press(router.getByTestId('home-empty-source'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
 });
 
-test('the onboarding card stays away once the ledger has an account', async () => {
-  await setPref(PREF_NAMES.onboardingHint, '1');
-  mockHome();
-  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
-
-  await router.findByTestId('home-balance-src-checking');
-  expect(router.queryByTestId('home-onboarding')).toBeNull();
-});
-
-test('taking the onboarding action spends the pref and goes to the account form', async () => {
-  await setPref(PREF_NAMES.onboardingHint, '1');
+test('no accounts at all: the wide home shows the three-step card', async () => {
+  useWideLayout();
   mockHome({ sources: [] });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  fireEvent.press(await router.findByTestId('home-onboarding-action'));
+  expect(await router.findByTestId('home-empty')).toHaveTextContent(containing('这本账还是空的'));
+  // The striped panel previews what the page will look like once there is data.
+  expect(router.getByTestId('home-empty-preview')).toBeTruthy();
 
+  fireEvent.press(router.getByTestId('home-empty-step-1'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
-  await waitFor(async () => expect(await getPref(PREF_NAMES.onboardingHint)).toBeNull());
+});
+
+/**
+ * 04 §4.4 wants refresh on every frame. The wide empty header carries the two ways forward
+ * *and* the refresh icon: pull-to-refresh is not reachable with a mouse.
+ */
+test('no accounts at all: the wide home keeps its refresh button next to the two ways in', async () => {
+  useWideLayout();
+  mockHome({ sources: [] });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  await router.findByTestId('home-empty');
+  expect(router.getByTestId('home-empty-invite')).toBeTruthy();
+  expect(router.getByTestId('home-empty-source')).toBeTruthy();
+  expect(getsFor(SOURCES_PATH).length).toBe(1);
+
+  await act(async () => {
+    fireEvent.press(router.getByTestId('home-refresh'));
+  });
+  await waitFor(() => expect(getsFor(SOURCES_PATH).length).toBe(2));
+});
+
+test('the empty home sends step 2 to the transaction form', async () => {
+  useWideLayout();
+  mockHome({ sources: [] });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  fireEvent.press(await router.findByTestId('home-empty-step-2'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+});
+
+test('the empty home sends step 3 to the ledger settings, where invites live', async () => {
+  useWideLayout();
+  mockHome({ sources: [] });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  fireEvent.press(await router.findByTestId('home-empty-step-3'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+});
+
+test('an archived-only ledger counts as empty', async () => {
+  mockHome({
+    sources: [makeSource({ id: 'src-old', archived: true, balance_base: '10.0000' })],
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-empty-transactions')).toBeTruthy();
 });

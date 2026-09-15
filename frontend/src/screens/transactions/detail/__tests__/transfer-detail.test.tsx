@@ -116,6 +116,18 @@ function containing(text: string): RegExp {
   return new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 }
 
+/**
+ * 屏幕稿 07 at 375 puts the operations in a sheet behind the pinned 「修改」 bar, so a
+ * narrow test opens the sheet before it can press one.
+ */
+async function openActions(
+  router: ReturnType<typeof renderRouter>,
+  prefix: string,
+): Promise<void> {
+  fireEvent.press(await router.findByTestId(`${prefix}-open`));
+  await router.findByTestId(`${prefix}-delete`);
+}
+
 /** The query params of every `GET` the adapter recorded for `path`, oldest first. */
 function getsFor(path: string): Array<Record<string, unknown>> {
   return api.mock.history.get
@@ -169,9 +181,10 @@ test('both legs are shown with their own account and amount, and no running bala
   expect(await router.findByTestId('transfer-detail-legs-out-source')).toHaveTextContent(
     '招行储蓄卡',
   );
-  expect(router.getByTestId('transfer-detail-legs-out-amount')).toHaveTextContent('−¥3,000.00');
+  expect(router.getByTestId('transfer-detail-legs-out-amount')).toHaveTextContent('−3,000.00');
   expect(router.getByTestId('transfer-detail-legs-in-source')).toHaveTextContent('建行信用卡');
-  expect(router.getByTestId('transfer-detail-legs-in-amount')).toHaveTextContent('¥3,000.00');
+  // 屏幕稿 07 signs both legs, so the receiving one wears a plus.
+  expect(router.getByTestId('transfer-detail-legs-in-amount')).toHaveTextContent('+3,000.00');
 
   // Header fields come off the out leg / the pair (decision §14.53a); no 余后 (§14.52 A7).
   expect(router.getByTestId('transfer-detail-header-extra')).toHaveTextContent('信用卡还款');
@@ -179,7 +192,7 @@ test('both legs are shown with their own account and amount, and no running bala
 
   // 屏幕稿 07 (B16): the bar names the move, not just 「交易」.
   expect(router.getByTestId('top-bar-title')).toHaveTextContent(
-    '交易 · 9月8日 · 招行储蓄卡 → 建行信用卡',
+    '交易 · 09-08 · 招行储蓄卡 → 建行信用卡',
   );
 });
 
@@ -210,10 +223,10 @@ test('a cross-currency pair gives each leg its own rate line', async () => {
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
 
   expect(await router.findByTestId('transfer-detail-legs-out-rate-text')).toHaveTextContent(
-    containing('按 9月8日 汇率 1 USD = 7.1694 CNY'),
+    containing('按 2026-09-08 汇率 1 USD = 7.1694 CNY'),
   );
   expect(router.getByTestId('transfer-detail-legs-in-rate-text')).toHaveTextContent(
-    containing('按 9月7日 汇率 1 EUR = 7.7928 CNY'),
+    containing('按 2026-09-07 汇率 1 EUR = 7.7928 CNY'),
   );
   // Only the in leg fell back to another day's quote.
   expect(router.getByTestId('transfer-detail-legs-in-rate-fallback')).toHaveTextContent(
@@ -259,7 +272,8 @@ test('「拆开」warns what unpairing does, then lands on the out leg\'s own pa
     });
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
 
-  fireEvent.press(await router.findByTestId('transfer-detail-actions-unpair'));
+  await openActions(router, 'transfer-detail-actions');
+  fireEvent.press(router.getByTestId('transfer-detail-actions-unpair'));
   expect(await router.findByTestId('confirm-dialog')).toHaveTextContent(
     containing('拆开后两条各自变成单腿转账，仍计入账户余额，但不再互相关联'),
   );
@@ -283,7 +297,8 @@ test('deleting a two-leg transfer goes through the pair endpoint, not a leg', as
   mockDelete(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, undefined, 204);
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
 
-  fireEvent.press(await router.findByTestId('transfer-detail-actions-delete'));
+  await openActions(router, 'transfer-detail-actions');
+  fireEvent.press(router.getByTestId('transfer-detail-actions-delete'));
   expect(await router.findByTestId('confirm-dialog')).toHaveTextContent(
     containing('删除会同时删除两腿'),
   );
@@ -375,9 +390,10 @@ test('a single leg names the other side and offers 「关联为转账对腿」',
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
 
   expect(await router.findByTestId('tx-detail-pair-counterparty')).toHaveTextContent('工资卡');
-  expect(router.getByTestId('tx-detail-pair-action')).toBeTruthy();
-  // 屏幕稿 07 (B16): 「交易 · 9月5日 · 对方：工资卡」.
-  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易 · 9月5日 · 对方：工资卡');
+  await openActions(router, 'tx-detail-actions');
+  expect(router.getByTestId('tx-detail-actions-pair')).toBeTruthy();
+  // 屏幕稿 07 (B16): 「交易 · 09-05 · 对方：工资卡」.
+  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易 · 09-05 · 对方：工资卡');
   // A single leg has nothing to unpair.
   expect(router.queryByTestId('tx-detail-actions-unpair')).toBeNull();
 });
@@ -399,7 +415,8 @@ test('the picker lists only a legal other leg, and pairing lands on the pair pag
   mockPost(`/ledgers/${LEDGER}/transactions/solo/pair`, pairResponse());
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
 
-  fireEvent.press(await router.findByTestId('tx-detail-pair-action'));
+  await openActions(router, 'tx-detail-actions');
+  fireEvent.press(router.getByTestId('tx-detail-actions-pair'));
 
   // Only the opposite-direction, still-single, other-account row survives.
   expect(await router.findByTestId('tx-detail-pair-picker-row-cand-ok')).toBeTruthy();
@@ -451,7 +468,8 @@ test('turning the same-currency-same-amount filter off widens the candidate list
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse([odd]));
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
 
-  fireEvent.press(await router.findByTestId('tx-detail-pair-action'));
+  await openActions(router, 'tx-detail-actions');
+  fireEvent.press(router.getByTestId('tx-detail-actions-pair'));
   // Nothing matches at the same amount, and the empty state explains what a leg must be.
   expect(await router.findByTestId('tx-detail-pair-picker-empty')).toHaveTextContent(
     '没有能配对的转账',

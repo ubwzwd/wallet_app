@@ -16,6 +16,7 @@ import { controls, density, radius, space, z } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, type IconName } from './Icon';
+import { Popover } from './Popover';
 import { Sheet } from './Sheet';
 import { Text } from './Text';
 import { TextField } from './TextField';
@@ -92,6 +93,7 @@ export function Select(props: SelectProps | MultiSelectProps): React.JSX.Element
   const wide = useIsWide();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
+  const anchorRef = React.useRef<View>(null);
   const hasError = typeof error === 'string' && error.length > 0;
 
   const multiple = props.multiple === true;
@@ -221,7 +223,7 @@ export function Select(props: SelectProps | MultiSelectProps): React.JSX.Element
           {label}
         </Text>
       ) : null}
-      <View style={styles.anchor}>
+      <View style={styles.anchor} ref={anchorRef}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: open, disabled }}
@@ -262,34 +264,17 @@ export function Select(props: SelectProps | MultiSelectProps): React.JSX.Element
           <Icon name="chevron-down" size={18} color={colors['fg.muted']} />
         </Pressable>
 
-        {open && wide ? (
-          <>
-            {/* Clicking anywhere outside the panel closes it — on the web there is no
-                modal above the page to catch that, so the panel brings its own invisible
-                full-bleed backdrop. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={closeLabel ?? label ?? placeholder}
-              onPress={close}
-              testID={testID ? `${testID}-backdrop` : 'select-backdrop'}
-              style={[styles.backdrop, { zIndex: z.dropdown - 1 }]}
-            />
-            <View
-              testID={testID ? `${testID}-panel` : 'select-panel'}
-              style={[
-                styles.panel,
-                {
-                  zIndex: z.dropdown,
-                  backgroundColor: colors['bg.raised'],
-                  borderColor: colors['border.default'],
-                  shadowColor: colors['fg.primary'],
-                },
-              ]}
-            >
-              {list}
-            </View>
-          </>
-        ) : null}
+        {/* The wide-layout panel lives in a Popover (a root-level Modal): an absolutely
+            positioned sibling would paint behind the next field, see Popover.tsx. */}
+        <Popover
+          open={open && wide}
+          onClose={close}
+          anchorRef={anchorRef}
+          closeLabel={closeLabel ?? label ?? placeholder ?? ''}
+          testID={testID ?? 'select'}
+        >
+          {list}
+        </Popover>
       </View>
 
       {hasError ? (
@@ -325,22 +310,6 @@ const styles = StyleSheet.create({
   wrap: { gap: space['1'], alignSelf: 'stretch' },
   anchor: { position: 'relative' },
   triggerText: { flex: 1 },
-  // Far enough in every direction to cover any viewport: the anchor is `position:
-  // relative`, so these offsets are relative to the trigger, not to the page.
-  backdrop: { position: 'absolute', top: -2000, bottom: -2000, left: -2000, right: -2000 },
-  panel: {
-    position: 'absolute',
-    top: controls.textField.height + 4,
-    left: 0,
-    right: 0,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: space['2'],
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
   list: { gap: space['2'], maxHeight: 320 },
   scroll: { flexGrow: 0 },
   option: {

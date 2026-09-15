@@ -1,65 +1,66 @@
 /**
- * 交易详情 `/l/:ledgerId/transactions/:txId` (04 §4.7).
+ * 交易详情 `/l/:ledgerId/transactions/:txId` (04 §4.7, 屏幕稿 07 单腿 / 08).
  *
- * One screen for expense / income / refund / single-leg transfer. `GET /transactions/{tid}`
- * carries four extras over a list row (§3.3) and each one owns a block here: `refunds[]` →
- * `RefundsSection`, `refund_of_detail` → `RefundOriginCard`, `events[]` → `EventTimeline`,
- * and `pair` → nothing, because a leg of a two-leg transfer is not a page: it redirects to
- * `/transfers/:pairId`, which is the only address that survives a refresh or a shared link.
+ * One screen for expense / income / refund / single-leg transfer, laid out the way the
+ * mockups draw it: a breadcrumb over a `minmax(0,1fr) 300px` grid — headline card and fact
+ * list on the left, 「对 N 月的影响」 / 退款 / 操作记录 on the right. Narrow stacks the same
+ * blocks and moves the operations into a sheet behind the pinned 「修改」 bar.
  *
- * The write operations here are all one-shot: delete, and the refund link (PATCH
- * `refund_of`, either cleared or re-pointed — decision §14.34 keeps both relations editable
- * after an import). None of them passes `{ silent: true }`: there is no form to render an
- * error into, so the global mutation toast (04 §3.9) is exactly the right place, and a 409
- * `stale_update` is handled once, globally (04 §3.8).
+ * `GET /transactions/{tid}` carries four extras over a list row (§3.3) and each one owns a
+ * block here: `refunds[]` → `RefundsSection`, `refund_of_detail` → `RefundOriginCard`,
+ * `events[]` → `EventsCard`, and `pair` → nothing, because a leg of a two-leg transfer is
+ * not a page: it redirects to `/transfers/:pairId`, the only address that survives a
+ * refresh or a shared link.
+ *
+ * The writes are one-shot: delete, and the refund link (PATCH `refund_of`, cleared or
+ * re-pointed — decision §14.34 keeps both relations editable after an import). Neither
+ * passes `{ silent: true }`: there is no form to render an error into, so the global
+ * mutation toast (04 §3.9) is the right place, and a 409 is handled globally (04 §3.8).
  */
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { Uuid } from '@/api/types';
+import { monthOf } from '@/domain/dates';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
-import { formatDate } from '@/i18n/format';
+import { formatDateShort } from '@/i18n/format';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import {
   useCategories,
   useDeleteTransaction,
   useMemberNames,
-  useSources,
+  useMembers,
   useTransaction,
   useUpdateTransaction,
 } from '@/queries';
 import { useAuth, useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
-import { Card, EmptyState, EventTimeline, Page, Skeleton, Text, confirm, toast } from '@/ui';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { EmptyState, Page, PageHeader, Skeleton, confirm, toast } from '@/ui';
 
 import { TransactionPicker } from '../TransactionPicker';
 import { DetailActions, type DetailAction } from './DetailActions';
-import { DetailHeader } from './DetailHeader';
+import { EventsCard } from './EventsCard';
+import { ImpactCard, SingleLegImpactCard } from './ImpactCard';
+import { KeyFacts } from './KeyFacts';
 import { PairSection } from './PairSection';
-import { RateLine } from './RateLine';
 import { RefundOriginCard, categoryPath } from './RefundOriginCard';
 import { RefundsSection } from './RefundsSection';
-
-/** `source_id → name`, the lookup every block on this page needs. */
-export function useSourceNames(ledgerId: Uuid): Record<Uuid, string> {
-  const sources = useSources(ledgerId, { include_archived: true });
-  const items = sources.data?.items;
-  return React.useMemo(() => {
-    const out: Record<Uuid, string> = {};
-    for (const s of items ?? []) out[s.id] = s.name;
-    return out;
-  }, [items]);
-}
+import { TxHeadline } from './TxHeadline';
+import { transactionFacts } from './facts';
+import { DetailColumns } from './parts';
+import { useSourceMap, useSourceNames } from './useSources';
 
 export default function TransactionDetailScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
   const router = useRouter();
+  const wide = useIsWide();
   const { ledgerId, baseCurrency } = useLedgerContext();
   const params = useLocalSearchParams<{ txId?: string }>();
   const txId = typeof params.txId === 'string' ? params.txId : '';
@@ -67,28 +68,35 @@ export default function TransactionDetailScreen(): React.JSX.Element {
   const query = useTransaction(ledgerId, txId === '' ? undefined : txId);
   const tx = query.data;
 
+  const sourceMap = useSourceMap(ledgerId);
   const sourceNames = useSourceNames(ledgerId);
   const { index } = useCategories();
   const memberNames = useMemberNames(ledgerId);
+  const members = useMembers(ledgerId);
   const { user } = useAuth();
 
   const remove = useDeleteTransaction(ledgerId);
   const update = useUpdateTransaction(ledgerId, txId);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [pairOpen, setPairOpen] = React.useState(false);
 
   // 屏幕稿 07 (decision B16) titles a single leg 「交易 · 9月5日 · 对方：工资卡」; everything
-  // else keeps the plain page title.
-  useTopBar(
-    tx && tx.kind === 'transfer' && tx.transfer_pair_id === null
-      ? [
-          t('transaction:list.title'),
-          formatDate(tx.occurred_at, lang),
-          t('transaction:list.row.counterparty', {
-            name: tx.counterparty ?? t('transaction:detail.counterparty_external'),
-          }),
-        ].join(' · ')
-      : t('transaction:list.title'),
-  );
+  // else names the merchant, which is what a breadcrumb is for.
+  const singleLeg = tx !== undefined && tx.kind === 'transfer' && tx.transfer_pair_id === null;
+  const crumb = tx
+    ? [
+        t('transaction:list.title'),
+        ...(singleLeg
+          ? [
+              formatDateShort(tx.occurred_at),
+              t('transaction:list.row.counterparty', {
+                name: tx.counterparty ?? t('transaction:detail.counterparty_external'),
+              }),
+            ]
+          : [tx.merchant ?? formatDateShort(tx.occurred_at)]),
+      ].join(' · ')
+    : t('transaction:list.title');
+  useTopBar(crumb);
 
   const l = routes.l(ledgerId);
 
@@ -171,88 +179,95 @@ export default function TransactionDetailScreen(): React.JSX.Element {
     return <Redirect href={l.transfer(pairId) as Href} />;
   }
 
+  const isTransfer = tx.kind === 'transfer';
   const category = categoryPath(index, tx.category_l1, tx.category_l2, lang);
+  const sheetTitle = t('transaction:detail.actions_sheet_title', {
+    kind: t(`transaction:kind.${tx.kind}`),
+  });
+
   const actions: DetailAction[] = [
+    ...(isTransfer
+      ? [
+          {
+            key: 'pair',
+            label: t('transaction:detail.pair_action'),
+            icon: 'link' as const,
+            tone: 'primary' as const,
+            hint: t('transaction:detail.pair_action_hint'),
+            onPress: () => setPairOpen(true),
+          },
+        ]
+      : []),
     {
       key: 'edit',
       label: t('common:button.edit'),
       icon: 'pencil',
-      variant: 'primary',
       onPress: () => router.push(l.transactionEdit(tx.id) as Href),
-    },
-    {
-      key: 'duplicate',
-      label: t('transaction:detail.duplicate_action'),
-      icon: 'copy',
-      onPress: () => router.push(l.transactionNew({ copy_of: tx.id }) as Href),
     },
     ...(tx.kind === 'expense'
       ? [
           {
             key: 'refund',
             label: t('transaction:detail.refund_action'),
-            icon: 'undo-2' as const,
+            icon: 'link' as const,
+            tone: 'refund' as const,
+            hint: t('transaction:detail.refund_action_hint'),
             onPress: () =>
               router.push(l.transactionNew({ kind: 'refund', refund_of: tx.id }) as Href),
           },
         ]
       : []),
+    ...(isTransfer
+      ? []
+      : [
+          {
+            key: 'duplicate',
+            label: t('transaction:detail.duplicate_action'),
+            icon: 'copy' as const,
+            hint: t('transaction:detail.duplicate_action_hint'),
+            onPress: () => router.push(l.transactionNew({ copy_of: tx.id }) as Href),
+          },
+        ]),
     {
       key: 'delete',
       label: t('common:button.delete'),
       icon: 'trash-2',
-      variant: 'danger',
+      tone: 'danger',
       onPress: onDelete,
       loading: remove.isPending,
     },
   ];
 
-  const events = tx.events ?? [];
+  const facts = transactionFacts(
+    {
+      t,
+      lang,
+      baseCurrency,
+      sources: sourceMap,
+      members: members.data?.items ?? [],
+      membersReady: members.isSuccess,
+      onOpenBatch: (batchId) => router.push(l.importBatch(batchId) as Href),
+    },
+    tx,
+    category,
+  );
 
-  return (
-    <Page testID="tx-detail">
-      <DetailHeader
-        testID="tx-detail-header"
-        kind={tx.kind}
-        amount={tx.amount}
-        currency={tx.currency}
-        occurredAt={tx.occurred_at}
-        merchant={tx.merchant}
-        sourceName={sourceNames[tx.source_id] ?? null}
-        categoryText={category}
-        badgeExtra={
-          tx.kind === 'transfer' && tx.transfer_subtype
-            ? t(`transaction:transfer.subtype.${tx.transfer_subtype}`)
-            : null
-        }
-        note={tx.note}
-      />
+  const actionBar = (
+    <DetailActions actions={actions} sheetTitle={sheetTitle} testID="tx-detail-actions" />
+  );
 
-      <RateLine
-        testID="tx-detail-rate"
-        amount={tx.amount}
-        currency={tx.currency}
+  const main = (
+    <>
+      <TxHeadline
+        tx={tx}
+        sources={sourceMap}
+        category={category}
         baseCurrency={baseCurrency}
-        amountBase={tx.amount_base}
-        rateUsed={tx.rate_used}
-        rateDate={tx.rate_date}
-        occurredAt={tx.occurred_at}
+        actions={actionBar}
       />
 
-      <DetailActions actions={actions} testID="tx-detail-actions" />
-
-      {tx.kind === 'expense' ? (
-        <RefundsSection
-          testID="tx-detail-refunds"
-          refunds={tx.refunds ?? []}
-          refundedTotal={tx.refunded_total ?? '0'}
-          refundable={tx.refundable ?? absMoney(tx.amount)}
-          currency={tx.currency}
-          sourceNames={sourceNames}
-          onOpen={(id) => router.push(l.transaction(id) as Href)}
-        />
-      ) : null}
-
+      {/* 「原支出」 sits directly under the headline (屏幕稿 08's refund shape): it is what
+          this row is *about*, not a sidebar aside. */}
       {tx.kind === 'refund' ? (
         <RefundOriginCard
           testID="tx-detail-origin"
@@ -267,27 +282,74 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         />
       ) : null}
 
-      {tx.kind === 'transfer' && tx.transfer_pair_id === null ? (
-        <PairSection testID="tx-detail-pair" tx={tx} sourceNames={sourceNames} />
+      <KeyFacts facts={facts} testID="tx-detail-facts" />
+    </>
+  );
+
+  const side = (
+    <>
+      {wide && isTransfer ? (
+        <SingleLegImpactCard
+          testID="tx-detail-impact"
+          month={monthOf(tx.occurred_at)}
+          /* Converted only: a foreign leg with no rate has no base-currency figure, so the
+             净资产 line is left out rather than printed with the wrong symbol. */
+          amount={tx.amount_base}
+          currency={baseCurrency}
+        />
       ) : null}
 
-      {events.length > 0 ? (
-        <Card testID="tx-detail-events-card" style={styles.events}>
-          <Text variant="subheading" accessibilityRole="header">
-            {t('transaction:detail.events_title')}
-          </Text>
-          <EventTimeline
-            testID="tx-detail-events"
-            events={events}
-            names={memberNames}
-            meId={user?.id ?? ''}
-            index={index ?? undefined}
-            sourceNames={sourceNames}
-            currency={tx.currency}
-            onPressBatch={(batchId) => router.push(l.importBatch(batchId) as Href)}
-          />
-        </Card>
+      {wide && tx.kind !== 'transfer' ? (
+        <ImpactCard
+          testID="tx-detail-impact"
+          ledgerId={ledgerId}
+          kind={tx.kind}
+          amountBase={tx.amount_base}
+          categoryL1={tx.category_l1}
+          occurredAt={tx.occurred_at}
+          baseCurrency={baseCurrency}
+          index={index}
+        />
       ) : null}
+
+      {tx.kind === 'expense' ? (
+        <RefundsSection
+          testID="tx-detail-refunds"
+          refunds={tx.refunds ?? []}
+          refundedTotal={tx.refunded_total ?? '0'}
+          refundable={tx.refundable ?? absMoney(tx.amount)}
+          currency={tx.currency}
+          sourceNames={sourceNames}
+          onOpen={(id) => router.push(l.transaction(id) as Href)}
+        />
+      ) : null}
+
+      <EventsCard
+        testID="tx-detail-events"
+        events={tx.events ?? []}
+        names={memberNames}
+        meId={user?.id ?? ''}
+        index={index ?? undefined}
+        sourceNames={sourceNames}
+        currency={tx.currency}
+        onPressBatch={(batchId) => router.push(l.importBatch(batchId) as Href)}
+      />
+    </>
+  );
+
+  return (
+    <Page scroll={false} testID="tx-detail">
+      <PageHeader
+        testID="tx-detail-crumb"
+        title=""
+        style={styles.crumb}
+        back={{ crumb, onPress: goBack, label: t('common:button.back') }}
+      />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
+        <DetailColumns main={main} side={side} />
+      </ScrollView>
+
+      {wide ? null : actionBar}
 
       {/* Re-pointing the refund at another expense: the kind is fixed to `expense`
           (decision §14.52 B11) and picking one PATCHes `refund_of` straight away. */}
@@ -299,10 +361,23 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         title={t('transaction:picker.title_refund_origin')}
         fixed={{ kind: ['expense'] }}
       />
+
+      {isTransfer ? (
+        <PairSection
+          testID="tx-detail-pair"
+          tx={tx}
+          sourceNames={sourceNames}
+          open={pairOpen}
+          onClose={() => setPairOpen(false)}
+        />
+      ) : null}
     </Page>
   );
 }
 
 const styles = StyleSheet.create({
-  events: { gap: space['2'], alignSelf: 'stretch' },
+  // The breadcrumb form carries no title, so the header's own title/crumb gap is dropped.
+  crumb: { gap: 0 },
+  scroll: { flex: 1, alignSelf: 'stretch' },
+  scrollBody: { paddingBottom: space['4'] },
 });

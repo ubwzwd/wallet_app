@@ -15,22 +15,29 @@ import { useTranslation } from 'react-i18next';
 
 import type { TxKind } from '@/api/types';
 import { KINDS } from '@/domain/kinds';
-import { routes } from '@/domain/routes';
-import { radius, space } from '@/theme/tokens';
+import { type RouteHref, routes } from '@/domain/routes';
+import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
 import { useLedgerContext } from '@/store/LedgerContext';
 import { Icon, type IconName, KIND_ICON, Sheet, Text } from '@/ui';
 
-import { isActivePath } from './Sidebar';
+import { isActivePath } from './isActivePath';
 
-export const TAB_BAR_HEIGHT = 60;
+/**
+ * Screen 01 at 375: 8 above, a 49 tall slot, 14 below.
+ *
+ * The centre slot is what sets the row's cross size: a 52 circle, a 4 gap and a 13 label
+ * line make 69, and `marginTop: -20` lifts 20 of that out of the row, leaving 49. Measured
+ * against the rendered bar, not assumed — the toast host offsets itself by this number.
+ */
+export const TAB_BAR_HEIGHT = 71;
 
 interface TabSpec {
   key: string;
   label: string;
   icon: IconName;
-  href: string;
+  href: RouteHref;
   exact: boolean;
 }
 
@@ -55,7 +62,7 @@ function Tab({
       style={styles.tab}
     >
       <Icon name={spec.icon} size={20} color={fg} />
-      <Text variant="micro" style={{ color: fg }} numberOfLines={1}>
+      <Text weight={active ? 600 : 500} style={[styles.tabLabel, { color: fg }]} numberOfLines={1}>
         {spec.label}
       </Text>
     </Pressable>
@@ -213,9 +220,9 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
         style={[
           styles.bar,
           {
-            paddingBottom: bottom,
+            // Screen 01 at 375: 14 below the labels, plus whatever the device asks for.
+            paddingBottom: bottom + density.rowInnerPadding,
             backgroundColor: colors['bg.surface'],
-            borderTopColor: colors['border.default'],
           },
         ]}
       >
@@ -228,18 +235,30 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
           />
         ))}
 
-        <View style={styles.tab}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('common:nav.add')}
-            onPress={() => openAdd('expense')}
-            onLongPress={() => setKindOpen(true)}
-            testID="tab-add"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common:nav.add')}
+          onPress={() => openAdd('expense')}
+          onLongPress={() => setKindOpen(true)}
+          testID="tab-add"
+          style={styles.addSlot}
+        >
+          {/* The disc and its label are what set the bar's height; they carry testIDs so a
+              test can add the bar up from its own style objects instead of restating 71. */}
+          <View
+            testID="tab-add-disc"
             style={[styles.addButton, { backgroundColor: colors['accent.solid'] }]}
           >
             <Icon name="plus" size={24} color={colors['accent.fg']} />
-          </Pressable>
-        </View>
+          </View>
+          <Text
+            weight={600}
+            testID="tab-add-label"
+            style={[styles.tabLabel, { color: colors['fg.muted'] }]}
+          >
+            {t('common:nav.add')}
+          </Text>
+        </Pressable>
 
         {right.map((spec) => (
           <Tab
@@ -255,7 +274,8 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
             key: 'me',
             label: t('common:nav.me'),
             icon: 'user',
-            href: '',
+            // Opens the "me" sheet rather than navigating; the href only names where it leads.
+            href: routes.settings(),
             exact: true,
           }}
           active={meOpen}
@@ -276,24 +296,27 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    minHeight: TAB_BAR_HEIGHT,
-    borderTopWidth: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    paddingTop: space['2'],
   },
   tab: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space['1'],
-    paddingVertical: space['2'],
+    gap: 3,
+    minWidth: density.listRowHeight,
+    minHeight: 44,
   },
+  // 10px labels, per screen 01 at 375.
+  tabLabel: { fontSize: 10, lineHeight: 13 },
+  /** The centre slot rides 20px above the bar (screen 01 at 375). */
+  addSlot: { alignItems: 'center', gap: space['1'], marginTop: -space['5'], minHeight: 44 },
   addButton: {
     width: 52,
     height: 52,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -space['5'],
   },
   sheetRow: {
     flexDirection: 'row',

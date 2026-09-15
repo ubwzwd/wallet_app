@@ -2,18 +2,26 @@
  * The ledger switcher (04 §1.4, screens 01 and 13): every ledger the user belongs to, plus
  * the two ways to get another one. Picking a ledger keeps the page you are on — that is
  * `LedgerContext.switchTo` (04 §2.2), not a jump home.
+ *
+ * Two shells over one list of rows, because screen 01 draws two:
+ *   wide   → `LedgerSwitcherPopover`, a small panel anchored under the sidebar's ledger
+ *            card (屏幕 01 · 首页.dc.html:183)
+ *   narrow → `LedgerSwitcher`, the shared bottom `Sheet`
+ *
+ * A row is a square letter tile, the ledger's name, its base currency and member count
+ * beneath, and a tick on the current one; then "create a ledger" and "join a ledger".
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { Ledger } from '@/api/types';
-import { routes } from '@/domain/routes';
+import type { Ledger, Uuid } from '@/api/types';
+import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useLedgerContext } from '@/store/LedgerContext';
-import { Badge, Button, Icon, Sheet, Text } from '@/ui';
+import { Avatar, Divider, Icon, type IconName, Popover, Sheet, Text } from '@/ui';
 
 export interface LedgerSwitcherProps {
   open: boolean;
@@ -31,9 +39,6 @@ function LedgerRow({
 }): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
-  const roleLabel = t(
-    ledger.role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member',
-  );
 
   return (
     <Pressable
@@ -52,29 +57,99 @@ function LedgerRow({
         },
       ]}
     >
+      <Avatar name={ledger.name} size={26} shape="square" tone={current ? 'accent' : 'muted'} />
       <View style={styles.rowText}>
-        <Text variant="subheading" numberOfLines={1}>
+        <Text weight={current ? 600 : 500} style={styles.rowName} numberOfLines={1}>
           {ledger.name}
         </Text>
-        <Text variant="caption" tone="muted" mono numberOfLines={1}>
-          {ledger.base_currency}
+        <Text mono tone="muted" style={styles.rowMeta} numberOfLines={1}>
+          {`${ledger.base_currency} · ${t('common:nav.member_count', { count: ledger.member_count })}`}
         </Text>
       </View>
-      <Badge label={roleLabel} tone={ledger.role === 'owner' ? 'info' : 'neutral'} />
       {current ? <Icon name="check" size={18} color={colors['accent.solid']} /> : null}
     </Pressable>
   );
 }
 
+function ActionRow({
+  label,
+  icon,
+  onPress,
+  testID,
+}: {
+  label: string;
+  icon: IconName;
+  onPress(): void;
+  testID: string;
+}): React.JSX.Element {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+      ]}
+    >
+      <Icon name={icon} size={18} color={colors['accent.solid']} />
+      <Text weight={600} tone="accent" style={styles.rowName} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** The rows themselves — the same list whichever shell is around them. */
+function SwitcherRows({
+  ledgers,
+  currentId,
+  onPick,
+  onNavigate,
+  scroll,
+}: {
+  ledgers: readonly Ledger[];
+  currentId: Uuid | null;
+  onPick(id: Uuid): void;
+  onNavigate(href: RouteHref): void;
+  /** The sheet lets a long list scroll; the anchored panel is already capped by `Popover`. */
+  scroll: boolean;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const rows = ledgers.map((ledger) => (
+    <LedgerRow
+      key={ledger.id}
+      ledger={ledger}
+      current={ledger.id === currentId}
+      onPress={() => onPick(ledger.id)}
+    />
+  ));
+  return (
+    <>
+      {scroll ? <ScrollView style={styles.list}>{rows}</ScrollView> : <View>{rows}</View>}
+      <Divider style={styles.divider} />
+      <ActionRow
+        label={t('ledger:list.empty.create_button')}
+        icon="plus"
+        onPress={() => onNavigate(routes.ledgersNew())}
+        testID="ledger-switcher-new"
+      />
+      <ActionRow
+        label={t('ledger:list.empty.join_button')}
+        icon="key-round"
+        onPress={() => onNavigate(routes.ledgersJoin())}
+        testID="ledger-switcher-join"
+      />
+    </>
+  );
+}
+
+/** Narrow layouts: the shared bottom sheet, driven by the ledger context. */
 export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const { ledgerId, ledgers, switchTo } = useLedgerContext();
-
-  const go = (href: string): void => {
-    onClose();
-    router.navigate(href);
-  };
 
   return (
     <Sheet
@@ -84,51 +159,86 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
       closeLabel={t('common:button.close')}
       testID="ledger-switcher"
     >
-      <ScrollView style={styles.list}>
-        {ledgers.map((ledger) => (
-          <LedgerRow
-            key={ledger.id}
-            ledger={ledger}
-            current={ledger.id === ledgerId}
-            onPress={() => {
-              onClose();
-              switchTo(ledger.id);
-            }}
-          />
-        ))}
-      </ScrollView>
-      <View style={styles.actions}>
-        <Button
-          label={t('ledger:list.empty.create_button')}
-          icon="plus"
-          variant="secondary"
-          fullWidth
-          onPress={() => go(routes.ledgersNew())}
-          testID="ledger-switcher-new"
-        />
-        <Button
-          label={t('ledger:list.empty.join_button')}
-          icon="key-round"
-          variant="ghost"
-          fullWidth
-          onPress={() => go(routes.ledgersJoin())}
-          testID="ledger-switcher-join"
-        />
-      </View>
+      <SwitcherRows
+        scroll
+        ledgers={ledgers}
+        currentId={ledgerId}
+        onPick={(id) => {
+          onClose();
+          switchTo(id);
+        }}
+        onNavigate={(href) => {
+          onClose();
+          router.navigate(href);
+        }}
+      />
     </Sheet>
+  );
+}
+
+export interface LedgerSwitcherPopoverProps {
+  open: boolean;
+  onClose(): void;
+  /** The sidebar's ledger card; the panel opens flush under it. */
+  anchorRef: React.RefObject<View | null>;
+  ledgers: readonly Ledger[];
+  currentId: Uuid | null;
+  onPick(id: Uuid): void;
+}
+
+/**
+ * Wide layouts: mockup 01's small dropdown under the ledger card. It takes its list as a
+ * prop rather than reading the ledger context, because `/settings` renders the sidebar
+ * outside any ledger and still shows the card (mockup 14).
+ */
+export function LedgerSwitcherPopover({
+  open,
+  onClose,
+  anchorRef,
+  ledgers,
+  currentId,
+  onPick,
+}: LedgerSwitcherPopoverProps): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const router = useRouter();
+  return (
+    <Popover
+      open={open}
+      onClose={onClose}
+      anchorRef={anchorRef}
+      closeLabel={t('common:button.close')}
+      testID="ledger-switcher"
+      style={styles.panel}
+    >
+      <SwitcherRows
+        scroll={false}
+        ledgers={ledgers}
+        currentId={currentId}
+        onPick={onPick}
+        onNavigate={(href) => {
+          onClose();
+          router.navigate(href);
+        }}
+      />
+    </Popover>
   );
 }
 
 const styles = StyleSheet.create({
   list: { maxHeight: 320 },
   row: {
-    height: density.listRowHeight,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space['3'],
+    gap: 10,
+    paddingVertical: space['2'],
     paddingHorizontal: space['3'],
-    borderRadius: radius.md,
+    borderRadius: 11,
   },
-  rowText: { flex: 1, gap: space['1'] },
-  actions: { gap: space['2'], paddingTop: space['3'] },
+  rowText: { flex: 1, minWidth: 0 },
+  // 屏幕 01 · 首页.dc.html:184-186: the overlay's rows are a step smaller than the card's.
+  rowName: { fontSize: 14, lineHeight: 19 },
+  rowMeta: { fontSize: 11, lineHeight: 15 },
+  divider: { marginVertical: space['1'], marginHorizontal: density.rowInnerPadding },
+  panel: { borderRadius: radius.md },
 });

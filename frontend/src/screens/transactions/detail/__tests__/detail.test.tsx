@@ -24,7 +24,7 @@ import { setAuthToken } from '@/api/client';
 import type { LedgerMember, Transaction, TransactionEvent } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { resetLedgerGone } from '@/navigation';
-import { queryClient } from '@/queries';
+import { qk, queryClient } from '@/queries';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
   USER_ID,
@@ -32,6 +32,7 @@ import {
   makeCurrencyList,
   makeLedger,
   makeSource,
+  makeStatsSummary,
   makeTransaction,
   makeUser,
 } from '@/test/fixtures';
@@ -56,6 +57,7 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
   '(app)/l/[ledgerId]/transactions/[txId]/edit': () => <RNText>edit-page</RNText>,
   '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
+  '(app)/l/[ledgerId]/imports/[batchId]/index': () => <RNText>batch-page</RNText>,
 };
 
 function members(): { items: LedgerMember[]; total: number } {
@@ -96,6 +98,17 @@ function containing(text: string): RegExp {
 function open(tx: Transaction): ReturnType<typeof renderRouter> {
   mockGet(txPath(tx.id), tx);
   return renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/${tx.id}` });
+}
+
+/**
+ * 屏幕稿 08 at 375 puts the operations in a sheet behind the pinned 「修改」 bar, so a
+ * narrow test opens the sheet before it can press one.
+ */
+async function openActions(
+  router: ReturnType<typeof renderRouter>,
+): Promise<void> {
+  fireEvent.press(await router.findByTestId('tx-detail-actions-open'));
+  await router.findByTestId('tx-detail-actions-delete');
 }
 
 let api: MockApi;
@@ -166,8 +179,12 @@ test('an expense lists its refunds with the account the money went back to, plus
   const router = open(EXPENSE);
 
   // The header says what it is, and never shows the transaction id (decision §14.52 A6).
-  expect(await router.findByTestId('tx-detail-header-merchant')).toHaveTextContent('京东订单');
-  expect(router.getByTestId('tx-detail-header-source')).toHaveTextContent('招行储蓄卡');
+  expect(await router.findByTestId('tx-detail-header-account-title')).toHaveTextContent(
+    '京东订单',
+  );
+  expect(router.getByTestId('tx-detail-header-account-sub')).toHaveTextContent(
+    containing('招行储蓄卡'),
+  );
   expect(router.getByTestId('tx-detail-header-category')).toHaveTextContent('消费购物 / 数码');
   expect(router.queryByText(EXPENSE.id)).toBeNull();
 
@@ -187,7 +204,8 @@ test('an expense lists its refunds with the account the money went back to, plus
 
 test('「登记退款」is offered on an expense and nowhere else', async () => {
   const router = open(EXPENSE);
-  expect(await router.findByTestId('tx-detail-actions-refund')).toBeTruthy();
+  await openActions(router);
+  expect(router.getByTestId('tx-detail-actions-refund')).toBeTruthy();
   router.unmount();
 
   queryClient.clear();
@@ -203,6 +221,7 @@ test('「登记退款」is offered on an expense and nowhere else', async () => 
   });
   const second = open(income);
   await second.findByTestId('tx-detail-header');
+  await openActions(second);
   expect(second.queryByTestId('tx-detail-actions-refund')).toBeNull();
   // 分享 was dropped for good (decision §14.52 A8).
   expect(second.queryByText('分享')).toBeNull();
@@ -211,7 +230,8 @@ test('「登记退款」is offered on an expense and nowhere else', async () => 
 test('「复制一笔」opens the form with copy_of, and 「登记退款」with kind + refund_of', async () => {
   const router = open(EXPENSE);
 
-  fireEvent.press(await router.findByTestId('tx-detail-actions-duplicate'));
+  await openActions(router);
+  fireEvent.press(router.getByTestId('tx-detail-actions-duplicate'));
   await waitFor(() =>
     expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
   );
@@ -220,7 +240,8 @@ test('「复制一笔」opens the form with copy_of, and 「登记退款」with 
 
   queryClient.clear();
   const second = open(EXPENSE);
-  fireEvent.press(await second.findByTestId('tx-detail-actions-refund'));
+  await openActions(second);
+  fireEvent.press(second.getByTestId('tx-detail-actions-refund'));
   await waitFor(() =>
     expect(second.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
   );
@@ -267,7 +288,7 @@ test('a refund shows the original expense and the other refunds against it, olde
 
   expect(await router.findByTestId('tx-detail-origin-merchant')).toHaveTextContent('京东订单');
   // Date, category and the original's own account all come off `refund_of_detail` (§14.53f).
-  expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(containing('9月2日'));
+  expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(containing('2026-09-02'));
   expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(
     containing('消费购物 / 数码'),
   );
@@ -364,6 +385,132 @@ test('a refund that was never linked offers 「去关联」', async () => {
   expect(await router.findByTestId('tx-detail-origin-none')).toHaveTextContent('未关联原支出');
   expect(router.getByTestId('tx-detail-origin-pick')).toHaveTextContent('去关联');
   expect(router.queryByTestId('tx-detail-origin-unlink')).toBeNull();
+});
+
+// ---------------------------------------------------------------------- wide
+
+/** The month's summary the card works off. */
+function summaryBody(): ReturnType<typeof makeStatsSummary> {
+  return makeStatsSummary({
+    month: '2026-09',
+    expense_total: '8421.6600',
+    expense: [
+      {
+        code: 'shopping',
+        name_zh: '消费购物',
+        name_en: 'Shopping',
+        amount: '2310.5000',
+        share: 0.2743,
+        count: 4,
+        children: [],
+      },
+    ],
+  });
+}
+
+/** The same summary, put where the home screen would have left it. */
+function seedSummary(): void {
+  queryClient.setQueryData(qk.ledger(LEDGER).statsSum('2026-09'), summaryBody());
+}
+
+/**
+ * 04 §4.7's 「来源」 row: a row that came out of an import names its batch and links to it;
+ * one typed in by hand says 手动录入 and is not a link at all.
+ */
+test('来源 names the import batch a row came from and opens that batch', async () => {
+  const router = open(makeTransaction({ ...EXPENSE, id: 'e-imported', import_batch_id: 'batch-1' }));
+
+  // A batch turns the row into a link, so the value lives inside it rather than in the
+  // plain `-value-origin` text node.
+  const link = await router.findByTestId('tx-detail-facts-link-origin');
+  expect(link).toHaveTextContent(containing('batch-1'));
+  expect(router.queryByTestId('tx-detail-facts-value-origin')).toBeNull();
+  fireEvent.press(link);
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/batch-1`));
+});
+
+test('a hand-typed row says 手动录入 and offers no link', async () => {
+  const router = open(EXPENSE);
+
+  expect(await router.findByTestId('tx-detail-facts-value-origin')).toHaveTextContent('手动录入');
+  expect(router.queryByTestId('tx-detail-facts-link-origin')).toBeNull();
+});
+
+/**
+ * 屏幕稿 08 at 1440: 「对 9 月的影响」 answers the question the 删除 button raises, and the
+ * operations sit beside the headline instead of behind the sheet. The arithmetic is the
+ * card's own (the month's summary minus this row), so it is asserted on both signs of it.
+ */
+test('宽屏 prices what deleting this row would change, and keeps the actions in the headline', async () => {
+  wideSpy.mockReturnValue(true);
+  // The arithmetic is the card's own (§14.52 A9); the month's summary is the ledger's
+  // ordinary `GET /stats/summary`, so a cache the home screen has already filled costs
+  // nothing and a cold one is fetched — see the deep-link test below.
+  seedSummary();
+
+  const router = open(EXPENSE);
+
+  expect(await router.findByTestId('tx-detail-impact-total')).toHaveTextContent(
+    containing('¥8,421.66 · 含本笔 ¥598.00'),
+  );
+  expect(router.getByTestId('tx-detail-impact-category')).toHaveTextContent(
+    containing('¥2,310.50 · 含本笔 ¥598.00'),
+  );
+  // 8,421.66 − 598.00: an expense leaving the month takes its own magnitude with it.
+  expect(router.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
+    containing('删除后支出¥7,823.66'),
+  );
+
+  // Wide has no sheet: every operation is already on screen.
+  expect(router.getByTestId('tx-detail-actions-delete')).toBeTruthy();
+  expect(router.queryByTestId('tx-detail-actions-open')).toBeNull();
+  router.unmount();
+
+  // A refund lives on the expense side of the summary, offsetting it, so deleting one
+  // *raises* the month: 8,421.66 + 199.00.
+  queryClient.clear();
+  seedSummary();
+  const second = open(REFUND);
+  expect(await second.findByTestId('tx-detail-impact-total')).toHaveTextContent(
+    containing('已冲减本笔 ¥199.00'),
+  );
+  expect(second.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
+    containing('删除后支出¥8,620.66'),
+  );
+});
+
+/**
+ * The card subscribes to the row's own month, so a link straight into a detail page — no
+ * home screen visited, nothing in the cache — still draws it (04 §4.7, 屏幕稿 08 · 1440
+ * leads the right column with it).
+ */
+test('宽屏 深链: 「对 N 月的影响」 fetches the row\'s own month instead of staying blank', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/stats/summary`, summaryBody());
+
+  const router = open(EXPENSE);
+
+  expect(await router.findByTestId('tx-detail-impact-total')).toHaveTextContent(
+    containing('¥8,421.66 · 含本笔 ¥598.00'),
+  );
+  expect(api.mock.history.get.some((r) => (r.url ?? '').includes('/stats/summary'))).toBe(true);
+});
+
+/**
+ * A category the summary does not report has no figure to print: 「¥0.00 · 含本笔 ¥299.00」
+ * would be a number invented by the card, so the row drops out instead.
+ */
+test('宽屏 drops the category line when the month\'s summary has no such node', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/stats/summary`, summaryBody());
+
+  // `dining` is nowhere in the seeded summary (only `shopping` is).
+  const router = open(
+    makeTransaction({ ...EXPENSE, id: 'e-dining', category_l1: 'dining', category_l2: null }),
+  );
+
+  expect(await router.findByTestId('tx-detail-impact-total')).toBeTruthy();
+  expect(router.queryByTestId('tx-detail-impact-category')).toBeNull();
 });
 
 // -------------------------------------------------------------------- events

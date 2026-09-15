@@ -1,17 +1,19 @@
 /**
- * `/l/:ledgerId/imports/guide` — step 0 of the import flow (04 §4.10, decision §6).
+ * `/l/:ledgerId/imports/guide` — 「标准格式说明」, the secondary page step 3 of the import
+ * page links to (04 §4.10, decision §6, §14.56: the steps and the skill text now live on
+ * `/imports/new`; only the format reference stayed here).
  *
- * Everything on this page comes out of `GET /import-format`: the two skill texts, the
- * column table, the sample CSV and the category-table version. Nothing is hardcoded —
- * the skill and the category table are generated from the same source, so a column name
- * baked in here would drift the day the table changes (decision §6, §14.30).
+ * Everything on this page comes out of `GET /import-format`: the column table, the sample
+ * CSV and the category-table version. Nothing is hardcoded — the skill and the category
+ * table are generated from the same source, so a column name baked in here would drift the
+ * day the table changes (decision §6, §14.30).
  *
  * The upload page deliberately does NOT show "your skill version": the app cannot know
  * which version the user installed, only which one the uploaded file declares
  * (decision §14.52 A18).
  */
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
@@ -24,19 +26,20 @@ import { useLedgerContext } from '@/store';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Button, Card, EmptyState, Page, SegmentedControl, Skeleton, Text, toast } from '@/ui';
+import {
+  Button,
+  EmptyState,
+  ListCard,
+  Page,
+  PageHeader,
+  Skeleton,
+  Text,
+  toast,
+} from '@/ui';
 
 import { useCopyText } from './useCopyText';
 
-type SkillTab = 'claude' | 'chatgpt';
-
-/** Filenames of the two downloads; neither is fetched from the backend (04 §4.10). */
-const SKILL_FILENAME = 'SKILL.md';
-const INSTRUCTIONS_FILENAME = 'wallet-import-instructions.txt';
 const SAMPLE_FILENAME = 'sample.csv';
-
-/** A code block tall enough to read but not so tall it buries the rest of the page. */
-const CODE_MAX_HEIGHT = 320;
 
 /** Split a CSV line on commas, honouring the double-quote escaping RFC 4180 describes. */
 function splitCsvLine(line: string): string[] {
@@ -77,105 +80,72 @@ export function parseSampleCsv(text: string): string[][] {
     .map(splitCsvLine);
 }
 
-function CodeBlock({ text, testID }: { text: string; testID: string }): React.JSX.Element {
-  const colors = useColors();
+function CardTitle({ children }: { children: string }): React.JSX.Element {
   return (
-    <ScrollView
-      nestedScrollEnabled
-      style={{
-        maxHeight: CODE_MAX_HEIGHT,
-        borderRadius: radius.md,
-        backgroundColor: colors['bg.subtle'],
-      }}
-      contentContainerStyle={{ padding: space['3'] }}
-      testID={`${testID}-scroll`}
-    >
-      <Text variant="caption" mono selectable testID={testID}>
-        {text}
-      </Text>
-    </ScrollView>
-  );
-}
-
-function SectionHeading({ children }: { children: string }): React.JSX.Element {
-  return (
-    <Text variant="heading" accessibilityRole="header">
+    <Text variant="subheading" weight={700} accessibilityRole="header">
       {children}
     </Text>
   );
 }
 
-interface FormatSectionProps {
-  format: ImportFormat;
-}
-
 /** The 11-column table, rendered from `columns` — never from a hardcoded list. */
-function FormatTable({ format }: FormatSectionProps): React.JSX.Element {
+function FormatTable({ format }: { format: ImportFormat }): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
   const colors = useColors();
   const wide = useIsWide();
 
+  const head = (
+    <View style={[styles.row, styles.headRow, { backgroundColor: colors['bg.canvas'] }]}>
+      <Text variant="micro" tone="secondary" mono weight={600} style={styles.colName}>
+        {t('import:guide.table.name')}
+      </Text>
+      <Text variant="micro" tone="secondary" mono weight={600} style={styles.colDesc}>
+        {t('import:guide.table.desc')}
+      </Text>
+      <Text variant="micro" tone="secondary" mono weight={600} style={styles.colRequired}>
+        {t('import:guide.table.required')}
+      </Text>
+    </View>
+  );
+
   return (
-    <View style={{ gap: space['2'] }} testID="guide-format-table">
-      {wide ? (
-        <View style={{ flexDirection: 'row', gap: space['2'] }}>
-          <Text variant="caption" tone="muted" style={{ flex: 2 }}>
-            {t('import:guide.table.name')}
-          </Text>
-          <Text variant="caption" tone="muted" style={{ flex: 4 }}>
-            {t('import:guide.table.desc')}
-          </Text>
-          <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-            {t('import:guide.table.required')}
-          </Text>
-        </View>
-      ) : null}
+    <ListCard divided header={wide ? head : undefined} testID="guide-format-table">
       {format.columns.map((column) => (
         <View
           key={column.name}
           testID={`guide-column-${column.name}`}
-          style={{
-            flexDirection: wide ? 'row' : 'column',
-            gap: wide ? space['2'] : space['1'],
-            paddingVertical: space['2'],
-            borderTopWidth: 1,
-            borderTopColor: colors['border.default'],
-          }}
+          style={[styles.row, wide ? styles.bodyRow : styles.bodyRowNarrow]}
         >
-          <Text variant="body" mono style={{ flex: wide ? 2 : undefined }}>
+          <Text variant="body" mono weight={500} style={wide ? styles.colName : undefined}>
             {column.name}
           </Text>
-          <Text variant="caption" tone="secondary" style={{ flex: wide ? 4 : undefined }}>
+          <Text variant="caption" tone="secondary" style={wide ? styles.colDesc : undefined}>
             {lang === 'zh' ? column.desc_zh : column.desc_en}
           </Text>
           <Text
             variant="caption"
             tone={column.required ? 'warning' : 'muted'}
-            style={{ flex: wide ? 1 : undefined }}
+            style={wide ? styles.colRequired : undefined}
           >
             {column.required ? t('import:guide.required_yes') : t('import:guide.required_no')}
           </Text>
         </View>
       ))}
-    </View>
+    </ListCard>
   );
 }
 
 /** The sample file as a horizontally scrollable read-only grid (04 §4.10 step 0). */
-function SampleTable({ format }: FormatSectionProps): React.JSX.Element {
+function SampleTable({ format }: { format: ImportFormat }): React.JSX.Element {
   const colors = useColors();
   const grid = React.useMemo(() => parseSampleCsv(format.sample_csv), [format.sample_csv]);
 
   return (
     <ScrollView horizontal nestedScrollEnabled testID="guide-sample-scroll">
-      <View style={{ gap: space['1'] }} testID="guide-sample-table">
+      <View style={styles.sample} testID="guide-sample-table">
         {grid.map((row, rowIndex) => (
-          <View
-            key={rowIndex}
-            testID={`guide-sample-row-${rowIndex}`}
-            style={{ flexDirection: 'row', gap: space['2'] }}
-          >
+          <View key={rowIndex} testID={`guide-sample-row-${rowIndex}`} style={styles.sampleRow}>
             {row.map((cell, cellIndex) => (
               <Text
                 key={cellIndex}
@@ -183,13 +153,10 @@ function SampleTable({ format }: FormatSectionProps): React.JSX.Element {
                 mono
                 numberOfLines={1}
                 tone={rowIndex === 0 ? 'muted' : 'primary'}
-                style={{
-                  minWidth: 96,
-                  paddingVertical: space['1'],
-                  paddingHorizontal: space['2'],
-                  borderRadius: radius.sm,
-                  backgroundColor: rowIndex <= 1 ? colors['bg.subtle'] : 'transparent',
-                }}
+                style={[
+                  styles.cell,
+                  { backgroundColor: rowIndex <= 1 ? colors['bg.subtle'] : 'transparent' },
+                ]}
               >
                 {cell}
               </Text>
@@ -204,15 +171,13 @@ function SampleTable({ format }: FormatSectionProps): React.JSX.Element {
 export default function ImportGuideScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
-  const lang = useLang();
   const { ledgerId } = useLedgerContext();
   const { copy, download } = useCopyText();
   useTopBar(t('import:guide.title'));
 
   const query = useImportFormat();
-  const [tab, setTab] = React.useState<SkillTab>('claude');
 
-  const goUpload = React.useCallback(
+  const goImport = React.useCallback(
     () => router.push(routes.l(ledgerId).importsNew() as Href),
     [ledgerId, router],
   );
@@ -226,9 +191,22 @@ export default function ImportGuideScreen(): React.JSX.Element {
     [copy, t],
   );
 
+  const header = (
+    <PageHeader
+      title={t('import:guide.title')}
+      back={{
+        crumb: t('import:guide.crumb'),
+        label: t('import:guide.back'),
+        onPress: goImport,
+      }}
+      testID="guide-header"
+    />
+  );
+
   if (query.isPending) {
     return (
       <Page testID="import-guide-screen">
+        {header}
         <Skeleton variant="card" testID="guide-skeleton" />
         <Skeleton variant="card" />
       </Page>
@@ -238,6 +216,7 @@ export default function ImportGuideScreen(): React.JSX.Element {
   if (query.isError || !query.data) {
     return (
       <Page testID="import-guide-screen">
+        {header}
         <EmptyState
           icon="alert-triangle"
           title={t('import:guide.error_retry')}
@@ -249,78 +228,16 @@ export default function ImportGuideScreen(): React.JSX.Element {
   }
 
   const format = query.data;
-  const skillText = tab === 'claude' ? format.skill_markdown : format.skill_text;
-  const downloadName = tab === 'claude' ? SKILL_FILENAME : INSTRUCTIONS_FILENAME;
-  const downloadLabel =
-    tab === 'claude'
-      ? t('import:guide.download_skill')
-      : t('import:guide.download_instructions');
 
   return (
-    <Page testID="import-guide-screen">
-      <Text variant="title" accessibilityRole="header" testID="guide-title">
-        {t('import:guide.title')}
-      </Text>
+    <Page readingWidth testID="import-guide-screen">
+      {header}
 
-      <Card variant="outlined" style={{ gap: space['3'] }} testID="guide-step-1">
-        <SectionHeading>{t('import:guide.step1_title')}</SectionHeading>
-        <SegmentedControl<SkillTab>
-          testID="guide-skill-tabs"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'claude', label: t('import:guide.tab_claude') },
-            { value: 'chatgpt', label: t('import:guide.tab_chatgpt') },
-          ]}
-        />
-        <CodeBlock text={skillText} testID="guide-skill-text" />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
-          <Button
-            testID="guide-skill-copy"
-            label={t('import:guide.copy')}
-            icon="copy"
-            variant="secondary"
-            size="sm"
-            onPress={() => onCopy(skillText)}
-          />
-          <Button
-            testID="guide-skill-download"
-            label={downloadLabel}
-            icon="download"
-            variant="secondary"
-            size="sm"
-            onPress={() => {
-              download(downloadName, skillText, 'text/markdown;charset=utf-8');
-            }}
-          />
-        </View>
-      </Card>
-
-      <Card variant="outlined" style={{ gap: space['2'] }} testID="guide-step-2">
-        <SectionHeading>{t('import:guide.step2_title')}</SectionHeading>
-        <Text variant="body" tone="secondary">
-          {t('import:guide.step2_body')}
+      <View style={styles.section} testID="guide-format">
+        <CardTitle>{t('import:guide.format_title')}</CardTitle>
+        <Text variant="body" tone="secondary" testID="guide-intro">
+          {t('import:guide.intro')}
         </Text>
-        <Text variant="caption" tone="muted" testID="guide-privacy-hint">
-          {t('import:guide.step2_privacy_hint')}
-        </Text>
-      </Card>
-
-      <Card variant="outlined" style={{ gap: space['3'] }} testID="guide-step-3">
-        <SectionHeading>{t('import:guide.step3_title')}</SectionHeading>
-        <Text variant="body" tone="secondary" testID="guide-instructions">
-          {lang === 'zh' ? format.instructions_zh : format.instructions_en}
-        </Text>
-        <Button
-          testID="guide-go-upload"
-          label={t('import:guide.step3_action')}
-          onPress={goUpload}
-          style={{ alignSelf: 'flex-start' }}
-        />
-      </Card>
-
-      <Card variant="outlined" style={{ gap: space['2'] }} testID="guide-format">
-        <SectionHeading>{t('import:guide.format_title')}</SectionHeading>
         <Text variant="caption" tone="secondary" mono testID="guide-version-line">
           {t('import:guide.version_line', { version: format.version })}
         </Text>
@@ -328,17 +245,19 @@ export default function ImportGuideScreen(): React.JSX.Element {
         <Text variant="caption" tone="muted" testID="guide-blank-category-hint">
           {t('import:guide.blank_category_hint')}
         </Text>
-      </Card>
+      </View>
 
-      <Card variant="outlined" style={{ gap: space['3'] }} testID="guide-sample">
-        <SectionHeading>{t('import:guide.sample_title')}</SectionHeading>
-        <SampleTable format={format} />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
+      <View style={styles.section} testID="guide-sample">
+        <CardTitle>{t('import:guide.sample_title')}</CardTitle>
+        <ListCard style={styles.sampleCard}>
+          <SampleTable format={format} />
+        </ListCard>
+        <View style={styles.actions}>
           <Button
             testID="guide-sample-copy"
             label={t('import:guide.copy_csv')}
             icon="copy"
-            variant="secondary"
+            variant="soft"
             size="sm"
             onPress={() => onCopy(format.sample_csv)}
           />
@@ -346,18 +265,45 @@ export default function ImportGuideScreen(): React.JSX.Element {
             testID="guide-sample-download"
             label={t('import:guide.download_sample')}
             icon="download"
-            variant="secondary"
+            variant="soft"
             size="sm"
             onPress={() => {
               download(SAMPLE_FILENAME, format.sample_csv, 'text/csv;charset=utf-8');
             }}
           />
         </View>
-      </Card>
+      </View>
 
-      <Text variant="caption" tone="muted" testID="guide-version">
+      <Text variant="caption" tone="muted" mono testID="guide-version">
         {t('import:guide.footer_version', { version: format.version })}
       </Text>
     </Page>
   );
 }
+
+const styles = StyleSheet.create({
+  section: { alignSelf: 'stretch', gap: space['3'] },
+  sampleCard: { padding: space['4'] },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
+  headRow: { paddingHorizontal: space['4'], paddingVertical: space['3'] },
+  bodyRow: { paddingHorizontal: space['4'], paddingVertical: space['3'] },
+  bodyRowNarrow: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: space['1'],
+    paddingHorizontal: space['3'],
+    paddingVertical: space['3'],
+  },
+  colName: { flex: 2, minWidth: 0 },
+  colDesc: { flex: 4, minWidth: 0 },
+  colRequired: { flex: 1, minWidth: 0, textAlign: 'right' },
+  sample: { gap: space['1'], paddingVertical: space['1'] },
+  sampleRow: { flexDirection: 'row', gap: space['2'] },
+  cell: {
+    minWidth: 96,
+    paddingVertical: space['1'],
+    paddingHorizontal: space['2'],
+    borderRadius: radius.sm,
+  },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] },
+});

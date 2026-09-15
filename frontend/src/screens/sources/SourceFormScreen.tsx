@@ -1,8 +1,11 @@
 /**
- * `/l/:ledgerId/sources/new` and `/l/:ledgerId/sources/:sourceId/edit` (04 §4.9).
+ * `/l/:ledgerId/sources/new` and `/l/:ledgerId/sources/:sourceId/edit` (04 §4.9), drawn as
+ * 屏幕稿 09 draws it: on wide screens a centred 620-wide dialog card (title + × back to the
+ * list, the fields, an action bar) laid over the dimmed account list; on narrow ones the
+ * same blocks full-width under the app's top bar.
  *
- * One component for both: the presence of the `sourceId` route parameter decides whether
- * it creates or edits. Three rules make this form different from the others:
+ * One component for both routes: the presence of the `sourceId` route parameter decides
+ * whether it creates or edits. Three rules make this form different from the others:
  *
  *  - `default_currency` is chosen once and then **locked** (decision §14.50): on the edit
  *    screen it is a read-only row and never appears in the PATCH body.
@@ -16,7 +19,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { Controller, useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 
@@ -38,28 +41,14 @@ import { useCreateSource, useCurrencies, useSource, useSources, useUpdateSource 
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import {
-  AmountField,
-  Button,
-  CurrencyPicker,
-  EmptyState,
-  Page,
-  SegmentedControl,
-  Skeleton,
-  Switch,
-  Text,
-  TextField,
-  confirm,
-  toast,
-} from '@/ui';
-import { SOURCE_TYPE_ICON } from '@/ui';
+import { Button, Card, EmptyState, Page, Skeleton, Switch, confirm, toast } from '@/ui';
 
+import { FormDialog } from './FormDialog';
+import SourcesScreen from './SourcesScreen';
+import { SourceFormFields } from './SourceFormFields';
 import {
-  SOURCE_NAME_MAX_LENGTH,
-  SOURCE_TYPES,
   openingBalanceInput,
   sourceFormSchema,
-  sourceValidationMessage,
   trimTrailingZeros,
   type SourceFormValues,
 } from './schemas';
@@ -67,6 +56,9 @@ import { useArchiveSource } from './useArchiveSource';
 
 /** `'0.0000'` — what an empty opening-balance field submits (decision §3). */
 const ZERO: Money = '0.0000';
+
+/** How many currency shortcut chips the mockup puts under the picker. */
+const QUICK_CURRENCIES = 3;
 
 function valuesOf(source: FinanceSource): SourceFormValues {
   return {
@@ -152,6 +144,7 @@ export default function SourceFormScreen(): React.JSX.Element {
 
   const type = watch('type');
   const name = watch('name');
+  const currency = watch('default_currency') || baseCurrency;
 
   /** Switching the type moves the stored value across the credit sign boundary
    *  (decision §14.52 A13) and says so. */
@@ -185,6 +178,13 @@ export default function SourceFormScreen(): React.JSX.Element {
     );
   }, [list.data, name, sourceId]);
 
+  /** The chips over the picker: the ledger's own currency first, then the ones its other
+   *  accounts already use (屏幕稿 09 draws three). */
+  const quickCurrencies = React.useMemo(() => {
+    const seen = [baseCurrency, ...(list.data?.items ?? []).map((s) => s.default_currency)];
+    return Array.from(new Set(seen)).slice(0, QUICK_CURRENCIES);
+  }, [baseCurrency, list.data]);
+
   /** "Net worth ¥52,300 → ¥49,096" for the opening-balance confirmation (04 §4.9). */
   const netWorthPreview = React.useCallback(
     (source: FinanceSource, nextStored: Money): { from: string; to: string } => {
@@ -196,6 +196,11 @@ export default function SourceFormScreen(): React.JSX.Element {
       };
     },
     [baseCurrency, lang, list.data],
+  );
+
+  const goBack = React.useCallback(
+    () => router.replace(routes.l(ledgerId).sources() as Href),
+    [ledgerId, router],
   );
 
   const onSubmit = React.useCallback(
@@ -213,7 +218,7 @@ export default function SourceFormScreen(): React.JSX.Element {
           {
             onSuccess: (source) => {
               toast.success(t('source:form.created_toast', { name: source.name }));
-              router.replace(routes.l(ledgerId).sources() as Href);
+              goBack();
             },
             onError: (e) => toast.error(errorMessage(t, e)),
           },
@@ -246,7 +251,7 @@ export default function SourceFormScreen(): React.JSX.Element {
       update.mutate(body, {
         onSuccess: (source) => {
           toast.success(t('source:form.saved_toast', { name: source.name }));
-          router.replace(routes.l(ledgerId).sources() as Href);
+          goBack();
         },
         onError: (e) => {
           // A 409 `stale_update` is the global handler's business (04 §3.8): it has already
@@ -256,7 +261,7 @@ export default function SourceFormScreen(): React.JSX.Element {
         },
       });
     },
-    [baseline, create, isEdit, ledgerId, netWorthPreview, router, t, update],
+    [baseline, create, goBack, isEdit, netWorthPreview, t, update],
   );
 
   const submit = handleSubmit((values) => void onSubmit(values));
@@ -265,16 +270,9 @@ export default function SourceFormScreen(): React.JSX.Element {
   // 04 §1.4: the narrow layout's top bar carries the title, so the page does not repeat it.
   useTopBar(title);
 
-  const heading = wide ? (
-    <Text variant="title" accessibilityRole="header" testID="source-form-title">
-      {title}
-    </Text>
-  ) : null;
-
   if (isEdit && detail.isPending) {
     return (
       <Page testID="source-form-screen">
-        {heading}
         <Skeleton variant="card" testID="source-form-skeleton" />
       </Page>
     );
@@ -283,7 +281,6 @@ export default function SourceFormScreen(): React.JSX.Element {
   if (isEdit && detail.isError) {
     return (
       <Page testID="source-form-screen">
-        {heading}
         <EmptyState
           icon="alert-triangle"
           title={t('source:form.load_error')}
@@ -294,107 +291,22 @@ export default function SourceFormScreen(): React.JSX.Element {
     );
   }
 
-  const isCredit = type === 'credit';
-
-  return (
-    <Page testID="source-form-screen">
-      {heading}
-      <View style={{ gap: space['3'], maxWidth: 520, width: '100%' }}>
-        <Controller
-          control={control}
-          name="name"
-          render={({ field }) => (
-            <TextField
-              testID="source-name"
-              label={t('source:form.name_label')}
-              accessibilityLabel={t('source:form.name_label')}
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              error={sourceValidationMessage(t, errors.name?.message)}
-              hint={duplicateName ? t('source:form.name_duplicate_hint') : undefined}
-              disabled={busy}
-              maxLength={SOURCE_NAME_MAX_LENGTH}
-              showCounter
-            />
-          )}
-        />
-
-        <View style={{ gap: space['2'] }}>
-          <Text variant="caption" tone="secondary">
-            {t('source:form.type_label')}
-          </Text>
-          <SegmentedControl<SourceType>
-            testID="source-type"
-            accessibilityLabel={t('source:form.type_label')}
-            value={type}
-            onChange={onTypeChange}
-            options={SOURCE_TYPES.map((value) => ({
-              value,
-              label: t(`source:type.${value}`),
-              icon: SOURCE_TYPE_ICON[value],
-              disabled: busy,
-            }))}
-          />
-        </View>
-
-        <Controller
-          control={control}
-          name="default_currency"
-          render={({ field }) => (
-            <View style={{ gap: space['1'] }}>
-              {isEdit ? (
-                <Text variant="caption" tone="secondary">
-                  {t('source:form.currency_label')}
-                </Text>
-              ) : null}
-              <CurrencyPicker
-                testID="source-currency"
-                label={t('source:form.currency_label')}
-                codes={currencies.codes}
-                names={currencies.names}
-                value={field.value === '' ? null : field.value}
-                onChange={field.onChange}
-                readOnly={isEdit}
-                error={sourceValidationMessage(t, errors.default_currency?.message)}
-                disabled={busy}
-              />
-              {isEdit ? (
-                <Text variant="caption" tone="muted" testID="source-currency-locked">
-                  {t('source:form.currency_locked_hint')}
-                </Text>
-              ) : null}
-            </View>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="opening_balance"
-          render={({ field }) => (
-            <View style={{ gap: space['1'] }}>
-              <AmountField
-                testID="source-opening-balance"
-                label={
-                  isCredit
-                    ? t('source:form.credit_debt_label')
-                    : t('source:form.opening_balance_label')
-                }
-                value={field.value}
-                onChange={field.onChange}
-                currency={watch('default_currency') || baseCurrency}
-                hint={isCredit ? t('source:form.credit_debt_hint') : undefined}
-                error={sourceValidationMessage(t, errors.opening_balance?.message)}
-                disabled={busy}
-              />
-              <Text variant="caption" tone="muted" testID="source-opening-balance-hint">
-                {t('source:form.opening_balance_hint')}
-              </Text>
-            </View>
-          )}
-        />
-
-        {isEdit && baseline ? (
+  const fields = (
+    <SourceFormFields
+      control={control}
+      errors={errors}
+      isEdit={isEdit}
+      busy={busy}
+      wide={wide}
+      type={type}
+      onTypeChange={onTypeChange}
+      duplicateName={duplicateName}
+      currencyCodes={currencies.codes}
+      currencyNames={currencies.names}
+      currency={currency}
+      quickCurrencies={quickCurrencies}
+      archivedSwitch={
+        isEdit && baseline ? (
           <Switch
             testID="source-archived"
             label={t('source:form.archived_toggle')}
@@ -405,17 +317,57 @@ export default function SourceFormScreen(): React.JSX.Element {
               void archive.setArchived(server ?? baseline, next);
             }}
           />
-        ) : null}
+        ) : undefined
+      }
+    />
+  );
 
-        <Button
-          testID="source-submit"
-          label={isEdit ? t('source:form.submit_save') : t('source:form.submit_create')}
-          onPress={() => void submit()}
-          loading={busy}
-          disabled={busy}
-          fullWidth
-        />
-      </View>
-    </Page>
+  const actions = (
+    <>
+      <Button
+        testID="source-cancel"
+        label={t('common:button.cancel')}
+        variant="soft"
+        onPress={goBack}
+        disabled={busy}
+        style={wide ? undefined : { flex: 1 }}
+      />
+      <Button
+        testID="source-submit"
+        label={isEdit ? t('source:form.submit_save') : t('source:form.submit_create')}
+        onPress={() => void submit()}
+        loading={busy}
+        disabled={busy}
+        style={wide ? undefined : { flex: 1.6 }}
+      />
+    </>
+  );
+
+  if (!wide) {
+    return (
+      <Page testID="source-form-screen">
+        <Card variant="raised" style={{ padding: space['4'] }}>
+          {fields}
+        </Card>
+        <View style={{ flexDirection: 'row', gap: space['2'] + 2 }}>{actions}</View>
+      </Page>
+    );
+  }
+
+  // 屏幕稿 09 draws the wide form as a modal over the dimmed account list, not as a page
+  // of its own; `FormDialog` owns that overlay and takes the list behind as a prop.
+  return (
+    <View style={{ flex: 1 }} testID="source-form-screen">
+      <FormDialog
+        testID="source-form"
+        title={title}
+        closeLabel={t('source:form.close_label')}
+        onClose={goBack}
+        actions={actions}
+        behind={<SourcesScreen />}
+      >
+        {fields}
+      </FormDialog>
+    </View>
   );
 }

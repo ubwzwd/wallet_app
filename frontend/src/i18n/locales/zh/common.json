@@ -12,7 +12,8 @@
     "back": "返回",
     "loading": "加载中",
     "refresh": "刷新",
-    "confirm_again": "再点一次确认"
+    "confirm_again": "再点一次确认",
+    "pick_date": "选择日期"
   },
   "nav": {
     "home": "首页",
@@ -21,6 +22,9 @@
     "sources": "账户",
     "imports": "导入",
     "me": "我的",
+    "ledgers": "账本管理",
+    "ledger_count_other": "{{count}} 本",
+    "member_count_other": "{{count}} 人",
     "ledger_settings": "账本设置",
     "settings": "个人设置",
     "switch_ledger": "切换账本",

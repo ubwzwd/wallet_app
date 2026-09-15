@@ -1,6 +1,6 @@
 /** 04 §2.3, decision §1.3: kind -> allowed tree, judging-criterion search over desc_*. */
 import type { CategoryTree } from '@/api/types';
-import { buildCategoryIndex, searchCategories } from '../categories';
+import { buildCategoryIndex } from '../categories';
 
 const tree: CategoryTree = {
   version: '2026-09-10',
@@ -76,37 +76,5 @@ describe('buildCategoryIndex', () => {
     expect(index.isValidPair('food', null, 'transfer')).toBe(false);
     expect(index.isValidPair('salary', 'bonus', 'income')).toBe(true);
     expect(index.isValidPair('salary', null, 'expense')).toBe(false); // salary isn't an expense category
-  });
-});
-
-describe('searchCategories', () => {
-  const index = buildCategoryIndex(tree);
-
-  test('matches the judging-criterion text ("用完就没了"), not just the name', () => {
-    const hits = searchCategories(index, 'expense', '用完就没了', 'zh');
-    expect(hits).toEqual([{ l1: 'groceries' }]);
-  });
-
-  test('matches level-2 category names', () => {
-    const hits = searchCategories(index, 'expense', '午餐', 'zh');
-    expect(hits).toEqual([{ l1: 'food', l2: 'lunch' }]);
-  });
-
-  test('refund uses the expense tree', () => {
-    const hits = searchCategories(index, 'refund', '用完就没了', 'zh');
-    expect(hits).toEqual([{ l1: 'groceries' }]);
-  });
-
-  test('is case-insensitive and searches English names too', () => {
-    const hits = searchCategories(index, 'expense', 'lunch', 'en');
-    expect(hits).toEqual([{ l1: 'food', l2: 'lunch' }]);
-  });
-
-  test('empty query returns no hits', () => {
-    expect(searchCategories(index, 'expense', '', 'zh')).toEqual([]);
-  });
-
-  test('transfer has nothing to search', () => {
-    expect(searchCategories(index, 'transfer', '餐饮', 'zh')).toEqual([]);
   });
 });

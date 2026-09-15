@@ -296,6 +296,68 @@ test('an empty opening balance submits the documented default of 0', async () =>
   expect(JSON.parse(api.mock.history.post[0].data as string).opening_balance).toBe('0.0000');
 });
 
+test('a currency quick chip picks that currency without opening the full list', async () => {
+  mockPost(SOURCES_PATH, makeSource({ id: 'new-src' }));
+  renderForm(NEW_URL);
+
+  expect(await screen.findByTestId('source-currency-quick-CNY')).toBeTruthy();
+  fireEvent.changeText(screen.getByTestId('source-name'), '现金');
+  fireEvent.press(screen.getByTestId('source-currency-quick-CNY'));
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('source-submit'));
+  });
+  await waitFor(() => expect(api.mock.history.post.length).toBe(1));
+  expect(JSON.parse(api.mock.history.post[0].data as string).default_currency).toBe('CNY');
+});
+
+test('cancelling goes back to the list without sending anything', async () => {
+  const router = renderForm(NEW_URL);
+
+  fireEvent.changeText(await screen.findByTestId('source-name'), '不要了');
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('source-cancel'));
+  });
+
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(api.mock.history.post.length).toBe(0);
+});
+
+test('the wide dialog closes back to the list with its × (屏幕稿 09)', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  const router = renderForm(NEW_URL);
+
+  expect(await screen.findByTestId('source-form-dialog')).toBeTruthy();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('source-form-close'));
+  });
+
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(api.mock.history.post.length).toBe(0);
+});
+
+test('the wide dialog sits over the account list, and the backdrop closes it (屏幕稿 09)', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  const router = renderForm(NEW_URL);
+
+  // 屏幕稿 09 draws the form as a modal over the dimmed list, not as a page of its own:
+  // the list the route came from is still on screen behind it.
+  expect(await screen.findByTestId('source-form-dialog')).toBeTruthy();
+  // The layer behind is `aria-hidden`, so it has to be asked for explicitly — which is
+  // itself the point: the pointer and the screen reader stay inside the dialog.
+  const behind = screen.getByTestId('source-form-behind', { includeHiddenElements: true });
+  expect(within(behind).getByTestId('sources-screen', { includeHiddenElements: true })).toBeTruthy();
+  expect(
+    within(behind).getByTestId('source-row-src-checking', { includeHiddenElements: true }),
+  ).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('source-form-backdrop', { includeHiddenElements: true }));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(api.mock.history.post.length).toBe(0);
+});
+
 // ----------------------------------------------------------- the title (04 §1.4)
 
 test('the narrow layout puts the title in the top bar and not on the page as well', async () => {

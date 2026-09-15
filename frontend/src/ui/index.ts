@@ -7,6 +7,7 @@
  * types, formatters and language pack, but still nothing about the API, the query cache
  * or the router — everything they render arrives as props.
  */
+export * from './Avatar';
 export * from './Badge';
 export * from './Button';
 export * from './Card';
@@ -17,20 +18,26 @@ export * from './DataTable';
 export * from './Divider';
 export * from './EmptyState';
 export * from './Icon';
+export * from './KeyValueRows';
+export * from './ListCard';
+export * from './ListRow';
 export * from './Page';
+export * from './PageHeader';
+export * from './Popover';
 export * from './ProgressBar';
+export * from './SectionHeader';
 export * from './SegmentedControl';
 export * from './Select';
 export * from './Sheet';
 export * from './Skeleton';
-export * from './StatTile';
 export * from './Switch';
 export * from './Text';
 export * from './TextField';
+export * from './TintCard';
 export * from './Toast';
 
 export * from './AmountField';
-export * from './BarList';
+export * from './BarChart';
 export * from './CategoryPicker';
 // Named, not `export *`: the panel module also owns `CategoryValue` / `orderByRecent`,
 // which `CategoryPicker` already re-exports above.
@@ -41,7 +48,6 @@ export * from './EventTimeline';
 export * from './FilterChips';
 export * from './KeyboardHint';
 export * from './KindBadge';
+export * from './KindIcon';
 export * from './MoneyText';
-export * from './MonthSwitcher';
 export * from './SourcePicker';
-export * from './TrendChart';

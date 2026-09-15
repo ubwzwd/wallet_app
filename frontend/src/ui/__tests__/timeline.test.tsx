@@ -4,6 +4,7 @@
  * "字段名 旧 → 新" with category codes turned into names, and a fold above three fields.
  */
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
@@ -11,6 +12,7 @@ import type { TransactionEvent, Uuid } from '@/api/types';
 import { buildCategoryIndex } from '@/domain/categories';
 import { namespaces, resources } from '@/i18n/resources';
 import { ThemeProvider } from '@/theme/ThemeProvider';
+import { lightColors } from '@/theme/tokens';
 import { EventTimeline } from '@/ui/EventTimeline';
 import { FilterChips } from '@/ui/FilterChips';
 import { KeyboardHint } from '@/ui/KeyboardHint';
@@ -71,6 +73,28 @@ describe('EventTimeline', () => {
     expect(order).toEqual(['updated', 'paired', 'created']);
   });
 
+  test('each entry is a dot, 「动作 · 人」 and the time below — the newest dot solid', () => {
+    renderThemed(
+      <EventTimeline
+        events={[
+          makeEvent({ id: 'new', at: '2026-08-20T14:02:00.000000Z', event: 'updated' }),
+          makeEvent({ id: 'old', at: '2026-08-14T09:12:00.000000Z', event: 'created' }),
+        ]}
+        names={{}}
+        meId={ME}
+        lang="zh"
+        testID="ev"
+      />,
+    );
+    // Mockups 07 / 08 write the action and the person on one line, the time underneath.
+    expect(screen.getByTestId('ev-action-new')).toHaveTextContent('改动 · 我');
+    expect(screen.getByTestId('ev-at-new')).toHaveTextContent('2026-08-20 22:02');
+    const dotStyle = (id: string): Record<string, unknown> =>
+      StyleSheet.flatten(screen.getByTestId(id).props.style as never) as never;
+    expect(dotStyle('ev-dot-new').backgroundColor).toBe(lightColors['accent.solid']);
+    expect(dotStyle('ev-dot-old').backgroundColor).toBe(lightColors['border.strong']);
+  });
+
   test('I am "我"; a known member gets their name; an unknown actor falls back', () => {
     renderThemed(
       <EventTimeline
@@ -114,7 +138,7 @@ describe('EventTimeline', () => {
       />,
     );
     const row = screen.getByTestId('ev-row-a');
-    expect(screen.getByTestId('ev-action-a')).toHaveTextContent('改动');
+    expect(screen.getByTestId('ev-action-a')).toHaveTextContent(/^改动 · /);
     expect(row).toHaveTextContent(/金额 −¥38\.00 → −¥42\.00/);
     expect(row).toHaveTextContent(/一级分类 餐饮 → 交通/);
     // A cleared field reads as "无", not as the raw null.

@@ -9,13 +9,13 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import type { IsoDate, TxKind } from '@/api/types';
+import { todayLocal } from '@/domain/dates';
 import { namespaces, resources } from '@/i18n/resources';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { lightColors } from '@/theme/tokens';
 import { AmountField, trimMoney } from '@/ui/AmountField';
-import { DateField, dateFieldErrorKey } from '@/ui/DateField';
+import { DateField, ISO_DATE_PATTERN, dateFieldErrorKey } from '@/ui/DateField';
 import { MoneyText } from '@/ui/MoneyText';
-import { MonthSwitcher } from '@/ui/MonthSwitcher';
 
 beforeAll(async () => {
   if (!i18next.isInitialized) {
@@ -45,12 +45,14 @@ function AmountHarness({
   kind,
   quickAdd = false,
   allowExpression = false,
+  size,
 }: {
   initial: string;
   onChange: (next: string) => void;
   kind?: TxKind;
   quickAdd?: boolean;
   allowExpression?: boolean;
+  size?: 'md' | 'lg';
 }) {
   const [value, setValue] = React.useState(initial);
   return (
@@ -64,6 +66,7 @@ function AmountHarness({
       kind={kind}
       quickAdd={quickAdd}
       allowExpression={allowExpression}
+      size={size}
       testID="amt"
     />
   );
@@ -155,6 +158,64 @@ describe('AmountField', () => {
     expect(screen.getByTestId('amt').props.value).toBe('12480.35');
   });
 
+  test('the large form paints the number in the kind colour and keeps the currency inside', () => {
+    renderThemed(
+      <AmountField
+        value="45"
+        onChange={() => undefined}
+        currency="CNY"
+        kind="expense"
+        size="lg"
+        testID="amt"
+      />,
+    );
+    const input = screen.getByTestId('amt');
+    const style = StyleSheet.flatten(input.props.style as never) as Record<string, unknown>;
+    expect(style.fontSize).toBe(40);
+    expect(style.color).toBe(lightColors['kind.expense']);
+    expect(style.fontFamily).toContain('IBMPlexMono');
+    // The sign is still read-only, and the currency picker still sits in the box.
+    expect(screen.getByTestId('amt-sign')).toHaveTextContent('−');
+    expect(screen.getByTestId('amt-currency')).toBeTruthy();
+    // The mobile keyboard hints survive the new shape (04 §7.1).
+    expect(input.props.inputMode).toBe('decimal');
+    expect(input.props.keyboardType).toBe('decimal-pad');
+  });
+
+  test('the large box shows a focus ring, the way the ordinary field does', () => {
+    renderThemed(
+      <AmountHarness initial="45" onChange={() => undefined} kind="expense" size="lg" />,
+    );
+    const well = () =>
+      StyleSheet.flatten(screen.getByTestId('amt-field').props.style as never) as Record<
+        string,
+        unknown
+      >;
+    expect(well().borderColor).toBe('transparent');
+    fireEvent(screen.getByTestId('amt'), 'focus');
+    expect(well().borderColor).toBe(lightColors['border.focus']);
+    fireEvent(screen.getByTestId('amt'), 'blur');
+    expect(well().borderColor).toBe('transparent');
+  });
+
+  test('a transfer keeps the large number unpainted (§6.2 rule 2)', () => {
+    renderThemed(
+      <AmountField
+        value="3000"
+        onChange={() => undefined}
+        currency="CNY"
+        kind="transfer"
+        size="lg"
+        testID="amt"
+      />,
+    );
+    const style = StyleSheet.flatten(
+      screen.getByTestId('amt').props.style as never,
+    ) as Record<string, unknown>;
+    expect(style.color).toBe(lightColors['fg.primary']);
+    expect(screen.queryByTestId('amt-sign')).toBeNull();
+  });
+
   test('trimMoney drops the wire format\'s trailing zeros', () => {
     expect(trimMoney('48.0000')).toBe('48');
     expect(trimMoney('30.1000')).toBe('30.1');
@@ -162,9 +223,28 @@ describe('AmountField', () => {
   });
 });
 
-function DateHarness({ initial, max, min }: { initial: IsoDate; max?: IsoDate; min?: IsoDate }) {
+function DateHarness({
+  initial,
+  max,
+  min,
+  todayLabel,
+}: {
+  initial: IsoDate;
+  max?: IsoDate;
+  min?: IsoDate;
+  todayLabel?: string;
+}) {
   const [value, setValue] = React.useState(initial);
-  return <DateField value={value} onChange={setValue} max={max} min={min} testID="date" />;
+  return (
+    <DateField
+      value={value}
+      onChange={setValue}
+      max={max}
+      min={min}
+      todayLabel={todayLabel}
+      testID="date"
+    />
+  );
 }
 
 describe('DateField', () => {
@@ -195,6 +275,40 @@ describe('DateField', () => {
     expect(screen.getByText('日期太早了')).toBeTruthy();
   });
 
+  test('the box shows the ISO day itself, never a locale-shaped date', () => {
+    renderThemed(<DateHarness initial="2026-09-08" />);
+    const input = screen.getByTestId('date');
+    // Not `09/08/2026`: the string in the box is the string the server gets (§14.32).
+    expect(input.props.value).toBe('2026-09-08');
+    expect(input.props.placeholder).toBe(ISO_DATE_PATTERN);
+    const boxStyle = StyleSheet.flatten(input.props.style as never) as Record<string, unknown>;
+    expect(boxStyle.fontFamily).toContain('IBMPlexMono');
+  });
+
+  test('the calendar button is a separate, named target next to the box', () => {
+    renderThemed(<DateHarness initial="2026-09-08" />);
+    const picker = screen.getByTestId('date-picker');
+    expect(picker.props.accessibilityRole).toBe('button');
+    // Its own name, from the pack: two controls both called 「日期」 tell a screen reader
+    // nothing about which one opens the calendar.
+    expect(picker.props.accessibilityLabel).toBe('选择日期');
+    expect(screen.getByTestId('date').props.accessibilityLabel).toBe('日期');
+    // Native has no date wheel this phase: pressing it focuses the box instead of throwing.
+    fireEvent.press(picker);
+    expect(screen.getByTestId('date').props.value).toBe('2026-09-08');
+  });
+
+  test('the optional "today" chip jumps the field to today', () => {
+    renderThemed(<DateHarness initial="2026-01-02" todayLabel="今天" />);
+    fireEvent.press(screen.getByTestId('date-today'));
+    expect(screen.getByTestId('date').props.value).toBe(todayLocal());
+  });
+
+  test('without a label there is no chip at all', () => {
+    renderThemed(<DateHarness initial="2026-01-02" />);
+    expect(screen.queryByTestId('date-today')).toBeNull();
+  });
+
   test('the range check itself is pure', () => {
     expect(dateFieldErrorKey('2026-08-14', '2026-09-11')).toBeNull();
     expect(dateFieldErrorKey('2026-09-12', '2026-09-11')).toEqual(['validation:date_not_future']);
@@ -204,33 +318,6 @@ describe('DateField', () => {
     expect(dateFieldErrorKey('2026-07-20', '2026-09-11', '2026-08-01')).toEqual([
       'validation:date_too_early',
     ]);
-  });
-});
-
-describe('MonthSwitcher', () => {
-  test('it steps back a month and never past the ceiling', () => {
-    const onChange = jest.fn();
-    renderThemed(
-      <MonthSwitcher value="2026-08" max="2026-09" onChange={onChange} lang="zh" testID="ms" />,
-    );
-    expect(screen.getByTestId('ms-label')).toHaveTextContent('2026 年 8 月');
-
-    fireEvent.press(screen.getByTestId('ms-prev'));
-    expect(onChange).toHaveBeenCalledWith('2026-07');
-
-    fireEvent.press(screen.getByTestId('ms-next'));
-    expect(onChange).toHaveBeenLastCalledWith('2026-09');
-  });
-
-  test('the next arrow is disabled on the ceiling month', () => {
-    const onChange = jest.fn();
-    renderThemed(
-      <MonthSwitcher value="2026-09" max="2026-09" onChange={onChange} lang="zh" testID="ms" />,
-    );
-    const next = screen.getByTestId('ms-next');
-    expect(next.props.accessibilityState).toMatchObject({ disabled: true });
-    fireEvent.press(next);
-    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

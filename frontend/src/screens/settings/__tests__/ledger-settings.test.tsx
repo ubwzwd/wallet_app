@@ -98,6 +98,8 @@ async function renderSettings(
   role: Ledger['role'],
   members: LedgerMember[],
   detail: LedgerDetail = makeDetail(),
+  /** Left undefined the window keeps its default width; the two layout tests pin it. */
+  wide?: boolean,
 ): Promise<Awaited<ReturnType<typeof renderWithProviders>>> {
   mockGet(`/ledgers/${LEDGER_ID}`, detail);
   mockGet(`/ledgers/${LEDGER_ID}/members`, { items: members, total: members.length });
@@ -106,12 +108,15 @@ async function renderSettings(
     <LedgerProvider ledgerId={LEDGER_ID} ledgers={ledgers}>
       <LedgerSettingsScreen />
     </LedgerProvider>,
-    { auth: { status: 'authenticated', user: makeUser() } },
+    { auth: { status: 'authenticated', user: makeUser() }, wide },
   );
 }
 
 test('a member sees the permission block but none of the owner-only actions', async () => {
-  await renderSettings('member', [makeMember({ role: 'member' }), { ...BOB, role: 'owner' }]);
+  // Pinned wide: 屏幕稿 12 375 has no 权限 card at all, so the block this asserts on only
+  // exists in the 1440 frame's right column.
+  const members = [makeMember({ role: 'member' }), { ...BOB, role: 'owner' as const }];
+  await renderSettings('member', members, makeDetail(), true);
 
   const hint = await screen.findByTestId('permission-hint');
   expect(hint).toHaveTextContent(/导入/);
@@ -120,12 +125,14 @@ test('a member sees the permission block but none of the owner-only actions', as
 
   expect(screen.queryByTestId('invite-card')).toBeNull();
   expect(screen.queryByTestId('invite-generate')).toBeNull();
-  expect(screen.queryByTestId('danger-zone')).toBeNull();
   expect(screen.queryByTestId('transfer-ownership')).toBeNull();
+  expect(screen.queryByTestId('delete-ledger')).toBeNull();
+  expect(screen.queryByTestId('ledger-rename')).toBeNull();
+  expect(screen.queryByTestId('ledger-base-currency-change')).toBeNull();
   expect(screen.queryByTestId(`member-remove-${OTHER_ID}`)).toBeNull();
   // The one thing a member can do here.
   expect(screen.getByTestId('leave-ledger').props.accessibilityState?.disabled).toBeFalsy();
-  expect(screen.getByTestId('ledger-name-readonly')).toHaveTextContent(/家庭账本/);
+  expect(screen.getByTestId('ledger-name')).toHaveTextContent(/家庭账本/);
 });
 
 test('an owner cannot leave before handing the ledger over', async () => {
@@ -133,21 +140,25 @@ test('an owner cannot leave before handing the ledger over', async () => {
 
   await screen.findByTestId('members-section');
   expect(screen.getByTestId('leave-ledger').props.accessibilityState?.disabled).toBe(true);
-  expect(screen.getByTestId('leave-disabled-hint')).toHaveTextContent(/先把创建者转让给别人/);
+  expect(screen.getByTestId('leave-ledger')).toHaveTextContent(/需先转让才能退出/);
 });
 
 test('changing the base currency warns with the transaction count, then PATCHes', async () => {
   await renderSettings('owner', [makeMember(), BOB]);
   mockPatch(`/ledgers/${LEDGER_ID}`, makeLedger({ base_currency: 'SGD' }));
 
-  fireEvent.press(await screen.findByTestId('ledger-base-currency-trigger'));
-  fireEvent.press(await screen.findByTestId('ledger-base-currency-option-SGD'));
+  fireEvent.press(await screen.findByTestId('ledger-base-currency-change'));
+  fireEvent.press(await screen.findByTestId('ledger-base-currency-picker-trigger'));
+  fireEvent.press(await screen.findByTestId('ledger-base-currency-picker-option-SGD'));
 
-  const dialog = await screen.findByTestId('confirm-dialog');
-  expect(dialog).toHaveTextContent(/328\ 笔交易/);
-  expect(dialog).toHaveTextContent(/各自发生日的汇率/);
+  // 屏幕稿 12: the warning is the panel itself, not a modal — it states the count and the
+  // rule, and nothing is sent until 「仍要改成 SGD」 is pressed.
+  const warning = await screen.findByTestId('ledger-currency-warning');
+  expect(warning).toHaveTextContent(/328\ 笔交易/);
+  expect(warning).toHaveTextContent(/各自发生日的汇率/);
+  expect(api.mock.history.patch).toHaveLength(0);
 
-  fireEvent.press(screen.getByTestId('confirm-accept'));
+  fireEvent.press(screen.getByTestId('ledger-currency-confirm'));
 
   await waitFor(() => expect(api.mock.history.patch).toHaveLength(1));
   expect(JSON.parse(api.mock.history.patch[0].data as string)).toEqual({
@@ -225,6 +236,7 @@ test('transferring ownership downgrades the page to a member view', async () => 
 
   // The first list has landed (the picker only exists once it has), so swapping the
   // handler now only affects the refetch the transfer itself triggers.
+  fireEvent.press(await screen.findByTestId('transfer-ownership'));
   const trigger = await screen.findByTestId('transfer-target-trigger');
   mockGet(`/ledgers/${LEDGER_ID}/members`, { items: swapped, total: 2 });
 
@@ -236,7 +248,7 @@ test('transferring ownership downgrades the page to a member view', async () => 
   fireEvent.press(await screen.findByTestId('confirm-accept'));
   fireEvent.press(screen.getByTestId('confirm-accept'));
 
-  await waitFor(() => expect(screen.queryByTestId('danger-zone')).toBeNull());
+  await waitFor(() => expect(screen.queryByTestId('delete-ledger')).toBeNull());
   expect(screen.queryByTestId('invite-card')).toBeNull();
   expect(screen.queryByTestId('transfer-ownership')).toBeNull();
   expect(JSON.parse(api.mock.history.post[0].data as string)).toEqual({ to_user_id: OTHER_ID });
@@ -270,15 +282,19 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
 
   fireEvent.press(await screen.findByTestId('delete-ledger'));
   const dialog = await screen.findByTestId('confirm-dialog');
-  expect(dialog).toHaveTextContent(/328 条交易/);
-  expect(dialog).toHaveTextContent(/4 个账户/);
-  expect(dialog).toHaveTextContent(/12 批导入记录/);
+  expect(dialog).toHaveTextContent(/删除「家庭账本」/);
+  // 屏幕稿 12 · 删除账本 draws the three counts as tiles, one number each.
+  expect(screen.getByTestId('delete-ledger-tile-transactions-value')).toHaveTextContent('328 笔');
+  expect(screen.getByTestId('delete-ledger-tile-sources-value')).toHaveTextContent('4 个');
+  expect(screen.getByTestId('delete-ledger-tile-imports-value')).toHaveTextContent('12 批');
 
   const accept = screen.getByTestId('confirm-accept');
   expect(accept.props.accessibilityState?.disabled).toBe(true);
 
   fireEvent.changeText(screen.getByTestId('confirm-require-text'), '家庭账');
   expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
+  // ...and says how far off it still is, the way the mockup's 「还差「本」字」 does.
+  expect(dialog).toHaveTextContent(/还差「本」字/);
 
   fireEvent.changeText(screen.getByTestId('confirm-require-text'), '家庭账本');
   fireEvent.press(screen.getByTestId('confirm-accept'));
@@ -287,10 +303,62 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
   expect(api.mock.history.delete[0].url).toContain(`/ledgers/${LEDGER_ID}`);
 });
 
+test('cancelling the delete dialog closes it and deletes nothing', async () => {
+  await renderSettings('owner', [makeMember(), BOB]);
+  mockDelete(`/ledgers/${LEDGER_ID}`, undefined, 204);
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(api.mock.history.delete).toHaveLength(0);
+
+  // Reopening starts from an empty box: the typed name must not survive a cancel.
+  fireEvent.press(screen.getByTestId('delete-ledger'));
+  expect((await screen.findByTestId('confirm-require-text')).props.value).toBe('');
+  expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
+});
+
+test('the delete dialog cannot be dismissed while the DELETE is in flight', async () => {
+  await renderSettings('owner', [makeMember(), BOB]);
+  let release: (() => void) | null = null;
+  api.mock
+    .onDelete(apiUrl(`/ledgers/${LEDGER_ID}`))
+    .reply(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([204, undefined]);
+        }),
+    );
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+  await waitFor(() => expect(api.mock.history.delete).toHaveLength(1));
+
+  // 取消, the ✕ and the backdrop are all shut off for as long as the request is out:
+  // closing here would leave the mutation running behind an empty screen and then
+  // navigate away from a ledger nobody can see they asked to delete. (The backdrop is a
+  // sibling of an `accessibilityViewIsModal` view, so it is not queryable from here; it
+  // shares the same `dismiss` guard, as does the wide frame's ✕.)
+  expect(screen.getByTestId('confirm-cancel').props.accessibilityState?.disabled).toBe(true);
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+  expect(screen.getByTestId('confirm-dialog')).toBeTruthy();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+
+  await act(async () => {
+    release?.();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
+});
+
 test('renaming the ledger sends the name and the version it was read at', async () => {
   await renderSettings('owner', [makeMember(), BOB]);
   mockPatch(`/ledgers/${LEDGER_ID}`, makeLedger({ name: '家用' }));
 
+  fireEvent.press(await screen.findByTestId('ledger-rename'));
   fireEvent.changeText(await screen.findByTestId('ledger-name-input'), '家用');
   fireEvent.press(screen.getByTestId('ledger-name-save'));
 
@@ -345,6 +413,7 @@ test('a failed rename is visible even though the card renders no error of its ow
   const { handlers } = await renderSettings('owner', [makeMember(), BOB]);
   mockPatch(`/ledgers/${LEDGER_ID}`, { code: 'internal_error', message: 'boom' }, 500);
 
+  fireEvent.press(await screen.findByTestId('ledger-rename'));
   fireEvent.changeText(await screen.findByTestId('ledger-name-input'), '家用');
   fireEvent.press(screen.getByTestId('ledger-name-save'));
 
@@ -368,10 +437,11 @@ test('the narrow layout publishes the title to the top bar and drops the page he
   );
 
   expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('账本设置');
-  expect(screen.queryByTestId('ledger-settings-title')).toBeNull();
+  // 屏幕稿 12 375: the page's own head is the ledger card, never a second 「账本设置」.
+  expect(await screen.findByTestId('ledger-settings-header')).toHaveTextContent(/家庭账本/);
 });
 
-test('the wide layout has no top bar, so the page carries the title itself', async () => {
+test('the wide layout has no top bar, so the page heads itself with the ledger', async () => {
   mockGet(`/ledgers/${LEDGER_ID}`, makeDetail());
   mockGet(`/ledgers/${LEDGER_ID}/members`, { items: [makeMember()], total: 1 });
   await renderWithProviders(
@@ -381,5 +451,8 @@ test('the wide layout has no top bar, so the page carries the title itself', asy
     { auth: { status: 'authenticated', user: makeUser() }, wide: true },
   );
 
-  expect(await screen.findByTestId('ledger-settings-title')).toHaveTextContent('账本设置');
+  // 屏幕稿 12 1440: the name, then 「建于 … · 328 笔交易 · 基准币种 CNY」 under it.
+  expect(await screen.findByTestId('ledger-name')).toHaveTextContent('家庭账本');
+  expect(screen.getByTestId('ledger-header-meta')).toHaveTextContent(/328/);
+  expect(screen.getByTestId('ledger-header-meta')).toHaveTextContent(/CNY/);
 });

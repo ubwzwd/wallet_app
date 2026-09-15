@@ -20,7 +20,7 @@ import * as i18n from '@/i18n';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
 import { makeLedger, makeUser } from '@/test/fixtures';
-import { mockApi, mockGet, type MockApi } from '@/test/mockApi';
+import { apiUrl, mockApi, mockGet, type MockApi } from '@/test/mockApi';
 import { space } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { toast } from '@/ui';
@@ -28,6 +28,7 @@ import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import { TAB_BAR_HEIGHT } from '../BottomTabBar';
 import { resetLedgerGone } from '../RequireLedger';
+import { showsLedgerManageCard } from '../Sidebar';
 import { useSwUpdateToast } from '../useSwUpdateToast';
 
 const LEDGER_A = 'ledger-a';
@@ -69,7 +70,35 @@ beforeEach(async () => {
   mockGet('/ledgers', {
     items: [
       makeLedger({ id: LEDGER_A, name: '家庭账本', base_currency: 'CNY', role: 'owner' }),
-      makeLedger({ id: LEDGER_B, name: '旅行账本', base_currency: 'SGD', role: 'member' }),
+      makeLedger({
+        id: LEDGER_B,
+        name: '旅行账本',
+        base_currency: 'SGD',
+        role: 'member',
+        member_count: 4,
+      }),
+    ],
+    total: 2,
+  });
+  // The sidebar's ledger card names the members while there are few enough of them.
+  mockGet(`/ledgers/${LEDGER_A}/members`, {
+    items: [
+      {
+        user_id: 'u-1',
+        email: 'ali@example.com',
+        display_name: '阿狸',
+        role: 'owner',
+        joined_at: '2026-02-01T09:00:00Z',
+        is_me: true,
+      },
+      {
+        user_id: 'u-2',
+        email: 'bo@example.com',
+        display_name: '老婆',
+        role: 'member',
+        joined_at: '2026-02-02T09:00:00Z',
+        is_me: false,
+      },
     ],
     total: 2,
   });
@@ -134,8 +163,42 @@ describe('narrow (<1024)', () => {
 
     expect(await router.findByTestId(`ledger-switcher-row-${LEDGER_B}`)).toBeTruthy();
     expect(router.getByText('旅行账本')).toBeTruthy();
-    expect(router.getByText('成员')).toBeTruthy();
-    expect(router.getByText('创建者')).toBeTruthy();
+    // Screen 01: each row carries the base currency and how many people are in that ledger.
+    expect(router.getByText('SGD · 4 人')).toBeTruthy();
+    expect(router.getByTestId('ledger-switcher-new')).toBeTruthy();
+    expect(router.getByTestId('ledger-switcher-join')).toBeTruthy();
+  });
+
+  test('the top bar carries the member disc, which leads to personal settings', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    fireEvent.press(await router.findByTestId('top-bar-me'));
+
+    await waitFor(() => expect(router.getPathname()).toBe('/settings'));
+  });
+
+  test('the bar is TAB_BAR_HEIGHT tall when added up from its own styles', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    const bar = StyleSheet.flatten(
+      (await router.findByTestId('bottom-tab-bar')).props.style,
+    ) as { paddingTop: number; paddingBottom: number };
+    const slot = StyleSheet.flatten(router.getByTestId('tab-add').props.style) as {
+      marginTop: number;
+      gap: number;
+    };
+    const disc = StyleSheet.flatten(router.getByTestId('tab-add-disc').props.style) as {
+      height: number;
+    };
+    const label = StyleSheet.flatten(router.getByTestId('tab-add-label').props.style) as {
+      lineHeight: number;
+    };
+
+    // The centre slot is the tallest thing in the row, and it rides `marginTop` above it.
+    const slotHeight = disc.height + slot.gap + label.lineHeight + slot.marginTop;
+    // Measured, not restated: growing the disc or the label fails this, and the toast host
+    // offsets itself by the constant.
+    expect(bar.paddingTop + slotHeight + bar.paddingBottom).toBe(TAB_BAR_HEIGHT);
   });
 
   test('the toast host clears the tab bar inside a ledger and sits low outside it', async () => {
@@ -178,6 +241,16 @@ describe('narrow (<1024)', () => {
     expect(router.getByLabelText('关闭')).toBeTruthy();
   });
 
+  test('/ledgers draws its own header: the shell adds no bar and no tabs at 375', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+
+    expect(await router.findByText('ledgers-page')).toBeTruthy();
+    // Mockup 13 at 375 puts the back button and the title inside the page itself.
+    expect(router.queryByTestId('top-bar')).toBeNull();
+    expect(router.queryByTestId('bottom-tab-bar')).toBeNull();
+    expect(router.queryByTestId('sidebar')).toBeNull();
+  });
+
   test('/settings keeps the chrome: a title bar with a way back, and no tabs', async () => {
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
@@ -193,22 +266,65 @@ describe('narrow (<1024)', () => {
 describe('wide (>=1024)', () => {
   beforeEach(() => setWide(true));
 
-  test('renders the six sidebar destinations, the primary button, and no tab bar', async () => {
+  test('renders the five sidebar destinations, the primary button, and no tab bar', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
 
     expect(await router.findByTestId('sidebar')).toBeTruthy();
-    for (const label of ['首页', '交易', '账户', '导入', '账本设置', '个人设置']) {
+    for (const label of ['首页', '交易', '账户', '导入', '我的']) {
       expect(router.getByText(label)).toBeTruthy();
     }
     expect(router.getByTestId('sidebar-add')).toBeTruthy();
     expect(router.getByText('记一笔')).toBeTruthy();
 
+    // §14.56: ledger settings is reached from the ledger card, not from the nav list.
+    expect(router.queryByText('账本设置')).toBeNull();
     // Decision §14.52 A21: neither of these is a top-level destination.
     expect(router.queryByText('报表')).toBeNull();
     expect(router.queryByText('成员')).toBeNull();
 
+    // There is no general top bar on a wide layout — each page carries its own header.
+    expect(router.queryByTestId('top-bar')).toBeNull();
     expect(router.queryByTestId('bottom-tab-bar')).toBeNull();
     expect(router.getByTestId('app-shell-wide')).toBeTruthy();
+  });
+
+  test('the ledger card names the ledger and its members, and opens the switcher', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
+    // Screen 01 at 1440: "家庭账本" over "CNY · 我 + 老婆".
+    expect(await router.findByText('CNY · 阿狸 + 老婆')).toBeTruthy();
+
+    fireEvent.press(router.getByTestId('sidebar-ledger'));
+    expect(await router.findByTestId(`ledger-switcher-row-${LEDGER_B}`)).toBeTruthy();
+  });
+
+  test('too many members to name: the ledger card falls back to a count', async () => {
+    mockGet(`/ledgers/${LEDGER_B}/members`, {
+      items: ['a', 'b', 'c', 'd'].map((n) => ({
+        user_id: `u-${n}`,
+        email: `${n}@example.com`,
+        display_name: n,
+        role: 'member',
+        joined_at: '2026-02-02T09:00:00Z',
+        is_me: false,
+      })),
+      total: 4,
+    });
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_B}` });
+
+    expect(await router.findByText('SGD · 4 人')).toBeTruthy();
+    expect(router.queryByText('SGD · a + b + c + d')).toBeNull();
+  });
+
+  test("the ledger card's chevron goes to that ledger's own settings", async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    const chevron = await router.findByTestId('sidebar-ledger-settings');
+    expect(chevron.props.accessibilityLabel ?? chevron.props['aria-label']).toBe('账本设置');
+    fireEvent.press(chevron);
+
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/settings`));
   });
 
   test('the current destination is marked selected', async () => {
@@ -219,15 +335,15 @@ describe('wide (>=1024)', () => {
     expect(router.getByTestId('sidebar-home').props.accessibilityState.selected).toBe(false);
   });
 
-  test('/l/:id marks 首页 selected without also matching 账本设置', async () => {
+  test('/l/:id marks 首页 selected without also matching its sub-paths', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
 
     expect((await router.findByTestId('sidebar-home')).props.accessibilityState.selected).toBe(
       true,
     );
-    expect(router.getByTestId('sidebar-ledger-settings').props.accessibilityState.selected).toBe(
-      false,
-    );
+    for (const key of ['transactions', 'sources', 'imports', 'settings']) {
+      expect(router.getByTestId(`sidebar-${key}`).props.accessibilityState.selected).toBe(false);
+    }
   });
 
   test('the primary button opens 记一笔 for the current ledger', async () => {
@@ -239,39 +355,175 @@ describe('wide (>=1024)', () => {
     );
   });
 
-  test('the footer names the signed-in member and offers a labelled log out', async () => {
+  test('the footer names the signed-in member and their role, and leads to settings', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
 
-    expect(await router.findByText('阿狸')).toBeTruthy();
-    expect(router.getByLabelText('登出')).toBeTruthy();
+    expect(await router.findByTestId('sidebar-user')).toBeTruthy();
+    expect(router.getByText('创建者')).toBeTruthy();
+
+    fireEvent.press(router.getByTestId('sidebar-user'));
+    await waitFor(() => expect(router.getPathname()).toBe('/settings'));
   });
 
-  test('/settings marks 个人设置 selected and keeps the ledger entries usable', async () => {
+  test('signing out is no longer in the chrome — it lives on the personal settings page', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    expect(await router.findByTestId('sidebar')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-logout')).toBeNull();
+    expect(router.queryByLabelText('登出')).toBeNull();
+  });
+
+  test('/settings keeps the ledger card and the ledger entries usable', async () => {
     // The user was in a ledger a moment ago, so the ledger-scoped entries still lead there.
     await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockGet(`/ledgers/${LEDGER_B}/members`, { items: [], total: 4 });
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
     expect(await router.findByText('settings-page')).toBeTruthy();
     expect(router.getByTestId('sidebar-settings').props.accessibilityState.selected).toBe(true);
     expect(router.getByTestId('sidebar-home').props.accessibilityState.selected).toBe(false);
-    // No ledger context: the header is a link to the ledger list, not the switcher.
-    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
-    expect(router.getByTestId('sidebar-ledgers-link')).toBeTruthy();
+    // Mockup 14 at 1440: the chrome does not change identity when 「我的」 opens — the card
+    // still names the ledger the user was last in, not 「账本管理」.
+    expect(await router.findByText('旅行账本')).toBeTruthy();
+    expect(router.getByTestId('sidebar-ledger')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledgers-link')).toBeNull();
 
     fireEvent.press(router.getByTestId('sidebar-transactions'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/transactions`));
   });
 
-  test('without a remembered ledger the sidebar sends every ledger entry to /ledgers', async () => {
+  test('a cold /settings holds the card slot rather than flashing 「账本管理」', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockGet(`/ledgers/${LEDGER_B}/members`, { items: [], total: 4 });
+    // A cold load — a bookmark, a reload — reaches the sidebar with `GET /ledgers` still in
+    // flight, so hold that request open and look at the frame it leaves behind.
+    const pending: { resolve?: (reply: [number, unknown]) => void } = {};
+    api.mock
+      .onGet(apiUrl('/ledgers'))
+      .reply(() => new Promise((resolve) => (pending.resolve = resolve)));
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    // The chrome shows no card at all rather than guessing the wrong one (mockup 14).
+    expect(await router.findByTestId('sidebar-ledger-pending')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledgers-link')).toBeNull();
+
+    pending.resolve?.([
+      200,
+      {
+        items: [
+          makeLedger({ id: LEDGER_A, name: '家庭账本' }),
+          makeLedger({ id: LEDGER_B, name: '旅行账本', base_currency: 'SGD', member_count: 4 }),
+        ],
+        total: 2,
+      },
+    ]);
+
+    expect(await router.findByText('旅行账本')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledger-pending')).toBeNull();
+  });
+
+  test('a cold /settings with nothing remembered still names a ledger (mockup 14)', async () => {
     await setPref(PREF_NAMES.lastLedgerId, null);
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
     expect(await router.findByText('settings-page')).toBeTruthy();
+    // No `last_ledger_id` yet (a bookmark, a fresh device): the chrome falls back to the
+    // ledger `/` itself would open rather than to 「账本管理」.
+    expect(await router.findByText('家庭账本')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledgers-link')).toBeNull();
+
+    fireEvent.press(router.getByTestId('sidebar-transactions'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`));
+  });
+
+  test('with no ledgers at all the card names the list and there is nowhere to add', async () => {
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
     expect(router.queryByTestId('sidebar-add')).toBeNull();
 
     fireEvent.press(router.getByTestId('sidebar-home'));
     await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
   });
+
+  test('/ledgers draws mockup 13\'s column: 「账本管理」, three entries, no 记一笔', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+
+    expect(await router.findByText('ledgers-page')).toBeTruthy();
+    expect(router.getByTestId('app-shell-wide')).toBeTruthy();
+    // The card names the list, not one ledger — even though a ledger is remembered.
+    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
+    expect(router.getByText('账本管理')).toBeTruthy();
+    expect(router.getByText('2 本')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
+
+    for (const label of ['首页', '交易', '导入']) expect(router.getByText(label)).toBeTruthy();
+    for (const key of ['sources', 'settings']) {
+      expect(router.queryByTestId(`sidebar-${key}`)).toBeNull();
+    }
+    // Screen 13 draws no primary button: no ledger is open to add a transaction to.
+    expect(router.queryByTestId('sidebar-add')).toBeNull();
+
+    // The three entries lead into the ledger the user last had open.
+    fireEvent.press(router.getByTestId('sidebar-transactions'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`));
+  });
+
+  test('/ledgers with nothing remembered draws the card and no navigation at all', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+
+    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
+    for (const key of ['home', 'transactions', 'imports']) {
+      expect(router.queryByTestId(`sidebar-${key}`)).toBeNull();
+    }
+  });
+
+  test('a user with no ledger at all gets no column: 屏幕稿 15 is full-bleed', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    mockGet('/me', makeUser({ display_name: '阿狸', ledger_count: 0 }));
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+
+    expect(await router.findByText('ledgers-page')).toBeTruthy();
+    await waitFor(() => expect(router.queryByTestId('sidebar')).toBeNull());
+    // Still the wide branch of the shell — it is the column that is gone, not the layout.
+    expect(router.getByTestId('app-shell-wide')).toBeTruthy();
+  });
+
+  test('personal settings keeps the column even with no ledger — it is the way back', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    mockGet('/me', makeUser({ display_name: '阿狸', ledger_count: 0 }));
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    expect(await router.findByTestId('sidebar')).toBeTruthy();
+  });
+
+  test('the member row names the signed-in email where there is no role (屏幕稿 14)', async () => {
+    mockGet('/me', makeUser({ display_name: '阿狸', email: 'ali@example.com' }));
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    const row = await router.findByTestId('sidebar-user');
+    expect(row).toHaveTextContent(/阿狸/);
+    // `/settings` is outside every ledger, so the second line falls back to the email
+    // rather than collapsing the row to one line mid-navigation.
+    expect(row).toHaveTextContent(/ali@example\.com/);
+  });
+
+  test('only the ledger pages swap the card for 「账本管理 · N 本」 (mockups 13 / 14)', () => {
+    const ledger = makeLedger({ id: LEDGER_A });
+    expect(showsLedgerManageCard('/settings', ledger)).toBe(false);
+    expect(showsLedgerManageCard(`/l/${LEDGER_A}`, ledger)).toBe(false);
+    expect(showsLedgerManageCard('/ledgers', ledger)).toBe(true);
+    expect(showsLedgerManageCard('/ledgers/new', ledger)).toBe(true);
+    // Nothing to name is the other way in — a device that never opened a ledger.
+    expect(showsLedgerManageCard('/settings', undefined)).toBe(true);
+  });
+
 });
 
 describe('the language pack gate (04 §2)', () => {

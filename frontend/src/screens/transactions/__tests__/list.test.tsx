@@ -263,6 +263,42 @@ test('the wide pager counts the whole filtered result, not the page', async () =
   expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 42 笔');
 });
 
+test('the wide layout is a seven-column table with a counted foot strip', async () => {
+  setWide(true);
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ total: 6 }));
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  // 屏幕稿 02 · 1440: 日期 / 种类 / 商户 / 分类 / 账户 / 备注 / 金额.
+  expect(await screen.findByTestId('tx-table-head-date')).toHaveTextContent('日期');
+  for (const [key, title] of [
+    ['kind', '种类'],
+    ['merchant', '商户'],
+    ['category', '分类'],
+    ['source', '账户'],
+    ['note', '备注'],
+    ['amount', '金额'],
+  ] as const) {
+    expect(screen.getByTestId(`tx-table-head-${key}`)).toHaveTextContent(title);
+  }
+
+  // One expense spread across its own columns, the merged pair naming both accounts.
+  expect(screen.getByTestId('tx-row-e1-date')).toHaveTextContent('09-10');
+  expect(screen.getByTestId('tx-row-e1-title')).toHaveTextContent('瑞幸咖啡');
+  expect(screen.getByTestId('tx-row-e1-category')).toHaveTextContent('餐饮 / 午餐');
+  expect(screen.getByTestId('tx-row-e1-source')).toHaveTextContent('招行储蓄卡');
+  expect(screen.getByTestId('tx-row-e1-note')).toHaveTextContent('和老婆下午茶');
+  // A row with no note shows the mockup's em dash rather than an empty cell.
+  expect(screen.getByTestId('tx-row-i1-note')).toHaveTextContent('—');
+  expect(screen.getByTestId(`tx-row-${PAIR_ID}-source`)).toHaveTextContent(
+    '招行储蓄卡 → 建行信用卡',
+  );
+
+  // The foot strip counts the merged rows on screen against the server's `total`, and
+  // takes the net from the response envelope — never from this page.
+  expect(screen.getByTestId('tx-table-shown')).toHaveTextContent('5 / 6 笔已显示');
+  expect(screen.getByTestId('tx-table-net')).toHaveTextContent('净额 +¥17,000.01');
+});
+
 test('each day header carries that day\'s expense and income subtotal', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
@@ -271,10 +307,11 @@ test('each day header carries that day\'s expense and income subtotal', async ()
     '当日支出 ¥45.00 · 收入 ¥18,000.00',
   );
   // The transfer pair is excluded from the day it falls on (decision §14.52 A14): only the
-  // imported 66.20 expense counts there.
-  expect(screen.getByTestId('tx-day-2026-09-08-total')).toHaveTextContent(
-    '当日支出 ¥66.20 · 收入 ¥0.00',
-  );
+  // imported 66.20 expense counts there — and 屏幕稿 02 · 375 names only the non-zero kinds,
+  // so that day's header says nothing about income.
+  const quiet = screen.getByTestId('tx-day-2026-09-08-total');
+  expect(quiet).toHaveTextContent('当日支出 ¥66.20');
+  expect(quiet).not.toHaveTextContent('收入');
 });
 
 test('the bottom summary comes from the response, not from the rows on screen', async () => {
@@ -289,13 +326,22 @@ test('the bottom summary comes from the response, not from the rows on screen', 
   expect(screen.getByTestId('tx-summary-rate-missing')).toHaveTextContent('3 笔因暂无汇率未计入');
 });
 
+/**
+ * 编辑 / 删除 have no per-row button any more (决策 §14.56 / 屏幕稿 02); the row's own menu
+ * is behind a long press, and that is where the two delete paths are exercised from.
+ */
+async function openRowMenu(rowTestId: string): Promise<void> {
+  fireEvent(await screen.findByTestId(rowTestId), 'longPress');
+  await screen.findByTestId('tx-row-menu-delete');
+}
+
 test('deleting a merged transfer row confirms once and calls DELETE .../transfer/{pair_id}', async () => {
-  setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   mockDelete(`/ledgers/${LEDGER}/transactions/transfer/${PAIR_ID}`, undefined, 204);
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
-  fireEvent.press(await screen.findByTestId(`tx-row-${PAIR_ID}-delete`));
+  await openRowMenu(`tx-row-${PAIR_ID}`);
+  fireEvent.press(screen.getByTestId('tx-row-menu-delete'));
 
   const dialog = await screen.findByTestId('confirm-dialog');
   expect(dialog).toHaveTextContent(/这是一笔两腿转账，删除会同时删除两腿。/);
@@ -309,12 +355,12 @@ test('deleting a merged transfer row confirms once and calls DELETE .../transfer
 });
 
 test('deleting a plain row calls DELETE on the transaction, not on a pair', async () => {
-  setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   mockDelete(`/ledgers/${LEDGER}/transactions/e1`, undefined, 204);
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
-  fireEvent.press(await screen.findByTestId('tx-row-e1-delete'));
+  await openRowMenu('tx-row-e1');
+  fireEvent.press(screen.getByTestId('tx-row-menu-delete'));
   const dialog = await screen.findByTestId('confirm-dialog');
   expect(dialog).not.toHaveTextContent(/两腿/);
   fireEvent.press(screen.getByTestId('confirm-accept'));
@@ -330,7 +376,10 @@ test('an empty ledger and an empty filter result say different things', async ()
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ items: [], total: 0 }));
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
-  expect(await screen.findByTestId('tx-empty')).toHaveTextContent(/这个账本还没有交易/);
+  // 屏幕稿 15 · 空交易列表: "nothing recorded yet" offers the two ways to put something in.
+  expect(await screen.findByTestId('tx-empty')).toHaveTextContent(/还没有任何交易/);
+  expect(screen.getByTestId('tx-empty-primary')).toBeTruthy();
+  expect(screen.getByTestId('tx-empty-secondary')).toBeTruthy();
   expect(screen.queryByTestId('tx-empty-filtered-state')).toBeNull();
 
   router.unmount();
@@ -338,17 +387,58 @@ test('an empty ledger and an empty filter result say different things', async ()
 
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions?q=没有这个词` });
 
+  // 屏幕稿 15 · 筛选无结果: a different problem, so a different block and a different way out.
   expect(await screen.findByTestId('tx-empty-filtered-state')).toHaveTextContent(
-    /没有符合筛选条件的交易/,
+    /这些条件下没有交易/,
   );
+  expect(screen.getByTestId('tx-empty-filtered-clear')).toBeTruthy();
   expect(screen.queryByTestId('tx-empty')).toBeNull();
   // One condition is not enough for the rescue block (decision §14.52 A15).
   expect(screen.queryByTestId('tx-empty-filtered')).toBeNull();
 });
 
-test('an imported row carries a badge that leads to its import batch', async () => {
+/**
+ * 04 §4.5's marks are marks, not controls: 屏幕稿 02 draws nothing pressable in the 商户
+ * column, and a button nested inside the row's own button is invalid HTML. 「看原单」 /
+ * 「看批次」 live on the detail page's fact list instead.
+ */
+test('an imported row carries a badge, and the badge is not a button', async () => {
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  const badge = await screen.findByTestId('tx-row-im1-badge-imported');
+  expect(badge).toHaveTextContent('导入');
+  expect(badge.props.accessibilityRole).not.toBe('button');
+  // Pressing it does nothing of its own; the row underneath is what opens.
+  fireEvent.press(badge);
+  await waitFor(() =>
+    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/im1`),
+  );
+});
+
+test('the wide table repeats the same non-interactive badge', async () => {
+  setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
-  expect(await screen.findByTestId('tx-row-im1-badge-imported')).toHaveTextContent('导入');
+  const badge = await screen.findByTestId('tx-row-im1-badge-imported');
+  expect(badge).toHaveTextContent('导入');
+  expect(badge.props.accessibilityRole).not.toBe('button');
+});
+
+/**
+ * 屏幕稿 15 · 空交易列表 1440 prints counts and nothing else — 「支出 ¥0.00 · 收入 ¥0.00 ·
+ * 净额 ¥0.00」 on a ledger with no rows is noise. The server's total keeps its place
+ * (04 §4.5).
+ */
+test('an empty wide result keeps the count but prints no money', async () => {
+  setWide(true);
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ items: [], total: 0 }));
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 0 笔');
+  expect(screen.queryByTestId('tx-summary-line')).toBeNull();
+  expect(screen.queryByTestId('tx-table-net')).toBeNull();
+  // The 「N / M 笔已显示」 line is a count, so it stays.
+  expect(screen.getByTestId('tx-table-shown')).toBeTruthy();
 });

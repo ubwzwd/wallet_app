@@ -68,26 +68,3 @@ export interface CategoryHit {
  * names and the level-1 `desc_*` classification hint (decision §1.3's "用完就没了" example) —
  * finding "纸巾算哪类" by searching the judging criterion, not just the name.
  */
-export function searchCategories(
-  index: CategoryIndex,
-  kind: TxKind,
-  query: string,
-  lang: 'zh' | 'en'
-): CategoryHit[] {
-  const q = query.trim().toLowerCase();
-  if (q === '') return [];
-
-  const hits: CategoryHit[] = [];
-  for (const l1 of index.kindAllows(kind)) {
-    const name = (lang === 'zh' ? l1.name_zh : l1.name_en).toLowerCase();
-    const desc = (lang === 'zh' ? l1.desc_zh : l1.desc_en) ?? '';
-    if (name.includes(q) || desc.toLowerCase().includes(q)) {
-      hits.push({ l1: l1.code });
-    }
-    for (const l2 of l1.children) {
-      const l2Name = (lang === 'zh' ? l2.name_zh : l2.name_en).toLowerCase();
-      if (l2Name.includes(q)) hits.push({ l1: l1.code, l2: l2.code });
-    }
-  }
-  return hits;
-}

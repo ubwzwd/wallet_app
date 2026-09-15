@@ -251,15 +251,7 @@ test('the keyboard moves, edits, cancels, skips, jumps and refuses to commit whi
     row({ id: 'row-2', row_no: 2, merchant: '京东' }),
     row({ id: 'row-3', row_no: 3, category_l1: null, category_l2: null }),
   ];
-  // A criterion that appears in no category name, so searching it proves the picker
-  // filters on `desc_*` too (decision §14.52 A19).
-  const tree = makeCategoryTree();
-  seed(rows, {
-    ...tree,
-    expense: tree.expense.map((c) =>
-      c.code === 'food' ? { ...c, desc_zh: '一日三餐、外卖、咖啡' } : c,
-    ),
-  });
+  seed(rows);
   api.mock.onPatch(apiUrl(`${ROWS_PATH}/row-2`)).reply(() => [
     200,
     { ...rows[1], status: 'skipped' },
@@ -298,12 +290,12 @@ test('the keyboard moves, edits, cancels, skips, jumps and refuses to commit whi
       expect(borderColorOf('review-table-cell-row-3-merchant')).toBe(lightColors['border.focus']),
     );
 
-    // `C` opens that row's category picker, and the search matches the criterion text.
+    // `C` opens that row's category picker with every level-1 category listed — there is no
+    // search box to type into (decision §14.57).
     doc.press({ key: 'c' });
-    const search = await screen.findByTestId('review-3-l1-search');
-    fireEvent.changeText(search, '一日三餐');
-    await waitFor(() => expect(screen.getByTestId('review-3-l1-l1-food')).toBeTruthy());
-    expect(screen.queryByTestId('review-3-l1-l1-transport')).toBeNull();
+    expect(await screen.findByTestId('review-3-l1-l1-food')).toBeTruthy();
+    expect(screen.getByTestId('review-3-l1-l1-transport')).toBeTruthy();
+    expect(screen.queryByTestId('review-3-l1-search')).toBeNull();
 
     // ⌘+Enter is inert while a row is still uncategorized (04 §4.11.8).
     doc.press({ key: 'Enter', metaKey: true });

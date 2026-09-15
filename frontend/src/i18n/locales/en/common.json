@@ -12,7 +12,8 @@
     "back": "Back",
     "loading": "Loading",
     "refresh": "Refresh",
-    "confirm_again": "Tap again to confirm"
+    "confirm_again": "Tap again to confirm",
+    "pick_date": "Pick a date"
   },
   "nav": {
     "home": "Home",
@@ -21,6 +22,11 @@
     "sources": "Accounts",
     "imports": "Import",
     "me": "Me",
+    "ledgers": "Ledgers",
+    "ledger_count_one": "{{count}} ledger",
+    "ledger_count_other": "{{count}} ledgers",
+    "member_count_one": "{{count}} person",
+    "member_count_other": "{{count}} people",
     "ledger_settings": "Ledger settings",
     "settings": "Settings",
     "switch_ledger": "Switch ledger",

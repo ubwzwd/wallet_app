@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { todayLocalIso } from '@/i18n/format';
 import { AuthProvider, LedgerProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -182,10 +183,12 @@ test('a non-credit account already chosen is cleared when the subtype becomes �
   renderRouter(ROUTES, { initialUrl: TRANSFER_URL, wrapper: Wrapper });
 
   await chooseTo(USD_ACCOUNT.id);
-  expect(screen.getByTestId('transfer-to-trigger')).toHaveTextContent(USD_ACCOUNT.name);
+  expect(screen.getByTestId('transfer-to-trigger-value')).toHaveTextContent(USD_ACCOUNT.name);
 
   fireEvent.press(screen.getByTestId('transfer-subtype-repayment'));
-  expect(screen.getByTestId('transfer-to-trigger')).not.toHaveTextContent(USD_ACCOUNT.name);
+  expect(screen.getByTestId('transfer-to-trigger-value')).not.toHaveTextContent(
+    USD_ACCOUNT.name,
+  );
   expect(screen.getByText('还款的转入方必须是信用卡账户')).toBeTruthy();
 });
 
@@ -230,6 +233,34 @@ test('"改记为收入" switches to the income tab with the social-income catego
   fireEvent.press(screen.getByTestId('transfer-direction-in'));
   fireEvent.press(screen.getByTestId('transfer-switch-income'));
 
-  expect(await screen.findByTestId('tx-category-trigger')).toHaveTextContent('人情收入');
+  expect(await screen.findByTestId('tx-category-path')).toHaveTextContent('人情收入');
   expect(screen.getByTestId('tx-merchant')).toBeTruthy();
+});
+
+/**
+ * 屏幕稿 04 / 05 / 06 give the wide header's grey line a different sentence per kind:
+ * 转账 and 退款 explain what the entry does to the books rather than repeating the ledger.
+ */
+test('宽屏 页头 explains what a transfer does, and says so differently for a single leg', async () => {
+  const wideSpy = jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  try {
+    renderRouter(ROUTES, { initialUrl: TRANSFER_URL, wrapper: Wrapper });
+
+    expect(await screen.findByTestId('tx-form-ledger-meta')).toHaveTextContent(
+      '转账不计入收支，只在账户之间移动',
+    );
+
+    fireEvent.press(screen.getByTestId('transfer-external'));
+    expect(screen.getByTestId('tx-form-ledger-meta')).toHaveTextContent(
+      '单腿转账 · 对方不在本账本内',
+    );
+    // 屏幕稿 05 单腿 says this once: the wide frame carries it in 「这一笔」, not twice — so
+    // the amber note in the summary card is there, and the form's own copy is not.
+    expect(
+      screen.getAllByText(i18next.t('transaction:transfer.single_leg_hint')),
+    ).toHaveLength(1);
+    expect(screen.queryByTestId('transfer-single-leg-hint')).toBeNull();
+  } finally {
+    wideSpy.mockRestore();
+  }
 });

@@ -37,6 +37,11 @@ export interface RateLineProps {
   rateUsed: Money | null;
   rateDate: IsoDate | null;
   occurredAt: IsoDate;
+  /**
+   * `lead` is the 16/22 mono line 屏幕稿 08 puts straight under the headline amount; `sm`
+   * is the caption a transfer leg carries inside its own tile.
+   */
+  size?: 'lead' | 'sm';
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -49,12 +54,14 @@ export function RateLine({
   rateUsed,
   rateDate,
   occurredAt,
+  size = 'sm',
   style,
   testID,
 }: RateLineProps): React.JSX.Element | null {
   const { t } = useTranslation();
   const lang = useLang();
   const id = testID ?? 'detail-rate';
+  const lead = size === 'lead';
 
   // Same currency as the ledger: there is nothing to convert and nothing to explain.
   if (currency.toUpperCase() === baseCurrency.toUpperCase()) return null;
@@ -62,7 +69,12 @@ export function RateLine({
   if (amountBase === null || rateUsed === null || rateDate === null) {
     return (
       <View style={[styles.wrap, style]}>
-        <Text variant="caption" tone="muted" testID={`${id}-missing`}>
+        <Text
+          variant="caption"
+          tone="muted"
+          style={lead ? styles.lead : undefined}
+          testID={`${id}-missing`}
+        >
           {t('transaction:list.rate_missing')}
         </Text>
       </View>
@@ -81,7 +93,14 @@ export function RateLine({
 
   return (
     <View style={[styles.wrap, style]} testID={id}>
-      <Text variant="caption" tone="secondary" mono testID={`${id}-text`}>
+      <Text
+        variant="caption"
+        tone="secondary"
+        mono
+        weight={500}
+        style={lead ? styles.lead : undefined}
+        testID={`${id}-text`}
+      >
         {line}
       </Text>
       {rateDate !== occurredAt ? (
@@ -95,4 +114,6 @@ export function RateLine({
 
 const styles = StyleSheet.create({
   wrap: { gap: space['1'], alignSelf: 'stretch' },
+  // 屏幕稿 08 sets the converted line one step under the headline: 16/22 mono.
+  lead: { fontSize: 16, lineHeight: 22 },
 });

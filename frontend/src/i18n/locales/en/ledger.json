@@ -1,97 +1,186 @@
 {
   "list": {
     "title": "My ledgers",
+    "subtitle": "Switching takes every page with it",
+    "current_badge": "Current",
+    "enter": "Open this one",
+    "switch_to": "Switch to this one",
+    "footnote": "A ledger you create is yours to own; one you join with a code makes you a member, who cannot change the base currency or the member list.",
     "card": {
-      "member_count_one": "{{count}} member",
-      "member_count_other": "{{count}} members",
       "role_owner": "Owner",
       "role_member": "Member",
-      "updated_at": "Updated {{time}}"
+      "role_line_owner": "You're the owner · can invite and delete",
+      "role_line_member": "You're a member · someone invited you",
+      "members_label": "Members",
+      "currency_label": "Base currency"
+    },
+    "new_card": {
+      "title": "New ledger",
+      "body": "One for a trip, one for your parents. Ledgers are completely independent."
     },
     "empty": {
-      "title": "You don't have any ledgers yet",
       "create_button": "Create a ledger",
-      "join_button": "Join someone else's ledger"
+      "join_button": "Join with an invite code"
+    },
+    "onboarding": {
+      "title": "Start with a ledger",
+      "body": "Transactions, accounts and statistics all hang off a ledger. Create one, or join someone else’s with the invite code they gave you.",
+      "footnote": "You can be in several ledgers at once — “Household” and “Travel”, say.",
+      "create": {
+        "title": "New ledger",
+        "body": "You'll be the owner: pick a name and a base currency, then generate invite codes for the family.",
+        "body_short": "You'll be the owner, set the currency, invite others",
+        "button": "Create a ledger"
+      },
+      "join": {
+        "title": "Join with an invite code",
+        "body": "They generate a 6-digit code in their ledger settings; entering it makes you a member of that ledger.",
+        "body_short": "They generate a 6-digit code in their ledger settings",
+        "button": "Enter an invite code"
+      }
     },
     "error_retry": "Couldn't load. Retry."
   },
   "create": {
     "title": "New ledger",
+    "subtitle": "A ledger holds everything: its transactions, accounts and statistics.",
     "name_label": "Ledger name",
+    "name_placeholder": "e.g. “Household”",
     "base_currency_label": "Base currency",
+    "base_currency_hint": "Every amount is converted into it for statistics. It cannot be changed later.",
     "submit": "Create",
     "limit_reached": "You've reached the limit of 10 ledgers",
     "success_toast": "Created “{{name}}”"
   },
   "join": {
     "title": "Join a ledger",
-    "code_hint": "Enter the 6-digit invite code",
+    "card_title": "Enter the 6-digit invite code",
+    "code_hint": "They generate it in their ledger settings; a code is valid for 10 minutes",
+    "paste_hint": "Pasting fills all six cells · digits only",
+    "submit": "Join",
+    "retry_button": "Start over",
+    "error_title": "This code didn't work",
+    "benefits": {
+      "title": "Once you join",
+      "one": "You can see every transaction and account in this ledger.",
+      "two": "You can add, import and recategorise — but not change the base currency or the members.",
+      "three": "Your own ledgers are untouched; you can switch back any time."
+    },
     "rate_limited_countdown": "Too busy right now — retrying in {{seconds}}s",
     "success_toast": "Joined \"{{name}}\""
   },
   "settings": {
     "title": "Ledger settings",
-    "basic": {
+    "header": {
+      "meta": "Created {{date}} · {{count}} transactions · base currency {{currency}}",
+      "meta_narrow": "Created {{date}} · {{count}} members",
+      "rename": "Rename",
+      "rename_cancel": "Cancel",
       "name_label": "Ledger name",
-      "base_currency_label": "Base currency",
-      "base_currency_warning": "Once changed to {{currency}}, the home dashboard and every converted amount will show in {{currency}}. Conversion uses each transaction's own exchange rate on its date — original amounts and currencies never change, so switching back brings the numbers back too. This will re-convert {{count}} transactions.",
-      "title": "Basics",
-      "created_at": "Created {{date}}",
-      "save": "Save",
       "name_saved_toast": "Ledger name updated",
-      "currency_change_title": "Changing the base currency re-converts all history",
-      "currency_change_confirm": "Change to {{currency}} anyway",
-      "currency_change_cancel": "Keep it as it is",
-      "currency_saved_toast": "Base currency changed to {{currency}}",
-      "read_only_hint": "Only the owner can rename the ledger or change its base currency"
+      "save": "Save"
     },
     "members": {
       "title": "Members",
-      "role_owner": "Owner",
-      "role_member": "Member",
-      "permission_hint": "Only the owner can generate/revoke invite codes, remove members, rename the ledger or change its base currency, transfer ownership, or delete the ledger; members can record and edit transactions, manage accounts, import, and undo imports.",
-      "remove_confirm": "Remove {{name}}? Their entries will stay in the ledger.",
-      "remove_action": "Remove",
-      "transfer_ownership": "Transfer ownership",
-      "transfer_confirm": "Transfer ownership to {{name}}? You'll become a member afterward.",
-      "leave_action": "Leave this ledger",
-      "leave_disabled_hint": "You're the owner of this ledger — transfer ownership to someone else before you leave",
       "count": "{{count}} / 10",
-      "joined_at": "Joined {{date}}",
+      "col_name": "Name",
+      "col_role": "Role",
+      "col_joined": "Joined",
+      "role_owner": "owner",
+      "role_member": "member",
+      "joined_founder": "created {{date}}",
+      "joined_at": "joined {{date}}",
+      "remove_action": "Remove",
       "remove_title": "Remove member",
-      "removed_toast": "Removed {{name}}",
-      "transfer_title": "Transfer ownership",
-      "transfer_select_label": "Transfer to",
-      "transfer_placeholder": "Pick a member",
-      "transfer_submit": "Transfer",
-      "transferred_toast": "{{name}} is the owner now",
-      "leave_title": "Leave ledger",
-      "leave_confirm": "Leave \"{{name}}\"? Your entries stay in the ledger, and you'll need a new invite code to come back.",
-      "left_toast": "Left \"{{name}}\""
+      "remove_confirm": "Remove {{name}}? Their entries stay in the ledger.",
+      "removed_toast": "Removed {{name}}"
+    },
+    "permission": {
+      "title": "Permissions",
+      "member_line": "Members: record entries, manage accounts, import and undo imports.",
+      "owner_line": "Only the owner can generate invite codes, remove members, rename the ledger, change its base currency, transfer ownership and delete the ledger."
     },
     "invite": {
       "title": "Invite code",
       "generate": "Generate invite code",
-      "expires_in": "Expires in {{time}}",
-      "hint": "Tell the other person this 6-digit code so they can enter it under \"Join a ledger.\" It's used up after one person joins.",
+      "idle_hint": "An invite code is valid for 10 minutes and can be used once. The other person enters it on their ledger list.",
+      "expires_in": "expires in {{time}}",
       "revoke": "Revoke",
-      "regenerate": "Regenerate",
+      "revoke_title": "Revoke invite code",
       "revoke_confirm": "Once revoked, this code stops working immediately.",
+      "revoked_toast": "Invite code revoked",
+      "copied_toast": "Invite code copied",
+      "code_label": "Invite code {{code}}",
+      "expired": "This code has expired - generate a new one",
+      "regenerate": "Regenerate",
       "used_by": "Used by {{name}}",
       "limit_reached": "This ledger already has 10 members",
       "retry_hint": "The code can be entered as often as needed while it is valid - a typo locks nothing.",
-      "expired": "This code has expired - generate a new one",
-      "revoke_title": "Revoke invite code",
-      "revoked_toast": "Invite code revoked",
-      "copied_toast": "Invite code copied",
-      "code_label": "Invite code {{code}}"
+      "countdown_label": "Time left on the invite code"
+    },
+    "currency": {
+      "title": "Base currency · {{code}} {{name}}",
+      "title_short": "{{code}} · {{name}}",
+      "names": {
+        "CNY": "Chinese yuan",
+        "SGD": "Singapore dollar",
+        "USD": "US dollar",
+        "HKD": "Hong Kong dollar",
+        "EUR": "Euro",
+        "JPY": "Japanese yen",
+        "GBP": "Pound sterling",
+        "AUD": "Australian dollar",
+        "TWD": "New Taiwan dollar",
+        "KRW": "South Korean won"
+      },
+      "section": "Base currency",
+      "subtitle": "Every conversion, the net worth and the category totals follow it",
+      "change": "Change",
+      "warning_title": "Changing the base currency re-converts all history",
+      "warning_body": "All {{count}} transactions will be re-converted at each one's own rate on its date, reproducibly. Original amounts and currencies never change, so switching back brings the numbers back too.",
+      "confirm": "Change to {{currency}} anyway",
+      "cancel": "Keep it as it is",
+      "pick_label": "Change to",
+      "saved_toast": "Base currency changed to {{currency}}",
+      "read_only_hint": "Only the owner can rename the ledger or change its base currency"
     },
     "danger": {
-      "delete_title": "Delete ledger",
-      "delete_confirm_body": "This will permanently delete {{transactions}} transactions, {{sources}} accounts and {{imports}} import batches in \"{{name}}\". Every member will lose access. This can't be undone.",
-      "delete_confirm_label": "Type the ledger name to confirm:",
-      "delete_action": "Delete ledger",
       "title": "Danger zone",
+      "transfer_title": "Transfer ownership",
+      "transfer_sub": "Hand it over and become an ordinary member",
+      "transfer_sub_none": "Nobody else is in this ledger yet",
+      "transfer_select_label": "Transfer to",
+      "transfer_placeholder": "Pick a member",
+      "transfer_submit": "Transfer",
+      "transfer_confirm_title": "Transfer ownership",
+      "transfer_confirm": "Transfer ownership to {{name}}? You'll become an ordinary member afterward.",
+      "transferred_toast": "{{name}} is the owner now",
+      "leave_title": "Leave ledger",
+      "leave_sub": "Your entries stay in the ledger; you'll need a new invite code to come back",
+      "leave_sub_owner": "The owner has to transfer ownership before leaving",
+      "leave_confirm_title": "Leave ledger",
+      "leave_confirm": "Leave \"{{name}}\"? Your entries stay in the ledger, and you'll need a new invite code to come back.",
+      "leave_action": "Leave ledger",
+      "left_toast": "Left \"{{name}}\"",
+      "delete_title": "Delete ledger",
+      "delete_sub": "Deletes all {{count}} transactions with it. This can't be undone",
+      "delete_confirm_title": "Delete \"{{name}}\"?",
+      "delete_confirm_body": "This can't be undone. Every other member loses access at the same time.",
+      "delete_confirm_label": "Type the ledger name to confirm — {{name}}",
+      "delete_tile": {
+        "transactions": "Transactions",
+        "sources": "Accounts",
+        "imports": "Import batches"
+      },
+      "delete_tile_value": {
+        "transactions": "{{count}} rows",
+        "sources": "{{count}} accounts",
+        "imports": "{{count}} batches"
+      },
+      "delete_hint": "Type \"{{name}}\" exactly to unlock the button",
+      "delete_remaining": "Still missing \"{{text}}\"",
+      "delete_mismatch": "That is not the ledger's name",
+      "delete_action": "Delete permanently",
       "deleted_toast": "Deleted \"{{name}}\""
     }
   }

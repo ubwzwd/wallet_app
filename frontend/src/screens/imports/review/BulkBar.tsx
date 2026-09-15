@@ -15,7 +15,7 @@
  * to nobody (§4.11.6).
  */
 import React from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { ApiClientError } from '@/api';
@@ -28,12 +28,9 @@ import {
   Button,
   Card,
   CategoryPickerPanel,
-  CurrencyPicker,
-  Icon,
   Select,
   Sheet,
   Text,
-  TextField,
 } from '@/ui';
 
 import type { ReviewEnv } from './ReviewRow';
@@ -50,8 +47,10 @@ export interface BulkBarProps {
   selection: ReviewSelection;
   /** Told which row to highlight and scroll to when a bulk edit is refused. */
   onFailure(rowNo: number | null): void;
-  /** Narrow layout pins the bar to the bottom of the screen (04 §4.11.9). */
+  /** Narrow layout scrolls the action strip sideways instead of wrapping it (04 §4.11.9). */
   compact?: boolean;
+  /** Render the contents only — the caller supplies the card (the merged bottom bar). */
+  bare?: boolean;
   testID?: string;
 }
 
@@ -162,13 +161,13 @@ export function BulkBar({
   selection,
   onFailure,
   compact = false,
+  bare = false,
   testID,
-}: BulkBarProps): React.JSX.Element | null {
+}: BulkBarProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   const id = testID ?? 'review-bulk';
   const [categoryOpen, setCategoryOpen] = React.useState(false);
-  const [query, setQuery] = React.useState('');
   const [stage, setStage] = React.useState<'l1' | 'l2'>('l1');
   const [pickedL1, setPickedL1] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -177,8 +176,11 @@ export function BulkBar({
   const ids = rows.map((row) => row.id);
   const kind = commonCategoryKind(rows);
   const kindOptions = bulkKindOptions(rows);
-
-  if (selection.count === 0) return null;
+  // 屏幕稿 03 draws 「已选 5 / 10 行」 and the bulk buttons as a permanent part of the bottom
+  // bar, so an empty selection greys the actions out rather than removing the strip — the
+  // bar must not change height as rows are ticked.
+  const empty = selection.count === 0;
+  const off = empty || env.ctrl.bulkPending;
 
   async function run(patch: ImportRowPatch): Promise<void> {
     setMessage(null);
@@ -207,82 +209,129 @@ export function BulkBar({
 
   const closeCategory = (): void => {
     setCategoryOpen(false);
-    setQuery('');
     setStage('l1');
     setPickedL1(null);
   };
 
-  return (
-    <Card
-      variant="outlined"
-      testID={id}
-      style={{
-        gap: space['2'],
-        backgroundColor: colors['bg.raised'],
-        ...(compact ? { borderRadius: 0 } : {}),
-      }}
-    >
-      <View
-        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
-      >
-        <Text variant="caption" testID={`${id}-count`}>
-          {t('import:review.selected', { count: selection.count })}
-        </Text>
-        <Button
-          testID={`${id}-category`}
-          size="sm"
-          variant="secondary"
-          label={t('import:review.bulk.set_category')}
-          disabled={kind === null || env.index === null || env.ctrl.bulkPending}
-          onPress={() => setCategoryOpen(true)}
-        />
-        <Select
-          testID={`${id}-kind`}
-          value={null}
-          placeholder={t('import:review.bulk.set_kind')}
-          // Only the kinds the selection's amounts allow — the rest would be a certain 400.
-          options={kindOptions.map((k) => ({ value: k, label: t(`transaction:kind.${k}`) }))}
-          disabled={kindOptions.length === 0 || env.ctrl.bulkPending}
-          onChange={(next) => {
-            if (next !== null) void run(bulkKindPatch(next as TxKind));
-          }}
-        />
-        <CurrencyPicker
-          testID={`${id}-currency`}
-          variant="inline"
-          codes={env.currencyCodes}
-          names={env.currencyNames}
-          value={null}
-          label={t('import:review.bulk.set_currency')}
-          disabled={env.ctrl.bulkPending}
-          onChange={(next) => void run({ currency: next })}
-        />
-        <Button
-          testID={`${id}-skip`}
-          size="sm"
-          variant="secondary"
-          label={t('import:review.bulk.skip')}
-          disabled={env.ctrl.bulkPending}
-          onPress={() => void run({ status: 'skipped' })}
-        />
-        <Button
-          testID={`${id}-unskip`}
-          size="sm"
-          variant="secondary"
-          label={t('import:review.bulk.unskip')}
-          disabled={env.ctrl.bulkPending}
-          onPress={() => void run({ status: 'pending' })}
-        />
-        <Button
-          testID={`${id}-clear`}
-          size="sm"
-          variant="ghost"
-          icon="x"
-          iconOnly
-          accessibilityLabel={t('common:button.cancel')}
-          onPress={selection.clear}
-        />
-      </View>
+  // 屏幕稿 03 draws the bulk buttons at the full 44 in the 1440 bar; the phone strip, which
+  // scrolls sideways, keeps them at 36.
+  const actionSize = compact ? 'sm' : 'md';
+
+  const actions = (
+    <>
+      <Button
+        testID={`${id}-category`}
+        size={actionSize}
+        variant="soft"
+        icon="tag"
+        label={t('import:review.bulk.set_category')}
+        disabled={kind === null || env.index === null || off}
+        onPress={() => setCategoryOpen(true)}
+      />
+      <Select
+        testID={`${id}-kind`}
+        value={null}
+        placeholder={t('import:review.bulk.set_kind')}
+        // Only the kinds the selection's amounts allow — the rest would be a certain 400.
+        options={kindOptions.map((k) => ({ value: k, label: t(`transaction:kind.${k}`) }))}
+        disabled={kindOptions.length === 0 || off}
+        onChange={(next) => {
+          if (next !== null) void run(bulkKindPatch(next as TxKind));
+        }}
+      />
+      {/* A bulk edit never holds a code, so the trigger wears the action's own label —
+          which means the whole control is the press target, like the kind picker beside
+          it, rather than a caption sitting outside a chevron. */}
+      <Select
+        testID={`${id}-currency`}
+        value={null}
+        placeholder={t('import:review.bulk.set_currency')}
+        closeLabel={t('common:button.close')}
+        searchable
+        searchPlaceholder={t('import:review.bulk.set_currency')}
+        emptyLabel={t('common:status.none')}
+        options={env.currencyCodes.map((code) => ({
+          value: code,
+          label: code,
+          hint: env.currencyNames[code],
+        }))}
+        disabled={off}
+        onChange={(next) => {
+          if (next !== null) void run({ currency: next });
+        }}
+      />
+      <Button
+        testID={`${id}-skip`}
+        size={actionSize}
+        variant="soft"
+        icon="chevron-right"
+        label={t('import:review.bulk.skip')}
+        disabled={off}
+        onPress={() => void run({ status: 'skipped' })}
+      />
+      <Button
+        testID={`${id}-unskip`}
+        size={actionSize}
+        variant="soft"
+        label={t('import:review.bulk.unskip')}
+        disabled={off}
+        onPress={() => void run({ status: 'pending' })}
+      />
+    </>
+  );
+
+  /* Dropping the selection must never be the thing that scrolled off the end of a phone
+     bar, so it is pinned beside the strip rather than carried inside it. */
+  const clear = empty ? null : (
+    <Button
+      testID={`${id}-clear`}
+      size="sm"
+      variant="ghost"
+      icon="x"
+      iconOnly
+      accessibilityLabel={t('common:button.cancel')}
+      onPress={selection.clear}
+    />
+  );
+
+  const count = (
+    <Text variant="body" mono tone="secondary" testID={`${id}-count`}>
+      {t('import:review.selected', { count: selection.count, total: selection.counts.all })}
+    </Text>
+  );
+
+  const body = (
+    <>
+      {/* 屏幕稿 03's action bar: how many rows are selected, a hairline, then the actions —
+          the two the mockup names first, and the rest of §4.11.6 after them. On a phone the
+          row scrolls sideways instead of wrapping into three lines over the cards. */}
+      {compact ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }}>
+          {count}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space['2'],
+            }}
+          >
+            {actions}
+          </ScrollView>
+          {clear}
+        </View>
+      ) : (
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+        >
+          {count}
+          <View style={{ width: 1, height: 24, backgroundColor: colors['border.default'] }} />
+          {actions}
+          {clear}
+        </View>
+      )}
 
       {message !== null ? (
         <Text variant="caption" tone="danger" testID={`${id}-error`}>
@@ -292,7 +341,7 @@ export function BulkBar({
 
       {/* A greyed picker with no reason is the weakest form of "block the impossible
           option" (§4.11.6), so say why it is out. */}
-      {kindOptions.length === 0 && !env.ctrl.bulkPending ? (
+      {!empty && kindOptions.length === 0 && !env.ctrl.bulkPending ? (
         <Text variant="caption" tone="muted" testID={`${id}-kind-hint`}>
           {t('import:review.bulk.kind_mixed_signs')}
         </Text>
@@ -305,14 +354,6 @@ export function BulkBar({
         closeLabel={t('common:button.close')}
         testID={`${id}-category-sheet`}
       >
-        <TextField
-          testID={`${id}-category-search`}
-          value={query}
-          onChangeText={setQuery}
-          accessibilityLabel={t('transaction:form.category_search_placeholder')}
-          placeholder={t('transaction:form.category_search_placeholder')}
-          prefix={<Icon name="search" size={16} color={colors['fg.muted']} />}
-        />
         {env.index !== null && kind !== null ? (
           <CategoryPickerPanel
             id={`${id}-category`}
@@ -320,7 +361,6 @@ export function BulkBar({
             kind={kind}
             lang={env.lang}
             value={{ l1: pickedL1, l2: null }}
-            query={query}
             wide={false}
             activeL1={pickedL1}
             stage={stage}
@@ -337,6 +377,18 @@ export function BulkBar({
           />
         ) : null}
       </Sheet>
+    </>
+  );
+
+  // `bare` hands the strip straight to the merged bottom bar the screen draws (屏幕稿 03);
+  // on its own it still wears a card.
+  return bare ? (
+    <View testID={id} style={{ gap: space['2'], minWidth: 0 }}>
+      {body}
+    </View>
+  ) : (
+    <Card variant="raised" testID={id} style={{ gap: space['2'] }}>
+      {body}
     </Card>
   );
 }

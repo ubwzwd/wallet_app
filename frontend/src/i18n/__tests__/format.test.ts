@@ -2,6 +2,7 @@
  * Pure formatter tests (04 §5.4, §8.1): unicode minus, zero-decimal currencies,
  * timezone-safe date parsing, relative-day wording, month/day-time formatting.
  */
+import type { IsoDate } from '@/api/types';
 import {
   formatMoney,
   formatConverted,
@@ -9,6 +10,7 @@ import {
   parseLocalDate,
   todayLocalIso,
   formatDate,
+  formatDateShort,
   formatRelativeDay,
   formatMonth,
   formatMonthShort,
@@ -134,15 +136,24 @@ describe('local-date parsing is timezone-safe (04 §5.4, §8.1)', () => {
 });
 
 describe('formatDate', () => {
-  test('this year: no year shown', () => {
+  // 屏幕稿 04 / 06 / 07 / 12 all write a date as the plain numeric day, and the settings
+  // page promises dates do not follow the interface language (决策 §14.45).
+  test('is the numeric day, with the year, in either language', () => {
     const thisYear = new Date().getFullYear();
-    expect(formatDate(`${thisYear}-08-14`, 'zh')).toBe('8月14日');
-    expect(formatDate(`${thisYear}-08-14`, 'en')).toBe('Aug 14');
+    expect(formatDate(`${thisYear}-08-14`, 'zh')).toBe(`${thisYear}-08-14`);
+    expect(formatDate(`${thisYear}-08-14`, 'en')).toBe(`${thisYear}-08-14`);
+    expect(formatDate('2019-08-14', 'zh')).toBe('2019-08-14');
+    expect(formatDate('2019-08-14', 'en')).toBe('2019-08-14');
+  });
+});
+
+describe('formatDateShort', () => {
+  test('drops the year for the columns that have no room for it (屏幕稿 01 / 02 / 03)', () => {
+    expect(formatDateShort('2026-08-14')).toBe('08-14');
   });
 
-  test('a past year includes the year', () => {
-    expect(formatDate('2019-08-14', 'zh')).toBe('2019年8月14日');
-    expect(formatDate('2019-08-14', 'en')).toBe('Aug 14, 2019');
+  test('leaves anything that is not a calendar day alone', () => {
+    expect(formatDateShort('whenever' as IsoDate)).toBe('whenever');
   });
 });
 

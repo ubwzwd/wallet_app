@@ -2,24 +2,30 @@
  * The review cells whose editor is a text box, plus the row-number cell (04 §4.11.2,
  * §4.11.5). Shared plumbing — `useDraft`, `useEditorHandle`, the em dash — lives in
  * `ReviewRow.tsx`.
+ *
+ * 屏幕稿 03's typography for the row: the row number and the date are mono and grey, the
+ * amount is mono and carries its kind's colour (a transfer stays ink, `kindSemantics`), the
+ * merchant is the only 14/500 line and the note is the grey one beside it. The date is
+ * shown as `MM-DD` — a batch is one statement, and the column has to fit twelve others.
  */
 import React from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
-import type { ImportRow, ImportRowPatch } from '@/api/types';
+import type { ImportRow, ImportRowPatch, IsoDate } from '@/api/types';
 import { applySign } from '@/domain/kinds';
 import { normalizeAmountInput } from '@/domain/money';
-import { formatMoney } from '@/i18n/format';
+import { formatDateShort, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { Button, DateField, Text, TextField, trimMoney } from '@/ui';
+import { Button, DateField, KIND_AMOUNT_TONE, Text, TextField, trimMoney } from '@/ui';
 
 import {
   type CellProps,
+  type ReviewEnv,
   CellFrame,
   DASH,
-  Dash,
   strikeIfSkipped,
   useDraft,
   useEditorHandle,
@@ -32,41 +38,58 @@ export interface RowNoCellProps {
   row: ImportRow;
   state: RowSaveState;
   onRetry(): void;
+  /** The card flow writes it as `#4`; the grid's own column is headed `#` already. */
+  hash?: boolean;
   testID: string;
 }
 
-type SaveDotToken = 'fg.muted' | 'accent.solid' | 'status.danger.fg';
+type SaveDotToken = 'accent.solid' | 'status.danger.fg';
 
-const SAVE_DOT_TOKEN: Readonly<Record<RowSaveState, SaveDotToken>> = {
-  saved: 'fg.muted',
+const SAVE_DOT_TOKEN: Readonly<Record<'saving' | 'failed', SaveDotToken>> = {
   saving: 'accent.solid',
   failed: 'status.danger.fg',
 };
+
+/** `2026-09-10` → `09-10` (屏幕稿 03); anything else is shown as it came. */
+export function shortDate(iso: string): string {
+  return formatDateShort(iso as IsoDate);
+}
 
 /**
  * Row number plus the save-state dot; a failed save turns the dot into a retry button.
  * The phone's card flow renders the very same cell (04 §4.11.9 — the narrow layout is a
  * different shape, not a smaller feature set).
+ *
+ * A saved row shows the number alone (屏幕稿 03): the dot is there to say "this row is not
+ * settled yet", so it appears while a write is in flight and stays, red, when one failed.
  */
-export function RowNoCell({ row, state, onRetry, testID }: RowNoCellProps): React.JSX.Element {
+export function RowNoCell({
+  row,
+  state,
+  onRetry,
+  hash = false,
+  testID,
+}: RowNoCellProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['1'] }}>
-      <Text variant="caption" tone="secondary" mono style={strikeIfSkipped(row)} testID={testID}>
-        {row.row_no}
+      <Text variant="caption" tone="muted" mono style={strikeIfSkipped(row)} testID={testID}>
+        {hash ? `#${row.row_no}` : row.row_no}
       </Text>
-      <View
-        testID={`${testID}-save-${state}`}
-        accessibilityRole="text"
-        accessibilityLabel={t(`import:review.save_state.${state}`)}
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: radius.pill,
-          backgroundColor: colors[SAVE_DOT_TOKEN[state]],
-        }}
-      />
+      {state !== 'saved' ? (
+        <View
+          testID={`${testID}-save-${state}`}
+          accessibilityRole="text"
+          accessibilityLabel={t(`import:review.save_state.${state}`)}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: radius.pill,
+            backgroundColor: colors[SAVE_DOT_TOKEN[state]],
+          }}
+        />
+      ) : null}
       {state === 'failed' ? (
         <Button
           testID={`${testID}-retry`}
@@ -101,8 +124,14 @@ export function DateCell({
   useEditorHandle(editing, registerEditor, flush, cancel);
 
   const body = !editing ? (
-    <Text variant="caption" mono tone={row.date === null ? 'danger' : 'primary'} testID={testID}>
-      {row.date ?? t('import:review.missing_value')}
+    <Text
+      variant="caption"
+      mono
+      tone={row.date === null ? 'danger' : 'secondary'}
+      style={strikeIfSkipped(row)}
+      testID={testID}
+    >
+      {row.date === null ? t('import:review.missing_value') : shortDate(row.date)}
     </Text>
   ) : (
     <DateField
@@ -150,7 +179,21 @@ export function AmountCell({
   useEditorHandle(editing, registerEditor, flush, cancel);
 
   const body = !editing ? (
-    <Text variant="caption" mono tone={row.amount === null ? 'danger' : 'primary'} testID={testID}>
+    <Text
+      variant="subheading"
+      mono
+      numberOfLines={1}
+      // 04 §6.2 rule 2: the amount carries its kind's colour, transfers excepted.
+      tone={
+        row.amount === null
+          ? 'danger'
+          : row.kind === null
+            ? 'primary'
+            : KIND_AMOUNT_TONE[row.kind]
+      }
+      style={strikeIfSkipped(row)}
+      testID={testID}
+    >
       {row.amount === null
         ? t('import:review.missing_value')
         : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
@@ -178,6 +221,23 @@ export function AmountCell({
 
 // --------------------------------------------------------------------- merchant / note
 
+/**
+ * A transfer row has no merchant (decision §14.52 B16), and 屏幕稿 03 puts the two ends of
+ * the leg in the 商户 column instead of an em dash — 「招行储蓄卡 → 建行信用卡」 — in both
+ * the 1440 grid and the 375 card flow. §14.45 makes the mockup the source of truth here;
+ * 04 §4.11.2's 「—」 is the wording that has to change.
+ */
+export function transferTitle(row: ImportRow, env: ReviewEnv, t: TFunction): string {
+  const other =
+    env.sources.find((s) => s.id === row.counterpart_source_id)?.name ??
+    row.counterparty ??
+    t('import:review.missing_value');
+  const mine = env.batch.source_name;
+  return row.transfer_role === 'in'
+    ? t('import:review.transfer_title', { from: other, to: mine })
+    : t('import:review.transfer_title', { from: mine, to: other });
+}
+
 export interface TextCellProps extends CellProps {
   field: 'merchant' | 'note';
   maxLength: number;
@@ -201,12 +261,26 @@ export function TextCell({
   });
   useEditorHandle(editing && !dead, registerEditor, flush, cancel);
 
-  if (dead) return <Dash testID={testID} />;
+  if (dead) {
+    return (
+      <Text
+        variant="body"
+        weight={500}
+        tone="secondary"
+        numberOfLines={1}
+        style={strikeIfSkipped(row)}
+        testID={testID}
+      >
+        {transferTitle(row, env, t)}
+      </Text>
+    );
+  }
   const body = !editing ? (
     <Text
-      variant="caption"
+      variant="body"
+      weight={field === 'merchant' ? 500 : 400}
       numberOfLines={1}
-      tone={row[field] ? 'primary' : 'muted'}
+      tone={field === 'merchant' ? (row[field] ? 'primary' : 'muted') : 'muted'}
       style={strikeIfSkipped(row)}
       testID={testID}
     >

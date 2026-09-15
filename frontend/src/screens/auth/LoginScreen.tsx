@@ -1,13 +1,13 @@
 /**
- * `/login` (04 §4.1): take the credentials, hand them to `AuthContext.login()`, land on
- * `?next=` (validated by `safeNext`) or on `/`, which the landing redirect resolves.
+ * `/login` (04 §4.1, screen 17): take the credentials, hand them to `AuthContext.login()`,
+ * land on `?next=` (validated by `safeNext`) or on `/`, which the landing redirect resolves.
  *
  * Two error shapes get special treatment: 401 `invalid_credentials` renders under the
  * password field *and* raises a toast while leaving the form untouched, and 429
  * `login_rate_limited` arms a `Retry-After` countdown that keeps the button disabled.
  */
 import React from 'react';
-import { Pressable, type TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, type TextInput, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -81,8 +81,33 @@ export default function LoginScreen(): React.JSX.Element {
     setServerError((current) => (current === null ? current : null));
   }, []);
 
+  const footer = (
+    <>
+      <Text variant="subheading" weight={400} tone="secondary">
+        {t('auth:login.no_account')}
+      </Text>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={t('auth:login.register_link')}
+        testID="login-register-link"
+        // One line of text; the slop is what makes it a 44 tap target.
+        hitSlop={space['3']}
+        onPress={() => router.push(routes.register(safeNext(nextParam) ?? undefined) as Href)}
+      >
+        <Text variant="subheading" weight={600}>
+          {t('auth:login.register_link')}
+        </Text>
+      </Pressable>
+    </>
+  );
+
   return (
-    <AuthLayout title={t('auth:login.title')} testID="login-screen">
+    <AuthLayout
+      title={t('auth:login.title')}
+      subtitle={t('auth:login.subtitle')}
+      footer={footer}
+      testID="login-screen"
+    >
       <Controller
         control={control}
         name="email"
@@ -91,6 +116,10 @@ export default function LoginScreen(): React.JSX.Element {
             testID="login-email"
             label={t('auth:login.email_label')}
             accessibilityLabel={t('auth:login.email_label')}
+            placeholder={t('auth:login.email_placeholder')}
+            // Screen 17 sets the email field in mono: an address is read character by
+            // character, the way a code is.
+            mono
             value={field.value}
             onChangeText={(text) => {
               clearServerError();
@@ -118,6 +147,7 @@ export default function LoginScreen(): React.JSX.Element {
             testID="login-password"
             label={t('auth:login.password_label')}
             accessibilityLabel={t('auth:login.password_label')}
+            placeholder={t('auth:login.password_placeholder')}
             value={field.value}
             onChangeText={(text) => {
               clearServerError();
@@ -138,15 +168,17 @@ export default function LoginScreen(): React.JSX.Element {
         )}
       />
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['3'] }}>
+      <View style={styles.submitRow}>
         <Button
           testID="login-submit"
           label={t('auth:login.submit')}
+          size="lg"
           onPress={() => void submit()}
           loading={submitting}
           disabled={blocked}
-          fullWidth={countdown.seconds === 0}
-          style={countdown.seconds === 0 ? undefined : { flex: 1 }}
+          // `flex: 1` and not `fullWidth`: the button shares a row with the countdown, and
+          // in a row `alignSelf: stretch` only fills the cross axis.
+          style={styles.submitButton}
         />
         {countdown.seconds > 0 ? (
           <Text variant="subheading" tone="muted" mono testID="login-countdown">
@@ -154,31 +186,11 @@ export default function LoginScreen(): React.JSX.Element {
           </Text>
         ) : null}
       </View>
-
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: space['1'],
-        }}
-      >
-        <Text variant="caption" tone="muted">
-          {t('auth:login.no_account')}
-        </Text>
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={t('auth:login.register_link')}
-          testID="login-register-link"
-          // One line of caption text; the slop is what makes it a 44 tap target.
-          hitSlop={space['3']}
-          onPress={() => router.push(routes.register(safeNext(nextParam) ?? undefined) as Href)}
-        >
-          <Text variant="caption" tone="accent">
-            {t('auth:login.register_link')}
-          </Text>
-        </Pressable>
-      </View>
     </AuthLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  submitRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
+  submitButton: { flex: 1 },
+});

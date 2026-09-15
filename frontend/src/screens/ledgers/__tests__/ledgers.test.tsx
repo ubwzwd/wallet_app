@@ -10,10 +10,12 @@ import i18next from 'i18next';
 import type { Ledger } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
 import { makeLedger, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
+import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import LedgersScreen from '../LedgersScreen';
 import NewLedgerScreen from '../NewLedgerScreen';
@@ -57,6 +59,7 @@ beforeEach(async () => {
   });
   await initI18n();
   await i18next.changeLanguage('zh');
+  await setPref(PREF_NAMES.lastLedgerId, null);
   mockGet('/me', makeUser({ base_currency: 'SGD' }));
   mockGet('/rates/currencies', { currencies: { CNY: 'Chinese Yuan', SGD: 'Singapore Dollar' } });
 });
@@ -65,15 +68,20 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  jest.restoreAllMocks();
 });
 
-test('the empty state offers both the create and the join action', async () => {
+test('with no ledgers the page is the onboarding guide, offering create and join', async () => {
   mockGet('/ledgers', { items: [], total: 0 });
-  renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
 
-  expect(await screen.findByText('你还没有账本')).toBeTruthy();
-  expect(screen.getByTestId('ledgers-empty-primary')).toBeTruthy();
+  // Screen 15: no list, no chrome — a title, one sentence and the two ways forward.
+  expect(await screen.findByTestId('ledgers-empty')).toBeTruthy();
+  expect(screen.getByText('先有一本账')).toBeTruthy();
   expect(screen.getByTestId('ledgers-empty-secondary')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('ledgers-empty-primary'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers/new'));
 });
 
 test('a ledger card shows currency, members and role but never net worth', async () => {
@@ -83,13 +91,26 @@ test('a ledger card shows currency, members and role but never net worth', async
 
   expect(await screen.findByTestId('ledger-card-led-1')).toBeTruthy();
   expect(screen.getByText('CNY')).toBeTruthy();
-  expect(screen.getByText('3 位成员')).toBeTruthy();
-  expect(screen.getByTestId('ledger-role-led-1')).toBeTruthy();
+  expect(screen.getByText('3 人')).toBeTruthy();
+  expect(screen.getByTestId('ledger-role-led-1')).toHaveTextContent(/你是 owner/);
   expect(screen.queryByText(/净资产/)).toBeNull();
   expect(screen.queryByText(/笔交易/)).toBeNull();
 
   fireEvent.press(screen.getByTestId('ledger-card-led-1'));
   await waitFor(() => expect(router.getPathname()).toBe('/l/led-1'));
+});
+
+test('the ledger the user was last in is the one marked as current', async () => {
+  await setPref(PREF_NAMES.lastLedgerId, 'led-2');
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: 'led-1', name: 'A' }), makeLedger({ id: 'led-2', name: 'B' })],
+    total: 2,
+  });
+  renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  const current = await screen.findByTestId('ledger-card-led-2');
+  await waitFor(() => expect(current.props.accessibilityState.selected).toBe(true));
+  expect(screen.getByTestId('ledger-card-led-1').props.accessibilityState.selected).toBe(false);
 });
 
 test('ten ledgers disable the create button and explain why (decision §2)', async () => {
@@ -135,4 +156,38 @@ test('an empty ledger name is refused before the request', async () => {
 
   expect(await screen.findByText('这是必填项')).toBeTruthy();
   expect(api.mock.history.post.length).toBe(0);
+});
+
+/**
+ * 屏幕稿 13 · 1440 is a different control set, not the same cards in three columns: the card
+ * stops being a button (a button inside a button is invalid on the web) and grows an
+ * explicit 「进入这本账」, and the empty third cell becomes the dashed 新建 tile. Everything
+ * here is unreachable at the jest default width, so it needs its own frame.
+ */
+test('宽屏 the card is opened by its own button and the dashed new-ledger tile is the third cell', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: 'led-1', name: 'A' }), makeLedger({ id: 'led-2', name: 'B' })],
+    total: 2,
+  });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  // The dashed third cell is an entry point of its own on wide (there is no 新建 button
+  // under the cards there).
+  const open = await screen.findByTestId('ledger-open-led-2');
+  expect(screen.getByTestId('ledgers-create-tile')).toBeTruthy();
+
+  // 04 §4.3: pressing a ledger still switches to it — on wide through this control, because
+  // the card itself is a plain View (a button inside a button is invalid on the web).
+  fireEvent.press(open);
+  await waitFor(() => expect(router.getPathname()).toBe('/l/led-2'));
+});
+
+test('宽屏 the new-ledger tile opens the create page', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: 'A' })], total: 1 });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('ledgers-create-tile'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers/new'));
 });
