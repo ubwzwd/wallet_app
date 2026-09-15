@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ImportBatchListItem } from '@/api/types';
 import { type Lang } from '@/i18n';
-import { formatBytes, formatDateTime } from '@/i18n/format';
+import { formatDateTime } from '@/i18n/format';
 
 import { signedPlain } from './amountFormat';
 import { radius, space } from '@/theme/tokens';
@@ -85,7 +85,6 @@ export interface HistoryRowProps {
 export interface Parts {
   id: string;
   filename: string;
-  size: string;
   pasted: boolean;
   ready: boolean;
   time: string;
@@ -103,11 +102,10 @@ export function useParts(batch: ImportBatchListItem, lang: Lang, totalFlags: num
   return {
     id: `import-batch-${batch.id}`,
     filename: pasted ? t('import:history.pasted_filename') : (batch.filename ?? ''),
-    size: formatBytes(batch.size_bytes),
     pasted,
     ready: batch.status === 'ready',
     // The mockup drops the year: a history row is read against "this month", not 2026.
-    time: formatDateTime(batch.created_at, lang).slice(5),
+    time: formatDateTime(batch.created_at).slice(5),
     // 屏幕稿 11's 净额 column is bare and signed — 「+1,204.60」 (§14.59a).
     net: signedPlain(batch.net_amount, batch.base_currency),
     negative: Number(batch.net_amount) < 0,
@@ -166,16 +164,13 @@ function Uploader({ name, testID }: { name: string; testID: string }): React.JSX
   );
 }
 
-/** 「粘贴」 badge or the file size — the mockup's second half of the file cell. */
-export function FileTag({ parts }: { parts: Parts }): React.JSX.Element {
+/** The 「粘贴」 badge of a pasted batch; a file batch shows nothing here (屏幕稿 11 draws
+ *  only the filename and the time, never the size). */
+export function FileTag({ parts }: { parts: Parts }): React.JSX.Element | null {
   const { t } = useTranslation();
   return parts.pasted ? (
     <Badge label={t('import:history.pasted_badge')} tone="info" testID={`${parts.id}-paste-badge`} />
-  ) : (
-    <Text variant="micro" tone="muted" mono testID={`${parts.id}-size`}>
-      {parts.size}
-    </Text>
-  );
+  ) : null;
 }
 
 export function StatusBadge({ parts, status }: { parts: Parts; status: string }): React.JSX.Element {

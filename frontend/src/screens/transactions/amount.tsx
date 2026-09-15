@@ -21,7 +21,7 @@ import {
   type FormatMoneyOptions,
   formatAmountPlain,
   formatConverted,
-  formatMoney,
+  formatLedgerAmount,
 } from '@/i18n/format';
 import { useLedgerContext } from '@/store';
 import type { TypeVariant } from '@/theme/tokens';
@@ -55,10 +55,7 @@ export function amountText(
   lang: Lang,
   signDisplay: SignDisplay = 'auto',
 ): string {
-  if (currency.toUpperCase() === baseCurrency.toUpperCase()) {
-    return plainAmount(amount, currency, signDisplay);
-  }
-  return formatMoney(amount, currency, lang, { signDisplay });
+  return formatLedgerAmount(amount, currency, baseCurrency, lang, { signDisplay });
 }
 
 /** `amountText` bound to the open ledger's base currency and the active language. */
@@ -93,8 +90,8 @@ export interface RowAmountProps {
 }
 
 /**
- * The amount cell of a list row or a table row (屏幕稿 02) — `MoneyText`'s shape with
- * §14.59a's writing rule. A row's own currency is what is printed; the ledger's base
+ * The amount cell of a list row or a table row (屏幕稿 02), written by
+ * §14.59a's rule. A row's own currency is what is printed; the ledger's base
  * currency only decides whether the symbol is worth the space.
  *
  * Positive amounts carry a '+' by default because 屏幕稿 02 writes 「+18,000.00」: without

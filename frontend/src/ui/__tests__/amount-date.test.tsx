@@ -15,7 +15,6 @@ import { ThemeProvider } from '@/theme/ThemeProvider';
 import { lightColors } from '@/theme/tokens';
 import { AmountField, trimMoney } from '@/ui/AmountField';
 import { DateField, ISO_DATE_PATTERN, dateFieldErrorKey } from '@/ui/DateField';
-import { MoneyText } from '@/ui/MoneyText';
 
 beforeAll(async () => {
   if (!i18next.isInitialized) {
@@ -318,60 +317,5 @@ describe('DateField', () => {
     expect(dateFieldErrorKey('2026-07-20', '2026-09-11', '2026-08-01')).toEqual([
       'validation:date_too_early',
     ]);
-  });
-});
-
-describe('MoneyText', () => {
-  test('a transfer amount stays fg.primary while an expense is painted', () => {
-    const { unmount } = renderThemed(
-      <MoneyText amount="-1000.0000" currency="CNY" kind="transfer" lang="zh" testID="m" />,
-    );
-    expect(styleOf(screen.getByTestId('m')).color).toBe(lightColors['fg.primary']);
-    unmount();
-
-    renderThemed(
-      <MoneyText amount="-38.0000" currency="CNY" kind="expense" lang="zh" testID="m" />,
-    );
-    const expense = screen.getByTestId('m');
-    expect(styleOf(expense).color).toBe(lightColors['kind.expense']);
-    expect(expense).toHaveTextContent('−¥38.00');
-  });
-
-  test('a missing rate says so instead of reading as zero', () => {
-    const { unmount } = renderThemed(
-      <MoneyText
-        amount="-140.0000"
-        currency="USD"
-        base={{ amount_base: null, base_currency: 'CNY' }}
-        lang="zh"
-        testID="m"
-      />,
-    );
-    expect(screen.getByTestId('m-base')).toHaveTextContent('暂无汇率');
-    unmount();
-
-    renderThemed(
-      <MoneyText
-        amount="-140.0000"
-        currency="USD"
-        base={{ amount_base: '-1003.72', base_currency: 'CNY' }}
-        lang="zh"
-        testID="m"
-      />,
-    );
-    expect(screen.getByTestId('m-base')).toHaveTextContent(/1,003\.72/);
-  });
-
-  test('no second line when the row is already in the base currency', () => {
-    renderThemed(
-      <MoneyText
-        amount="-38.0000"
-        currency="CNY"
-        base={{ amount_base: '-38.0000', base_currency: 'CNY' }}
-        lang="zh"
-        testID="m"
-      />,
-    );
-    expect(screen.queryByTestId('m-base')).toBeNull();
   });
 });

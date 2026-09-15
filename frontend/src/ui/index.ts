@@ -49,5 +49,5 @@ export * from './FilterChips';
 export * from './KeyboardHint';
 export * from './KindBadge';
 export * from './KindIcon';
-export * from './MoneyText';
+export * from './money';
 export * from './SourcePicker';

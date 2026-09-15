@@ -13,7 +13,7 @@
  */
 import type { Money } from '@/api/types';
 import type { Lang } from '@/i18n';
-import { formatAmountPlain, formatMoney } from '@/i18n/format';
+import { type FormatMoneyOptions, formatAmountPlain, formatLedgerAmount } from '@/i18n/format';
 
 /** The bare amount with an explicit sign on both directions: 「+1,204.60」 / 「−45.00」. */
 export function signedPlain(amount: Money | number, currency: string): string {
@@ -21,14 +21,14 @@ export function signedPlain(amount: Money | number, currency: string): string {
   return Number(amount) > 0 ? `+${text}` : text;
 }
 
-/** `signedPlain` for the ledger's own currency, `formatMoney` for anything else. */
+/** §14.59a for a review / history cell: bare in the base currency, symbol elsewhere. */
 export function importAmountText(
   amount: Money | number,
   currency: string,
   baseCurrency: string,
   lang: Lang,
+  /** 屏幕稿 03 signs 支出 / 收入 / 退款 rows but writes a transfer bare: 「3,000.00」. */
+  signDisplay: NonNullable<FormatMoneyOptions['signDisplay']> = 'always',
 ): string {
-  return currency.toUpperCase() === baseCurrency.toUpperCase()
-    ? signedPlain(amount, currency)
-    : formatMoney(amount, currency, lang, { signDisplay: 'always' });
+  return formatLedgerAmount(amount, currency, baseCurrency, lang, { signDisplay });
 }

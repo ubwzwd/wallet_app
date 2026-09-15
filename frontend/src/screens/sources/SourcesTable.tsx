@@ -119,11 +119,6 @@ function ConvertedCell({
       >
         {formatAmountPlain(source.balance_base, baseCurrency)}
       </Text>
-      {source.balance_rate_date !== null ? (
-        <Text variant="micro" tone="muted" testID={`source-rate-date-${source.id}`}>
-          {t('source:list.rate_date', { date: formatDate(source.balance_rate_date) })}
-        </Text>
-      ) : null}
     </View>
   );
 }

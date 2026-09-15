@@ -223,7 +223,7 @@ describe('formatDateTimeShort (屏幕稿 07 / 08 操作记录)', () => {
 
   test('it is formatDateTime with the year and its dash cut off', () => {
     const utc = '2026-08-14T09:12:00.000000Z';
-    expect(formatDateTimeShort(utc)).toBe(formatDateTime(utc, 'en').slice(5));
+    expect(formatDateTimeShort(utc)).toBe(formatDateTime(utc).slice(5));
     expect(formatDateTimeShort(utc)).not.toContain('2026');
   });
 });
@@ -259,7 +259,7 @@ describe('formatMonth', () => {
 });
 
 test('formatDateTime renders local YYYY-MM-DD HH:mm', () => {
-  const out = formatDateTime('2026-08-14T09:12:00.000000Z', 'en');
+  const out = formatDateTime('2026-08-14T09:12:00.000000Z');
   expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 });
 

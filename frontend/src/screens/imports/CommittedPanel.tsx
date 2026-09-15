@@ -109,7 +109,7 @@ export function CommittedPanel({
               {filename}
             </Text>
             <Text variant="caption" tone="muted" mono numberOfLines={1}>
-              {`${batch.source_name} · ${formatDateTime(when, lang)}`}
+              {`${batch.source_name} · ${formatDateTime(when)}`}
             </Text>
           </View>
         </View>

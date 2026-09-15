@@ -274,6 +274,7 @@ export function ReviewCards({
                         row.currency ?? env.batch.base_currency,
                         env.batch.base_currency,
                         env.lang,
+                        row.kind === 'transfer' ? 'auto' : 'always',
                       )}
                 </Text>
                 <Button

@@ -217,7 +217,6 @@
     "title": "导入历史",
     "stat_batches": "{{batches}} 批",
     "stat_ready": "{{ready}} 批待提交",
-    "stat_posted": "已入账 {{posted}} 笔",
     "filter": {
       "all": "全部",
       "ready": "待提交",

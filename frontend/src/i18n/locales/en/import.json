@@ -238,7 +238,6 @@
     "title": "Import history",
     "stat_batches": "{{batches}} batches",
     "stat_ready": "{{ready}} waiting to be submitted",
-    "stat_posted": "{{posted}} entries posted",
     "filter": {
       "all": "All",
       "ready": "Ready",

@@ -26,7 +26,6 @@
     "mixed_currencies": "Mixed currencies",
     "same_currency": "—",
     "no_rate_cell": "No rate",
-    "rate_date": "Rate from {{date}}",
     "archived_title": "Archived accounts",
     "archived_hint": "Left out of net worth and the home page; their history is kept and still searchable",
     "archived_count": "{{count}}",

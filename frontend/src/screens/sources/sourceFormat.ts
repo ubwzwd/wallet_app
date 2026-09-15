@@ -16,7 +16,7 @@
 import type { FinanceSource } from '@/api/types';
 import { parseMoney } from '@/domain/money';
 import type { Lang } from '@/i18n';
-import { formatAmountPlain, formatMoney } from '@/i18n/format';
+import { formatLedgerAmount } from '@/i18n/format';
 import type { TextTone } from '@/ui';
 
 /** An account in the red (a credit card's debt, an overdrawn account) reads as expense. */
@@ -27,9 +27,7 @@ export function balanceTone(source: FinanceSource, muted: boolean): TextTone {
 
 /** The balance in the account's own currency; bare when that is the ledger's base. */
 export function balanceText(source: FinanceSource, lang: Lang, baseCurrency: string): string {
-  return isForeign(source, baseCurrency)
-    ? formatMoney(source.balance, source.default_currency, lang)
-    : formatAmountPlain(source.balance, source.default_currency);
+  return formatLedgerAmount(source.balance, source.default_currency, baseCurrency, lang);
 }
 
 /** Whether this account's balance is worth converting at all. */

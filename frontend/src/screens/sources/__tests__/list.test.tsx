@@ -182,12 +182,12 @@ test('accounts are grouped into the four types, each with its converted subtotal
     expect(screen.getByTestId(`source-group-${type}`)).toBeTruthy();
   }
   // The archived checking account is NOT part of its group's subtotal (decision §14.50).
-  // Every subtotal is in the base currency and therefore bare (§14.59a).
-  expect(textOf('source-subtotal-checking')).toContain(formatAmountPlain('10000.0000', 'CNY'));
-  expect(textOf('source-subtotal-credit')).toContain(formatAmountPlain('-3204.0000', 'CNY'));
-  expect(textOf('source-subtotal-cash')).toContain(formatAmountPlain('500.0000', 'CNY'));
+  // A group subtotal is a standalone figure, so it keeps its symbol like 屏幕稿 09 (§14.59 f).
+  expect(textOf('source-subtotal-checking')).toContain(formatMoney('10000.0000', 'CNY', 'zh'));
+  expect(textOf('source-subtotal-credit')).toContain(formatMoney('-3204.0000', 'CNY', 'zh'));
+  expect(textOf('source-subtotal-cash')).toContain(formatMoney('500.0000', 'CNY', 'zh'));
   // The SGD account's subtotal is its converted value, not its own-currency balance.
-  expect(textOf('source-subtotal-other')).toContain(formatAmountPlain('1000.0000', 'CNY'));
+  expect(textOf('source-subtotal-other')).toContain(formatMoney('1000.0000', 'CNY', 'zh'));
 });
 
 test('a credit card shows its debt as a negative amount, and a foreign account its converted value', async () => {
@@ -221,7 +221,6 @@ test('the wide table gives every account a row, and the foot strip the total of 
 
   // 折算 column: the converted value plus the rate date, 「—」 in the base currency.
   expect(textOf('source-balance-base-src-other')).toContain('1,000.00');
-  expect(textOf('source-rate-date-src-other')).toContain(formatDate('2026-09-11'));
   expect(textOf('source-converted-src-cash')).toBe('—');
 
   // 余额 · 原币: 屏幕稿 09 writes a base-currency balance bare — the 币种 column already

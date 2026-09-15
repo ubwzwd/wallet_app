@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import { maxAllowedDate } from '@/domain/dates';
 import { space } from '@/theme/tokens';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { AmountField, Skeleton, TextField } from '@/ui';
 
@@ -65,6 +66,7 @@ export function SingleFields({
     sources,
     allowArchivedId,
   } = ctrl;
+  const currencyNames = useCurrencyNames(currencies.names);
   const { errors } = formState;
 
   const amount = (
@@ -88,7 +90,7 @@ export function SingleFields({
                 currency={currencyField.value}
                 onCurrencyChange={currencyField.onChange}
                 codes={currencies.codes}
-                currencyNames={currencies.names}
+                currencyNames={currencyNames}
                 kind={kind}
                 quickAdd={amountChips === undefined}
                 allowExpression

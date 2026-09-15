@@ -45,7 +45,7 @@ export function undoMeta(
 ): string {
   const filename =
     batch.source === 'paste' ? t('import:history.pasted_filename') : (batch.filename ?? '');
-  return [filename, formatDateTime(batch.created_at, lang), batch.source_name]
+  return [filename, formatDateTime(batch.created_at), batch.source_name]
     .filter((part) => part.length > 0)
     .join(' · ');
 }

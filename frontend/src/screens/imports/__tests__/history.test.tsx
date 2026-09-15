@@ -140,10 +140,10 @@ function seed(items: ImportBatchListItem[] = [READY, COMMITTED]): void {
 }
 
 /**
- * Every *list* GET the screen sent to the history endpoint, oldest first. The header's two
- * ledger-wide numbers ride on probes of their own — a one-row `status=ready` counter and a
- * `status=committed` sweep that adds up 「已入账 N 笔」 — which are counters rather than pages
- * of the list, so they are left out here: a page is anything asked for at `IMPORTS_PAGE_SIZE`.
+ * Every *list* GET the screen sent to the history endpoint, oldest first. The header's
+ * ledger-wide 「N 批待提交」 rides on a one-row `status=ready` probe of its own — a counter
+ * rather than a page of the list, so it is left out here: a page is anything asked for at
+ * `IMPORTS_PAGE_SIZE`.
  */
 function listRequests(): Array<Record<string, unknown> | undefined> {
   return api.mock.history.get
@@ -208,11 +208,11 @@ test('a pasted batch shows the placeholder and its badge instead of an empty fil
     '粘贴的 CSV 文本',
   );
   expect(screen.getByTestId(`import-batch-${PASTED_ID}-paste-badge`)).toBeTruthy();
-  // A real file shows its name and a human-readable size instead.
+  // A real file shows its name and nothing else in that cell — 屏幕稿 11 draws no size.
   expect(screen.getByTestId(`import-batch-${BATCH_ID}-filename`).props.children).toBe(
     '2026-08-cmb.csv',
   );
-  expect(screen.getByTestId(`import-batch-${BATCH_ID}-size`).props.children).toBe('18 KB');
+  expect(screen.queryByTestId(`import-batch-${BATCH_ID}-size`)).toBeNull();
   expect(screen.queryByTestId(`import-batch-${BATCH_ID}-paste-badge`)).toBeNull();
 });
 
@@ -395,18 +395,16 @@ test('the header counts the batches and the status filter narrows the list throu
   seed();
   const router = renderHistory();
 
-  // 屏幕稿 11's three numbers: the batch count for the filter in force, a `status=ready`
-  // probe and the committed batches' own row counts. All three come off the server rather
-  // than off the page in hand, so the sentence never mixes 「all of them」 with 「the ones on
-  // this page」.
+  // 屏幕稿 11's numbers: the batch count for the filter in force and a `status=ready` probe.
+  // Both come off the server rather than off the page in hand, so the sentence never mixes
+  // 「all of them」 with 「the ones on this page」. (「已入账 N 笔」 waits for a server count,
+  // §14.59 f.)
   const meta = await screen.findByTestId('imports-header-meta');
   await waitFor(() =>
     expect(String(meta.props.children)).toBe(
       [
         i18next.t('import:history.stat_batches', { batches: 2 }),
         i18next.t('import:history.stat_ready', { ready: 1 }),
-        // The one committed batch has 10 rows and skipped none of them.
-        i18next.t('import:history.stat_posted', { posted: 10 }),
       ].join(' · '),
     ),
   );
@@ -421,7 +419,7 @@ test('the header counts the batches and the status filter narrows the list throu
   await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
 
-  // 「N 批待提交」 and 「已入账 N 笔」 are ledger-wide counts, so they drop out under a filter
+  // 「N 批待提交」 is a ledger-wide count, so it drops out under a filter
   // rather than counting a pending batch inside a list of 已提交 ones (「1 批 · 1 批待提交」).
   await waitFor(() =>
     expect(String(screen.getByTestId('imports-header-meta').props.children)).toBe(

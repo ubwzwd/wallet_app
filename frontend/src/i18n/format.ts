@@ -146,6 +146,30 @@ export function formatAmountPlain(amount: Money | number, currency: string): str
   return value < 0 ? MINUS + formatted : formatted;
 }
 
+/**
+ * §14.59a in one place: an amount in the ledger's **base** currency is written bare
+ * (`formatAmountPlain` — the page has already said which currency it counts in), any other
+ * currency keeps its symbol (`formatMoney`). `signDisplay` follows `formatMoney`'s rules on
+ * both branches, so a list can ask for 「+18,000.00」 and a transfer for 「3,000.00」.
+ */
+export function formatLedgerAmount(
+  amount: Money | number,
+  currency: string,
+  baseCurrency: string,
+  lang: Lang,
+  opts?: FormatMoneyOptions,
+): string {
+  const signDisplay = opts?.signDisplay ?? 'auto';
+  if (currency.toUpperCase() !== baseCurrency.toUpperCase()) {
+    return formatMoney(amount, currency, lang, { signDisplay });
+  }
+  const value = typeof amount === 'number' ? amount : Number(amount);
+  const digits = formatAmountPlain(amount, currency);
+  if (signDisplay === 'never') return value < 0 ? digits.slice(1) : digits;
+  if (signDisplay === 'always' && value > 0) return `+${digits}`;
+  return digits;
+}
+
 /** Parses a calendar date (`YYYY-MM-DD`, no timezone) as a LOCAL date — never
  *  `new Date('YYYY-MM-DD')`, which parses as UTC midnight and shifts a day in
  *  timezones east of UTC (04 §5.4, §8.1). */
@@ -231,7 +255,7 @@ export function formatMonthShort(month: string, lang: Lang): string {
 
 /** UTC ISO datetime → local `'YYYY-MM-DD HH:mm'` (24h, locale-invariant — used in the
  *  operations timeline, 04 §4.7). */
-export function formatDateTime(isoDateTime: IsoDateTime, _lang: Lang): string {
+export function formatDateTime(isoDateTime: IsoDateTime): string {
   const date = new Date(isoDateTime);
   return (
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +

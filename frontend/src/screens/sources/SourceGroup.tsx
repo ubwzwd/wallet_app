@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { FinanceSource, Money, SourceType } from '@/api/types';
 import type { Lang } from '@/i18n';
-import { formatAmountPlain, formatConverted, formatDate } from '@/i18n/format';
+import { formatConverted, formatDate, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { ListCard, ListRow, SourceTypeIcon, Text, sourceTypeLabelKey } from '@/ui';
 
@@ -136,10 +136,10 @@ export function SourceGroup({
         >
           {t(sourceTypeLabelKey(type))}
         </Text>
-        {/* 屏幕稿 09 writes every group subtotal bare — the page header above already
-            says 「折算 CNY」 (§14.59a). */}
+        {/* 屏幕稿 09 writes the group subtotal with its symbol (「¥12,480.35」): it is a
+            standalone figure, not a column (§14.59 f). */}
         <Text variant="micro" tone="muted" mono testID={`source-subtotal-${type}`}>
-          {formatAmountPlain(subtotal, baseCurrency)}
+          {formatMoney(subtotal, baseCurrency, lang)}
         </Text>
       </View>
       <ListCard testID={`source-group-card-${type}`}>

@@ -24,10 +24,9 @@ import type { CategoryIndex } from '@/domain/categories';
 import { useLang, type Lang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
 import {
-  formatAmountPlain,
   formatConverted,
+  formatLedgerAmount,
   formatDateShort,
-  formatMoney,
 } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -191,15 +190,10 @@ export function RecentSection({
           // income nor expense, and the mockup writes it 「3,000.00」 — so its direction is
           // left to the 种类 badge and to the row's own 「A → B」 title.
           const signed = tx.kind !== 'transfer';
-          const money = (value: Money, currency: string): string => {
-            if (currency !== baseCurrency) {
-              return formatMoney(value, currency, lang, {
-                signDisplay: signed ? 'always' : 'auto',
-              });
-            }
-            const text = formatAmountPlain(value, currency);
-            return signed && Number(value) > 0 ? `+${text}` : text;
-          };
+          const money = (value: Money, currency: string): string =>
+            formatLedgerAmount(value, currency, baseCurrency, lang, {
+              signDisplay: signed ? 'always' : 'auto',
+            });
           const amount =
             row.kind === 'pair'
               ? money(absMoney(row.out.amount), row.out.currency)
