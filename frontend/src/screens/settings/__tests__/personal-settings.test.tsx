@@ -101,8 +101,10 @@ test('picking 中文 switches i18n and persists `language: "zh"`', async () => {
   await waitFor(() => expect(patchBodies()).toEqual([{ language: 'zh' }]));
   expect(i18next.language).toBe('zh');
   // The page itself is in Chinese again — its title lives in the narrow top bar (04 §1.4),
-  // so a section heading is what proves it here.
-  expect(await screen.findByText('关于我')).toBeTruthy();
+  // so the language card's own note is what proves it here.
+  await waitFor(() =>
+    expect(screen.getByTestId('settings-language-note')).toHaveTextContent(/金额格式/),
+  );
 });
 
 test('"follow the system" sends an explicit null', async () => {
@@ -134,6 +136,10 @@ test('a new display name is saved on its own, trimmed', async () => {
   const user = makeUser({ display_name: null });
   await renderSettings(user);
   mockPatch('/me', { ...user, display_name: '小王' });
+
+  // 屏幕稿 14: one 保存 in the page head, dark only once something actually differs.
+  const save = await screen.findByTestId('settings-display-name-save');
+  expect(save.props.accessibilityState?.disabled).toBe(true);
 
   fireEvent.changeText(await screen.findByTestId('settings-display-name'), ' 小王 ');
   fireEvent.press(screen.getByTestId('settings-display-name-save'));
@@ -191,7 +197,7 @@ test('the narrow shell carries the title, so the page does not print it twice', 
     { auth: { status: 'authenticated', user: makeUser() }, wide: false },
   );
 
-  expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('个人设置');
+  expect(await screen.findByTestId('top-bar-title')).toHaveTextContent('我的');
   expect(screen.queryByTestId('personal-settings-title')).toBeNull();
 });
 
@@ -202,5 +208,6 @@ test('the wide layout has no top bar, so the page carries the title itself', asy
     wide: true,
   });
 
-  expect(await screen.findByTestId('personal-settings-title')).toHaveTextContent('个人设置');
+  expect(await screen.findByTestId('personal-settings-title')).toHaveTextContent('我的');
+  expect(screen.getByTestId('personal-settings-subtitle')).toHaveTextContent(/只影响你自己/);
 });

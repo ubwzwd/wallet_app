@@ -1,5 +1,10 @@
 /**
- * `/settings` — personal settings (04 §4.13).
+ * `/settings` — 「我的」 (04 §4.13), rebuilt against 屏幕稿 14.
+ *
+ * Wide: a page head — 「我的」 + 「只影响你自己，不影响账本里的其他人」 + 「保存」 — over two
+ * columns. Left is 关于我 (avatar, display name, default currency) and 语言; right is 外观,
+ * the 关于 row and the 登录 card whose only control is the outlined 「退出登录」. Narrow
+ * stacks profile → 偏好 (默认币种 / 外观 / 语言) → 入口 → 关于 → 退出登录.
  *
  * Three of the four preferences live on the server (`display_name`, `base_currency`,
  * `language`) and every `PATCH /me` carries only the field that changed. The fourth,
@@ -8,47 +13,52 @@
  */
 import React from 'react';
 import { View } from 'react-native';
+import Constants from 'expo-constants';
 import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { User } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { applyLanguage, useLang, type Lang } from '@/i18n';
-import { formatDateTime } from '@/i18n/format';
 import { useTopBar } from '@/navigation';
 import { useCurrencies, useMe, useUpdateMe } from '@/queries';
 import { useAuth, useOptionalLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
-import { useTheme, type ThemePref } from '@/theme/ThemeProvider';
+import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
   Button,
   Card,
   CurrencyPicker,
+  Icon,
+  ListCard,
+  ListRow,
   Page,
+  PageHeader,
   SegmentedControl,
-  Skeleton,
   Text,
-  TextField,
   toast,
 } from '@/ui';
 
-/** Decision §14.6: a display name is at most 40 characters, and may be empty. */
-export const DISPLAY_NAME_MAX_LENGTH = 40;
+import { IconWell } from './IconWell';
+import { LanguageCard, LanguageField, type LanguageChoice } from './LanguageCard';
+import { DISPLAY_NAME_MAX_LENGTH, ProfileCard } from './ProfileCard';
 
-/** `null` is the server's spelling of "follow the system" (decision §14.6). */
-type LanguageChoice = 'system' | Lang;
+export { DISPLAY_NAME_MAX_LENGTH };
 
-/** The part of an email before `@` — what an empty display name falls back to. */
-function emailPrefix(email: string): string {
-  const at = email.indexOf('@');
-  return at > 0 ? email.slice(0, at) : email;
+/** 屏幕稿 14: `minmax(0,1.15fr) minmax(0,1fr)`. */
+const LEFT_FLEX = 1.15;
+
+/** The version the 关于 row shows; `app.json` is the single source (04 §7.2). */
+function appVersion(): string {
+  return Constants.expoConfig?.version ?? '';
 }
 
 export default function PersonalSettingsScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
   const wide = useIsWide();
+  const colors = useColors();
   const router = useRouter();
   const { logout, setUser } = useAuth();
   const theme = useTheme();
@@ -117,9 +127,7 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
 
   const goLedgerSettings = (): void => {
     router.push(
-      (ledgerContext
-        ? routes.l(ledgerContext.ledgerId).settings()
-        : routes.ledgers()) as Href,
+      (ledgerContext ? routes.l(ledgerContext.ledgerId).settings() : routes.ledgers()) as Href,
     );
   };
 
@@ -131,140 +139,190 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   };
 
   const languageValue: LanguageChoice = user?.language ?? 'system';
+  const dirty = user !== undefined && (name.trim() === '' ? null : name.trim()) !== user.display_name;
 
-  return (
-    <Page>
+  const currencyField = (
+    <View style={{ gap: space['1'] + 2 }}>
+      <CurrencyPicker
+        testID="settings-base-currency"
+        label={t('settings:base_currency_label')}
+        codes={currencies.codes}
+        names={currencies.names}
+        value={user?.base_currency ?? null}
+        onChange={changeCurrency}
+        disabled={!user || update.isPending}
+      />
+      <Text variant="caption" tone="muted" testID="settings-base-currency-hint">
+        {t('settings:base_currency_hint')}
+      </Text>
+    </View>
+  );
+
+  const appearanceControl = (
+    <SegmentedControl<ThemePref>
+      testID="settings-appearance"
+      accessibilityLabel={t('settings:appearance_label')}
+      value={theme.pref}
+      onChange={changeAppearance}
+      options={[
+        { value: 'system', label: t('settings:appearance.system') },
+        { value: 'light', label: t('settings:appearance.light') },
+        { value: 'dark', label: t('settings:appearance.dark') },
+      ]}
+    />
+  );
+
+  const entriesCard = (
+    <ListCard divided testID="entries-card">
+      <ListRow
+        testID="settings-ledger-settings"
+        icon={<IconWell name="settings" tone="neutral" size={32} />}
+        title={t('settings:entry.ledger_settings')}
+        onPress={goLedgerSettings}
+        trailing={<Icon name="chevron-right" size={16} color={colors['fg.muted']} />}
+      />
+      <ListRow
+        testID="settings-switch-ledger"
+        icon={<IconWell name="wallet" tone="neutral" size={32} />}
+        title={t('settings:entry.switch_ledger')}
+        onPress={() => router.push(routes.ledgers() as Href)}
+        trailing={<Icon name="chevron-right" size={16} color={colors['fg.muted']} />}
+      />
+    </ListCard>
+  );
+
+  // 屏幕稿 14 draws a chevron here, but v3.0 has no 「关于」 page to open — the row states
+  // the version and stays inert rather than promising a destination that does not exist.
+  const aboutCard = (
+    <ListCard testID="about-card">
+      <ListRow
+        testID="settings-about"
+        icon={<IconWell name="info" tone="neutral" size={32} />}
+        title={t('settings:about_label')}
+        amount={appVersion()}
+        amountTone="muted"
+      />
+    </ListCard>
+  );
+
+  const sessionCard = (
+    <Card variant="raised" testID="session-card" style={{ padding: space['5'], gap: space['3'] }}>
       {wide ? (
-        <Text variant="title" accessibilityRole="header" testID="personal-settings-title">
-          {t('settings:title')}
+        <Text variant="subheading" weight={700} accessibilityRole="header">
+          {t('settings:section.session')}
         </Text>
       ) : null}
+      <Text variant="body" tone="muted" testID="settings-logout-hint">
+        {t('settings:logout_hint')}
+      </Text>
+      <Button
+        testID="settings-logout"
+        label={t('settings:entry.logout')}
+        icon="log-out"
+        variant="danger"
+        size="lg"
+        fullWidth
+        onPress={signOut}
+      />
+    </Card>
+  );
 
-      <Card variant="outlined" style={{ gap: space['3'] }} testID="profile-card">
-        <Text variant="heading" accessibilityRole="header">
-          {t('settings:section.profile')}
+  const save = (
+    <Button
+      testID="settings-display-name-save"
+      label={t('settings:save')}
+      onPress={saveName}
+      loading={update.isPending}
+      disabled={!user || !dirty}
+    />
+  );
+
+  const header = (
+    <PageHeader
+      testID="personal-settings"
+      title={t('settings:title')}
+      meta={
+        <Text variant="body" tone="muted" testID="personal-settings-subtitle">
+          {t('settings:subtitle')}
         </Text>
-        {user ? (
-          <View style={{ gap: space['1'] }}>
-            <Text variant="caption" tone="secondary">
-              {t('settings:email_label')}
-            </Text>
-            <Text testID="settings-email">{user.email}</Text>
-            <Text variant="caption" tone="secondary">
-              {t('settings:created_at_label')}
-            </Text>
-            <Text variant="caption" tone="muted" testID="settings-created-at">
-              {formatDateTime(user.created_at, lang)}
-            </Text>
-          </View>
-        ) : (
-          <Skeleton variant="row" testID="settings-profile-skeleton" />
-        )}
+      }
+      actions={save}
+    />
+  );
 
-        <TextField
-          testID="settings-display-name"
-          label={t('settings:display_name_label')}
-          accessibilityLabel={t('settings:display_name_label')}
-          value={name}
-          onChangeText={(next) => {
+  if (!wide) {
+    return (
+      <Page testID="personal-settings-screen">
+        {header}
+        <ProfileCard
+          user={user}
+          name={name}
+          onNameChange={(next) => {
             setTouched(true);
             setName(next);
           }}
-          hint={t('settings:display_name_hint', {
-            fallback: user ? emailPrefix(user.email) : '',
-          })}
-          maxLength={DISPLAY_NAME_MAX_LENGTH}
-          showCounter
           disabled={!user || update.isPending}
         />
-        <Button
-          testID="settings-display-name-save"
-          label={t('settings:save')}
-          size="sm"
-          onPress={saveName}
-          loading={update.isPending}
-          disabled={!user}
-        />
+        <Card
+          variant="raised"
+          testID="device-card"
+          style={{ padding: space['4'], gap: space['5'] }}
+        >
+          {currencyField}
+          <View style={{ gap: space['2'] }}>
+            <Text variant="caption" tone="secondary" weight={600}>
+              {t('settings:appearance_label')}
+            </Text>
+            {appearanceControl}
+            <Text variant="caption" tone="muted" testID="settings-appearance-hint">
+              {t('settings:appearance_hint')}
+            </Text>
+          </View>
+          <LanguageField value={languageValue} resolved={lang} onChange={changeLanguage} />
+        </Card>
+        {entriesCard}
+        {aboutCard}
+        {sessionCard}
+      </Page>
+    );
+  }
 
-        <CurrencyPicker
-          testID="settings-base-currency"
-          label={t('settings:base_currency_label')}
-          codes={currencies.codes}
-          names={currencies.names}
-          value={user?.base_currency ?? null}
-          onChange={changeCurrency}
-          disabled={!user || update.isPending}
-        />
-        <Text variant="caption" tone="muted" testID="settings-base-currency-hint">
-          {t('settings:base_currency_hint')}
-        </Text>
-      </Card>
-
-      <Card variant="outlined" style={{ gap: space['3'] }} testID="device-card">
-        <Text variant="heading" accessibilityRole="header">
-          {t('settings:section.device')}
-        </Text>
-
-        <Text variant="caption" tone="secondary">
-          {t('settings:language_label')}
-        </Text>
-        <SegmentedControl<LanguageChoice>
-          testID="settings-language"
-          accessibilityLabel={t('settings:language_label')}
-          value={languageValue}
-          onChange={changeLanguage}
-          options={[
-            { value: 'system', label: t('settings:language.system') },
-            { value: 'zh', label: t('settings:language.zh') },
-            { value: 'en', label: t('settings:language.en') },
-          ]}
-        />
-
-        <Text variant="caption" tone="secondary">
-          {t('settings:appearance_label')}
-        </Text>
-        <SegmentedControl<ThemePref>
-          testID="settings-appearance"
-          accessibilityLabel={t('settings:appearance_label')}
-          value={theme.pref}
-          onChange={changeAppearance}
-          options={[
-            { value: 'system', label: t('settings:appearance.system'), icon: 'monitor' },
-            { value: 'light', label: t('settings:appearance.light'), icon: 'sun' },
-            { value: 'dark', label: t('settings:appearance.dark'), icon: 'moon' },
-          ]}
-        />
-      </Card>
-
-      <Card variant="outlined" style={{ gap: space['2'] }} testID="entries-card">
-        <Text variant="heading" accessibilityRole="header">
-          {t('settings:section.entries')}
-        </Text>
-        <Button
-          testID="settings-ledger-settings"
-          label={t('settings:entry.ledger_settings')}
-          variant="secondary"
-          size="sm"
-          icon="settings"
-          onPress={goLedgerSettings}
-        />
-        <Button
-          testID="settings-switch-ledger"
-          label={t('settings:entry.switch_ledger')}
-          variant="secondary"
-          size="sm"
-          icon="wallet"
-          onPress={() => router.push(routes.ledgers() as Href)}
-        />
-        <Button
-          testID="settings-logout"
-          label={t('settings:entry.logout')}
-          variant="secondary"
-          size="sm"
-          icon="log-out"
-          onPress={signOut}
-        />
-      </Card>
+  return (
+    <Page testID="personal-settings-screen">
+      {header}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space['6'] }}>
+        <View style={{ flexGrow: LEFT_FLEX, flexShrink: 1, flexBasis: 0, gap: space['5'] }}>
+          <ProfileCard
+            user={user}
+            name={name}
+            onNameChange={(next) => {
+              setTouched(true);
+              setName(next);
+            }}
+            disabled={!user || update.isPending}
+            currencyField={currencyField}
+          />
+          <LanguageCard value={languageValue} resolved={lang} onChange={changeLanguage} />
+        </View>
+        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, gap: space['5'] }}>
+          <Card
+            variant="raised"
+            testID="device-card"
+            style={{ padding: space['5'], gap: space['3'] + 2 }}
+          >
+            <Text variant="subheading" weight={700} accessibilityRole="header">
+              {t('settings:section.appearance')}
+            </Text>
+            {appearanceControl}
+            <Text variant="body" tone="muted" testID="settings-appearance-hint">
+              {t('settings:appearance_hint')}
+            </Text>
+          </Card>
+          {entriesCard}
+          {aboutCard}
+          {sessionCard}
+        </View>
+      </View>
     </Page>
   );
 }
