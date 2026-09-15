@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
 
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
@@ -172,6 +172,26 @@ test('the narrow layout puts the same controls behind a counted filter button', 
   fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
   await waitFor(() => expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull());
   expect(searchOf(router).kind).toEqual(['expense', 'income']);
+});
+
+test('leaving the screen for good closes the narrow drawer; coming back never reopens it', async () => {
+  setWide(false);
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const first = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.press(await screen.findByTestId('tx-filter-bar-open'));
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+
+  // Unlike the remount a filter change causes, this is a real departure: one tick passes
+  // with nothing mounted, so the drawer flag is dropped.
+  first.unmount();
+  act(() => {
+    jest.advanceTimersByTime(1);
+  });
+
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  expect(await screen.findByTestId('tx-filter-bar-open')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
 });
 
 test('typing in the search box writes `q` once, 300ms after the last keystroke', async () => {

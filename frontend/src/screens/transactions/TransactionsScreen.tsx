@@ -7,14 +7,11 @@
  * (屏幕稿 02 · 375) is the search box plus a filter button, a stat line, day-grouped cards
  * and a summary card at the end, scrolling infinitely.
  *
- * The URL owns the filters (04 §1.3), so this screen holds almost no state of its own: it
- * reads `useTxFilters`, hands the parameters to the query layer, and paints what comes
- * back. Two of the numbers on screen are deliberately *not* computed from the rows: the
- * summary comes from the response's `summary` (the whole filtered result, not this page),
- * and the count is the response's `total` — the number of entries the filters match on the
- * server. Subtracting the pairs merged *on this page* (the two legs of a transfer render as
- * one row) would make it drift as more pages arrive, so the header counts entries and the
- * narrow layout says how many of them are loaded.
+ * The URL owns the filters (04 §1.3), so this screen holds almost no state of its own. Two
+ * numbers are deliberately *not* computed from the rows: the summary comes from the
+ * response's `summary` (the whole filtered result, not this page) and the count from its
+ * `total` — subtracting the pairs merged *on this page* (a transfer's two legs render as
+ * one row) would make either drift as more pages arrive.
  */
 import React from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
@@ -294,42 +291,42 @@ export default function TransactionsScreen(): React.JSX.Element {
   const narrowHeader = (
     <View style={{ gap: space['3'], paddingBottom: space['1'] }}>
       {filterBar}
-      <View style={[styles.statLine, styles.statRow]}>
-        <Text variant="caption" tone="secondary" mono testID="tx-count">
-          {countLabel}
-        </Text>
-        {summaryLabel !== null ? (
-          <Text variant="caption" tone="secondary" mono testID="tx-summary-line">
-            {summaryLabel}
+      {/* 屏幕稿 15 draws no stat line when the result is empty — neither on a ledger that
+          holds nothing nor on a filter that matched nothing; the card says it instead. */}
+      {total > 0 ? (
+        <View style={[styles.statLine, styles.statRow]}>
+          <Text variant="caption" tone="secondary" mono testID="tx-count">
+            {countLabel}
           </Text>
-        ) : null}
-      </View>
+          {summaryLabel !== null ? (
+            <Text variant="caption" tone="secondary" mono testID="tx-summary-line">
+              {summaryLabel}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 
-  const narrowEmpty = (): React.JSX.Element => {
-    if (isPending) {
-      return (
-        <View style={{ gap: space['2'] }} testID="tx-skeletons">
-          {Array.from({ length: SKELETON_ROWS }, (_, i) => (
-            <Skeleton key={i} variant="row" testID={`tx-skeleton-${i}`} />
-          ))}
-        </View>
-      );
-    }
-    if (isError) return errorBlock;
-    return (
-      <Card style={{ padding: space['5'] - 2, gap: space['4'] }}>
-        {f.activeCount === 0 ? (
-          <>
-            <GhostBlock rows={3} />
-            <Divider />
-          </>
-        ) : null}
-        {emptyBlock}
-      </Card>
-    );
-  };
+  const narrowEmpty = isPending ? (
+    <View style={{ gap: space['2'] }} testID="tx-skeletons">
+      {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+        <Skeleton key={i} variant="row" testID={`tx-skeleton-${i}`} />
+      ))}
+    </View>
+  ) : isError ? (
+    errorBlock
+  ) : (
+    <Card style={{ padding: space['5'] - 2, gap: space['4'] }}>
+      {f.activeCount === 0 ? (
+        <>
+          <GhostBlock rows={3} />
+          <Divider />
+        </>
+      ) : null}
+      {emptyBlock}
+    </Card>
+  );
 
   const narrowFooter = (
     <View style={{ gap: space['3'], paddingTop: space['2'] }}>
@@ -345,7 +342,7 @@ export default function TransactionsScreen(): React.JSX.Element {
           testID="tx-load-more"
         />
       ) : null}
-      {summary ? <SummaryBar summary={summary} lang={lang} /> : null}
+      {summary && total > 0 ? <SummaryBar summary={summary} lang={lang} /> : null}
     </View>
   );
 
@@ -369,7 +366,7 @@ export default function TransactionsScreen(): React.JSX.Element {
             />
           )}
           ListHeaderComponent={narrowHeader}
-          ListEmptyComponent={narrowEmpty()}
+          ListEmptyComponent={narrowEmpty}
           ListFooterComponent={narrowFooter}
           onEndReachedThreshold={0.4}
           onEndReached={() => {

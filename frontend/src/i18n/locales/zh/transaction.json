@@ -16,7 +16,6 @@
     "filter": {
       "open": "筛选",
       "title": "筛选",
-      "done": "完成",
       "apply_other": "应用 · {{count}} 笔",
       "reset": "重置",
       "reset_all": "重置全部",
@@ -27,7 +26,7 @@
       "keyword_placeholder": "商户或备注",
       "multi_hint": "多选",
       "optional_hint": "选填",
-      "kind_label": "种类",
+      "kind_label": "类型",
       "kind_hint": "多选 · 不选 = 全部",
       "source_label": "账户",
       "source_placeholder": "全部账户",
@@ -86,6 +85,8 @@
     "empty_filtered_clear": "清空全部条件",
     "error_title": "交易加载失败",
     "day_total": "当日支出 {{expense}} · 收入 {{income}}",
+    "day_total_expense": "当日支出 {{expense}}",
+    "day_total_income": "当日收入 {{income}}",
     "summary": "支出 {{expense}} · 收入 {{income}} · 净额 {{net}}",
     "summary_short": "支出 {{expense}} · 收入 {{income}}",
     "summary_label": {
@@ -130,7 +131,6 @@
       "6": "周六"
     },
     "row": {
-      "arrow": "→",
       "counterparty": "对方：{{name}}",
       "transfer_pair": "{{from}} → {{to}}",
       "category_path": "{{l1}} / {{l2}}",

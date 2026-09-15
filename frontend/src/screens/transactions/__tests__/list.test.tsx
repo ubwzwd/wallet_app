@@ -307,10 +307,11 @@ test('each day header carries that day\'s expense and income subtotal', async ()
     '当日支出 ¥45.00 · 收入 ¥18,000.00',
   );
   // The transfer pair is excluded from the day it falls on (decision §14.52 A14): only the
-  // imported 66.20 expense counts there.
-  expect(screen.getByTestId('tx-day-2026-09-08-total')).toHaveTextContent(
-    '当日支出 ¥66.20 · 收入 ¥0.00',
-  );
+  // imported 66.20 expense counts there — and 屏幕稿 02 · 375 names only the non-zero kinds,
+  // so that day's header says nothing about income.
+  const quiet = screen.getByTestId('tx-day-2026-09-08-total');
+  expect(quiet).toHaveTextContent('当日支出 ¥66.20');
+  expect(quiet).not.toHaveTextContent('收入');
 });
 
 test('the bottom summary comes from the response, not from the rows on screen', async () => {

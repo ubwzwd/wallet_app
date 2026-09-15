@@ -7,10 +7,12 @@
  */
 import React from 'react';
 import { View } from 'react-native';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
 import type { Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
+import { parseMoney } from '@/domain/money';
 import type { DayGroup as DayGroupData, ListRow } from '@/domain/transfers';
 import { type Lang } from '@/i18n';
 import { formatMoney, parseLocalDate } from '@/i18n/format';
@@ -32,11 +34,33 @@ export interface DayGroupProps {
   testID?: string;
 }
 
+/**
+ * The day's subtotal line, naming only the kinds that actually happened that day: 屏幕稿 02 ·
+ * 375 writes 「退款 199.00」 on a refund-only day, never a padded 「支出 ¥0.00 · 收入 ¥0.00」.
+ * What is summed is unchanged (transfers stay excluded) — this only picks the wording.
+ */
+function daySubtotal(
+  t: TFunction,
+  group: DayGroupData,
+  baseCurrency: string,
+  lang: Lang,
+): string | null {
+  const hasExpense = parseMoney(group.expense) !== 0n;
+  const hasIncome = parseMoney(group.income) !== 0n;
+  const expense = formatMoney(group.expense, baseCurrency, lang);
+  const income = formatMoney(group.income, baseCurrency, lang);
+  if (hasExpense && hasIncome) return t('transaction:list.day_total', { expense, income });
+  if (hasExpense) return t('transaction:list.day_total_expense', { expense });
+  if (hasIncome) return t('transaction:list.day_total_income', { income });
+  return null;
+}
+
 export function DayGroup(props: DayGroupProps): React.JSX.Element {
   const { t } = useTranslation();
   const { group, lang, baseCurrency } = props;
   const id = props.testID ?? `tx-day-${group.date}`;
   const weekday = t(`transaction:list.weekday.${parseLocalDate(group.date).getDay()}`);
+  const subtotal = daySubtotal(t, group, baseCurrency, lang);
 
   return (
     <View testID={id} style={{ gap: space['2'] - 2, paddingBottom: space['3'] }}>
@@ -53,12 +77,11 @@ export function DayGroup(props: DayGroupProps): React.JSX.Element {
         <Text variant="caption" tone="secondary" mono weight={600} testID={`${id}-date`}>
           {`${group.date.slice(5)} ${weekday}`}
         </Text>
-        <Text variant="micro" tone="muted" mono testID={`${id}-total`}>
-          {t('transaction:list.day_total', {
-            expense: formatMoney(group.expense, baseCurrency, lang),
-            income: formatMoney(group.income, baseCurrency, lang),
-          })}
-        </Text>
+        {subtotal === null ? null : (
+          <Text variant="micro" tone="muted" mono testID={`${id}-total`}>
+            {subtotal}
+          </Text>
+        )}
       </View>
 
       <ListCard testID={`${id}-card`}>

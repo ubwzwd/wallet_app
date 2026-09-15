@@ -16,7 +16,6 @@
     "filter": {
       "open": "Filters",
       "title": "Filters",
-      "done": "Done",
       "apply_one": "Apply · {{count}} transaction",
       "apply_other": "Apply · {{count}} transactions",
       "reset": "Reset",
@@ -91,6 +90,8 @@
     "empty_filtered_clear": "Clear every filter",
     "error_title": "Couldn't load transactions",
     "day_total": "Expense {{expense}} · Income {{income}}",
+    "day_total_expense": "Expense {{expense}}",
+    "day_total_income": "Income {{income}}",
     "summary": "Expense {{expense}} · Income {{income}} · Net {{net}}",
     "summary_short": "Expense {{expense}} · Income {{income}}",
     "summary_label": {
@@ -139,7 +140,6 @@
       "6": "Sat"
     },
     "row": {
-      "arrow": "→",
       "counterparty": "Counterparty: {{name}}",
       "transfer_pair": "{{from}} → {{to}}",
       "category_path": "{{l1}} / {{l2}}",

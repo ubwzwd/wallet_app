@@ -179,7 +179,7 @@ export function KindChips(props: FilterFieldProps): React.JSX.Element {
 
   return (
     <FilterField
-      label={t('transaction:list.filter.kind_label')}
+      label={t('transaction:list.table.kind')}
       hint={t('transaction:list.filter.kind_hint')}
     >
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>

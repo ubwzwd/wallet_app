@@ -119,9 +119,12 @@ function currencyCodesOf(props: FilterBarProps): string[] {
  * in it writes the URL, expo-router remounts the screen for the replaced URL (04 §1.3), and
  * component state would not survive that — the drawer would slam shut on the first pill the
  * user touched. 屏幕稿 02 has them set several conditions and then press 「应用」, so the flag
- * outlives the remount and is cleared the moment the drawer is closed.
+ * outlives the remount; it is cleared when the drawer is closed and when the screen is left
+ * for good, so coming back to /transactions never reopens it by itself.
  */
 let drawerOpen = false;
+/** Pending reset of `drawerOpen`, armed on unmount and cancelled by a remount in the same tick. */
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function FilterBar(props: FilterBarProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -131,6 +134,19 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
   const setDrawer = React.useCallback((open: boolean): void => {
     drawerOpen = open;
     setSheetOpen(open);
+  }, []);
+  // A filter change remounts the screen, and the drawer must survive that; leaving the
+  // screen must close it. Unmount arms a reset, a remount in the same tick cancels it.
+  React.useEffect(() => {
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    return () => {
+      closeTimer = setTimeout(() => {
+        drawerOpen = false;
+      }, 0);
+    };
   }, []);
   const id = props.testID ?? 'tx-filter-bar';
 
