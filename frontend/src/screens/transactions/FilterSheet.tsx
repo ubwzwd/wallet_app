@@ -1,0 +1,218 @@
+/**
+ * The narrow layout's filter drawer (屏幕稿 02 · 交易筛选 375), and the account field — the
+ * one control the drawer draws completely differently from the wide card, which is why it
+ * lives here rather than with the other fields.
+ *
+ * The drawer stacks the same fields the wide 「筛选」 card lays out in a grid
+ * (`FilterFields.tsx`): 重置 in the header, keyword / 种类 / 账户 / 币种 / 日期区间 / 分类 /
+ * 金额区间 down the body, and one 「应用 · N 笔」 button that says how many entries the filters
+ * match before it is pressed.
+ *
+ * There is no 「取消」: every control writes to the URL as it is touched (04 §1.3), so the
+ * list behind the drawer is already showing the result and there is nothing to roll back —
+ * the button confirms and closes.
+ */
+import React from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+
+import { formatMoney } from '@/i18n/format';
+import { density, radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import {
+  Button,
+  Checkbox,
+  MultiSelect,
+  Sheet,
+  Text,
+  sourceTypeLabelKey,
+  type SelectOption,
+} from '@/ui';
+
+import {
+  AmountRangeField,
+  CategoryField,
+  CurrencyChips,
+  DateRangeField,
+  FilterField,
+  KeywordField,
+  KindChips,
+  type FilterFieldProps,
+} from './FilterFields';
+
+/**
+ * 屏幕稿 02 draws the accounts two ways: a dropdown reading 「招行储蓄卡 +2」 on the wide card,
+ * and — in the drawer, where there is room — the accounts themselves as a tinted list of
+ * tick rows carrying each account's type, currency and balance.
+ */
+export function SourceField(props: FilterFieldProps & { inline?: boolean }): React.JSX.Element {
+  const { t } = useTranslation();
+  const colors = useColors();
+  const values = props.filters.source_id ?? [];
+
+  const toggle = (id: string): void => {
+    const next = values.includes(id) ? values.filter((v) => v !== id) : [...values, id];
+    props.onPatch({ source_id: next.length > 0 ? next : undefined });
+  };
+
+  // The trigger names the first account and counts the rest, rather than a bare number that
+  // says nothing about which ones.
+  const summary = (count: number): string => {
+    const first = props.sources.find((s) => s.id === values[0])?.name;
+    if (first === undefined) return t('transaction:list.filter.source_selected', { count });
+    if (count === 1) return first;
+    return t('transaction:list.filter.source_summary', { name: first, count: count - 1 });
+  };
+
+  const options: SelectOption[] = props.sources.map((s) => ({
+    value: s.id,
+    label: s.name,
+    hint: s.default_currency,
+  }));
+
+  return (
+    <FilterField
+      label={t('transaction:list.filter.source_label')}
+      hint={
+        props.inline === true && values.length > 0
+          ? t('transaction:list.filter.source_selected', { count: values.length })
+          : t('transaction:list.filter.multi_hint')
+      }
+    >
+      {props.inline === true ? (
+        <View
+          testID={`${props.id}-source-list`}
+          style={{
+            borderRadius: radius.md,
+            backgroundColor: colors['bg.subtle'],
+            paddingVertical: space['1'],
+          }}
+        >
+          {props.sources.map((source) => (
+            <Pressable
+              key={source.id}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: values.includes(source.id) }}
+              accessibilityLabel={source.name}
+              onPress={() => toggle(source.id)}
+              testID={`${props.id}-source-${source.id}`}
+              style={{
+                minHeight: 48,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space['3'],
+                paddingHorizontal: density.rowInnerPadding,
+                paddingVertical: space['2'],
+              }}
+            >
+              <View pointerEvents="none" accessibilityElementsHidden>
+                <Checkbox checked={values.includes(source.id)} onChange={() => {}} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="subheading" numberOfLines={1}>
+                  {source.name}
+                </Text>
+                <Text variant="micro" tone="muted" mono>
+                  {t('transaction:list.row.meta', {
+                    category: t(sourceTypeLabelKey(source.type)),
+                    source: source.default_currency,
+                  })}
+                </Text>
+              </View>
+              <Text variant="caption" tone="secondary" mono numberOfLines={1}>
+                {formatMoney(source.balance, source.default_currency, props.lang)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <MultiSelect
+          placeholder={t('transaction:list.filter.source_placeholder')}
+          closeLabel={t('common:button.close')}
+          options={options}
+          values={values}
+          selectedLabel={summary}
+          onChange={(next) => props.onPatch({ source_id: next.length > 0 ? next : undefined })}
+          testID={`${props.id}-source`}
+        />
+      )}
+    </FilterField>
+  );
+}
+
+export interface FilterSheetProps extends FilterFieldProps {
+  open: boolean;
+  onClose(): void;
+  onClear(): void;
+  qDraft: string;
+  onQChange(value: string): void;
+  /** How many entries the filters currently match — the 「应用 · N 笔」 button's number. */
+  total: number;
+}
+
+export function FilterSheet(props: FilterSheetProps): React.JSX.Element {
+  const { t } = useTranslation();
+  const colors = useColors();
+
+  return (
+    <Sheet
+      open={props.open}
+      onClose={props.onClose}
+      title={t('transaction:list.filter.title')}
+      closeLabel={t('common:button.close')}
+      testID={`${props.id}-sheet`}
+    >
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingBottom: space['2'] }}>
+        <Button
+          variant="ghost"
+          size="sm"
+          label={t('transaction:list.filter.reset')}
+          onPress={props.onClear}
+          testID={`${props.id}-reset`}
+        />
+      </View>
+
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }}>
+        <View
+          testID={`${props.id}-controls`}
+          style={{ gap: space['4'], paddingBottom: space['4'] }}
+        >
+          <KeywordField
+            value={props.qDraft}
+            onChange={props.onQChange}
+            id={`${props.id}-sheet-q`}
+          />
+          <KindChips {...props} />
+          <SourceField {...props} inline />
+          <CurrencyChips {...props} />
+          <DateRangeField {...props} />
+          <View style={{ flexDirection: 'row', gap: space['2'] }}>
+            <View style={{ flex: 1 }}>
+              <CategoryField {...props} level={1} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <CategoryField {...props} level={2} />
+            </View>
+          </View>
+          <AmountRangeField {...props} longHint />
+        </View>
+      </ScrollView>
+
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: colors['border.default'],
+          paddingTop: space['3'],
+        }}
+      >
+        <Button
+          label={t('transaction:list.filter.apply', { count: props.total })}
+          size="lg"
+          fullWidth
+          onPress={props.onClose}
+          testID={`${props.id}-done`}
+        />
+      </View>
+    </Sheet>
+  );
+}

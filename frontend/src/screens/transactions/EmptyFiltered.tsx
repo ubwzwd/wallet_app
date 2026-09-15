@@ -7,7 +7,7 @@
  * the block appears once instead of flickering in twice.
  */
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
@@ -17,8 +17,10 @@ import { type Lang } from '@/i18n';
 import { formatAmountPlain, formatDate } from '@/i18n/format';
 import { categoryName } from '@/i18n/category';
 import type { CategoryIndex } from '@/domain/categories';
-import { space } from '@/theme/tokens';
-import { Chip, Text } from '@/ui';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { Icon, Text } from '@/ui';
 
 /** 04 §4.5: a probe asks for the count, not for the rows. */
 const PROBE_LIMIT = 1;
@@ -150,6 +152,7 @@ export function EmptyFiltered({
   testID,
 }: EmptyFilteredProps): React.JSX.Element | null {
   const { t } = useTranslation();
+  const wide = useIsWide();
   const id = testID ?? 'tx-empty-filtered';
 
   const candidates = React.useMemo(
@@ -171,23 +174,81 @@ export function EmptyFiltered({
   if (candidates.length === 0 || answered.some((total) => total === undefined)) return null;
 
   return (
-    <View testID={id} style={{ gap: space['2'], alignItems: 'center' }}>
+    <View
+      testID={id}
+      style={{
+        gap: space['2'],
+        alignSelf: 'stretch',
+        maxWidth: wide ? undefined : 420,
+        flexDirection: wide ? 'row' : 'column',
+        flexWrap: wide ? 'wrap' : 'nowrap',
+        justifyContent: 'center',
+      }}
+    >
       {candidates.map((candidate, i) => (
-        <Chip
+        <Suggestion
           key={candidate.id}
-          label={t('transaction:list.filter.drop_filter_hint', {
-            label: candidate.label,
-            count: answered[i] ?? 0,
-          })}
-          icon="x"
+          wide={wide}
+          title={t('transaction:list.filter.remove_filter', { label: candidate.label })}
+          count={t('transaction:list.filter.drop_filter_count', { count: answered[i] ?? 0 })}
           onPress={() => onApply(candidate.without)}
           testID={`${id}-${candidate.id}`}
         />
       ))}
-      <Text variant="micro" tone="muted">
-        {t('transaction:list.empty_filtered')}
-      </Text>
     </View>
+  );
+}
+
+/** 屏幕稿 15: a two-line row with a chevron on narrow, a soft button on wide. */
+function Suggestion({
+  wide,
+  title,
+  count,
+  onPress,
+  testID,
+}: {
+  wide: boolean;
+  title: string;
+  count: string;
+  onPress(): void;
+  testID: string;
+}): React.JSX.Element {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title} ${count}`}
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space['2'] + 2,
+        paddingVertical: space['2'],
+        paddingHorizontal: space['4'] - 2,
+        borderRadius: radius.md,
+        backgroundColor: pressed ? colors['bg.hover'] : colors['bg.subtle'],
+      })}
+    >
+      <View style={{ flexShrink: 1, minWidth: 0, gap: wide ? 0 : 1 }}>
+        <Text variant="body" weight={wide ? 600 : 500} numberOfLines={1}>
+          {title}
+        </Text>
+        {wide ? null : (
+          <Text variant="caption" tone="muted" mono>
+            {count}
+          </Text>
+        )}
+      </View>
+      {wide ? (
+        <Text variant="caption" tone="muted" mono>
+          {count}
+        </Text>
+      ) : (
+        <Icon name="chevron-right" size={18} color={colors['fg.muted']} />
+      )}
+    </Pressable>
   );
 }
 

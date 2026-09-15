@@ -148,6 +148,32 @@ test('picking a kind writes it to the URL, and nothing empty goes with it', asyn
   );
 });
 
+test('the narrow layout puts the same controls behind a counted filter button', async () => {
+  setWide(false);
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const router = renderRouter(ROUTES, {
+    initialUrl: `/l/${LEDGER}/transactions?kind=expense&currency=SGD`,
+  });
+
+  // 屏幕稿 02 · 375: the button carries how many conditions are on; the fields are inside.
+  expect(await screen.findByTestId('tx-filter-bar-open-count')).toHaveTextContent('2');
+  expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-open'));
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-kind-income'));
+  await waitFor(() => expect(searchOf(router).kind).toEqual(['expense', 'income']));
+  // A filter change replaces the URL and remounts the screen; the drawer has to survive
+  // that, or no one could ever set a second condition.
+  expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
+
+  // 「应用」 only closes the drawer: the URL is already the filter state (04 §1.3).
+  fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
+  await waitFor(() => expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull());
+  expect(searchOf(router).kind).toEqual(['expense', 'income']);
+});
+
 test('typing in the search box writes `q` once, 300ms after the last keystroke', async () => {
   serveList(() => ({ items: [], total: 0 }));
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });

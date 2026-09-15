@@ -1,20 +1,23 @@
 /**
- * `/l/:ledgerId/transactions` — the transaction list (04 §4.5).
+ * `/l/:ledgerId/transactions` — the transaction list (04 §4.5, 屏幕稿 02 / 15).
+ *
+ * Two frames over one query family. **Wide** (屏幕稿 02 · 1440) is the page header with its
+ * inline stats and 「＋ 记一笔」, the 「筛选」 card, and a real seven-column table whose foot
+ * strip carries 「N / M 笔已显示」, the net of the whole result and the pager. **Narrow**
+ * (屏幕稿 02 · 375) is the search box plus a filter button, a stat line, day-grouped cards
+ * and a summary card at the end, scrolling infinitely.
  *
  * The URL owns the filters (04 §1.3), so this screen holds almost no state of its own: it
  * reads `useTxFilters`, hands the parameters to the query layer, and paints what comes
- * back. Two paging modes over one query family: infinite scroll on a narrow layout, a
- * pager whose `offset` lives in the URL on a wide one.
- *
- * Two of the numbers on screen are deliberately *not* computed from the rows: the bottom
+ * back. Two of the numbers on screen are deliberately *not* computed from the rows: the
  * summary comes from the response's `summary` (the whole filtered result, not this page),
- * and the count is the response's `total` as it stands — the number of entries the filters
- * match on the server. Subtracting the pairs merged *on this page* (the two legs of a
- * transfer render as one row) would make the count drift as more pages arrive, so the
- * header counts entries, and the narrow layout says how many of them are loaded.
+ * and the count is the response's `total` — the number of entries the filters match on the
+ * server. Subtracting the pairs merged *on this page* (the two legs of a transfer render as
+ * one row) would make it drift as more pages arrive, so the header counts entries and the
+ * narrow layout says how many of them are loaded.
  */
 import React from 'react';
-import { ActivityIndicator, FlatList, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
@@ -32,7 +35,6 @@ import { useTopBar } from '@/navigation';
 import {
   TX_PAGE_SIZE,
   useCategories,
-  useCurrencies,
   useDeleteTransaction,
   useDeleteTransfer,
   useInfiniteTransactions,
@@ -42,20 +44,31 @@ import {
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Button, EmptyState, Page, Sheet, Skeleton, Text, confirm, toast } from '@/ui';
+import {
+  Button,
+  Card,
+  Divider,
+  GhostBlock,
+  Page,
+  PageHeader,
+  Skeleton,
+  Text,
+  confirm,
+  toast,
+} from '@/ui';
 
 import { DayGroup } from './DayGroup';
-import { EmptyFiltered, type CandidateCtx } from './EmptyFiltered';
+import { type CandidateCtx } from './EmptyFiltered';
 import { FilterBar } from './FilterBar';
 import { Pagination } from './Pagination';
 import { SummaryBar } from './SummaryBar';
-import { leadTransaction } from './TransactionRow';
+import { RowMenu, leadTransaction } from './TransactionRow';
+import { EmptyFilteredState, EmptyNoData, ListError } from './TransactionsEmpty';
+import { TransactionsTable } from './TransactionsTable';
 import { useTxFilters } from './useTxFilters';
 
 /** 04 §4.5: eight skeleton rows while the first page is in flight. */
 const SKELETON_ROWS = 8;
-/** Decision §14.52 A15: the rescue block only appears once two conditions are active. */
-const RESCUE_MIN_FILTERS = 2;
 
 export default function TransactionsScreen(): React.JSX.Element {
   const { t } = useTranslation();
@@ -65,7 +78,7 @@ export default function TransactionsScreen(): React.JSX.Element {
   const { ledgerId, baseCurrency } = useLedgerContext();
   const l = routes.l(ledgerId);
   // The narrow layout's chrome carries the page title (04 §1.4); the wide one has no top
-  // bar, so there the heading below is the only one.
+  // bar, so there the `PageHeader` below is the only one (decision §14.56).
   useTopBar(t('transaction:list.title'));
 
   const f = useTxFilters(ledgerId);
@@ -74,7 +87,6 @@ export default function TransactionsScreen(): React.JSX.Element {
   // ones, and a filter that couldn't name them would hide those rows' account (§4.8).
   const sourcesQuery = useSources(ledgerId, { include_archived: true });
   const categories = useCategories();
-  const currencies = useCurrencies();
 
   const listParams = { ...f.filters, limit: TX_PAGE_SIZE };
   const pageQuery = useTransactions(wide ? ledgerId : undefined, listParams);
@@ -90,10 +102,7 @@ export default function TransactionsScreen(): React.JSX.Element {
   const isError = wide ? pageQuery.isError : infiniteQuery.isError;
   const refetch = wide ? pageQuery.refetch : infiniteQuery.refetch;
 
-  const items: Transaction[] = React.useMemo(
-    () => pages.flatMap((p) => p.items),
-    [pages],
-  );
+  const items: Transaction[] = React.useMemo(() => pages.flatMap((p) => p.items), [pages]);
   const rows: ListRow[] = React.useMemo(() => mergeTransferRows(items), [items]);
   const groups: DayGroupData[] = React.useMemo(() => groupByDay(rows), [rows]);
 
@@ -120,7 +129,11 @@ export default function TransactionsScreen(): React.JSX.Element {
   const openRow = React.useCallback(
     (row: ListRow): void => {
       const pairId = pairIdOf(row);
-      router.push((pairId ? l.transfer(pairId) : l.transaction(row.kind === 'pair' ? row.out.id : row.tx.id)) as Href);
+      router.push(
+        (pairId
+          ? l.transfer(pairId)
+          : l.transaction(row.kind === 'pair' ? row.out.id : row.tx.id)) as Href,
+      );
     },
     [l, router],
   );
@@ -157,13 +170,39 @@ export default function TransactionsScreen(): React.JSX.Element {
     [deleteTransaction, deleteTransfer, t],
   );
 
-  const runRowAction = (action: (row: ListRow) => void | Promise<void>): void => {
-    const row = menuRow;
-    setMenuRow(null);
-    if (row) void action(row);
-  };
+  const openBatch = (batchId: Uuid): void => router.push(l.importBatch(batchId) as Href);
+  const openRefundOrigin = (txId: Uuid): void => router.push(l.transaction(txId) as Href);
 
   // -------------------------------------------------------------------- parts
+  const countLabel = wide
+    ? t('transaction:list.count', { count: total })
+    : t('transaction:list.count_loaded', { loaded, count: total });
+
+  const summaryLabel = summary
+    ? t(wide ? 'transaction:list.summary' : 'transaction:list.summary_short', {
+        expense: formatMoney(summary.expense, summary.base_currency, lang),
+        income: formatMoney(summary.income, summary.base_currency, lang),
+        net: formatMoney(summary.net, summary.base_currency, lang, { signDisplay: 'always' }),
+      })
+    : null;
+
+  const filterBar = (
+    <FilterBar
+      filters={f.filters}
+      activeCount={f.activeCount}
+      qDraft={f.qDraft}
+      onQChange={f.setQ}
+      onPatch={f.patch}
+      onRemove={f.remove}
+      onClear={f.clear}
+      sources={sourcesQuery.data?.items ?? []}
+      index={categories.index}
+      baseCurrency={baseCurrency}
+      lang={lang}
+      total={total}
+    />
+  );
+
   const candidateCtx: CandidateCtx = {
     t,
     lang,
@@ -172,53 +211,103 @@ export default function TransactionsScreen(): React.JSX.Element {
     baseCurrency,
   };
 
-  const header = (
-    <View style={{ gap: space['3'] }}>
-      <View
-        style={{ flexDirection: 'row', alignItems: 'baseline', gap: space['3'], flexWrap: 'wrap' }}
-      >
-        {wide ? (
-          <Text variant="title" accessibilityRole="header">
-            {t('transaction:list.title')}
-          </Text>
-        ) : null}
+  // ------------------------------------------------------------- empty states
+  const errorBlock = <ListError onRetry={() => void refetch()} />;
+
+  const emptyBlock =
+    f.activeCount === 0 ? (
+      <EmptyNoData
+        onAdd={() => router.push(l.transactionNew() as Href)}
+        onImport={() => router.push(l.importsNew() as Href)}
+      />
+    ) : (
+      <EmptyFilteredState
+        ledgerId={ledgerId}
+        filters={f.filters}
+        activeCount={f.activeCount}
+        ctx={candidateCtx}
+        onApply={f.replaceAll}
+        onClear={f.clear}
+      />
+    );
+
+  // ---------------------------------------------------------------- wide page
+  if (wide) {
+    return (
+      <Page testID="transactions-screen">
+        <PageHeader
+          title={t('transaction:list.title')}
+          meta={
+            <View style={styles.statLine}>
+              <Text variant="body" tone="secondary" mono weight={500} testID="tx-count">
+                {countLabel}
+              </Text>
+              {summaryLabel !== null ? (
+                <Text variant="body" tone="muted" mono testID="tx-summary-line">
+                  {`· ${summaryLabel}`}
+                </Text>
+              ) : null}
+            </View>
+          }
+          actions={
+            <Button
+              icon="plus"
+              label={t('common:nav.add')}
+              onPress={() => router.push(l.transactionNew() as Href)}
+              testID="tx-add"
+            />
+          }
+          testID="tx-header"
+        />
+        {filterBar}
+        {isError ? (
+          errorBlock
+        ) : (
+          <TransactionsTable
+            rows={isPending ? [] : rows}
+            baseCurrency={baseCurrency}
+            lang={lang}
+            index={categories.index}
+            sourceName={sourceName}
+            onPressRow={openRow}
+            onOpenBatch={openBatch}
+            onOpenRefundOrigin={openRefundOrigin}
+            total={total}
+            shown={rows.length}
+            summary={summary}
+            empty={isPending ? undefined : emptyBlock}
+            pager={
+              <Pagination
+                total={total}
+                offset={f.filters.offset ?? 0}
+                limit={TX_PAGE_SIZE}
+                onChange={f.setOffset}
+              />
+            }
+          />
+        )}
+      </Page>
+    );
+  }
+
+  // -------------------------------------------------------------- narrow page
+  const narrowHeader = (
+    <View style={{ gap: space['3'], paddingBottom: space['1'] }}>
+      {filterBar}
+      <View style={[styles.statLine, styles.statRow]}>
         <Text variant="caption" tone="secondary" mono testID="tx-count">
-          {wide
-            ? t('transaction:list.count', { count: total })
-            : t('transaction:list.count_loaded', { loaded, count: total })}
+          {countLabel}
         </Text>
-        {summary ? (
-          <Text variant="caption" tone="muted" mono testID="tx-summary-line">
-            {t('transaction:list.summary', {
-              expense: formatMoney(summary.expense, summary.base_currency, lang),
-              income: formatMoney(summary.income, summary.base_currency, lang),
-              net: formatMoney(summary.net, summary.base_currency, lang, {
-                signDisplay: 'always',
-              }),
-            })}
+        {summaryLabel !== null ? (
+          <Text variant="caption" tone="secondary" mono testID="tx-summary-line">
+            {summaryLabel}
           </Text>
         ) : null}
       </View>
-
-      <FilterBar
-        filters={f.filters}
-        activeCount={f.activeCount}
-        qDraft={f.qDraft}
-        onQChange={f.setQ}
-        onPatch={f.patch}
-        onRemove={f.remove}
-        onClear={f.clear}
-        sources={sourcesQuery.data?.items ?? []}
-        index={categories.index}
-        currencyCodes={currencies.codes}
-        currencyNames={currencies.names}
-        baseCurrency={baseCurrency}
-        lang={lang}
-      />
     </View>
   );
 
-  const empty = (): React.JSX.Element => {
+  const narrowEmpty = (): React.JSX.Element => {
     if (isPending) {
       return (
         <View style={{ gap: space['2'] }} testID="tx-skeletons">
@@ -228,60 +317,24 @@ export default function TransactionsScreen(): React.JSX.Element {
         </View>
       );
     }
-    if (isError) {
-      return (
-        <EmptyState
-          icon="alert-triangle"
-          title={t('transaction:list.error_title')}
-          primaryAction={{ label: t('common:button.retry'), onPress: () => void refetch() }}
-          testID="tx-error"
-        />
-      );
-    }
-    if (f.activeCount === 0) {
-      return (
-        <EmptyState
-          icon="list"
-          title={t('transaction:list.empty_no_data')}
-          primaryAction={{
-            label: t('transaction:list.empty_no_data_action'),
-            onPress: () => router.push(l.transactionNew() as Href),
-          }}
-          testID="tx-empty"
-        />
-      );
-    }
+    if (isError) return errorBlock;
     return (
-      <View style={{ gap: space['3'] }}>
-        <EmptyState
-          icon="search"
-          title={t('transaction:list.empty_filtered')}
-          primaryAction={{ label: t('transaction:list.filter.clear_filters'), onPress: f.clear }}
-          testID="tx-empty-filtered-state"
-        />
-        {f.activeCount >= RESCUE_MIN_FILTERS ? (
-          <EmptyFiltered
-            ledgerId={ledgerId}
-            filters={f.filters}
-            ctx={candidateCtx}
-            onApply={f.replaceAll}
-          />
+      <Card style={{ padding: space['5'] - 2, gap: space['4'] }}>
+        {f.activeCount === 0 ? (
+          <>
+            <GhostBlock rows={3} />
+            <Divider />
+          </>
         ) : null}
-      </View>
+        {emptyBlock}
+      </Card>
     );
   };
 
-  const footer = (
-    <View style={{ gap: space['3'], paddingTop: space['3'] }}>
-      {wide ? (
-        <Pagination
-          total={total}
-          offset={f.filters.offset ?? 0}
-          limit={TX_PAGE_SIZE}
-          onChange={f.setOffset}
-        />
-      ) : infiniteQuery.isFetchingNextPage ? (
-        <View style={{ alignItems: 'center', gap: space['2'] }} testID="tx-loading-more">
+  const narrowFooter = (
+    <View style={{ gap: space['3'], paddingTop: space['2'] }}>
+      {infiniteQuery.isFetchingNextPage ? (
+        <View style={{ alignItems: 'center' }} testID="tx-loading-more">
           <ActivityIndicator accessibilityLabel={t('transaction:list.loading_more')} />
         </View>
       ) : infiniteQuery.hasNextPage ? (
@@ -292,7 +345,7 @@ export default function TransactionsScreen(): React.JSX.Element {
           testID="tx-load-more"
         />
       ) : null}
-      {!wide && summary ? <SummaryBar summary={summary} lang={lang} /> : null}
+      {summary ? <SummaryBar summary={summary} lang={lang} /> : null}
     </View>
   );
 
@@ -310,19 +363,16 @@ export default function TransactionsScreen(): React.JSX.Element {
               index={categories.index}
               sourceName={sourceName}
               onPressRow={openRow}
-              onEditRow={editRow}
-              onDeleteRow={(row) => void deleteRow(row)}
               onOpenMenu={setMenuRow}
-              onOpenBatch={(batchId) => router.push(l.importBatch(batchId) as Href)}
-              onOpenRefundOrigin={(txId) => router.push(l.transaction(txId) as Href)}
+              onOpenBatch={openBatch}
+              onOpenRefundOrigin={openRefundOrigin}
             />
           )}
-          ListHeaderComponent={header}
-          ListEmptyComponent={empty()}
-          ListFooterComponent={footer}
+          ListHeaderComponent={narrowHeader}
+          ListEmptyComponent={narrowEmpty()}
+          ListFooterComponent={narrowFooter}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
-            if (wide) return;
             if (infiniteQuery.hasNextPage && !infiniteQuery.isFetchingNextPage) {
               void infiniteQuery.fetchNextPage();
             }
@@ -330,35 +380,22 @@ export default function TransactionsScreen(): React.JSX.Element {
           testID="tx-list"
         />
       </Page>
-
-      {wide && summary ? <SummaryBar summary={summary} lang={lang} pinned /> : null}
-
-      <Sheet
-        open={menuRow !== null}
+      <RowMenu
+        row={menuRow}
         onClose={() => setMenuRow(null)}
-        title={t('transaction:list.row.menu_title')}
-        closeLabel={t('common:button.close')}
-        testID="tx-row-menu"
-      >
-        <View style={{ gap: space['2'] }}>
-          <Button
-            variant="secondary"
-            icon="pencil"
-            label={t('common:button.edit')}
-            fullWidth
-            onPress={() => runRowAction(editRow)}
-            testID="tx-row-menu-edit"
-          />
-          <Button
-            variant="danger"
-            icon="trash-2"
-            label={t('common:button.delete')}
-            fullWidth
-            onPress={() => runRowAction(deleteRow)}
-            testID="tx-row-menu-delete"
-          />
-        </View>
-      </Sheet>
+        onEdit={editRow}
+        onDelete={(row) => void deleteRow(row)}
+      />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  statLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: space['2'],
+  },
+  statRow: { justifyContent: 'space-between', paddingHorizontal: space['1'] },
+});
