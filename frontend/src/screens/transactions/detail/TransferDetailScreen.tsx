@@ -54,8 +54,8 @@ import { TransferImpactCard } from './ImpactCard';
 import { KeyFacts } from './KeyFacts';
 import { TransferLegs } from './TransferLegs';
 import { transferFacts } from './facts';
-import { useSourceMap, useSourceNames } from './TransactionDetailScreen';
 import { DetailColumns, InfoBadge } from './parts';
+import { useSourceMap, useSourceNames } from './useSources';
 
 export default function TransferDetailScreen(): React.JSX.Element {
   const { t } = useTranslation();
@@ -249,6 +249,7 @@ export default function TransferDetailScreen(): React.JSX.Element {
         amount={absMoney(pair.out.amount)}
         currency={pair.out.currency}
         signDisplay="never"
+        plain
         badges={
           <>
             <InfoBadge

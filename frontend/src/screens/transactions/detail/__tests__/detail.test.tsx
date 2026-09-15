@@ -24,7 +24,7 @@ import { setAuthToken } from '@/api/client';
 import type { LedgerMember, Transaction, TransactionEvent } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { resetLedgerGone } from '@/navigation';
-import { queryClient } from '@/queries';
+import { qk, queryClient } from '@/queries';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
   USER_ID,
@@ -388,15 +388,10 @@ test('a refund that was never linked offers 「去关联」', async () => {
 
 // ---------------------------------------------------------------------- wide
 
-/**
- * 屏幕稿 08 at 1440: 「对 9 月的影响」 answers the question the 删除 button raises, and the
- * operations sit beside the headline instead of behind the sheet. The arithmetic is the
- * card's own (the month's summary minus this row), so it is asserted on both signs of it.
- */
-test('宽屏 prices what deleting this row would change, and keeps the actions in the headline', async () => {
-  wideSpy.mockReturnValue(true);
-  mockGet(
-    `/ledgers/${LEDGER}/stats/summary`,
+/** The month's summary as the home screen leaves it in the cache — never fetched here. */
+function seedSummary(): void {
+  queryClient.setQueryData(
+    qk.ledger(LEDGER).statsSum('2026-09'),
     makeStatsSummary({
       month: '2026-09',
       expense_total: '8421.6600',
@@ -413,6 +408,18 @@ test('宽屏 prices what deleting this row would change, and keeps the actions i
       ],
     }),
   );
+}
+
+/**
+ * 屏幕稿 08 at 1440: 「对 9 月的影响」 answers the question the 删除 button raises, and the
+ * operations sit beside the headline instead of behind the sheet. The arithmetic is the
+ * card's own (the month's summary minus this row), so it is asserted on both signs of it.
+ */
+test('宽屏 prices what deleting this row would change, and keeps the actions in the headline', async () => {
+  wideSpy.mockReturnValue(true);
+  // The card reads the summary out of the cache and never asks for one (04 §4.7 / §14.52
+  // A9), so the test seeds the very key the home screen fills.
+  seedSummary();
 
   const router = open(EXPENSE);
 
@@ -435,6 +442,7 @@ test('宽屏 prices what deleting this row would change, and keeps the actions i
   // A refund lives on the expense side of the summary, offsetting it, so deleting one
   // *raises* the month: 8,421.66 + 199.00.
   queryClient.clear();
+  seedSummary();
   const second = open(REFUND);
   expect(await second.findByTestId('tx-detail-impact-total')).toHaveTextContent(
     containing('已冲减本笔 ¥199.00'),

@@ -9,6 +9,7 @@
 import type { LedgerMember, Money, Transaction, TransferPair, Uuid } from '@/api/types';
 import type { Lang } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
+import { memberLabel } from '@/queries';
 
 import type { Fact } from './KeyFacts';
 import type { SourceMap } from './TransferLegs';
@@ -36,9 +37,7 @@ export interface FactContext {
 function recordedBy(ctx: FactContext, userId: Uuid): string {
   const member = ctx.members.find((m) => m.user_id === userId);
   if (!member) return ctx.t('transaction:detail.recorded_by_unknown');
-  const name = member.is_me
-    ? ctx.t('transaction:detail.events_actor_me')
-    : (member.display_name ?? member.email.split('@')[0]);
+  const name = member.is_me ? ctx.t('transaction:detail.events_actor_me') : memberLabel(member);
   const role = ctx.t(
     member.role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member',
   );

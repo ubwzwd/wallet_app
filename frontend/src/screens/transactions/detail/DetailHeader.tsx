@@ -21,7 +21,7 @@ import { density, space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Card, KIND_AMOUNT_TONE, Text } from '@/ui';
 
-import { KindHeadBadge } from './parts';
+import { KindHeadBadge, plainAmount } from './parts';
 
 export interface DetailHeaderProps {
   kind: TxKind;
@@ -29,6 +29,12 @@ export interface DetailHeaderProps {
   currency: string;
   /** `never` for a transfer: the legs below carry the signs (a transfer is not a loss). */
   signDisplay?: FormatMoneyOptions['signDisplay'];
+  /**
+   * 屏幕稿 07 writes a transfer's headline as bare digits — 「3,000.00」, 「+5,000.00」 — because
+   * the grey line right under it already opens with the currency (「CNY · 账本内部搬钱…」).
+   * Every other shape keeps the symbol `formatMoney` puts there.
+   */
+  plain?: boolean;
   /** Pills after the kind badge: the category path, 已折算, the subtype, 「2 条腿」. */
   badges?: React.ReactNode;
   /** Wide only: the action row, right-aligned on the badges' line. */
@@ -47,6 +53,7 @@ export function DetailHeader({
   amount,
   currency,
   signDisplay,
+  plain = false,
   badges,
   actions,
   sub,
@@ -80,7 +87,9 @@ export function DetailHeader({
               style={wide ? styles.amountWide : styles.amountNarrow}
               testID={`${id}-amount`}
             >
-              {formatMoney(amount, currency, lang, signDisplay ? { signDisplay } : undefined)}
+              {plain
+                ? plainAmount(amount, currency, signDisplay)
+                : formatMoney(amount, currency, lang, signDisplay ? { signDisplay } : undefined)}
             </Text>
             {sub}
           </View>

@@ -10,8 +10,8 @@ import React from 'react';
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { IsoDate, TxKind } from '@/api/types';
-import { parseLocalDate } from '@/i18n/format';
+import type { IsoDate, Money, TxKind } from '@/api/types';
+import { type FormatMoneyOptions, formatAmountPlain, parseLocalDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -268,6 +268,27 @@ export function DetailColumns({ main, side, testID }: DetailColumnsProps): React
 export function longDate(iso: IsoDate, t: (key: string) => string): string {
   const weekday = t(`transaction:detail.weekday.${parseLocalDate(iso).getDay()}`);
   return `${iso} ${weekday}`;
+}
+
+/**
+ * 「3,000.00」 / 「+5,000.00」 — an amount with no currency symbol, the way 屏幕稿 07 writes
+ * every figure on a transfer: the currency is already spelled out beside it (the grey line
+ * 「CNY · 账本内部搬钱…」, the leg's own 「储蓄卡 · CNY」), and repeating the symbol on a 40px
+ * number is what made the phase-6 page look like a receipt.
+ *
+ * `formatAmountPlain` writes its own U+2212 and never a '+', so `never` drops that minus and
+ * `always` adds the plus here — the same sign rules `formatMoney` applies.
+ */
+export function plainAmount(
+  amount: Money,
+  currency: string,
+  signDisplay: FormatMoneyOptions['signDisplay'],
+): string {
+  const value = Number(amount);
+  const digits = formatAmountPlain(amount, currency);
+  if (signDisplay === 'never') return value < 0 ? digits.slice(1) : digits;
+  if (signDisplay === 'always' && value > 0) return `+${digits}`;
+  return digits;
 }
 
 const styles = StyleSheet.create({

@@ -181,10 +181,10 @@ test('both legs are shown with their own account and amount, and no running bala
   expect(await router.findByTestId('transfer-detail-legs-out-source')).toHaveTextContent(
     '招行储蓄卡',
   );
-  expect(router.getByTestId('transfer-detail-legs-out-amount')).toHaveTextContent('−¥3,000.00');
+  expect(router.getByTestId('transfer-detail-legs-out-amount')).toHaveTextContent('−3,000.00');
   expect(router.getByTestId('transfer-detail-legs-in-source')).toHaveTextContent('建行信用卡');
   // 屏幕稿 07 signs both legs, so the receiving one wears a plus.
-  expect(router.getByTestId('transfer-detail-legs-in-amount')).toHaveTextContent('+¥3,000.00');
+  expect(router.getByTestId('transfer-detail-legs-in-amount')).toHaveTextContent('+3,000.00');
 
   // Header fields come off the out leg / the pair (decision §14.53a); no 余后 (§14.52 A7).
   expect(router.getByTestId('transfer-detail-header-extra')).toHaveTextContent('信用卡还款');

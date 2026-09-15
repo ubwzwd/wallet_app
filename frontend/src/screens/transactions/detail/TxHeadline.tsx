@@ -79,6 +79,7 @@ export function TxHeadline({
         amount={tx.amount}
         currency={tx.currency}
         signDisplay={isTransfer ? 'always' : undefined}
+        plain={isTransfer}
         badges={
           <>
             {category !== null ? (

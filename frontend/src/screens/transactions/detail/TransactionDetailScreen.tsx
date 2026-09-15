@@ -22,7 +22,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, Uuid } from '@/api/types';
+import type { Uuid } from '@/api/types';
 import { monthOf } from '@/domain/dates';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
@@ -35,7 +35,6 @@ import {
   useDeleteTransaction,
   useMemberNames,
   useMembers,
-  useSources,
   useTransaction,
   useUpdateTransaction,
 } from '@/queries';
@@ -52,31 +51,10 @@ import { KeyFacts } from './KeyFacts';
 import { PairSection } from './PairSection';
 import { RefundOriginCard, categoryPath } from './RefundOriginCard';
 import { RefundsSection } from './RefundsSection';
-import type { SourceMap } from './TransferLegs';
 import { TxHeadline } from './TxHeadline';
 import { transactionFacts } from './facts';
 import { DetailColumns } from './parts';
-
-/** Every account of the ledger, archived ones included — a detail page shows history. */
-export function useSourceMap(ledgerId: Uuid): SourceMap {
-  const sources = useSources(ledgerId, { include_archived: true });
-  const items = sources.data?.items;
-  return React.useMemo(() => {
-    const out: Record<Uuid, FinanceSource> = {};
-    for (const s of items ?? []) out[s.id] = s;
-    return out;
-  }, [items]);
-}
-
-/** `source_id → name`, the lookup the pickers and the timeline need. */
-export function useSourceNames(ledgerId: Uuid): Record<Uuid, string> {
-  const map = useSourceMap(ledgerId);
-  return React.useMemo(() => {
-    const out: Record<Uuid, string> = {};
-    for (const [id, s] of Object.entries(map)) out[id] = s.name;
-    return out;
-  }, [map]);
-}
+import { useSourceMap, useSourceNames } from './useSources';
 
 export default function TransactionDetailScreen(): React.JSX.Element {
   const { t } = useTranslation();
@@ -287,6 +265,23 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         baseCurrency={baseCurrency}
         actions={actionBar}
       />
+
+      {/* 「原支出」 sits directly under the headline (屏幕稿 08's refund shape): it is what
+          this row is *about*, not a sidebar aside. */}
+      {tx.kind === 'refund' ? (
+        <RefundOriginCard
+          testID="tx-detail-origin"
+          refundOf={tx.refund_of}
+          origin={tx.refund_of_detail}
+          sourceNames={sourceNames}
+          index={index}
+          onOpen={(id) => router.push(l.transaction(id) as Href)}
+          onPick={() => setPickerOpen(true)}
+          onUnlink={onUnlinkRefund}
+          busy={update.isPending}
+        />
+      ) : null}
+
       <KeyFacts facts={facts} testID="tx-detail-facts" />
     </>
   );
@@ -326,20 +321,6 @@ export default function TransactionDetailScreen(): React.JSX.Element {
           currency={tx.currency}
           sourceNames={sourceNames}
           onOpen={(id) => router.push(l.transaction(id) as Href)}
-        />
-      ) : null}
-
-      {tx.kind === 'refund' ? (
-        <RefundOriginCard
-          testID="tx-detail-origin"
-          refundOf={tx.refund_of}
-          origin={tx.refund_of_detail}
-          sourceNames={sourceNames}
-          index={index}
-          onOpen={(id) => router.push(l.transaction(id) as Href)}
-          onPick={() => setPickerOpen(true)}
-          onUnlink={onUnlinkRefund}
-          busy={update.isPending}
         />
       ) : null}
 

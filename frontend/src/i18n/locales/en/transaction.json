@@ -1,10 +1,5 @@
 {
-  "kind": {
-    "expense": "Expense",
-    "income": "Income",
-    "refund": "Refund",
-    "transfer": "Transfer"
-  },
+  "kind": { "expense": "Expense", "income": "Income", "refund": "Refund", "transfer": "Transfer" },
   "picker": {
     "title_refund_origin": "Choose the original expense",
     "refunded_out": "Fully refunded",
@@ -163,19 +158,13 @@
     }
   },
   "transfer": {
-    "subtype": {
-      "plain": "Regular transfer",
-      "repayment": "Card repayment"
-    },
+    "subtype": { "plain": "Regular transfer", "repayment": "Card repayment" },
     "subtype_label": "Subtype",
     "direction_label": "Direction",
     "from_source": "From account",
     "to_source": "To account",
     "amount_in": "Amount received",
-    "role": {
-      "in": "In",
-      "out": "Out"
-    },
+    "role": { "in": "In", "out": "Out" },
     "counterparty_toggle": "The other side isn't in this app",
     "counterparty_label": "Counterparty",
     "single_leg_hint": "A single-leg transfer affects the account balance but isn't counted in income/expense stats",
@@ -307,7 +296,7 @@
     "refunds_title": "Linked refunds",
     "refunds_summary": "Refunded {{refunded}} / Refundable {{refundable}}",
     "refunds_empty": "No refunds are linked to this expense yet. Use “Record a refund” when one arrives.",
-    "original_title": "Refund of this",
+    "original_title": "Original expense",
     "original_deleted": "The original expense was deleted",
     "original_none": "Not linked to an original expense",
     "original_link_action": "Link one",

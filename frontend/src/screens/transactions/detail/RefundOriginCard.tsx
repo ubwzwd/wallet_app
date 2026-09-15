@@ -1,5 +1,5 @@
 /**
- * 「退的是这一笔」 — the original expense behind a refund (04 §4.7, decisions §14.46 04-D-6,
+ * 「原支出」 — the original expense behind a refund (04 §4.7, decisions §14.46 04-D-6,
  * §14.52 A25, §14.53f, 屏幕稿 08).
  *
  * Three states, and all three have to be distinguishable:

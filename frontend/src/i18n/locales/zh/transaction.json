@@ -1,10 +1,5 @@
 {
-  "kind": {
-    "expense": "支出",
-    "income": "收入",
-    "refund": "退款",
-    "transfer": "转账"
-  },
+  "kind": { "expense": "支出", "income": "收入", "refund": "退款", "transfer": "转账" },
   "picker": {
     "title_refund_origin": "选择原支出",
     "refunded_out": "已退完",
@@ -154,19 +149,13 @@
     }
   },
   "transfer": {
-    "subtype": {
-      "plain": "普通转账",
-      "repayment": "信用卡还款"
-    },
+    "subtype": { "plain": "普通转账", "repayment": "信用卡还款" },
     "subtype_label": "子类型",
     "direction_label": "方向",
     "from_source": "转出账户",
     "to_source": "转入账户",
     "amount_in": "转入金额",
-    "role": {
-      "in": "转入",
-      "out": "转出"
-    },
+    "role": { "in": "转入", "out": "转出" },
     "counterparty_toggle": "对方不在这个应用里",
     "counterparty_label": "对方",
     "single_leg_hint": "单腿转账会计入账户余额，但不进收支统计",
@@ -298,7 +287,7 @@
     "refunds_title": "已关联的退款",
     "refunds_summary": "已退 {{refunded}} / 可退 {{refundable}}",
     "refunds_empty": "这笔还没有退款记录。收到退款时用「登记退款」建一笔并关联进来。",
-    "original_title": "退的是这一笔",
+    "original_title": "原支出",
     "original_deleted": "原单已删除",
     "original_none": "未关联原支出",
     "original_link_action": "去关联",

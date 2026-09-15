@@ -4,25 +4,26 @@
  *
  * It answers the question the delete button raises: what does this row actually move? The
  * arithmetic is the same local arithmetic the form's `StatsPreview` does — the monthly
- * summary minus (or plus) this row's own converted magnitude — so nothing new is computed
- * on the server and the card simply does not render when the month has no summary yet or
- * the row has no rate to convert with.
+ * summary *already in the cache* minus (or plus) this row's own converted magnitude — so no
+ * request is ever issued from here and the card simply does not render when the month has no
+ * cached summary or the row has no rate to convert with.
  *
  * A transfer needs no summary at all: both legs sit inside the ledger, so every line is
  * 「不变」, and only a single leg (money from outside the ledger) moves the net worth.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
-import type { Money, TransferSubtype, TxKind, Uuid } from '@/api/types';
+import type { Money, StatsSummary, TransferSubtype, TxKind, Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { monthOf } from '@/domain/dates';
 import { absMoney, addMoney, subMoney } from '@/domain/money';
 import { useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
 import { formatMonthShort, formatMoney } from '@/i18n/format';
-import { useStatsSummary } from '@/queries';
+import { qk } from '@/queries';
 import { space } from '@/theme/tokens';
 import { Text } from '@/ui';
 
@@ -53,8 +54,11 @@ export function ImpactCard({
   const { t } = useTranslation();
   const lang = useLang();
   const month = monthOf(occurredAt);
-  const summary = useStatsSummary(ledgerId, month);
-  const data = summary.data;
+  // Read-only: the card lives off the monthly summary the ledger already fetched (the home
+  // screen's own query key), exactly as the form's `StatsPreview` does — 04 §4.7 / decision
+  // §14.52 A9 ask for local arithmetic and no extra request, so a cold cache hides the card.
+  const qc = useQueryClient();
+  const data = qc.getQueryData<StatsSummary>(qk.ledger(ledgerId).statsSum(month));
 
   // The same guard `StatsPreview` puts before the same arithmetic: a summary in another
   // base currency cannot be added to or subtracted from this row's converted magnitude.

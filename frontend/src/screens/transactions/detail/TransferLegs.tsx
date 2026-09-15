@@ -14,14 +14,13 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { FinanceSource, IsoDate, Money, TransferRole, Uuid } from '@/api/types';
-import { useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, SourceTypeIcon, Text, sourceTypeLabelKey } from '@/ui';
 
 import { RateLine } from './RateLine';
+import { plainAmount } from './parts';
 
 export interface LegLike {
   source_id: Uuid;
@@ -58,7 +57,6 @@ function LegTile({
   testID: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const lang = useLang();
   const colors = useColors();
   const wide = useIsWide();
   const source = sources[leg.source_id];
@@ -97,7 +95,7 @@ function LegTile({
         style={wide ? styles.legAmountWide : styles.legAmountNarrow}
         testID={`${testID}-amount`}
       >
-        {formatMoney(leg.amount, leg.currency, lang, { signDisplay: 'always' })}
+        {plainAmount(leg.amount, leg.currency, 'always')}
       </Text>
       {baseCurrency !== undefined && leg.occurred_at !== undefined ? (
         <RateLine
