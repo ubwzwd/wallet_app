@@ -5,9 +5,13 @@
  *   narrow → a top bar above the content and a five-slot tab bar below it
  *
  * The shell also runs outside a ledger — `/settings` is reachable from the sidebar and
- * from the "me" sheet, and losing the chrome on the way there would strand the user. Then
- * there is no ledger switcher and no tab bar (every tab is ledger-scoped): the sidebar
- * links to the ledger list instead, and the narrow top bar carries a back button.
+ * from the "me" sheet, and losing the chrome on the way there would strand the user; and
+ * `/ledgers*` is drawn with the sidebar in mockup 13. Then there is no ledger switcher and
+ * no tab bar (every tab is ledger-scoped): the sidebar names the ledger list instead, and
+ * the narrow top bar carries a back button.
+ *
+ * `narrowChrome={false}` keeps the wide column and drops that narrow bar, for pages whose
+ * own 375 frame already draws a header (mockup 13's ledger list, new ledger, join).
  *
  * The shell owns exactly one piece of state, the ledger switcher sheet, because three
  * different affordances open it (the sidebar header, the top bar's ledger line, and the
@@ -73,6 +77,8 @@ function usePublishBottomTabInset(height: number): void {
 
 export interface AppShellProps {
   children: React.ReactNode;
+  /** Whether the narrow layout gets the shell's own top bar. Default: yes. */
+  narrowChrome?: boolean;
 }
 
 /** Narrow top bar for a page outside any ledger: the page title, and a way back. */
@@ -99,7 +105,7 @@ function PlainTopBar(): React.JSX.Element {
         testID="top-bar-back"
         style={({ pressed }) => [
           styles.backButton,
-          { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'] },
+          { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
         ]}
       >
         <Icon name="chevron-left" size={20} color={colors['fg.secondary']} />
@@ -111,7 +117,7 @@ function PlainTopBar(): React.JSX.Element {
   );
 }
 
-function Chrome({ children }: AppShellProps): React.JSX.Element {
+function Chrome({ children, narrowChrome = true }: AppShellProps): React.JSX.Element {
   const colors = useColors();
   const wide = useIsWide();
   const ledger = useOptionalLedgerContext();
@@ -134,7 +140,7 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
     >
       {wide ? (
         <Sidebar />
-      ) : ledger ? (
+      ) : !narrowChrome ? null : ledger ? (
         <TopBarSurface onPressLedger={openSwitcher} />
       ) : (
         <PlainTopBar />
@@ -148,10 +154,10 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
   );
 }
 
-export function AppShell({ children }: AppShellProps): React.JSX.Element {
+export function AppShell({ children, narrowChrome }: AppShellProps): React.JSX.Element {
   return (
     <TopBarProvider>
-      <Chrome>{children}</Chrome>
+      <Chrome narrowChrome={narrowChrome}>{children}</Chrome>
     </TopBarProvider>
   );
 }

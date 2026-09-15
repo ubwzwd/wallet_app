@@ -2,9 +2,10 @@
  * Card (04 §6.4): radius 18, three depths.
  *
  * There is exactly one white in the kit: every card — flat, outlined or raised — is
- * `bg.surface`, and `raised` differs only by the mockups' hairline lift. `bg.raised` is
- * reserved for what genuinely floats over a surface (a popover panel, the segmented
- * control's thumb), so two cards side by side can never read as two different whites.
+ * `bg.raised` (§14.58), and `raised` differs only by the mockups' hairline lift. That is
+ * the white every mockup paints a content card with, in both themes; `bg.surface` is the
+ * chrome layer under them — the sidebar, the tab bar — and the faint inset tiles of screens
+ * 13 / 15. Two cards side by side can never read as two different whites.
  */
 import React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
@@ -52,7 +53,7 @@ export function Card({
   const base: ViewStyle = {
     borderRadius: radius.lg,
     padding: padded ? density.rowInnerPadding : 0,
-    backgroundColor: colors['bg.surface'],
+    backgroundColor: colors['bg.raised'],
     borderWidth: variant === 'outlined' ? 1 : 0,
     borderColor: variant === 'outlined' ? colors['border.default'] : undefined,
   };

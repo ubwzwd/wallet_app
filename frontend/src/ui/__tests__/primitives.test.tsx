@@ -541,10 +541,11 @@ describe('smaller pieces', () => {
       </>,
     );
     for (const id of ['flat', 'outlined', 'raised']) {
-      expect(styleOf(screen.getByTestId(id)).backgroundColor).toBe(lightColors['bg.surface']);
+      expect(styleOf(screen.getByTestId(id)).backgroundColor).toBe(lightColors['bg.raised']);
     }
-    // `bg.raised` is for what floats over a surface (the segmented control's thumb, a
-    // popover panel), never for a card — two cards must not read as two whites.
+    // §14.58: `bg.raised` is the content white every mockup paints a card with; `bg.surface`
+    // is the chrome under them. Two cards must not read as two whites, so only the lift
+    // separates the variants.
     expect(styleOf(screen.getByTestId('raised')).shadowOpacity).toBeCloseTo(0.07);
     expect(styleOf(screen.getByTestId('flat')).shadowOpacity).toBeUndefined();
   });

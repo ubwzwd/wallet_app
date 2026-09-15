@@ -1,5 +1,5 @@
 /**
- * The white card a list of rows sits in (mockups 01 / 08 / 09 / 11 / 13): `bg.surface`,
+ * The white card a list of rows sits in (mockups 01 / 08 / 09 / 11 / 13): `bg.raised`,
  * radius 18, the `shadow.raised` hairline lift, and 4px of vertical padding so the first
  * and last row do not touch the corners.
  *
@@ -41,7 +41,7 @@ export function ListCard({
       style={[
         styles.card,
         raisedShadow(colors, scheme),
-        { backgroundColor: colors['bg.surface'] },
+        { backgroundColor: colors['bg.raised'] },
         style,
       ]}
     >

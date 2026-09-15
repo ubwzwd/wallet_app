@@ -84,7 +84,7 @@ export function PageHeader({
             style={({ pressed }) => [
               styles.back,
               raisedShadow(colors, scheme),
-              { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'] },
+              { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
             ]}
           >
             <Icon name="chevron-left" color={colors['fg.secondary']} />

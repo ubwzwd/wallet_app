@@ -34,7 +34,7 @@ interface VariantStyle {
 
 const VARIANTS: Readonly<Record<ButtonVariant, VariantStyle>> = {
   primary: { bg: 'accent.solid', bgPressed: 'accent.solid', fg: 'accent.fg' },
-  secondary: { bg: 'bg.surface', bgPressed: 'bg.hover', fg: 'fg.primary', border: 'border.default' },
+  secondary: { bg: 'bg.raised', bgPressed: 'bg.hover', fg: 'fg.primary', border: 'border.default' },
   // The mockups' second-rank action (「编辑」/「复制一笔」 on screen 08): a tinted fill with
   // no outline, so a row of them does not read as a row of boxes.
   soft: { bg: 'bg.subtle', bgPressed: 'bg.hover', fg: 'fg.primary' },
