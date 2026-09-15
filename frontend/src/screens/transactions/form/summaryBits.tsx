@@ -131,7 +131,7 @@ export function summaryContent({
       { label: t('transaction:form.category_title'), value: categoryText },
       {
         label: t('transaction:form.date'),
-        value: values.occurred_at === '' ? '—' : formatDate(values.occurred_at, ctrl.lang),
+        value: values.occurred_at === '' ? '—' : formatDate(values.occurred_at),
         mono: true,
       },
       { label: t('transaction:form.summary_author'), value: userName },

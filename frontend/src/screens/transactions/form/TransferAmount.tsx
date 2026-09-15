@@ -56,7 +56,6 @@ export function TransferAmount({
   const {
     form: { control, formState },
     currencies,
-    lang,
     values,
   } = ctrl;
   const { errors } = formState;
@@ -146,7 +145,7 @@ export function TransferAmount({
           from: values.currency,
           rate,
           to: values.currency_in,
-          date: formatDate(values.occurred_at, lang),
+          date: formatDate(values.occurred_at),
         })}
         style={styles.rateChip}
       />

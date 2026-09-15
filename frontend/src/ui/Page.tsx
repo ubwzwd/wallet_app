@@ -26,15 +26,6 @@ export const PAGE_MAX_WIDTH = 1200;
 
 export interface PageProps {
   children?: React.ReactNode;
-  /**
-   * Kept for callers written before phase 7, when it dropped the reading-width cap. The
-   * cap is gone by default now, so this is a no-op: it is neither destructured nor read.
-   *
-   * The only callers left are the four `<Page wide>` in `ImportBatchScreen.tsx`; delete
-   * them — and then this prop — when that page is rebuilt.
-   * @deprecated pages fill their column; pass `readingWidth` to cap one.
-   */
-  wide?: boolean;
   /** Caps the content at `PAGE_MAX_WIDTH` and centres it. */
   readingWidth?: boolean;
   scroll?: boolean;

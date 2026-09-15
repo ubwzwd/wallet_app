@@ -13,7 +13,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { Money, RefundRef, Uuid } from '@/api/types';
-import { useLang } from '@/i18n';
 import { formatDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -43,7 +42,6 @@ export function RefundsSection({
   testID,
 }: RefundsSectionProps): React.JSX.Element {
   const { t } = useTranslation();
-  const lang = useLang();
   const colors = useColors();
   // 屏幕稿 08 writes 「已退 0.00 / 66.20」 bare — the card counts in one currency (§14.59a).
   const money = useAmountText();
@@ -88,8 +86,8 @@ export function RefundsSection({
                   ) : null}
                   <Text variant="caption" tone="secondary" mono numberOfLines={1}>
                     {r.note === null
-                      ? formatDate(r.occurred_at, lang)
-                      : `${formatDate(r.occurred_at, lang)} · ${r.note}`}
+                      ? formatDate(r.occurred_at)
+                      : `${formatDate(r.occurred_at)} · ${r.note}`}
                   </Text>
                 </View>
                 <Text
