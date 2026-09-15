@@ -121,11 +121,14 @@ function flatStyle(element: { props: { style?: unknown } }): Record<string, numb
   >;
 }
 
-/** Pick `food` (level 1 only) in the category picker. */
+/**
+ * Pick `food` (level 1 only) in the inline category card (mockup 04: the cascade is on
+ * the page, so there is no trigger to open first; 「不细分」 is the level-2 column's first
+ * entry and means "level 1 alone", decision §1.3).
+ */
 async function pickFood(): Promise<void> {
-  fireEvent.press(await screen.findByTestId('tx-category-trigger'));
   fireEvent.press(await screen.findByTestId('tx-category-l1-food'));
-  fireEvent.press(await screen.findByTestId('tx-category-l1-only'));
+  fireEvent.press(await screen.findByTestId('tx-category-l2-none'));
 }
 
 test('an expense is submitted with a negative amount and the §4.6.1 body shape', async () => {
@@ -155,9 +158,8 @@ test('income is submitted with a positive amount', async () => {
   renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=income`, wrapper: Wrapper });
 
   fireEvent.changeText(await screen.findByTestId('tx-amount'), '1200');
-  fireEvent.press(await screen.findByTestId('tx-category-trigger'));
   fireEvent.press(await screen.findByTestId('tx-category-l1-salary'));
-  fireEvent.press(await screen.findByTestId('tx-category-l1-only'));
+  fireEvent.press(await screen.findByTestId('tx-category-l2-none'));
   fireEvent.press(screen.getByTestId('tx-submit'));
 
   await waitFor(() => expect(postedTransactions()).toHaveLength(1));
@@ -179,15 +181,15 @@ test('switching tab rewrites ?kind=, keeps the amount and drops the other tree�
   await waitFor(() => expect(router.getSearchParams().kind).toBe('income'));
   // Amount, date and account survive; the expense-tree category does not (decision §1.3).
   expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
-  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CHECKING.name);
-  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('一级分类');
+  expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CHECKING.name);
+  expect(screen.getByTestId('tx-category-path')).toHaveTextContent('还没选');
 });
 
 test('the transfer tab renders neither a category control nor a merchant box', async () => {
   renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=transfer`, wrapper: Wrapper });
 
   expect(await screen.findByTestId('transfer-amount')).toBeTruthy();
-  expect(screen.queryByTestId('tx-category-trigger')).toBeNull();
+  expect(screen.queryByTestId('tx-category')).toBeNull();
   expect(screen.queryByTestId('tx-merchant')).toBeNull();
 });
 
@@ -234,9 +236,11 @@ function mockCandidates(items: Transaction[]): void {
   });
 }
 
+/** Open the picker, choose a row, and confirm it with 「用这一笔」 (mockup 06's footer). */
 async function linkOrigin(id: string): Promise<void> {
   fireEvent.press(await screen.findByTestId('refund-link'));
   fireEvent.press(await screen.findByTestId(`refund-picker-row-${id}`));
+  fireEvent.press(await screen.findByTestId('refund-picker-confirm'));
 }
 
 test('linking an original expense prefills the category and the account, and both stay editable', async () => {
@@ -247,8 +251,8 @@ test('linking an original expense prefills the category and the account, and bot
 
   // Category and account now come from the original (decision §1.1).
   expect(await screen.findByTestId('refund-origin-card')).toBeTruthy();
-  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('消费购物 · 数码');
-  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name);
+  expect(screen.getByTestId('tx-category-path')).toHaveTextContent('消费购物 / 数码');
+  expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CREDIT.name);
 
   // …and can still be changed: switching account earns the neutral note, not a block.
   fireEvent.press(screen.getByTestId('tx-source-trigger'));
@@ -288,6 +292,7 @@ test('a fully refunded original is greyed out but still selectable (decision §1
   expect(marker).toHaveTextContent('已退完');
 
   fireEvent.press(screen.getByTestId(`refund-picker-row-${USED_UP.id}`));
+  fireEvent.press(screen.getByTestId('refund-picker-confirm'));
   expect(await screen.findByTestId('refund-origin-card')).toBeTruthy();
   fireEvent.changeText(screen.getByTestId('tx-amount'), '20');
   fireEvent.press(screen.getByTestId('tx-submit'));
@@ -304,14 +309,14 @@ test('?refund_of= alone prefills the original’s category and account, both sti
 
   expect(await screen.findByTestId('refund-origin-card')).toBeTruthy();
   await waitFor(() =>
-    expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('消费购物 · 数码'),
+    expect(screen.getByTestId('tx-category-path')).toHaveTextContent('消费购物 / 数码'),
   );
   // The original sits on the credit card, not on the default (first) account.
-  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name);
+  expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CREDIT.name);
 
   // Both are prefills, not decisions: the user can still change either one.
   await pickFood();
-  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('餐饮');
+  expect(screen.getByTestId('tx-category-path')).toHaveTextContent('餐饮');
   fireEvent.press(screen.getByTestId('tx-source-trigger'));
   fireEvent.press(await screen.findByTestId(`tx-source-option-${CHECKING.id}`));
   expect(await screen.findByTestId('refund-other-source-hint')).toBeTruthy();
@@ -330,7 +335,7 @@ test('a prefill from 「登记退款」 is not an edit: leaving straight away as
   expect(await screen.findByTestId('refund-origin-card')).toBeTruthy();
   // The account really did follow the original — the prefill happened, it just was not dirty.
   await waitFor(() =>
-    expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name),
+    expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CREDIT.name),
   );
 
   await act(async () => {
@@ -504,8 +509,8 @@ test('"保存并再记一笔" clears the amount, keeps account and category, and
   await waitFor(() => expect(postedTransactions()).toHaveLength(1));
   await waitFor(() => expect(screen.getByTestId('tx-amount').props.value).toBe(''));
   expect(screen.getByTestId('tx-merchant').props.value).toBe('');
-  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CHECKING.name);
-  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('餐饮');
+  expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CHECKING.name);
+  expect(screen.getByTestId('tx-category-path')).toHaveTextContent('餐饮');
   expect(toast.peek().some((item) => item.message.includes('第 1 笔'))).toBe(true);
 
   // Still on the form — a second entry can go straight in.
@@ -532,8 +537,8 @@ test('「复制一笔」 copies account / merchant / category / amount and moves
   await waitFor(() => expect(screen.getByTestId('tx-amount').props.value).toBe('88.00'));
   expect(screen.getByTestId('tx-merchant').props.value).toBe('山姆');
   expect(screen.getByTestId('tx-note').props.value).toBe('囤货');
-  expect(screen.getByTestId('tx-source-trigger')).toHaveTextContent(CREDIT.name);
-  expect(screen.getByTestId('tx-category-trigger')).toHaveTextContent('生活购物');
+  expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CREDIT.name);
+  expect(screen.getByTestId('tx-category-path')).toHaveTextContent('生活购物');
   // A copy is a new entry made today, not a second copy of an old day (04 §4.7).
   expect(screen.getByTestId('tx-date').props.value).toBe(todayLocalIso());
   expect(screen.getByTestId('tx-date').props.value).not.toBe(ORIGINAL.occurred_at);
@@ -693,6 +698,7 @@ test('an open overlay takes the keyboard: the refund picker unhooks the form sho
 
     // Closing it hands the keyboard back.
     fireEvent.press(screen.getByTestId(`refund-picker-row-${ORIGIN.id}`));
+    fireEvent.press(screen.getByTestId('refund-picker-confirm'));
     await waitFor(() => expect(doc.listeners()).toBe(1));
   } finally {
     // The tree has to come down while the stub is still installed: its listener cleanup

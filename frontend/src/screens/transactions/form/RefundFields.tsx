@@ -1,5 +1,7 @@
 /**
- * The refund tab's extra machinery (04 §4.6.3, decisions §1.1 / §14.52 A20 / B10 / B11).
+ * The refund tab's extra machinery (04 §4.6.3, decisions §1.1 / §14.52 A20 / B10 / B11),
+ * drawn the way mockup 06 draws it: a 「关联原支出」 block under the amount that holds the
+ * linked expense, how much of it has already come back and how much is still refundable.
  *
  * Linking the original expense is optional, but once it is linked it drives three things:
  * the category (prefilled, still editable), the account the money comes back to
@@ -12,14 +14,18 @@ import { useTranslation } from 'react-i18next';
 
 import type { Transaction } from '@/api/types';
 import { daysAgo } from '@/domain/dates';
-import { absMoney, cmpMoney, normalizeAmountInput } from '@/domain/money';
+import { absMoney, cmpMoney, normalizeAmountInput, subMoney } from '@/domain/money';
 import { formatDate, formatMoney } from '@/i18n/format';
 import { useTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
-import { space } from '@/theme/tokens';
-import { Button, Card, Chip, Switch, Text, trimMoney } from '@/ui';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { Badge, Button, Chip, Icon, ProgressBar, Text, trimMoney } from '@/ui';
 
 import { TransactionPicker } from '../TransactionPicker';
+import { FieldLabel, FormCard } from './parts';
+import { RefundCandidateRow, RefundPickerHeader } from './RefundPickerRow';
 import type { TxFormController } from './useTransactionForm';
 
 /** How far back the candidate list reaches by default (decision §1.1). */
@@ -37,7 +43,7 @@ export interface RefundOriginState {
 }
 
 /** `refundable` as the list/detail endpoints report it, or the full amount as a fallback. */
-function refundableOf(tx: Transaction): string {
+export function refundableOf(tx: Transaction): string {
   return tx.refundable ?? absMoney(tx.amount);
 }
 
@@ -116,35 +122,94 @@ export interface RefundFieldsProps {
   disabled?: boolean;
 }
 
-/** The block above the amount box: link button or linked card, plus the two quick chips. */
+/** 「关联原支出」: the linked original with its refund progress, or the button to pick one. */
 export function RefundFields({
   ctrl,
   state,
   disabled = false,
 }: RefundFieldsProps): React.JSX.Element {
   const { t } = useTranslation();
-  const { lang, form, values } = ctrl;
+  const colors = useColors();
+  const wide = useIsWide();
+  const { lang, values } = ctrl;
   const { origin } = state;
 
   const full = origin ? absMoney(origin.amount) : null;
+  const refunded = origin?.refunded_total ?? '0';
   const remaining = origin ? refundableOf(origin) : null;
+  const done = full !== null && Number(full) > 0 ? Number(refunded) / Number(full) : 0;
 
-  return (
-    <View style={styles.wrap}>
+  const body = (
+    <>
+      <FieldLabel
+        label={t('transaction:form.refund_of')}
+        right={
+          <Badge
+            label={t('transaction:form.refund_recommended')}
+            tone={origin === null ? 'warning' : 'neutral'}
+            testID="refund-recommended"
+          />
+        }
+      />
+
       {origin === null ? (
         <Button
           testID="refund-link"
-          variant="secondary"
+          variant="soft"
+          fullWidth
           label={t('transaction:form.refund_of')}
           icon="link"
           onPress={state.openPicker}
           disabled={disabled}
         />
       ) : (
-        <Card variant="outlined" testID="refund-origin-card">
-          <View style={styles.cardHeader}>
-            <Text variant="caption" tone="secondary">
-              {t('transaction:picker.linked_title')}
+        <View
+          testID="refund-origin-card"
+          style={[styles.origin, { backgroundColor: colors['kind.refund.subtle'] }]}
+        >
+          <View style={styles.originRow}>
+            <View style={[styles.well, { backgroundColor: colors['bg.surface'] }]}>
+              <Icon name="link" size={18} color={colors['kind.refund']} />
+            </View>
+            <View style={styles.grow}>
+              <Text variant="subheading" weight={600} numberOfLines={1}>
+                {origin.merchant ?? origin.note ?? formatDate(origin.occurred_at, lang)}
+              </Text>
+              <Text variant="caption" tone="secondary" mono numberOfLines={2}>
+                {`${formatDate(origin.occurred_at, lang)} · ${formatMoney(
+                  origin.amount,
+                  origin.currency,
+                  lang,
+                )}`}
+              </Text>
+            </View>
+            <View style={styles.originRight}>
+              <Text variant="caption" tone="secondary" mono testID="refund-origin-remaining">
+                {t('transaction:form.refund_remaining_label', {
+                  amount: formatMoney(remaining ?? '0', origin.currency, lang),
+                })}
+              </Text>
+              <Button
+                testID="refund-change"
+                variant="ghost"
+                size="sm"
+                label={t('transaction:form.refund_change')}
+                onPress={state.openPicker}
+                disabled={disabled}
+              />
+            </View>
+          </View>
+          <ProgressBar
+            value={done}
+            accessibilityLabel={t('transaction:form.refund_of')}
+            testID="refund-origin-progress"
+          />
+          <View style={styles.originRow}>
+            <Text variant="caption" tone="secondary" mono style={styles.grow}>
+              {t('transaction:detail.refunds_summary', {
+                refunded: formatMoney(refunded, origin.currency, lang),
+                refundable: formatMoney(remaining ?? '0', origin.currency, lang),
+              })}
             </Text>
             <Button
               testID="refund-unlink"
@@ -155,20 +220,12 @@ export function RefundFields({
               disabled={disabled}
             />
           </View>
-          <Text variant="body">
-            {`${formatDate(origin.occurred_at, lang)} · ${origin.merchant ?? ''}`}
-          </Text>
-          <Text variant="body" mono>
-            {formatMoney(origin.amount, origin.currency, lang)}
-          </Text>
-          <Text variant="caption" tone="secondary" testID="refund-origin-remaining">
-            {t('transaction:detail.refunds_summary', {
-              refunded: formatMoney(origin.refunded_total ?? '0', origin.currency, lang),
-              refundable: formatMoney(remaining ?? '0', origin.currency, lang),
-            })}
-          </Text>
-        </Card>
+        </View>
       )}
+
+      <Text variant="caption" tone="muted">
+        {t('transaction:form.refund_optional_hint')}
+      </Text>
 
       {origin !== null && values.source_id !== origin.source_id ? (
         <Text variant="caption" tone="secondary" testID="refund-other-source-hint">
@@ -176,82 +233,94 @@ export function RefundFields({
         </Text>
       ) : null}
 
-      {origin !== null && full !== null ? (
-        <View style={styles.chips}>
-          <Chip
-            testID="refund-chip-full"
-            label={t('transaction:form.refund_full_amount', {
-              amount: formatMoney(full, origin.currency, lang),
-            })}
-            disabled={disabled}
-            onPress={() => form.setValue('amount', trimMoney(full), { shouldDirty: true })}
-          />
-          {remaining !== null && cmpMoney(remaining, '0') > 0 ? (
-            <Chip
-              testID="refund-chip-remaining"
-              label={t('transaction:form.refund_remaining_amount', {
-                amount: formatMoney(remaining, origin.currency, lang),
-              })}
-              disabled={disabled}
-              onPress={() =>
-                form.setValue('amount', trimMoney(remaining), { shouldDirty: true })
-              }
-            />
-          ) : null}
-        </View>
-      ) : null}
+      <RefundPicker ctrl={ctrl} state={state} />
+    </>
+  );
 
-      <TransactionPicker
-        testID="refund-picker"
-        open={state.pickerOpen}
-        onClose={state.closePicker}
-        onSelect={state.link}
-        title={t('transaction:picker.title_refund_origin')}
-        // `refund_of` may only ever point at an expense (decision §1.1), so "expenses only"
-        // is a static label here rather than a chip that can be clicked away (§14.52 B11).
-        fixed={{ kind: ['expense'] }}
-        initial={{
-          source_id: values.source_id === '' ? undefined : [values.source_id],
-          from: daysAgo(REFUND_LOOKBACK_DAYS),
-        }}
-        filterRows={(tx) => !state.onlyRefundable || cmpMoney(refundableOf(tx), '0') > 0}
-        toolbar={
-          <Switch
-            testID="refund-only-refundable"
-            value={state.onlyRefundable}
-            onChange={state.setOnlyRefundable}
-            label={t('transaction:form.refund_only_refundable_toggle')}
-          />
-        }
-        renderRow={(tx) => (
-          <View style={styles.row}>
-            <Text variant="body" mono>
-              {formatDate(tx.occurred_at, lang)}
-            </Text>
-            <View style={styles.rowMain}>
-              <Text variant="body" numberOfLines={1}>
-                {tx.merchant ?? tx.note ?? ''}
-              </Text>
-              <Text
-                variant="caption"
-                tone={cmpMoney(refundableOf(tx), '0') > 0 ? 'secondary' : 'muted'}
-                testID={`refund-candidate-remaining-${tx.id}`}
-              >
-                {cmpMoney(refundableOf(tx), '0') > 0
-                  ? t('transaction:detail.refunds_summary', {
-                      refunded: formatMoney(tx.refunded_total ?? '0', tx.currency, lang),
-                      refundable: formatMoney(refundableOf(tx), tx.currency, lang),
-                    })
-                  : t('transaction:picker.refunded_out')}
-              </Text>
-            </View>
-            <Text variant="body" mono>
-              {formatMoney(tx.amount, tx.currency, lang)}
-            </Text>
-          </View>
-        )}
+  if (wide) return <View style={styles.wrap}>{body}</View>;
+  return <FormCard style={styles.wrap}>{body}</FormCard>;
+}
+
+/** The two amount chips that sit under the refund amount box (mockup 06). */
+export function RefundAmountChips({
+  ctrl,
+  state,
+  disabled = false,
+}: RefundFieldsProps): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const { lang, form } = ctrl;
+  const origin = state.origin;
+  if (!origin) return null;
+  const full = absMoney(origin.amount);
+  const remaining = refundableOf(origin);
+  return (
+    <View style={styles.chips}>
+      <Chip
+        testID="refund-chip-full"
+        label={t('transaction:form.refund_full_amount', {
+          amount: formatMoney(full, origin.currency, lang),
+        })}
+        disabled={disabled}
+        onPress={() => form.setValue('amount', trimMoney(full), { shouldDirty: true })}
       />
+      {cmpMoney(remaining, '0') > 0 ? (
+        <Chip
+          testID="refund-chip-remaining"
+          label={t('transaction:form.refund_remaining_amount', {
+            amount: formatMoney(remaining, origin.currency, lang),
+          })}
+          disabled={disabled}
+          onPress={() => form.setValue('amount', trimMoney(remaining), { shouldDirty: true })}
+        />
+      ) : null}
     </View>
+  );
+}
+
+/** The candidate dialog of mockup 06 — a table on 1440, full-screen cards on 375. */
+function RefundPicker({ ctrl, state }: RefundFieldsProps): React.JSX.Element {
+  const { t } = useTranslation();
+  const { lang, values } = ctrl;
+  return (
+    <TransactionPicker
+      testID="refund-picker"
+      open={state.pickerOpen}
+      onClose={state.closePicker}
+      onSelect={state.link}
+      onClear={state.unlink}
+      clearLabel={t('transaction:form.picker_no_link')}
+      confirm
+      confirmLabel={t('transaction:form.picker_use')}
+      selectedId={values.refund_of}
+      footerNote={t('transaction:form.picker_refund_note')}
+      title={t('transaction:picker.title_refund_origin')}
+      // `refund_of` may only ever point at an expense (decision §1.1), so "expenses only"
+      // is a static label here rather than a chip that can be clicked away (§14.52 B11).
+      fixed={{ kind: ['expense'] }}
+      initial={{
+        source_id: values.source_id === '' ? undefined : [values.source_id],
+        from: daysAgo(REFUND_LOOKBACK_DAYS),
+      }}
+      filterRows={(tx) => !state.onlyRefundable || cmpMoney(refundableOf(tx), '0') > 0}
+      toolbar={
+        <Chip
+          testID="refund-only-refundable"
+          label={t('transaction:form.refund_only_refundable_toggle')}
+          selected={state.onlyRefundable}
+          onPress={() => state.setOnlyRefundable(!state.onlyRefundable)}
+        />
+      }
+      tableHeader={<RefundPickerHeader />}
+      rowSummary={(tx) =>
+        t('transaction:form.picker_selected_summary', {
+          name: tx.merchant ?? tx.note ?? formatDate(tx.occurred_at, lang),
+          amount: formatMoney(refundableOf(tx), tx.currency, lang),
+        })
+      }
+      renderRow={(tx, selected) => (
+        <RefundCandidateRow tx={tx} lang={lang} selected={selected} />
+      )}
+    />
   );
 }
 
@@ -273,7 +342,7 @@ export function RefundOverWarning({
   if (cmpMoney(current, remaining) <= 0) return null;
 
   return (
-    <Text variant="caption" tone="warning" testID="refund-over-warning">
+    <Text variant="caption" tone="warning" testID="refund-over-warning" style={styles.warning}>
       {t('transaction:form.refund_over_hint', {
         original: formatMoney(absMoney(origin.amount), origin.currency, lang),
         refunded: formatMoney(origin.refunded_total ?? '0', origin.currency, lang),
@@ -283,10 +352,27 @@ export function RefundOverWarning({
   );
 }
 
+/** What is still owed after this entry, for the summary card (mockup 06's 「后全额退完」). */
+export function remainingAfter(origin: Transaction, amount: string): string | null {
+  const current = normalizeAmountInput(amount);
+  if (current === null) return null;
+  return subMoney(refundableOf(origin), current);
+}
+
 const styles = StyleSheet.create({
   wrap: { gap: space['2'], alignSelf: 'stretch' },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
-  rowMain: { flex: 1, gap: 2 },
+  grow: { flex: 1, minWidth: 0 },
+  origin: { borderRadius: radius.md + 2, padding: space['3'] + 2, gap: space['2'] },
+  originRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
+  originRight: { alignItems: 'flex-end', flexShrink: 0, gap: space['1'] },
+  well: {
+    width: 36,
+    height: 36,
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'], marginTop: space['2'] },
+  warning: { marginTop: space['2'] },
 });
