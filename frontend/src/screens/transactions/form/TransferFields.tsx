@@ -313,6 +313,8 @@ export function TransferFields({
               testID="transfer-date"
               label={t('transaction:form.date')}
               todayLabel={t('transaction:form.today')}
+              // 屏幕稿 05 · 转账 两腿 375 draws this row with the chevron alone.
+              showToday={false}
               value={field.value}
               onChange={field.onChange}
               max={maxAllowedDate()}

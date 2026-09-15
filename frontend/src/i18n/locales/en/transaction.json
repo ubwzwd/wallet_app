@@ -104,6 +104,8 @@
     "count_other": "{{count}} transactions",
     "count_matched_one": "{{count}} of {{total}} transactions",
     "count_matched_other": "{{count}} of {{total}} transactions",
+    "count_matched_pending_one": "{{count}} matched",
+    "count_matched_pending_other": "{{count}} matched",
     "stat": {
       "expense": "Expense {{amount}}",
       "income": "Income {{amount}}",

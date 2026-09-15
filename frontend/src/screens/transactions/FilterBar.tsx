@@ -162,6 +162,18 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     };
   }, []);
   const id = props.testID ?? 'tx-filter-bar';
+  // Typing in the wide panel's search box pins the panel open: the first keystroke becomes
+  // a 「关键词」 chip, and without this the collapse rule below would swap the whole card —
+  // caret and all — for the 「已选条件」 strip mid-word (§14.59b applies to conditions the
+  // user has finished setting, not to the box they are still typing in).
+  const onQChange = props.onQChange;
+  const onQType = React.useCallback(
+    (value: string): void => {
+      setPanel(true);
+      onQChange(value);
+    },
+    [setPanel, onQChange],
+  );
 
   const sourceName = React.useCallback(
     (sid: Uuid): string => props.sources.find((s) => s.id === sid)?.name ?? sid.slice(0, 6),
@@ -278,7 +290,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
           style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['5'] }}
         >
           {[
-            <KeywordField key="q" value={props.qDraft} onChange={props.onQChange} id={`${id}-q`} />,
+            <KeywordField key="q" value={props.qDraft} onChange={onQType} id={`${id}-q`} />,
             <SourceField key="source" {...fields} />,
             <CurrencyChips key="currency" {...fields} />,
             <AmountRangeField key="amount" {...fields} />,

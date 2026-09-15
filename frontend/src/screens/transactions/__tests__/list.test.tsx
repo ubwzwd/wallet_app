@@ -326,6 +326,44 @@ test('the bottom summary comes from the response, not from the rows on screen', 
 });
 
 /**
+ * The footnote under that card names the refund total, which the API does not report: it
+ * is recovered from §5.25's `net = income − expense + refund`. A change to that definition
+ * would silently print a wrong number, so both halves of the derivation are pinned here.
+ */
+test('the narrow summary footnote states the refund the net includes, and is absent at zero', async () => {
+  mockGet(
+    `/ledgers/${LEDGER}/transactions`,
+    listResponse({
+      summary: { ...WHOLE_RESULT_SUMMARY, net: '17199.0100', rate_missing_count: 0 },
+    }),
+  );
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  // 18,000.00 − 999.99 + 199.00 = 17,199.01, so the refunds came to 199.00.
+  expect(await screen.findByTestId('tx-summary-refund-note')).toHaveTextContent(
+    '退款 199.00 计入净额；转账不计入。',
+  );
+
+  // The default envelope's net is exactly income − expense: no refunds, no footnote.
+  api.restore();
+  api = mockApi();
+  queryClient.clear();
+  mockGet('/me', makeUser());
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: LEDGER, name: '家庭账本', base_currency: 'CNY' })],
+    total: 1,
+  });
+  mockGet('/categories', makeCategoryTree());
+  mockGet('/rates/currencies', makeCurrencyList());
+  mockGet(`/ledgers/${LEDGER}/sources`, { items: [SOURCE_A, SOURCE_B], total: 2 });
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-summary-net')).toHaveTextContent('+17,000.01');
+  expect(screen.queryByTestId('tx-summary-refund-note')).toBeNull();
+});
+
+/**
  * 编辑 / 删除 have no per-row button any more (决策 §14.56 / 屏幕稿 02); the row's own menu
  * is behind a long press, and that is where the two delete paths are exercised from.
  */

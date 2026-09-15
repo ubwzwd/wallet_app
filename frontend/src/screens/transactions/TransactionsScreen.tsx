@@ -170,9 +170,14 @@ export default function TransactionsScreen(): React.JSX.Element {
   );
   const ledgerTotal = ledgerTotalQuery.data?.total;
 
+  // While that probe is in flight the ledger total is unknown, and 「共 N 笔」 would state
+  // the *filtered* count as the ledger's size — a wrong sentence, not a partial one. So the
+  // matched half stands alone until the second number arrives.
   const countLabel =
-    f.activeCount > 0 && ledgerTotal !== undefined
-      ? t('transaction:list.count_matched', { count: total, total: ledgerTotal })
+    f.activeCount > 0
+      ? ledgerTotal !== undefined
+        ? t('transaction:list.count_matched', { count: total, total: ledgerTotal })
+        : t('transaction:list.count_matched_pending', { count: total })
       : t('transaction:list.count', { count: total });
 
   // 屏幕稿 15 · 空交易列表 prints counts and nothing else: 「支出 0.00 · 收入 0.00」 on a

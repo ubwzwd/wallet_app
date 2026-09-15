@@ -38,6 +38,11 @@ export interface DateRowFieldProps {
   max?: IsoDate;
   label: string;
   todayLabel: string;
+  /**
+   * Whether the row carries the 「今天」 chip. 屏幕稿 04 · 记一笔 375 draws it; 屏幕稿 05 ·
+   * 转账 两腿 375 draws the date row with the chevron alone, so the transfer form turns it off.
+   */
+  showToday?: boolean;
   error?: string | null;
   disabled?: boolean;
   testID: string;
@@ -49,6 +54,7 @@ export function DateRowField({
   max,
   label,
   todayLabel,
+  showToday = true,
   error,
   disabled = false,
   testID,
@@ -113,12 +119,14 @@ export function DateRowField({
             </Text>
           </View>
         </Pressable>
-        <Chip
-          label={todayLabel}
-          disabled={disabled}
-          onPress={() => onChange(todayLocal())}
-          testID={`${testID}-today`}
-        />
+        {showToday ? (
+          <Chip
+            label={todayLabel}
+            disabled={disabled}
+            onPress={() => onChange(todayLocal())}
+            testID={`${testID}-today`}
+          />
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common:button.pick_date')}

@@ -103,6 +103,12 @@ function searchOf(router: { getSearchParams(): Record<string, string | string[] 
 }
 
 beforeEach(async () => {
+  // The filter bar keeps 「drawer open」 / 「panel open」 in module-level flags so they
+  // survive the remount every URL write causes (FilterBar.tsx). The previous test's
+  // unmount armed the reset; let it land, or one test's open panel leaks into the next.
+  act(() => {
+    jest.advanceTimersByTime(1);
+  });
   api = mockApi();
   listRequests = [];
   queryClient.clear();
@@ -206,6 +212,36 @@ test('typing in the search box writes `q` once, 300ms after the last keystroke',
 
   await waitFor(() => expect(searchOf(router).q).toBe('咖啡'));
   expect(listRequests.filter((p) => p.q !== undefined).map((p) => p.q)).toEqual(['咖啡']);
+});
+
+test('the wide panel stays open while the search box is being typed in', async () => {
+  // §14.59b collapses the wide panel once conditions are on, but the keyword the user is
+  // still typing is not a finished condition: collapsing there would unmount the box under
+  // the caret and force a press on 「筛选」 to type a second character.
+  serveList(() => ({ items: [], total: 0 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.changeText(await screen.findByTestId('tx-filter-bar-q'), '咖');
+  await waitFor(() => expect(searchOf(router).q).toBe('咖'));
+
+  expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-expand')).toBeNull();
+
+  // And refining it keeps working, which is the whole point.
+  fireEvent.changeText(screen.getByTestId('tx-filter-bar-q'), '咖啡');
+  await waitFor(() => expect(searchOf(router).q).toBe('咖啡'));
+  expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
+});
+
+test('a filter set from elsewhere still collapses the wide panel to the chip strip', async () => {
+  serveList(() => ({ items: [], total: 0 }));
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions?kind=expense` });
+
+  expect(await screen.findByTestId('tx-filter-bar-expand')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-expand'));
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
 });
 
 test('a shared URL is restored verbatim, repeated keys included', async () => {

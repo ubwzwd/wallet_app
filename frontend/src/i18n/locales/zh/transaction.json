@@ -96,6 +96,7 @@
     "summary_rate_missing_other": "{{count}} 笔因暂无汇率未计入",
     "count_other": "共 {{count}} 笔",
     "count_matched_other": "{{count}} 笔命中 · 共 {{total}} 笔",
+    "count_matched_pending_other": "{{count}} 笔命中",
     "stat": { "expense": "支出 {{amount}}", "income": "收入 {{amount}}", "refund": "退款 {{amount}}" },
     "summary_refund_note": "退款 {{refund}} 计入净额；转账不计入。",
     "rate_missing": "暂无汇率",
