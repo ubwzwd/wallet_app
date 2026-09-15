@@ -67,7 +67,6 @@
     "name_duplicate_hint": "已有同名账户，仍会按账户区分",
     "type_label": "类型",
     "currency_label": "币种",
-    "currency_lock_note": "存后不可改",
     "currency_locked_hint": "币种创建后不能改，改了历史交易的含义会乱；如果要换币种，请新建一个账户并把旧的归档",
     "opening_balance_label": "期初余额",
     "opening_balance_hint": "余额 = 期初余额 + 这个账户下所有交易金额之和。期初余额记在账户上，不是一笔交易，它不会出现在交易列表里。",

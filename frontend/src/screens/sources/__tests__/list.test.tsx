@@ -17,6 +17,7 @@ import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
 import { formatDate, formatMoney } from '@/i18n/format';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
+import { lightColors } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider, LedgerProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -196,7 +197,7 @@ test('a credit card shows its debt as a negative amount, and a foreign account i
   // 屏幕稿 09 paints the debt as a signed number in the expense colour.
   const debt = screen.getByTestId('source-row-src-credit-amount');
   expect(String(debt.props.children)).toBe(formatMoney('-3204.0000', 'CNY', 'zh'));
-  expect(debt).toHaveStyle({ color: '#AC4335' });
+  expect(debt).toHaveStyle({ color: lightColors['kind.expense'] });
 
   expect(String(screen.getByTestId('source-row-src-other-amount-sub').props.children)).toContain(
     formatMoney('1000.0000', 'CNY', 'zh'),
@@ -267,6 +268,35 @@ test('?include_archived=1 expands the section, greying each row with its archive
   expect(textOf('sources-archived-hint')).toContain('不计入净资产');
   // Still out of the three numbers while expanded.
   expect(textOf('sources-net-worth')).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
+});
+
+test('the expanded archived block keeps the table columns and stamps each row', async () => {
+  goWide();
+  seedList();
+  renderList(`/l/${LEDGER_ID}/sources?include_archived=1`);
+
+  // The head strip names what archiving costs and how many accounts are folded in.
+  expect(await screen.findByTestId('sources-archived-section')).toBeTruthy();
+  expect(textOf('sources-archived-hint')).toContain('不计入净资产');
+  expect(textOf('sources-archived-count')).toContain('1');
+  // The wide rows reuse the table grid, with 折算 swapped for 「归档于 …」.
+  expect(screen.getByTestId('source-row-src-archived')).toBeTruthy();
+  expect(textOf('source-archived-at-src-archived')).toContain(formatDate('2026-08-20', 'zh'));
+  // Both cards sit in the same horizontal scroller, so their columns stay lined up.
+  expect(screen.getByTestId('sources-archived-hscroll')).toBeTruthy();
+});
+
+test('both layouts list accounts in the frozen §14.48 type order', async () => {
+  // Server order is deliberately shuffled: 现金 first, 储蓄卡 last.
+  seedList([cash, other, credit, checking, archived]);
+  goWide();
+  renderList();
+
+  const table = await screen.findByTestId('sources-table');
+  const names = within(table)
+    .getAllByTestId(/^source-name-/)
+    .map((node) => String(node.props.children));
+  expect(names).toEqual([checking.name, credit.name, cash.name, other.name]);
 });
 
 test('toggling the archived section writes include_archived into the URL', async () => {

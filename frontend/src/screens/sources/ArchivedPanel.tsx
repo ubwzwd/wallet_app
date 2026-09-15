@@ -7,7 +7,7 @@
  * date; the open/closed state is the caller's, because it lives in the URL.
  */
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { FinanceSource } from '@/api/types';
@@ -18,7 +18,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, ListCard, Text } from '@/ui';
 
 import { SourceListRow } from './SourceGroup';
-import { SourceTableRow } from './SourcesTable';
+import { MIN_TABLE_WIDTH, SourceTableRow } from './SourcesTable';
 
 /** The head strip's round icon well (屏幕稿 09: 32px). */
 const WELL = 32;
@@ -101,8 +101,12 @@ export function ArchivedPanel({
     </Pressable>
   );
 
-  return (
-    <ListCard testID="sources-archived-section" divided>
+  const card = (
+    <ListCard
+      testID="sources-archived-section"
+      divided
+      style={wide ? { minWidth: MIN_TABLE_WIDTH, flexGrow: 1 } : undefined}
+    >
       {head}
       {expanded
         ? sources.map((source) =>
@@ -130,5 +134,20 @@ export function ArchivedPanel({
           )
         : null}
     </ListCard>
+  );
+
+  if (!wide) return card;
+  // 屏幕稿 09: the archived block reuses the table's column track, so it has to scroll
+  // with it — without the same floor and the same horizontal scroller, the two cards'
+  // columns drift apart as soon as the page is narrower than MIN_TABLE_WIDTH.
+  return (
+    <ScrollView
+      horizontal
+      testID="sources-archived-hscroll"
+      style={{ flexGrow: 0 }}
+      contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}
+    >
+      {card}
+    </ScrollView>
   );
 }

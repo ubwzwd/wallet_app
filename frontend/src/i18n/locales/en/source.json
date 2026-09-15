@@ -67,7 +67,6 @@
     "name_duplicate_hint": "There's already an account with this name — they're still tracked separately",
     "type_label": "Type",
     "currency_label": "Currency",
-    "currency_lock_note": "locked once saved",
     "currency_locked_hint": "An account's currency can't be changed after it's created — changing it would muddle past transactions. To switch currency, create a new account and archive this one.",
     "opening_balance_label": "Opening balance",
     "opening_balance_hint": "Balance = opening balance + the sum of every transaction on this account. The opening balance lives on the account, not as a transaction — it won't show up in the transaction list.",

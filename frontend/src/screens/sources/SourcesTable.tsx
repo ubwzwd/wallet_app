@@ -2,7 +2,7 @@
  * The wide layout's account table (屏幕稿 09 · 账户列表 1440).
  *
  * Six columns — 账户 / 类型 / 币种 / 余额 · 原币 / 折算 <base> / ··· — in one white card with
- * a tinted head strip and a foot strip carrying 「合计 · 在用」, the 「混合币种」 caveat and the
+ * a head strip and a foot strip carrying 「合计 · 在用」, the 「混合币种」 caveat and the
  * net worth of the accounts above it. The mockup drops the per-type group cards the text
  * spec drew: the type badge in every row and the foot total carry §14.50's reading instead
  * (decision §14.45 — the mockups are the visual source of truth).
@@ -27,8 +27,9 @@ import { balanceText, balanceTone, isForeign } from './sourceFormat';
 const ROW_HEIGHT = 60;
 const GRID_GAP = space['3'] + 2;
 const GRID_PADDING = space['5'];
-/** Narrower than this and six columns stop being readable; the card scrolls instead. */
-const MIN_TABLE_WIDTH = 820;
+/** Narrower than this and six columns stop being readable; the card scrolls instead.
+ *  Exported so the archived block can pin the same column track (屏幕稿 09). */
+export const MIN_TABLE_WIDTH = 820;
 
 /** The mockup's grid: one elastic name column, three fixed, two elastic numbers, 44 for ···. */
 const COLUMNS = [
@@ -263,11 +264,10 @@ export interface SourcesTableProps {
 
 export function SourcesTable(props: SourcesTableProps): React.JSX.Element {
   const { t } = useTranslation();
-  const colors = useColors();
   const id = props.testID ?? 'sources-table';
 
   const head = (
-    <View style={[gridRow, { paddingVertical: space['3'], backgroundColor: colors['bg.canvas'] }]}>
+    <View style={[gridRow, { paddingVertical: space['3'] }]}>
       {COLUMNS.map((column) => (
         <View key={column.key} style={cellStyle(column)} testID={`${id}-head-${column.key}`}>
           <Text variant="micro" tone="secondary" mono weight={600} numberOfLines={1}>
@@ -283,12 +283,7 @@ export function SourcesTable(props: SourcesTableProps): React.JSX.Element {
   );
 
   const foot = (
-    <View
-      style={[
-        gridRow,
-        { paddingVertical: space['4'], backgroundColor: colors['bg.canvas'] },
-      ]}
-    >
+    <View style={[gridRow, { paddingVertical: space['4'] }]}>
       <View style={cellStyle(COLUMNS[0])}>
         <Text variant="body" weight={600} testID={`${id}-total-label`}>
           {t('source:list.total_active')}

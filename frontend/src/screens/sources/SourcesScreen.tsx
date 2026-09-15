@@ -42,6 +42,15 @@ const SKELETON_CARDS = 3;
 /** The server's refusal when an account still has transactions (decision §3). */
 const HAS_TRANSACTIONS = 'source_has_transactions';
 
+/**
+ * Rows read in the frozen §14.48 type order — 储蓄卡 → 信用卡 → 现金 → 其他 — at both
+ * widths: the narrow layout groups by type, and the wide table (屏幕稿 09 账户列表 1440)
+ * has to list the same accounts in the same order. Within a type the server's order stands.
+ */
+function byType(sources: readonly FinanceSource[]): FinanceSource[] {
+  return SOURCE_TYPE_ORDER.flatMap((type) => sources.filter((s) => s.type === type));
+}
+
 export default function SourcesScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
@@ -100,8 +109,8 @@ export default function SourcesScreen(): React.JSX.Element {
 
   const items = query.data?.items ?? [];
   const summary = sumSources(items);
-  const active = items.filter((s) => !s.archived);
-  const archived = items.filter((s) => s.archived);
+  const active = byType(items.filter((s) => !s.archived));
+  const archived = byType(items.filter((s) => s.archived));
 
   /** 屏幕稿 09: 「4 个在用 · 2 个已归档 · 净资产 ¥34,627.10」 on the title's baseline. */
   const meta = [
