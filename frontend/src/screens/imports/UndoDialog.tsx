@@ -108,11 +108,6 @@ export function askUndo(data: UndoDialogData): Promise<boolean> {
   });
 }
 
-/** Test seam: drop a dialog left open by an unmounted screen. */
-export function closeUndoDialog(): void {
-  if (pending !== null) settle(false);
-}
-
 function StatTile({ stat, wide }: { stat: UndoStat; wide: boolean }): React.JSX.Element {
   const colors = useColors();
   return (
