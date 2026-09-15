@@ -2955,7 +2955,7 @@ PATCH .../rows/f6a7b8c9-...
 | 字段 | 类型 | 必填 | 校验 |
 |---|---|---|---|
 | `row_ids` | UUID[] | 是 | 1..500 个，必须都属于本批次；有一个不属于就整体 404，不部分执行 |
-| `patch` | object | 是 | 与 §5.41 的可改字段完全相同的一份改动，应用到每一行 |
+| `patch` | object | 是 | 与 §5.41 的可改字段相同的一份改动，应用到每一行，**但不收** `matched_transaction_id` / `counterpart_source_id` / `counterparty`（逐行关联不能批量套用，带了任一即 422；决策 §14.55，2026-09-16 同步） |
 
 ```json
 PATCH /api/v1/ledgers/8f0f7b2e-.../imports/d1e2f3a4-.../rows
