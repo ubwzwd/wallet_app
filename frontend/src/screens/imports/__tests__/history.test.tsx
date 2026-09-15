@@ -130,8 +130,21 @@ const ROUTES = {
   'l/[ledgerId]/transactions/index': () => <RNText>transaction list</RNText>,
 };
 
+/** The history endpoint as the server answers it: `?status=` filters server-side, so the
+ *  pager and the filter describe one and the same list (04 §4.10). */
 function seed(items: ImportBatchListItem[] = [READY, COMMITTED]): void {
-  mockGet(IMPORTS_PATH, { items, total: items.length });
+  api.mock.onGet(apiUrl(IMPORTS_PATH)).reply((config) => {
+    const status = config.params?.status as string[] | undefined;
+    const matched = status ? items.filter((b) => status.includes(b.status)) : items;
+    return [200, { items: matched, total: matched.length }];
+  });
+}
+
+/** Every GET the screen sent to the history endpoint, oldest first. */
+function listRequests(): Array<Record<string, unknown> | undefined> {
+  return api.mock.history.get
+    .filter((r) => (r.url ?? '').endsWith('/imports'))
+    .map((r) => r.params as Record<string, unknown> | undefined);
 }
 
 function renderHistory(): ReturnType<typeof renderRouter> {
@@ -251,9 +264,19 @@ test('undo asks with dry_run first, words both counters separately, then deletes
   expect(api.mock.history.delete).toHaveLength(1);
   expect(api.mock.history.delete[0].params).toEqual({ dry_run: true });
 
-  // Two counters, two different sentences (decision §14.52 B24).
+  // Two counters, two different sentences, on two separate amber cards (§14.52 B24).
+  expect(screen.getByTestId('undo-dialog-warning-orphaned')).toBeTruthy();
+  expect(screen.getByTestId('undo-dialog-warning-in_batch')).toBeTruthy();
   expect(screen.getByText(/批外有 2 笔退款指向这批里的支出/)).toBeTruthy();
   expect(screen.getByText(/这批里有 3 笔退款/)).toBeTruthy();
+
+  // 屏幕稿 11: the stat tiles, and a confirm button that names the count.
+  expect(screen.getByTestId('undo-dialog-stat-deleted-value').props.children).toBe('128 笔');
+  expect(screen.getByTestId('undo-dialog-stat-rollback-value').props.children).toBe(
+    formatMoney('-900.0000', 'CNY', 'zh', { signDisplay: 'always' }),
+  );
+  expect(screen.getByTestId('confirm-meta')).toBeTruthy();
+  expect(screen.getByText('撤销 128 笔')).toBeTruthy();
 
   // `doubleTap`: the first press only arms the button.
   fireEvent.press(screen.getByTestId('confirm-accept'));
@@ -284,6 +307,7 @@ test('a counter of zero contributes no line to the confirmation', async () => {
   expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
   expect(screen.getByText(/这批里有 4 笔退款/)).toBeTruthy();
   expect(screen.queryByText(/批外有/)).toBeNull();
+  expect(screen.queryByTestId('undo-dialog-warning-orphaned')).toBeNull();
 });
 
 test('cancelling the confirmation leaves the batch alone', async () => {
@@ -357,17 +381,69 @@ test('the header counts the batches and the status filter narrows the list throu
 
   fireEvent.press(screen.getByTestId('imports-filter-ready'));
   await waitFor(() => expect(router.getSearchParams().status).toBe('ready'));
+  await waitFor(() => expect(screen.queryByTestId(`import-batch-${PASTED_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${BATCH_ID}`)).toBeTruthy();
-  expect(screen.queryByTestId(`import-batch-${PASTED_ID}`)).toBeNull();
 
   fireEvent.press(screen.getByTestId('imports-filter-committed'));
   await waitFor(() => expect(router.getSearchParams().status).toBe('committed'));
+  await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
-  expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull();
 
-  // Filtering is a view over the page in hand — it costs no second request.
-  const listed = api.mock.history.get.filter((r) => (r.url ?? '').endsWith('/imports'));
-  expect(listed).toHaveLength(1);
+  // The filter goes to the server, so it narrows the whole history and not just the 20
+  // batches on this page — the pager and the rows then describe the same list.
+  expect(listRequests()).toEqual([
+    { limit: 20, offset: 0 },
+    { limit: 20, offset: 0, status: ['ready'] },
+    { limit: 20, offset: 0, status: ['committed'] },
+  ]);
+});
+
+test('changing the filter goes back to page 1 instead of keeping the old offset', async () => {
+  const many = Array.from({ length: 20 }, (_, i) =>
+    makeImportBatch({ id: `batch-${i}`, filename: `f${i}.csv`, status: 'committed' }),
+  );
+  api.mock.onGet(apiUrl(IMPORTS_PATH)).reply((config) => {
+    const offset = Number(config.params?.offset ?? 0);
+    return [200, { items: offset === 0 ? many : many.slice(0, 3), total: 43 }];
+  });
+  renderHistory();
+
+  fireEvent.press(await screen.findByTestId('imports-pagination-next'));
+  await waitFor(() =>
+    expect(screen.getByTestId('imports-pagination-page').props.children).toBe('第 2 / 3 页'),
+  );
+
+  fireEvent.press(screen.getByTestId('imports-filter-committed'));
+  await waitFor(() =>
+    expect(screen.getByTestId('imports-pagination-page').props.children).toBe('第 1 / 3 页'),
+  );
+  expect(listRequests().at(-1)).toEqual({ limit: 20, offset: 0, status: ['committed'] });
+});
+
+test('a page that empties under the user falls back to page 1 rather than stranding them', async () => {
+  const many = Array.from({ length: 20 }, (_, i) =>
+    makeImportBatch({ id: `batch-${i}`, filename: `f${i}.csv` }),
+  );
+  let tailGone = false;
+  api.mock.onGet(apiUrl(IMPORTS_PATH)).reply((config) => {
+    const offset = Number(config.params?.offset ?? 0);
+    if (offset === 0) return [200, { items: many, total: tailGone ? 20 : 43 }];
+    // Page 2 is where the batches used to be; they have since been undone.
+    return [200, { items: tailGone ? [] : many, total: tailGone ? 20 : 43 }];
+  });
+  renderHistory();
+
+  fireEvent.press(await screen.findByTestId('imports-pagination-next'));
+  await waitFor(() =>
+    expect(screen.getByTestId('imports-pagination-page').props.children).toBe('第 2 / 3 页'),
+  );
+
+  // Page 2 is now past the end: no pager is drawn at `total: 20`, so without the clamp the
+  // user would sit on an empty table head with no control back.
+  tailGone = true;
+  queryClient.clear();
+  await waitFor(() => expect(screen.getByTestId('import-batch-batch-0')).toBeTruthy());
+  expect(screen.queryByTestId('imports-filter-empty')).toBeNull();
 });
 
 test('an empty filter slice says so, instead of claiming the ledger has no imports', async () => {
@@ -384,15 +460,18 @@ test('an empty filter slice says so, instead of claiming the ledger has no impor
   expect(screen.queryByTestId('imports-empty')).toBeNull();
 });
 
-test('a draft row says how many rows still need a category, on both layouts', async () => {
+test('a draft row says how many rows still need a category, on the wide table', async () => {
   seed([{ ...READY, uncategorized_count: 3 }]);
   renderHistory();
 
   expect(await screen.findByText('3 行待归类')).toBeTruthy();
+});
 
+test('a draft card says how many rows still need a category, on the narrow layout', async () => {
   setWide(false);
   seed([{ ...READY, uncategorized_count: 3 }]);
   renderHistory();
+
   expect(await screen.findByText('还有 3 行待归类，补齐后才能提交')).toBeTruthy();
 });
 

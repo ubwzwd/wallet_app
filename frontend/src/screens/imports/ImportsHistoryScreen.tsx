@@ -5,8 +5,10 @@
  * The header carries the page's numbers inline (「4 批 · 1 批待提交 · 已入账 52 笔」) and, on
  * its right, the way in plus the small 全部 / 待提交 / 已提交 segmented control. That choice
  * lives in the URL (`?status=`), so a filtered history is shareable and the back button is
- * right; it is applied to the page in hand rather than re-fetched, which keeps the counts
- * above it stable and costs no extra request.
+ * right, and it is sent to the *server* as `status=`: the pager pages 20 batches at a time,
+ * so a filter applied to the page in hand would silently hide matching batches on every
+ * other page while the pager still counted the unfiltered list. Both the rows and the
+ * numbers above them therefore describe one thing — the filtered page in hand.
  *
  * A batch has exactly two states (decision §5): `ready` (a validated draft waiting to be
  * reviewed) and `committed`. There is no `reverted` — undoing an import deletes the batch,
@@ -52,6 +54,7 @@ import {
   historyGridRow,
 } from './HistoryRows';
 import { ImportsEmpty } from './ImportsEmpty';
+import { UndoDialogHost } from './UndoDialog';
 import { undoImportBatch, undoMeta } from './undoBatch';
 
 /** 04 §4.10: the history pages 20 batches at a time. */
@@ -128,7 +131,7 @@ function HistoryEntry({ ledgerId, batch, uploader, lang, wide }: RowProps): Reac
   // shared with the committed panel of the batch screen. The list has nowhere to go
   // afterwards: the batch simply leaves it (decision §14.22).
   const onUndo = React.useCallback((): void => {
-    void undoImportBatch({ remove: remove.mutateAsync, t, meta: undoMeta(batch, t, lang) });
+    void undoImportBatch({ remove: remove.mutateAsync, batch, t, lang });
   }, [batch, lang, remove, t]);
 
   const shared = {
@@ -178,7 +181,11 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const filter = resolveFilter(params.status);
 
   const [offset, setOffset] = React.useState(0);
-  const query = useImports(ledgerId, { limit: IMPORTS_PAGE_SIZE, offset });
+  const query = useImports(ledgerId, {
+    limit: IMPORTS_PAGE_SIZE,
+    offset,
+    status: filter === 'all' ? undefined : [filter],
+  });
   const memberNames = useMemberNames(ledgerId);
 
   const goNew = React.useCallback(
@@ -197,15 +204,28 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
   const stats = historyStats(items);
-  const shown = filter === 'all' ? items : items.filter((batch) => batch.status === filter);
+
+  // Page 1 of the new filter, not page 3 of the old one — and page 1 again when the list
+  // shrank under the pager (the tail batches were undone or discarded), which would
+  // otherwise strand the user on an empty page with no pager to walk back with.
+  React.useEffect(() => {
+    setOffset(0);
+  }, [filter]);
+  React.useEffect(() => {
+    if (!query.isPending && items.length === 0 && offset > 0) setOffset(0);
+  }, [items.length, offset, query.isPending]);
 
   // An empty history has nothing to count and nothing to filter, so 屏幕稿 15's header is
-  // just the title and the way in.
-  const bare = items.length === 0;
+  // just the title and the way in. A filter that matches nothing is *not* that: the
+  // segmented control has to stay on screen, or there is no way back to 全部.
+  const bare = filter === 'all' && items.length === 0;
+  // 「0 批 · 0 批待提交」 under a filter that matches nothing says nothing, so the counts go
+  // whenever the page is empty — but the segmented control only goes when the ledger is.
+  const meta = items.length === 0 ? undefined : t('import:history.stats', stats);
   const header = (
     <PageHeader
       title={t('import:history.title')}
-      meta={bare ? undefined : t('import:history.stats', stats)}
+      meta={meta}
       testID="imports-header"
       actions={
         <>
@@ -257,7 +277,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
     );
   }
 
-  if (items.length === 0 && offset === 0) {
+  if (bare && offset === 0) {
     return (
       <Page testID="imports-history-screen">
         {header}
@@ -269,7 +289,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const pages = Math.max(1, Math.ceil(total / IMPORTS_PAGE_SIZE));
   const page = Math.floor(offset / IMPORTS_PAGE_SIZE) + 1;
 
-  const rows = shown.map((batch) => (
+  const rows = items.map((batch) => (
     <HistoryEntry
       key={batch.id}
       ledgerId={ledgerId}
@@ -310,7 +330,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   // The ledger does have batches — this filter just matches none of them. Saying 「还没导入过
   // 账单」 here would contradict the counts in the header right above.
   const emptySlice =
-    shown.length === 0 ? (
+    items.length === 0 ? (
       <View style={styles.emptySlice} testID="imports-filter-empty">
         <Text variant="body" tone="muted">
           {t('import:history.filter_empty')}
@@ -349,6 +369,8 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
       <Text variant="caption" tone="muted" testID="imports-footer-note">
         {t('import:history.footer_note')}
       </Text>
+      {/* 屏幕稿 11 · 撤销确认 — its own dialog, not a `ConfirmDialog` (see `UndoDialog.tsx`). */}
+      <UndoDialogHost />
     </Page>
   );
 }

@@ -29,7 +29,9 @@ import {
   selectableSources,
 } from '@/ui';
 
-/** The dashed-looking drop zone of 屏幕稿 10 (1.5px inset ring, not a border). */
+/** The drop zone's 1.5px ring of 屏幕稿 10. 屏幕 10 · 导入指南与上传.dc.html paints it with a
+ *  solid `dropRing`, whose value is exactly the `border.strong` token — it is NOT dashed,
+ *  whatever the prose around the mockup says, so please leave this a solid border. */
 const DROP_RING = 1.5;
 
 function sourceHint(source: FinanceSource, lang: Lang, typeLabel: string): string {

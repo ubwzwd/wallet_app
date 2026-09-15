@@ -176,6 +176,16 @@ export default function NewImportScreen(): React.JSX.Element {
         ? t('import:upload.non_csv_hint')
         : t('import:upload.error.file_too_large');
 
+  // What the red card below the zone shouts, in one line, so the zone is never red and mute.
+  const failureHeadline =
+    failure === null
+      ? null
+      : failure.code === 'import_format_invalid'
+        ? t('import:upload.error.structure_title')
+        : failure.code === 'skill_outdated'
+          ? t('import:upload.error.skill_outdated_title')
+          : t('import:upload.error.generic_title');
+
   const steps = formatQuery.data ? (
     <ImportSteps format={formatQuery.data} onOpenFormat={() => goGuide(undefined)} />
   ) : (
@@ -200,16 +210,25 @@ export default function NewImportScreen(): React.JSX.Element {
         </Text>
       ) : null}
 
+      {/* 屏幕稿 10's error branch paints the ring in kind.expense whenever the upload was
+          refused — by the local precheck or by the server. The card below keeps the detail;
+          the zone repeats its headline so the two do not disagree. */}
       <DropZone
-        tone={localProblem === null ? 'default' : 'danger'}
+        tone={localProblem === null && failure === null ? 'default' : 'danger'}
         title={
           file
             ? t('import:upload.selected_file', { name: file.name, size: formatBytes(file.size) })
             : t('import:upload.drop_title')
         }
         titleTestID={file ? 'upload-selected-file' : 'upload-drop-title'}
-        body={localMessage ?? t('import:upload.drop_body')}
-        bodyTestID={localMessage === null ? 'upload-dropzone-hint' : 'upload-local-error'}
+        body={localMessage ?? failureHeadline ?? t('import:upload.drop_body')}
+        bodyTestID={
+          localMessage !== null
+            ? 'upload-local-error'
+            : failureHeadline !== null
+              ? 'upload-server-error-hint'
+              : 'upload-dropzone-hint'
+        }
         onChoose={choose}
       />
 
