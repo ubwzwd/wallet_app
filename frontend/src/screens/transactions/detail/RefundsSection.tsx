@@ -1,9 +1,9 @@
 /**
- * "这笔支出被退了多少" (04 §4.7, decision §14.46 04-D-6, §14.53f).
+ * 「已关联的退款」 (04 §4.7, decisions §14.46 04-D-6, §14.53f, 屏幕稿 08).
  *
- * Every refund pointing at this expense — date, amount, note and the account the money came
- * back to (`source_id`, which only `refunds[]` carries) — plus the one line that answers the
- * question people actually open this page with: 已退 X / 可退 Y. Each row opens that refund.
+ * The beige side card on an expense: every refund pointing at it — date, amount, note and
+ * the account the money came back to (`source_id`, which only `refunds[]` carries) — and
+ * the one line people open this page for, 已退 X / 可退 Y. Each row opens that refund.
  *
  * `refundable` may be negative: over-refunding is allowed (decision §1.1), so the number is
  * shown as it is rather than clamped.
@@ -17,7 +17,9 @@ import { useLang } from '@/i18n';
 import { formatDate, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { Card, Text } from '@/ui';
+import { Icon, Text } from '@/ui';
+
+import { TintSideCard } from './parts';
 
 export interface RefundsSectionProps {
   refunds: readonly RefundRef[];
@@ -45,19 +47,9 @@ export function RefundsSection({
   const id = testID ?? 'detail-refunds';
 
   return (
-    <Card testID={id} style={styles.card}>
-      <Text variant="subheading" accessibilityRole="header">
-        {t('transaction:detail.refunds_title')}
-      </Text>
-      <Text variant="body" tone="secondary" testID={`${id}-summary`}>
-        {t('transaction:detail.refunds_summary', {
-          refunded: formatMoney(refundedTotal, currency, lang, { signDisplay: 'never' }),
-          refundable: formatMoney(refundable, currency, lang),
-        })}
-      </Text>
-
+    <TintSideCard title={t('transaction:detail.refunds_title')} testID={id}>
       {refunds.length === 0 ? (
-        <Text variant="caption" tone="muted" testID={`${id}-empty`}>
+        <Text variant="caption" tone="warning" testID={`${id}-empty`}>
           {t('transaction:detail.refunds_empty')}
         </Text>
       ) : (
@@ -65,6 +57,7 @@ export function RefundsSection({
           {refunds.map((r) => {
             const account = sourceNames[r.source_id];
             return (
+              // touch-target-exempt: `styles.row` is 52 tall and stretches the card's width.
               <Pressable
                 key={r.id}
                 accessibilityRole="link"
@@ -73,28 +66,36 @@ export function RefundsSection({
                 onPress={() => onOpen(r.id)}
                 style={({ pressed }) => [
                   styles.row,
-                  {
-                    borderColor: colors['border.default'],
-                    backgroundColor: pressed ? colors['bg.hover'] : 'transparent',
-                  },
+                  { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
                 ]}
               >
-                <Text variant="body" mono>
-                  {formatDate(r.occurred_at, lang)}
-                </Text>
+                <View style={[styles.well, { backgroundColor: colors['kind.refund.subtle'] }]}>
+                  <Icon name="undo-2" size={16} color={colors['kind.refund']} />
+                </View>
                 <View style={styles.rowMain}>
-                  {account ? (
-                    <Text variant="body" numberOfLines={1} testID={`${id}-account-${r.id}`}>
+                  {account !== undefined ? (
+                    <Text
+                      variant="body"
+                      weight={500}
+                      numberOfLines={1}
+                      testID={`${id}-account-${r.id}`}
+                    >
                       {account}
                     </Text>
                   ) : null}
-                  {r.note ? (
-                    <Text variant="caption" tone="muted" numberOfLines={1}>
-                      {r.note}
-                    </Text>
-                  ) : null}
+                  <Text variant="caption" tone="secondary" mono numberOfLines={1}>
+                    {r.note === null
+                      ? formatDate(r.occurred_at, lang)
+                      : `${formatDate(r.occurred_at, lang)} · ${r.note}`}
+                  </Text>
                 </View>
-                <Text variant="body" tone="refund" mono testID={`${id}-amount-${r.id}`}>
+                <Text
+                  variant="body"
+                  tone="warning"
+                  mono
+                  weight={500}
+                  testID={`${id}-amount-${r.id}`}
+                >
                   {formatMoney(r.amount, r.currency, lang)}
                 </Text>
               </Pressable>
@@ -102,22 +103,43 @@ export function RefundsSection({
           })}
         </View>
       )}
-    </Card>
+
+      <Text
+        variant="caption"
+        tone="warning"
+        mono
+        weight={500}
+        style={styles.summary}
+        testID={`${id}-summary`}
+      >
+        {t('transaction:detail.refunds_summary', {
+          refunded: formatMoney(refundedTotal, currency, lang, { signDisplay: 'never' }),
+          refundable: formatMoney(refundable, currency, lang),
+        })}
+      </Text>
+    </TintSideCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { gap: space['2'], alignSelf: 'stretch' },
   list: { alignSelf: 'stretch' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space['3'],
-    minHeight: 44,
+    gap: space['2'] + 3,
+    minHeight: 52,
     paddingVertical: space['2'],
     paddingHorizontal: space['1'],
     borderRadius: radius.sm,
-    borderBottomWidth: 1,
   },
-  rowMain: { flex: 1, gap: 2 },
+  well: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rowMain: { flex: 1, minWidth: 0, gap: 1 },
+  summary: { alignSelf: 'stretch', textAlign: 'right' },
 });

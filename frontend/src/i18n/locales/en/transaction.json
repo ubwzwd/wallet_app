@@ -1,5 +1,10 @@
 {
-  "kind": { "expense": "Expense", "income": "Income", "refund": "Refund", "transfer": "Transfer" },
+  "kind": {
+    "expense": "Expense",
+    "income": "Income",
+    "refund": "Refund",
+    "transfer": "Transfer"
+  },
   "picker": {
     "title_refund_origin": "Choose the original expense",
     "refunded_out": "Fully refunded",
@@ -158,13 +163,19 @@
     }
   },
   "transfer": {
-    "subtype": { "plain": "Regular transfer", "repayment": "Card repayment" },
+    "subtype": {
+      "plain": "Regular transfer",
+      "repayment": "Card repayment"
+    },
     "subtype_label": "Subtype",
     "direction_label": "Direction",
     "from_source": "From account",
     "to_source": "To account",
     "amount_in": "Amount received",
-    "role": { "in": "In", "out": "Out" },
+    "role": {
+      "in": "In",
+      "out": "Out"
+    },
     "counterparty_toggle": "The other side isn't in this app",
     "counterparty_label": "Counterparty",
     "single_leg_hint": "A single-leg transfer affects the account balance but isn't counted in income/expense stats",
@@ -293,10 +304,10 @@
   "detail": {
     "rate_used": "At the {{date}} rate: 1 {{from}} = {{rate}} {{to}}",
     "rate_fallback_hint": "No rate for that day — used the {{date}} rate instead",
-    "refunds_title": "Refunds",
+    "refunds_title": "Linked refunds",
     "refunds_summary": "Refunded {{refunded}} / Refundable {{refundable}}",
     "refunds_empty": "No refunds are linked to this expense yet. Use “Record a refund” when one arrives.",
-    "original_title": "Original expense",
+    "original_title": "Refund of this",
     "original_deleted": "The original expense was deleted",
     "original_none": "Not linked to an original expense",
     "original_link_action": "Link one",
@@ -341,6 +352,57 @@
     },
     "from_import": "Imported from {{filename}}",
     "kind_change_disabled_hint": "To change this to a transfer, delete it and re-enter it",
-    "archived_source_hint": "This account is archived — you can still edit this historical entry, but you can't switch it to another archived account"
+    "archived_source_hint": "This account is archived — you can still edit this historical entry, but you can't switch it to another archived account",
+    "weekday": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    },
+    "actions_open": "Edit",
+    "actions_sheet_title": "Change this {{kind}}",
+    "duplicate_action_hint": "Same merchant and category, dated today",
+    "refund_action_hint": "Create a refund and link it to this expense",
+    "unpair_action_hint": "Back to two single legs, each keeping its amount and account",
+    "pair_action_hint": "Find an opposite entry of the same amount and merge the two",
+    "converted_badge": "Converted",
+    "amount_original": "Original amount",
+    "amount_base": "In {{currency}}",
+    "counterparty_text": "{{name}} (text only)",
+    "recorded_by_unknown": "A member who left",
+    "source_label": "Source",
+    "source_manual": "Entered by hand",
+    "source_import": "Import #{{batch}}",
+    "leg_out_label": "Out leg",
+    "leg_in_label": "In leg",
+    "leg_external": "{{role}} · other side (outside the ledger)",
+    "leg_external_short": "{{role}} · other side",
+    "leg_count_pair": "2 legs",
+    "leg_count_single": "1 leg · other side outside the ledger",
+    "legs_hint": "Both legs are the same amount in the same currency, so it is counted once.",
+    "external_no_balance": "No balance",
+    "single_leg_card_hint": "Only one leg. If this money really came from another account in this ledger, use 「Link as the other leg」 to merge the two entries.",
+    "transfer_note_pair": "{{currency}} · moving money inside the ledger: no income, no expense, no change in net worth",
+    "transfer_note_single": "{{currency}} · not counted as income or expense, but net worth {{delta}}",
+    "impact": {
+      "title": "Effect on {{month}}",
+      "ledger_title": "Effect on the ledger",
+      "month_expense": "{{month}} expense",
+      "month_income": "{{month}} income",
+      "month_net": "{{month}} in and out",
+      "category": "{{category}} category",
+      "including": "incl. {{amount}} here",
+      "offset": "offset by {{amount}} here",
+      "after_delete_expense": "Expense after deleting",
+      "after_delete_income": "Income after deleting",
+      "unchanged": "Unchanged",
+      "net_worth": "Net worth",
+      "repaid": "Card repaid",
+      "single_title": "This is a single leg",
+      "single_body": "A two-leg transfer moves money inside the ledger and leaves net worth alone. A single leg is money arriving from outside, so net worth does move. Link it to its other leg and it stops affecting net worth."
+    }
   }
 }

@@ -98,6 +98,17 @@ function open(tx: Transaction): ReturnType<typeof renderRouter> {
   return renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/${tx.id}` });
 }
 
+/**
+ * 屏幕稿 08 at 375 puts the operations in a sheet behind the pinned 「修改」 bar, so a
+ * narrow test opens the sheet before it can press one.
+ */
+async function openActions(
+  router: ReturnType<typeof renderRouter>,
+): Promise<void> {
+  fireEvent.press(await router.findByTestId('tx-detail-actions-open'));
+  await router.findByTestId('tx-detail-actions-delete');
+}
+
 let api: MockApi;
 let wideSpy: jest.SpyInstance;
 
@@ -166,8 +177,12 @@ test('an expense lists its refunds with the account the money went back to, plus
   const router = open(EXPENSE);
 
   // The header says what it is, and never shows the transaction id (decision §14.52 A6).
-  expect(await router.findByTestId('tx-detail-header-merchant')).toHaveTextContent('京东订单');
-  expect(router.getByTestId('tx-detail-header-source')).toHaveTextContent('招行储蓄卡');
+  expect(await router.findByTestId('tx-detail-header-account-title')).toHaveTextContent(
+    '京东订单',
+  );
+  expect(router.getByTestId('tx-detail-header-account-sub')).toHaveTextContent(
+    containing('招行储蓄卡'),
+  );
   expect(router.getByTestId('tx-detail-header-category')).toHaveTextContent('消费购物 / 数码');
   expect(router.queryByText(EXPENSE.id)).toBeNull();
 
@@ -187,7 +202,8 @@ test('an expense lists its refunds with the account the money went back to, plus
 
 test('「登记退款」is offered on an expense and nowhere else', async () => {
   const router = open(EXPENSE);
-  expect(await router.findByTestId('tx-detail-actions-refund')).toBeTruthy();
+  await openActions(router);
+  expect(router.getByTestId('tx-detail-actions-refund')).toBeTruthy();
   router.unmount();
 
   queryClient.clear();
@@ -203,6 +219,7 @@ test('「登记退款」is offered on an expense and nowhere else', async () => 
   });
   const second = open(income);
   await second.findByTestId('tx-detail-header');
+  await openActions(second);
   expect(second.queryByTestId('tx-detail-actions-refund')).toBeNull();
   // 分享 was dropped for good (decision §14.52 A8).
   expect(second.queryByText('分享')).toBeNull();
@@ -211,7 +228,8 @@ test('「登记退款」is offered on an expense and nowhere else', async () => 
 test('「复制一笔」opens the form with copy_of, and 「登记退款」with kind + refund_of', async () => {
   const router = open(EXPENSE);
 
-  fireEvent.press(await router.findByTestId('tx-detail-actions-duplicate'));
+  await openActions(router);
+  fireEvent.press(router.getByTestId('tx-detail-actions-duplicate'));
   await waitFor(() =>
     expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
   );
@@ -220,7 +238,8 @@ test('「复制一笔」opens the form with copy_of, and 「登记退款」with 
 
   queryClient.clear();
   const second = open(EXPENSE);
-  fireEvent.press(await second.findByTestId('tx-detail-actions-refund'));
+  await openActions(second);
+  fireEvent.press(second.getByTestId('tx-detail-actions-refund'));
   await waitFor(() =>
     expect(second.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
   );
