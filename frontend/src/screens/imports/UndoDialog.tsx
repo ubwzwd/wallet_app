@@ -257,31 +257,59 @@ export function UndoDialogHost(): React.JSX.Element | null {
             {d.warnings.map((warning) => (
               <WarningCard key={warning.key} warning={warning} />
             ))}
+            {/* 屏幕稿 11's sheet spends its whole foot on the two buttons, so on a phone the
+                sentence goes above them instead of beside them. */}
+            {wide ? null : (
+              <Text variant="caption" tone="muted" testID="confirm-note">
+                {d.footNote}
+              </Text>
+            )}
           </ScrollView>
 
-          <View style={[styles.foot, { backgroundColor: colors['bg.surface'] }]}>
-            <Text
-              variant="caption"
-              tone="muted"
-              style={styles.footNote}
-              testID="confirm-note"
-            >
-              {d.footNote}
-            </Text>
-            <View style={styles.footActions}>
+          <View
+            style={[
+              wide ? styles.foot : styles.footNarrow,
+              { backgroundColor: colors['bg.surface'], borderTopColor: colors['border.default'] },
+            ]}
+          >
+            {wide ? (
+              <Text
+                variant="caption"
+                tone="muted"
+                style={styles.footNote}
+                testID="confirm-note"
+              >
+                {d.footNote}
+              </Text>
+            ) : null}
+            <View style={wide ? styles.footActions : styles.footCell}>
               <Button
                 label={d.cancelLabel}
                 variant="soft"
+                fullWidth={!wide}
                 onPress={() => settle(false)}
                 testID="confirm-cancel"
               />
-              <Button
-                label={armed ? d.confirmAgainLabel : d.confirmLabel}
-                variant="danger"
-                onPress={onConfirm}
-                testID="confirm-accept"
-              />
+              {wide ? (
+                <Button
+                  label={armed ? d.confirmAgainLabel : d.confirmLabel}
+                  variant="danger"
+                  onPress={onConfirm}
+                  testID="confirm-accept"
+                />
+              ) : null}
             </View>
+            {wide ? null : (
+              <View style={styles.footCellWide}>
+                <Button
+                  label={armed ? d.confirmAgainLabel : d.confirmLabel}
+                  variant="danger"
+                  fullWidth
+                  onPress={onConfirm}
+                  testID="confirm-accept"
+                />
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -359,8 +387,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: space['6'],
     paddingVertical: space['4'],
   },
+  footNarrow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['3'] - 2,
+    marginTop: space['4'],
+    paddingHorizontal: space['5'] - 2,
+    paddingTop: space['4'],
+    paddingBottom: space['5'],
+    borderTopWidth: 1,
+  },
   footNote: { flexShrink: 1, minWidth: 140 },
-  footActions: { flexDirection: 'row', gap: space['2'], flexGrow: 1, justifyContent: 'flex-end' },
+  footActions: { flexDirection: 'row', gap: space['2'] },
+  // 屏幕稿 11's sheet gives the destructive button the wider half of the foot.
+  footCell: { flex: 1, minWidth: 0 },
+  footCellWide: { flex: 1.4, minWidth: 0 },
 });
 
 export default UndoDialogHost;
