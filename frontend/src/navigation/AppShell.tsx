@@ -1,7 +1,7 @@
 /**
  * The responsive shell of 04 §1.4. One breakpoint (1024, decision §0.6):
  *
- *   wide   → a 252px sidebar beside the content area
+ *   wide   → a `SIDEBAR_WIDTH` column beside the content area
  *   narrow → a top bar above the content and a five-slot tab bar below it
  *
  * The shell also runs outside a ledger — `/settings` is reachable from the sidebar and
@@ -133,7 +133,7 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
       }}
     >
       {wide ? (
-        <Sidebar onOpenSwitcher={openSwitcher} />
+        <Sidebar />
       ) : ledger ? (
         <TopBarSurface onPressLedger={openSwitcher} />
       ) : (
@@ -141,7 +141,9 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
       )}
       <View style={{ flex: 1 }}>{children}</View>
       {showTabs ? <BottomTabBar onOpenSwitcher={openSwitcher} /> : null}
-      {ledger ? <LedgerSwitcher open={switcherOpen} onClose={closeSwitcher} /> : null}
+      {/* Wide layouts get mockup 01's dropdown, anchored under the sidebar's ledger card
+          and owned by the sidebar; only the narrow chrome opens this sheet. */}
+      {!wide && ledger ? <LedgerSwitcher open={switcherOpen} onClose={closeSwitcher} /> : null}
     </View>
   );
 }

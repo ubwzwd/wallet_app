@@ -24,8 +24,14 @@ import { Icon, type IconName, KIND_ICON, Sheet, Text } from '@/ui';
 
 import { isActivePath } from './Sidebar';
 
-/** Screen 01 at 375: 8 above, a 44 tall slot, 14 below. */
-export const TAB_BAR_HEIGHT = 66;
+/**
+ * Screen 01 at 375: 8 above, a 49 tall slot, 14 below.
+ *
+ * The centre slot is what sets the row's cross size: a 52 circle, a 4 gap and a 13 label
+ * line make 69, and `marginTop: -20` lifts 20 of that out of the row, leaving 49. Measured
+ * against the rendered bar, not assumed — the toast host offsets itself by this number.
+ */
+export const TAB_BAR_HEIGHT = 71;
 
 interface TabSpec {
   key: string;

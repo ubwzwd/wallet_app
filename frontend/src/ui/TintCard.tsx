@@ -5,6 +5,12 @@
  * It is the one place a whole surface takes a semantic tint, so the tone is the message:
  * an expense card is `kind.expense.subtle`, a warning note `status.warning.bg`. Everything
  * inside — label, number, prose — is painted in the matching foreground.
+ *
+ * Token note (§14.45): mockup 01 inks the expense and income wells one step darker than
+ * `kind.expense` / `kind.income`, which is what this component uses. The expense ink it
+ * draws happens to be `status.danger.fg`, but a big expense is not an error, and the
+ * income one has no token at all — so both wells keep their kind colour rather than
+ * borrowing a status colour for half the pair.
  */
 import React from 'react';
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';

@@ -1,10 +1,14 @@
 /**
  * Operations timeline on the transaction detail page (04 §4.7; decision §14.51).
  *
- * Newest first: time · person · action · what changed. People come from the member list
- * (`names`), you are "我"; a member who left the ledger keeps their name, nothing is
- * anonymised. `client` is deliberately not rendered — this release only has a web client
- * (decision §0.1), so showing it would be noise.
+ * Newest first, drawn the way mockups 07 / 08 draw it: an 8px dot in the gutter, then
+ * 「手动录入 · 我」 at 13/19, then the time underneath in small muted mono, then whatever
+ * that entry changed. The newest dot is solid `accent.solid`; the older ones step back to
+ * `border.strong`, so the reader's eye lands on the last thing that happened.
+ *
+ * People come from the member list (`names`), you are "我"; a member who left the ledger
+ * keeps their name, nothing is anonymised. `client` is deliberately not rendered — this
+ * release only has a web client (decision §0.1), so showing it would be noise.
  */
 import React from 'react';
 import { Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
@@ -14,7 +18,7 @@ import type { CategoryIndex } from '@/domain/categories';
 import { type Lang, useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
 import { formatDate, formatDateTime, formatMoney } from '@/i18n/format';
-import { density, radius, space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Text } from './Text';
 
@@ -145,7 +149,7 @@ export function EventTimeline({
 
   return (
     <View testID={id} style={[styles.wrap, style]}>
-      {ordered.map((event) => {
+      {ordered.map((event, position) => {
         const lines = changeLines(event);
         const open = expanded[event.id] === true;
         const visible = open ? lines : lines.slice(0, CHANGES_COLLAPSE_AT);
@@ -154,64 +158,72 @@ export function EventTimeline({
           batchId === null
             ? null
             : t('transaction:list.chip.from_batch', { batch: shortId(batchId) });
+        const newest = position === 0;
         return (
           <View key={event.id} style={styles.row} testID={`${id}-row-${event.id}`}>
-            <View style={styles.head}>
-              <Text variant="caption" tone="muted" mono>
+            <View
+              testID={`${id}-dot-${event.id}`}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: newest ? colors['accent.solid'] : colors['border.strong'],
+                },
+              ]}
+            />
+            <View style={styles.body}>
+              {/* 「手动录入 · 我」 — one line, the way the mockup writes it. */}
+              <Text weight={500} style={styles.title} testID={`${id}-action-${event.id}`}>
+                {`${t(`transaction:detail.event.${event.event}`)} · ${actorName(event.actor_id)}`}
+              </Text>
+              <Text mono tone="muted" style={styles.meta} testID={`${id}-at-${event.id}`}>
                 {formatDateTime(event.at, l)}
               </Text>
-              <Text variant="caption" tone="secondary" numberOfLines={1} style={styles.actor}>
-                {actorName(event.actor_id)}
-              </Text>
-              <Text variant="caption" testID={`${id}-action-${event.id}`}>
-                {t(`transaction:detail.event.${event.event}`)}
-              </Text>
-            </View>
 
-            {visible.map((line) => (
-              <Text key={line.field} variant="caption" tone="secondary">
-                {`${line.name} ${line.before} → ${line.after}`}
-              </Text>
-            ))}
-
-            {lines.length > CHANGES_COLLAPSE_AT && !open ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setExpanded((prev) => ({ ...prev, [event.id]: true }))}
-                testID={`${id}-expand-${event.id}`}
-                hitSlop={space['3']}
-              >
-                <Text variant="caption" tone="accent">
-                  {t('transaction:detail.events_collapsed', { count: lines.length })}
+              {visible.map((line) => (
+                <Text key={line.field} variant="caption" tone="secondary">
+                  {`${line.name} ${line.before} → ${line.after}`}
                 </Text>
-              </Pressable>
-            ) : null}
+              ))}
 
-            {/* A reverted (deleted) batch has no page left to open, so the caller drops
-                `onPressBatch` and the mark degrades to plain text (04 §4.7). */}
-            {batchId !== null && batchLabel !== null ? (
-              onPressBatch ? (
+              {lines.length > CHANGES_COLLAPSE_AT && !open ? (
                 <Pressable
-                  accessibilityRole="link"
-                  accessibilityLabel={batchLabel}
-                  onPress={() => onPressBatch(batchId)}
-                  testID={`${id}-batch-${event.id}`}
+                  accessibilityRole="button"
+                  onPress={() => setExpanded((prev) => ({ ...prev, [event.id]: true }))}
+                  testID={`${id}-expand-${event.id}`}
                   hitSlop={space['3']}
-                  style={({ pressed }) => [
-                    styles.batch,
-                    { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
-                  ]}
                 >
                   <Text variant="caption" tone="accent">
-                    {batchLabel}
+                    {t('transaction:detail.events_collapsed', { count: lines.length })}
                   </Text>
                 </Pressable>
-              ) : (
-                <Text variant="caption" tone="muted" testID={`${id}-batch-${event.id}`}>
-                  {batchLabel}
-                </Text>
-              )
-            ) : null}
+              ) : null}
+
+              {/* A reverted (deleted) batch has no page left to open, so the caller drops
+                  `onPressBatch` and the mark degrades to plain text (04 §4.7). */}
+              {batchId !== null && batchLabel !== null ? (
+                onPressBatch ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={batchLabel}
+                    onPress={() => onPressBatch(batchId)}
+                    testID={`${id}-batch-${event.id}`}
+                    hitSlop={space['3']}
+                    style={({ pressed }) => [
+                      styles.batch,
+                      { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+                    ]}
+                  >
+                    <Text variant="caption" tone="accent">
+                      {batchLabel}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Text variant="caption" tone="muted" testID={`${id}-batch-${event.id}`}>
+                    {batchLabel}
+                  </Text>
+                )
+              ) : null}
+            </View>
           </View>
         );
       })}
@@ -220,9 +232,13 @@ export function EventTimeline({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space['2'], alignSelf: 'stretch' },
-  row: { minHeight: 44, gap: space['1'], paddingVertical: space['1'] },
-  head: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
-  actor: { maxWidth: density.listRowHeight * 2 },
+  // Mockups 07 / 08: 12 between entries, a 10 gutter between the dot and the text.
+  wrap: { gap: space['3'], alignSelf: 'stretch' },
+  row: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
+  // The dot hangs beside the first line rather than centring on the whole entry.
+  dot: { width: 8, height: 8, borderRadius: radius.pill, flexShrink: 0, marginTop: 6 },
+  body: { flex: 1, minWidth: 0, gap: space['1'] },
+  title: { fontSize: 13, lineHeight: 19 },
+  meta: { fontSize: 12, lineHeight: 17 },
   batch: { alignSelf: 'flex-start', borderRadius: radius.sm },
 });

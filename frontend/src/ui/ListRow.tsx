@@ -6,6 +6,10 @@
  *
  * 60 tall on a wide screen, 56 narrow (the C2 density's `listRowHeight`). Hover tints the
  * row with `bg.hover`; the divider between rows is drawn by `ListCard`.
+ *
+ * Name clash to watch: `@/domain/transfers` also exports a `ListRow` — a *type*, imported
+ * by the transaction screens. A file that needs both must alias one of them, e.g.
+ * `import { ListRow as ListRowView } from '@/ui'`; do not rename the domain type.
  */
 import React from 'react';
 import {

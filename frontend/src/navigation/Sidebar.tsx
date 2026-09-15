@@ -15,20 +15,24 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { Ledger, User } from '@/api/types';
+import type { Ledger, User, Uuid } from '@/api/types';
 import { type RouteHref, routes } from '@/domain/routes';
-import { memberLabel, useMembers } from '@/queries';
+import { memberLabel, useLedgers, useMembers } from '@/queries';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
 import { useOptionalLedgerContext } from '@/store/LedgerContext';
-import { Button, Icon, type IconName, Text } from '@/ui';
+import { Avatar, Button, Icon, type IconName, Text } from '@/ui';
 import { PREF_NAMES, getPref, getPrefSync } from '@/utils/prefs';
 
-import { LetterAvatar } from './LetterAvatar';
+import { LedgerSwitcherPopover } from './LedgerSwitcher';
 
-/** Screen 01 at 1440: a 252px column of `bg.surface`, padded 20 / 14. */
-export const SIDEBAR_WIDTH = 252;
+/**
+ * Screen 01 at 1440. The mockup's column is `width:252px;padding:20px 14px` with no
+ * border-box reset, so the white band it paints is 252 + 2×14 = 280 wide; RN's box model
+ * is border-box, so the same 14 of padding needs the outer 280 here.
+ */
+export const SIDEBAR_WIDTH = 280;
 
 /** At most this many members are named in full on the ledger card; beyond it, a count. */
 const NAMED_MEMBER_LIMIT = 3;
@@ -167,7 +171,9 @@ function LedgerCard({
   const meta = useLedgerCardMeta(ledger);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors['bg.subtle'] }]}>
+    // Screen 01 fills the card with `bg.canvas` at rest and darkens it to `bg.subtle` on
+    // the press — the other way round, the press was one invisible step away from resting.
+    <View style={[styles.card, { backgroundColor: colors['bg.canvas'] }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('common:nav.switch_ledger')}
@@ -175,10 +181,10 @@ function LedgerCard({
         testID="sidebar-ledger"
         style={({ pressed }) => [
           styles.cardBody,
-          { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+          { backgroundColor: pressed ? colors['bg.subtle'] : 'transparent' },
         ]}
       >
-        <LetterAvatar name={ledger.name} size={32} shape="square" tone="accent" />
+        <Avatar name={ledger.name} size={32} shape="square" tone="accent" />
         <View style={styles.cardText}>
           <Text weight={600} style={styles.cardName} numberOfLines={1}>
             {ledger.name}
@@ -196,7 +202,7 @@ function LedgerCard({
         testID="sidebar-ledger-settings"
         style={({ pressed }) => [
           styles.cardChevron,
-          { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+          { backgroundColor: pressed ? colors['bg.subtle'] : 'transparent' },
         ]}
       >
         <Icon name="chevron-right" size={16} color={colors['fg.secondary']} />
@@ -205,7 +211,23 @@ function LedgerCard({
   );
 }
 
-/** Screen 13: outside any ledger the card names the ledger list instead. */
+/**
+ * Which card sits at the top of the column.
+ *
+ * Mockup 14 (个人设置 1440) keeps the *ledger* card on `/settings`, so the chrome does not
+ * change identity when the user opens 「我的」; only mockup 13's own pages — `/ledgers`,
+ * `/ledgers/new`, `/ledgers/join` — swap it for 「账本管理 · N 本」. A user with no ledger
+ * to name gets the list card wherever they are, because there is nothing else to show.
+ *
+ * (The `/ledgers*` branch cannot be reached yet: `app/(app)/_layout.tsx` still renders
+ * those pages without the shell. It is written the way §14.56 rules so the card is right
+ * the moment that gate widens.)
+ */
+export function showsLedgerManageCard(pathname: string, ledger: Ledger | undefined): boolean {
+  return ledger === undefined || isActivePath(pathname, routes.ledgers(), false);
+}
+
+/** Screen 13: on the ledger pages themselves the card names the ledger list instead. */
 function LedgerManageCard({
   count,
   onPress,
@@ -226,10 +248,10 @@ function LedgerManageCard({
         styles.card,
         styles.cardBody,
         styles.cardAlone,
-        { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.subtle'] },
+        { backgroundColor: pressed ? colors['bg.subtle'] : colors['bg.canvas'] },
       ]}
     >
-      <LetterAvatar name={title} size={32} shape="square" tone="accent" />
+      <Avatar name={title} size={32} shape="square" tone="accent" />
       <View style={styles.cardText}>
         <Text weight={600} style={styles.cardName} numberOfLines={1}>
           {title}
@@ -245,11 +267,7 @@ function LedgerManageCard({
 
 // -------------------------------------------------------------------------- sidebar
 
-export interface SidebarProps {
-  onOpenSwitcher(): void;
-}
-
-export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
+export function Sidebar(): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
@@ -263,17 +281,48 @@ export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
   const destinations = useSidebarDestinations(ledgerId);
   const homeHref = ledgerId === null ? null : routes.l(ledgerId).home();
 
+  // Outside a ledger route the list has to come from the cache; inside one the context
+  // already holds it, and this is the same query key, so it costs nothing extra.
+  const known = useLedgers().data?.items;
+  const ledgers = ledgerContext?.ledgers ?? known ?? [];
+  const ledger =
+    ledgerContext?.ledger ??
+    (ledgerId === null ? undefined : ledgers.find((l) => l.id === ledgerId));
+
+  const manageCard = showsLedgerManageCard(pathname, ledger);
+
+  const cardRef = React.useRef<View | null>(null);
+  const [switcherOpen, setSwitcherOpen] = React.useState(false);
+
+  const pickLedger = (id: Uuid): void => {
+    setSwitcherOpen(false);
+    // Inside a ledger, switching keeps the page you are on (04 §2.2). Outside one there is
+    // no page to keep, so picking a ledger opens it.
+    if (ledgerContext) ledgerContext.switchTo(id);
+    else router.navigate(routes.l(id).home());
+  };
+
   const me = userLabel(user);
   const role = ledgerContext?.myRole;
 
   return (
     <View testID="sidebar" style={[styles.root, { backgroundColor: colors['bg.surface'] }]}>
-      {ledgerContext ? (
-        <LedgerCard
-          ledger={ledgerContext.ledger}
-          onOpenSwitcher={onOpenSwitcher}
-          onOpenSettings={() => router.navigate(routes.l(ledgerContext.ledgerId).settings())}
-        />
+      {ledger !== undefined && !manageCard ? (
+        <View ref={cardRef} collapsable={false}>
+          <LedgerCard
+            ledger={ledger}
+            onOpenSwitcher={() => setSwitcherOpen(true)}
+            onOpenSettings={() => router.navigate(routes.l(ledger.id).settings())}
+          />
+          <LedgerSwitcherPopover
+            open={switcherOpen}
+            onClose={() => setSwitcherOpen(false)}
+            anchorRef={cardRef}
+            ledgers={ledgers}
+            currentId={ledger.id}
+            onPick={pickLedger}
+          />
+        </View>
       ) : (
         <LedgerManageCard
           count={user?.ledger_count ?? 0}
@@ -313,7 +362,7 @@ export function Sidebar({ onOpenSwitcher }: SidebarProps): React.JSX.Element {
           { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
         ]}
       >
-        <LetterAvatar name={me} size={32} shape="round" tone="subtle" />
+        <Avatar name={me} size={32} shape="circle" tone="muted" />
         <View style={styles.cardText}>
           <Text weight={500} style={styles.userName} numberOfLines={1}>
             {me}

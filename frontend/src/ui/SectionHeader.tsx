@@ -48,7 +48,16 @@ export function SectionHeader({
       </Text>
       {meta !== undefined ? (
         typeof meta === 'string' ? (
-          <Text variant="caption" tone="secondary" mono weight={500} testID={`${id}-meta`}>
+          <Text
+            variant="caption"
+            tone="secondary"
+            mono
+            weight={500}
+            // 13/19, the step mockup 01 draws for 「月均 6,220 · 峰值 8,100（4 月）」 —
+            // one above `caption`, which is why it is spelled out here.
+            style={styles.meta}
+            testID={`${id}-meta`}
+          >
             {meta}
           </Text>
         ) : (
@@ -84,4 +93,5 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   title: { flexShrink: 1, marginRight: 'auto' },
+  meta: { fontSize: 13, lineHeight: 19 },
 });
