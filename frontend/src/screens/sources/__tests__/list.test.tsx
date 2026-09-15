@@ -1,5 +1,9 @@
 /**
  * `/l/:ledgerId/sources` — the account list (04 §4.8, §8.3; decisions §3, §14.48, §14.50).
+ *
+ * The screen has two shapes since 屏幕稿 09 (决策 §14.45): narrow keeps one white card per
+ * account type with its converted subtotal, wide draws a single table with a
+ * 「合计 · 在用」 foot strip. Every rule below holds in both.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -133,6 +137,21 @@ function renderList(url = `/l/${LEDGER_ID}/sources`): ReturnType<typeof renderRo
   return renderRouter(ROUTES, { initialUrl: url, wrapper: Wrapper });
 }
 
+/** Switches the layout under test to the 1440 frame. */
+function goWide(): void {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+}
+
+/** The three actions moved behind the row's 「···」 menu (屏幕稿 09). */
+async function openRowMenu(id: string): Promise<void> {
+  fireEvent.press(await screen.findByTestId(`source-menu-${id}`));
+}
+
+/** The text a `<Text>` node renders, whatever shape its children take. */
+function textOf(testID: string): string {
+  return String(screen.getByTestId(testID).props.children);
+}
+
 beforeEach(async () => {
   api = mockApi();
   await setAuthToken('test-token');
@@ -162,37 +181,61 @@ test('accounts are grouped into the four types, each with its converted subtotal
     expect(screen.getByTestId(`source-group-${type}`)).toBeTruthy();
   }
   // The archived checking account is NOT part of its group's subtotal (decision §14.50).
-  expect(screen.getByTestId('source-subtotal-checking').props.children).toContain(
-    formatMoney('10000.0000', 'CNY', 'zh'),
-  );
-  expect(screen.getByTestId('source-subtotal-credit').props.children).toContain(
-    formatMoney('-3204.0000', 'CNY', 'zh'),
-  );
-  expect(screen.getByTestId('source-subtotal-cash').props.children).toContain(
-    formatMoney('500.0000', 'CNY', 'zh'),
-  );
+  expect(textOf('source-subtotal-checking')).toContain(formatMoney('10000.0000', 'CNY', 'zh'));
+  expect(textOf('source-subtotal-credit')).toContain(formatMoney('-3204.0000', 'CNY', 'zh'));
+  expect(textOf('source-subtotal-cash')).toContain(formatMoney('500.0000', 'CNY', 'zh'));
   // The SGD account's subtotal is its converted value, not its own-currency balance.
-  expect(screen.getByTestId('source-subtotal-other').props.children).toContain(
-    formatMoney('1000.0000', 'CNY', 'zh'),
-  );
+  expect(textOf('source-subtotal-other')).toContain(formatMoney('1000.0000', 'CNY', 'zh'));
 });
 
-test('a credit card reads as "owes", and a foreign account shows its converted value and rate date', async () => {
+test('a credit card shows its debt as a negative amount, and a foreign account its converted value', async () => {
   seedList();
   renderList();
 
-  expect(await screen.findByTestId('source-balance-src-credit')).toBeTruthy();
-  expect(screen.getByTestId('source-balance-src-credit').props.children).toContain(
-    formatMoney('3204.0000', 'CNY', 'zh'),
-  );
-  expect(screen.getByText(/欠 /)).toBeTruthy();
+  expect(await screen.findByTestId('source-row-src-credit-amount')).toBeTruthy();
+  // 屏幕稿 09 paints the debt as a signed number in the expense colour.
+  const debt = screen.getByTestId('source-row-src-credit-amount');
+  expect(String(debt.props.children)).toBe(formatMoney('-3204.0000', 'CNY', 'zh'));
+  expect(debt).toHaveStyle({ color: '#AC4335' });
 
-  expect(screen.getByTestId('source-balance-base-src-other').props.children).toContain(
+  expect(String(screen.getByTestId('source-row-src-other-amount-sub').props.children)).toContain(
     formatMoney('1000.0000', 'CNY', 'zh'),
   );
-  expect(screen.getByTestId('source-rate-date-src-other')).toBeTruthy();
   // A base-currency account has no second line.
-  expect(screen.queryByTestId('source-balance-base-src-cash')).toBeNull();
+  expect(screen.queryByTestId('source-row-src-cash-amount-sub')).toBeNull();
+});
+
+test('the wide table gives every account a row, and the foot strip the total of the active ones', async () => {
+  goWide();
+  seedList();
+  renderList();
+
+  expect(await screen.findByTestId('sources-table')).toBeTruthy();
+  for (const id of ['src-checking', 'src-credit', 'src-cash', 'src-other']) {
+    expect(screen.getByTestId(`source-row-${id}`)).toBeTruthy();
+  }
+  // The archived account is not in the table above the foot strip.
+  expect(screen.queryByTestId('source-row-src-archived')).toBeNull();
+
+  // 折算 column: the converted value plus the rate date, 「—」 in the base currency.
+  expect(textOf('source-balance-base-src-other')).toContain('1,000.00');
+  expect(textOf('source-rate-date-src-other')).toContain(formatDate('2026-09-11', 'zh'));
+  expect(textOf('source-converted-src-cash')).toBe('—');
+
+  // 合计 · 在用 = 10000 − 3204 + 500 + 1000, and the currencies are mixed.
+  expect(textOf('sources-net-worth')).toBe(formatMoney('8296.0000', 'CNY', 'zh'));
+  expect(screen.getByTestId('sources-table-mixed')).toBeTruthy();
+});
+
+test('the wide page header carries the counts and net worth inline', async () => {
+  goWide();
+  seedList();
+  renderList();
+
+  const meta = String((await screen.findByTestId('sources-meta')).props.children);
+  expect(meta).toContain('4 个在用');
+  expect(meta).toContain('1 个已归档');
+  expect(meta).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
 });
 
 test('archived accounts stay out of the three numbers and are folded away by default', async () => {
@@ -201,13 +244,14 @@ test('archived accounts stay out of the three numbers and are folded away by def
 
   expect(await screen.findByTestId('sources-assets')).toBeTruthy();
   // assets = 10000 + 500 + 1000 (SGD converted); the archived 700 is excluded.
-  expect(screen.getByText(formatMoney('11500.0000', 'CNY', 'zh'))).toBeTruthy();
-  expect(screen.getByText(formatMoney('3204.0000', 'CNY', 'zh'))).toBeTruthy();
-  expect(screen.getByText(formatMoney('8296.0000', 'CNY', 'zh'))).toBeTruthy();
+  expect(textOf('sources-assets')).toContain(formatMoney('11500.0000', 'CNY', 'zh'));
+  expect(textOf('sources-liabilities')).toContain(formatMoney('3204.0000', 'CNY', 'zh'));
+  expect(textOf('sources-net-worth')).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
+  expect(textOf('sources-excluded-archived')).toContain('1');
 
   // Folded: the section names the count but no archived row is on screen.
   expect(screen.getByTestId('sources-archived-toggle')).toBeTruthy();
-  expect(screen.getByText('已归档（1）')).toBeTruthy();
+  expect(textOf('sources-archived-count')).toContain('1');
   expect(screen.queryByTestId('source-row-src-archived')).toBeNull();
 });
 
@@ -216,14 +260,13 @@ test('?include_archived=1 expands the section, greying each row with its archive
   renderList(`/l/${LEDGER_ID}/sources?include_archived=1`);
 
   expect(await screen.findByTestId('source-row-src-archived')).toBeTruthy();
-  expect(screen.getByTestId('source-archived-at-src-archived').props.children).toContain(
-    formatDate('2026-08-20', 'zh'),
-  );
-  expect(screen.getByTestId('source-archived-hint-src-archived').props.children).toBe(
-    '余额不计入净资产',
-  );
+  expect(
+    String(screen.getByTestId('source-row-src-archived-amount-sub').props.children),
+  ).toContain(formatDate('2026-08-20', 'zh'));
+  // The block says out loud that these balances are out of net worth.
+  expect(textOf('sources-archived-hint')).toContain('不计入净资产');
   // Still out of the three numbers while expanded.
-  expect(screen.getByText(formatMoney('8296.0000', 'CNY', 'zh'))).toBeTruthy();
+  expect(textOf('sources-net-worth')).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
 });
 
 test('toggling the archived section writes include_archived into the URL', async () => {
@@ -257,11 +300,23 @@ test('pressing a row opens that account for editing', async () => {
   );
 });
 
+test('the row menu opens the edit form as well', async () => {
+  seedList();
+  const router = renderList();
+
+  await openRowMenu('src-cash');
+  fireEvent.press(await screen.findByTestId('source-edit-src-cash'));
+  await waitFor(() =>
+    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources/src-cash/edit`),
+  );
+});
+
 test('archiving confirms with the balance leaving net worth, then PATCHes archived + updated_at', async () => {
   seedList();
   mockPatch(`${SOURCES_PATH}/src-checking`, { ...checking, archived: true });
   renderList();
 
+  await openRowMenu('src-checking');
   fireEvent.press(await screen.findByTestId('source-archive-src-checking'));
 
   const dialog = await screen.findByTestId('confirm-dialog');
@@ -285,6 +340,7 @@ test('cancelling the archive confirmation sends nothing', async () => {
   seedList();
   renderList();
 
+  await openRowMenu('src-checking');
   fireEvent.press(await screen.findByTestId('source-archive-src-checking'));
   await act(async () => {
     fireEvent.press(await screen.findByTestId('confirm-cancel'));
@@ -302,6 +358,7 @@ test('a delete refused with source_has_transactions explains that archiving is t
   );
   renderList();
 
+  await openRowMenu('src-checking');
   fireEvent.press(await screen.findByTestId('source-delete-src-checking'));
   // The delete confirmation is double-tap (it cannot be undone).
   await act(async () => {
@@ -315,7 +372,9 @@ test('a delete refused with source_has_transactions explains that archiving is t
     (await screen.findByTestId('source-delete-blocked-src-checking')).props.children,
   ).toBe('这个账户下有交易，只能归档');
   // The global error toast carried the server's copy as well (04 §3.9).
-  await waitFor(() => expect(handlers.notify).toHaveBeenCalledWith('error', expect.any(String), expect.anything()));
+  await waitFor(() =>
+    expect(handlers.notify).toHaveBeenCalledWith('error', expect.any(String), expect.anything()),
+  );
 });
 
 // ----------------------------------------------------------- the title (04 §1.4)
@@ -329,7 +388,7 @@ test('the narrow layout publishes the title to the top bar instead of printing i
 });
 
 test('the wide layout carries the title on the page', async () => {
-  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  goWide();
   seedList();
   renderList();
 
