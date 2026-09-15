@@ -1,5 +1,10 @@
 /** Jest config: jest-expo preset (React Native runtime + Testing Library). */
 module.exports = {
+  // Bound the worker pool: several jest runs share this machine (parallel orchestrator
+  // worktrees plus the dev server), and the default of CPUs-1 workers each has taken
+  // the whole WSL VM down with it twice. Four workers keep a run well under a few GB.
+  maxWorkers: 4,
+  workerIdleMemoryLimit: '768MB',
   preset: 'jest-expo',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
