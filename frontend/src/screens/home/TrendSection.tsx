@@ -1,13 +1,13 @@
 /**
- * Home block 4 (04 §4.4, decisions §7 / §14.52 B20 / A21): the 12-month expense trend.
+ * Home block 4 (screen 01, 04 §4.4, decisions §7 / §14.52 B20 / A21): 「近 12 个月支出」.
  *
- * One line, expenses only — income deliberately stays out (two lines plus a legend do not
- * fit). The monthly average and the peak are kept as two small figures in the block's top
- * right (decision §14.52 A21, confirmed 2026-09-11); both are computed with the decimal
- * money helpers, never with floats. Tapping a month switches the summary block above to it.
+ * Twelve columns, expenses only — income deliberately stays out. The monthly average and
+ * the peak are the section header's meta (decision §14.52 A21, confirmed 2026-09-11); both
+ * are computed with the decimal money helpers, never with floats. The narrow header keeps
+ * the average alone, as the mockup draws it. Tapping a column switches the month above it.
  */
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { UseQueryResult } from '@tanstack/react-query';
 
@@ -16,12 +16,21 @@ import { cmpMoney, formatMoney4, parseMoney } from '@/domain';
 import { useLang } from '@/i18n';
 import { formatMoney, formatMonthShort } from '@/i18n/format';
 import { space } from '@/theme/tokens';
-import { EmptyState, Skeleton, Text, TrendChart, type TrendPoint } from '@/ui';
+import { useIsWide } from '@/theme/useBreakpoint';
+import {
+  BarChart,
+  type BarChartPoint,
+  EmptyState,
+  ListCard,
+  SectionHeader,
+  Skeleton,
+  Text,
+} from '@/ui';
 
 export interface TrendSectionProps {
   query: UseQueryResult<StatsTrend>;
   baseCurrency: string;
-  /** The month the summary block is showing; drawn with a larger dot. */
+  /** The month the page is showing; drawn as the solid column. */
   month: string;
   onPressMonth(month: string): void;
 }
@@ -33,7 +42,7 @@ export interface TrendStats {
   peakMonth: string | null;
 }
 
-export function trendStats(months: readonly TrendPoint[]): TrendStats {
+export function trendStats(months: readonly BarChartPoint[]): TrendStats {
   if (months.length === 0) return { average: '0.0000', peak: '0.0000', peakMonth: null };
   const total = months.reduce((acc, m) => acc + parseMoney(m.expense), 0n);
   let peak = months[0];
@@ -53,26 +62,51 @@ export function TrendSection({
 }: TrendSectionProps): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
+  const wide = useIsWide();
 
-  const title = (
-    <Text variant="heading" accessibilityRole="header">
-      {t('stats:home.trend_title')}
-    </Text>
+  const stats = query.data ? trendStats(query.data.months) : null;
+
+  const meta =
+    stats === null || stats.peakMonth === null ? undefined : (
+      <View style={styles.meta}>
+        <Text variant="caption" tone="secondary" mono weight={500} testID="home-trend-average">
+          {t('stats:home.trend_average', {
+            amount: formatMoney(stats.average, baseCurrency, lang),
+          })}
+        </Text>
+        {wide ? (
+          <>
+            <Text variant="caption" tone="muted">
+              ·
+            </Text>
+            <Text variant="caption" tone="secondary" mono weight={500} testID="home-trend-peak">
+              {t('stats:home.trend_peak', {
+                amount: formatMoney(stats.peak, baseCurrency, lang),
+                month: formatMonthShort(stats.peakMonth, lang),
+              })}
+            </Text>
+          </>
+        ) : null}
+      </View>
+    );
+
+  const header = (
+    <SectionHeader title={t('stats:home.trend_title')} meta={meta} testID="home-trend-header" />
   );
 
   if (query.isPending) {
     return (
-      <View style={{ gap: space['2'] }} testID="home-trend-loading">
-        {title}
-        <Skeleton variant="card" height={140} />
+      <View style={styles.section} testID="home-trend-loading">
+        {header}
+        <Skeleton variant="card" height={wide ? 160 : 100} />
       </View>
     );
   }
 
   if (query.isError) {
     return (
-      <View style={{ gap: space['2'] }} testID="home-trend">
-        {title}
+      <View style={styles.section} testID="home-trend">
+        {header}
         <EmptyState
           icon="alert-triangle"
           title={t('stats:home.error_retry')}
@@ -83,44 +117,25 @@ export function TrendSection({
     );
   }
 
-  const months = query.data.months;
-  const stats = trendStats(months);
-
   return (
-    <View style={{ gap: space['2'] }} testID="home-trend">
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'baseline',
-          flexWrap: 'wrap',
-          gap: space['2'],
-        }}
-      >
-        <View style={{ flex: 1, minWidth: 140 }}>{title}</View>
-        {stats.peakMonth !== null ? (
-          <View style={{ flexDirection: 'row', gap: space['2'], flexWrap: 'wrap' }}>
-            <Text variant="caption" tone="secondary" mono testID="home-trend-average">
-              {t('stats:home.trend_average', {
-                amount: formatMoney(stats.average, baseCurrency, lang),
-              })}
-            </Text>
-            <Text variant="caption" tone="secondary" mono testID="home-trend-peak">
-              {t('stats:home.trend_peak', {
-                amount: formatMoney(stats.peak, baseCurrency, lang),
-                month: formatMonthShort(stats.peakMonth, lang),
-              })}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      <TrendChart
-        months={months}
-        currency={baseCurrency}
-        selected={month}
-        onPressMonth={onPressMonth}
-        testID="home-trend-chart"
-      />
+    <View style={styles.section} testID="home-trend">
+      {header}
+      <ListCard style={wide ? styles.cardWide : styles.cardNarrow}>
+        <BarChart
+          months={query.data.months}
+          currency={baseCurrency}
+          selected={month}
+          onPressMonth={onPressMonth}
+          testID="home-trend-chart"
+        />
+      </ListCard>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  section: { alignSelf: 'stretch', gap: space['2'] + 2 },
+  meta: { flexDirection: 'row', alignItems: 'baseline', gap: space['2'], flexShrink: 1 },
+  cardWide: { paddingHorizontal: space['5'], paddingVertical: space['4'] },
+  cardNarrow: { paddingHorizontal: space['3'] + 2, paddingVertical: space['3'] },
+});
