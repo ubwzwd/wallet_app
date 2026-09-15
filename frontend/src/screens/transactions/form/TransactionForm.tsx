@@ -245,6 +245,7 @@ export function TransactionForm({
       submitting={submitting}
       submitDisabled={submitDisabled}
       saveAgainLabel={showSaveAndNext ? t('transaction:form.save_and_next') : undefined}
+      saveAgainShortLabel={t('transaction:form.save_and_next_short')}
       onSaveAgain={showSaveAndNext ? () => submit(true) : undefined}
       shortcutHint={t('transaction:form.shortcut_hint')}
     />
@@ -288,7 +289,7 @@ export function TransactionForm({
         {banner}
         <PageHeader
           title={pageTitle ?? t('transaction:form.page_title')}
-          meta={
+          actions={
             <Text variant="caption" tone="muted" testID="tx-form-ledger-meta">
               {t('transaction:form.ledger_meta', {
                 ledger: ledger.name,

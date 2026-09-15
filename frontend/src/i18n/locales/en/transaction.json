@@ -128,6 +128,8 @@
     "counterparty_currency_locked_hint": "There's only one leg, so the currency follows the selected account"
   },
   "form": {
+    "picker_more_filters": "+ More",
+    "save_and_next_short": "Add another",
     "page_title": "New entry",
     "page_title_edit": "Edit",
     "ledger_meta": "Into {{ledger}} · base currency {{currency}}",

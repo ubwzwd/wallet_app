@@ -48,6 +48,13 @@ export function PickerFilters({
 }: PickerFiltersProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
+  // `flexBasis: 0` is a *height* of 0 once the row stacks, so the grow style is only ever
+  // applied while the three controls really do sit side by side.
+  const cell = wide ? styles.grow : undefined;
+  // 375 has room for the search box and the condition chips only; the account and the date
+  // range hide behind 「+ 更多」, exactly as mockup 06's sheet draws them.
+  const [more, setMore] = React.useState(false);
+  const showExtras = wide || more;
 
   const conditions: React.ReactNode[] = [];
   if (fixed.kind && fixed.kind.length > 0) {
@@ -89,11 +96,21 @@ export function PickerFilters({
     );
   }
   if (toolbar) conditions.push(<View key="toolbar">{toolbar}</View>);
+  if (!wide && !more) {
+    conditions.push(
+      <Chip
+        key="more"
+        label={t('transaction:form.picker_more_filters')}
+        onPress={() => setMore(true)}
+        testID={`${id}-more`}
+      />,
+    );
+  }
 
   return (
     <>
       <View style={wide ? styles.rowWide : styles.rowNarrow}>
-        <View style={styles.grow}>
+        <View style={cell}>
           <TextField
             testID={`${id}-search`}
             value={filters.q}
@@ -103,30 +120,34 @@ export function PickerFilters({
             prefix={<Icon name="search" size={16} color={colors['fg.muted']} />}
           />
         </View>
-        <SourcePicker
-          testID={`${id}-source`}
-          sources={sources}
-          value={filters.source_id}
-          onChange={(source_id) => onChange((f) => ({ ...f, source_id }))}
-          lang={lang}
-          style={styles.grow}
-        />
-        <View style={styles.dates}>
-          <DateField
-            testID={`${id}-from`}
-            label={t('transaction:picker.date_from')}
-            value={filters.from}
-            onChange={(from) => onChange((f) => ({ ...f, from }))}
-            style={styles.grow}
+        {showExtras ? (
+          <SourcePicker
+            testID={`${id}-source`}
+            sources={sources}
+            value={filters.source_id}
+            onChange={(source_id) => onChange((f) => ({ ...f, source_id }))}
+            lang={lang}
+            style={cell}
           />
-          <DateField
-            testID={`${id}-to`}
-            label={t('transaction:picker.date_to')}
-            value={filters.to}
-            onChange={(to) => onChange((f) => ({ ...f, to }))}
-            style={styles.grow}
-          />
-        </View>
+        ) : null}
+        {showExtras ? (
+          <View style={wide ? styles.dates : styles.datesNarrow}>
+            <DateField
+              testID={`${id}-from`}
+              label={t('transaction:picker.date_from')}
+              value={filters.from}
+              onChange={(from) => onChange((f) => ({ ...f, from }))}
+              style={styles.half}
+            />
+            <DateField
+              testID={`${id}-to`}
+              label={t('transaction:picker.date_to')}
+              value={filters.to}
+              onChange={(to) => onChange((f) => ({ ...f, to }))}
+              style={styles.half}
+            />
+          </View>
+        ) : null}
       </View>
       {conditions.length > 0 ? (
         <View style={styles.conditions}>
@@ -194,6 +215,8 @@ const styles = StyleSheet.create({
   rowWide: { flexDirection: 'row', gap: space['3'], alignItems: 'flex-start' },
   rowNarrow: { gap: space['2'] },
   dates: { flexDirection: 'row', gap: space['2'], flexGrow: 1, flexShrink: 1, flexBasis: 0 },
+  datesNarrow: { flexDirection: 'row', gap: space['2'] },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
   conditions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space['2'] },
   footer: {
     flexDirection: 'row',

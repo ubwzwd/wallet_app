@@ -38,6 +38,8 @@ export interface SummaryCardProps {
   submitting: boolean;
   submitDisabled: boolean;
   saveAgainLabel?: string;
+  /** The bottom bar has room for 「再记一笔」, not the full 「保存并再记一笔」. */
+  saveAgainShortLabel?: string;
   onSaveAgain?(): void;
   /** ⌘↵ 保存 · ⌘⇧↵ 保存并继续 — wide only, where a keyboard is assumed. */
   shortcutHint: string;
@@ -55,6 +57,7 @@ export function SummaryCard({
   submitting,
   submitDisabled,
   saveAgainLabel,
+  saveAgainShortLabel,
   onSaveAgain,
   shortcutHint,
   testID,
@@ -82,7 +85,7 @@ export function SummaryCard({
               testID="tx-submit-again"
               variant="soft"
               size="lg"
-              label={saveAgainLabel}
+              label={saveAgainShortLabel ?? saveAgainLabel}
               onPress={onSaveAgain}
               disabled={submitting || submitDisabled}
               style={styles.barAgain}

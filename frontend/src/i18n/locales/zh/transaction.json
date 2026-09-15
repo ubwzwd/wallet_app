@@ -123,6 +123,8 @@
     "counterparty_currency_locked_hint": "只有一条腿，币种跟随所选账户"
   },
   "form": {
+    "picker_more_filters": "＋ 更多",
+    "save_and_next_short": "再记一笔",
     "page_title": "记一笔",
     "page_title_edit": "编辑",
     "ledger_meta": "记入 {{ledger}} · 基准币种 {{currency}}",

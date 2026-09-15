@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { TransferRole, TransferSubtype } from '@/api/types';
 import { maxAllowedDate } from '@/domain/dates';
-import { radius, space } from '@/theme/tokens';
+import { controls, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Chip, DateField, Icon, SegmentedControl, Text, TextField } from '@/ui';
@@ -107,6 +107,10 @@ export function TransferFields({
   /** The single leg's free-text side is whichever end is not the account. */
   const outIsAccount = !external || values.direction === 'out';
 
+  // Both legs' labels must sit on the same line, and the 「不在应用里」 chip is taller than a
+  // bare label — so the leg that does not carry it reserves the same height.
+  const legSpacer = <View style={styles.legSpacer} />;
+
   const externalToggle =
     lockShape || lockLegs ? null : (
       <Chip
@@ -135,7 +139,7 @@ export function TransferFields({
               ? t('transaction:transfer.from_source')
               : t('transaction:transfer.to_source')
           }
-          labelRight={external ? undefined : externalToggle}
+          labelRight={external ? legSpacer : (externalToggle ?? legSpacer)}
           sources={sources}
           value={field.value === '' ? null : field.value}
           onChange={selectSource}
@@ -156,6 +160,7 @@ export function TransferFields({
         <SourceField
           testID="transfer-to"
           label={t('transaction:transfer.to_source')}
+          labelRight={legSpacer}
           sources={sources}
           value={field.value === '' ? null : field.value}
           onChange={chooseToSource}
@@ -180,7 +185,7 @@ export function TransferFields({
             ? t('transaction:form.transfer_counterparty_in')
             : t('transaction:form.transfer_counterparty_out')
         }
-        right={externalToggle}
+        right={externalToggle ?? legSpacer}
       />
       <Controller
         control={control}
@@ -236,8 +241,8 @@ export function TransferFields({
 
   const body = (
     <>
-      <View style={styles.kindRow}>
-        <View style={styles.grow}>{header}</View>
+      <View style={wide ? styles.kindRow : styles.kindStack}>
+        {header ? <View style={wide ? styles.grow : undefined}>{header}</View> : null}
         <Controller
           control={control}
           name="subtype"
@@ -357,10 +362,12 @@ const styles = StyleSheet.create({
   card: { gap: space['5'], alignSelf: 'stretch' },
   grow: { flex: 1, minWidth: 0 },
   kindRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'], flexWrap: 'wrap' },
+  kindStack: { gap: space['3'], alignSelf: 'stretch' },
   banner: { gap: space['1'] },
-  legsWide: { flexDirection: 'row', alignItems: 'flex-end', gap: space['3'] },
+  legsWide: { flexDirection: 'row', alignItems: 'flex-start', gap: space['3'] },
   legsNarrow: { gap: space['2'] },
-  arrowSlot: { alignItems: 'center', justifyContent: 'center', paddingBottom: space['3'] },
+  // The arrow lines up with the middle of the two account rows, below their labels.
+  arrowSlot: { alignItems: 'center', justifyContent: 'center', paddingTop: space['8'] + 4 },
   arrow: {
     width: 36,
     height: 36,
@@ -369,5 +376,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   counterpartyHint: { marginTop: space['1'] + 2 },
+  legSpacer: { height: controls.chip.height },
   direction: { marginTop: space['2'] },
 });

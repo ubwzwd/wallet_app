@@ -12,8 +12,10 @@ import { useTranslation } from 'react-i18next';
 
 import { normalizeAmountInput } from '@/domain/money';
 import { formatDate } from '@/i18n/format';
-import { space } from '@/theme/tokens';
-import { AmountField, Badge, Chip, Text } from '@/ui';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { AmountField, Badge, Chip, Icon, Text } from '@/ui';
 
 import { FieldColumns } from './parts';
 import { txValidationMessage } from './schemas';
@@ -49,6 +51,8 @@ export function TransferAmount({
   disabled = false,
 }: TransferAmountProps): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
+  const wide = useIsWide();
   const {
     form: { control, formState },
     currencies,
@@ -134,6 +138,20 @@ export function TransferAmount({
     />
   );
 
+  const rateChip =
+    rate === null ? null : (
+      <Chip
+        testID="transfer-rate"
+        label={t('transaction:transfer.rate_readonly_hint', {
+          from: values.currency,
+          rate,
+          to: values.currency_in,
+          date: formatDate(values.occurred_at, lang),
+        })}
+        style={styles.rateChip}
+      />
+    );
+
   return (
     <View style={styles.block}>
       {badge === null ? null : (
@@ -147,21 +165,22 @@ export function TransferAmount({
       )}
       {crossCurrency ? (
         <>
-          <FieldColumns>
-            {out}
-            {inbound}
-          </FieldColumns>
-          {rate !== null ? (
-            <Chip
-              testID="transfer-rate"
-              label={t('transaction:transfer.rate_readonly_hint', {
-                from: values.currency,
-                rate,
-                to: values.currency_in,
-                date: formatDate(values.occurred_at, lang),
-              })}
-            />
-          ) : null}
+          {wide ? (
+            <View style={styles.crossRow}>
+              <View style={styles.grow}>{out}</View>
+              <View style={styles.arrowSlot}>
+                <Icon name="chevron-right" size={18} color={colors['fg.muted']} />
+              </View>
+              <View style={styles.grow}>{inbound}</View>
+            </View>
+          ) : (
+            <>
+              {out}
+              {rateChip}
+              {inbound}
+            </>
+          )}
+          {wide ? rateChip : null}
           <Text variant="caption" tone="muted">
             {t('transaction:transfer.fee_hint')}
           </Text>
@@ -170,7 +189,12 @@ export function TransferAmount({
         <FieldColumns ratio={1.25}>
           {out}
           {external ? (
-            <Text variant="caption" tone="muted" testID="transfer-currency-locked-hint">
+            <Text
+              variant="caption"
+              tone="muted"
+              style={styles.lockedHint}
+              testID="transfer-currency-locked-hint"
+            >
               {t('transaction:transfer.counterparty_currency_locked_hint')}
             </Text>
           ) : (
@@ -186,4 +210,19 @@ const styles = StyleSheet.create({
   block: { gap: space['2'], alignSelf: 'stretch', position: 'relative' },
   // The 「跨币种」 / 「单腿」 badge sits on the amount label's own line, at the far right.
   badgeFloat: { position: 'absolute', top: 0, right: 0, zIndex: 1 },
+  // Sits beside the amount box, not beside its label — the badge owns that line.
+  lockedHint: { paddingTop: space['8'] },
+  grow: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
+  crossRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space['3'] },
+  arrowSlot: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Label (16) + its 6 of padding + half of the 72-tall well, so the arrow sits on the
+    // amount's own centre line rather than on the label's.
+    marginTop: space['10'] + space['1'],
+  },
+  rateChip: { alignSelf: 'center' },
 });

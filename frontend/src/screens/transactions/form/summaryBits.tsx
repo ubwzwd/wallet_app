@@ -176,10 +176,13 @@ function TransferLegs({ ctrl }: { ctrl: TxFormController }): React.JSX.Element {
   const target = ctrl.sourceById(values.to_source_id === '' ? null : values.to_source_id);
   const pending = t('transaction:form.summary_pending');
 
-  const wallet = (type: React.ComponentProps<typeof SourceTypeIcon>['type'] | null) =>
+  const wallet = (
+    type: React.ComponentProps<typeof SourceTypeIcon>['type'] | null,
+    offBook = false,
+  ) =>
     type === null ? (
       <View style={[styles.well, { backgroundColor: colors['bg.canvas'] }]}>
-        <Icon name="users" size={16} color={colors['fg.secondary']} />
+        <Icon name={offBook ? 'users' : 'wallet'} size={16} color={colors['fg.secondary']} />
       </View>
     ) : (
       <SourceTypeIcon type={type} size={30} />
@@ -209,7 +212,7 @@ function TransferLegs({ ctrl }: { ctrl: TxFormController }): React.JSX.Element {
   const otherLeg = external ? (
     <Leg
       testID="tx-summary-leg-other"
-      icon={wallet(null)}
+      icon={wallet(null, true)}
       name={counterparty}
       amount={t('transaction:form.summary_off_book')}
       tone="muted"
