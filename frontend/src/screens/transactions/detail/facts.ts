@@ -22,6 +22,12 @@ export interface FactContext {
   baseCurrency: string;
   sources: SourceMap;
   members: readonly LedgerMember[];
+  /**
+   * Whether `members` is the answered list rather than the empty placeholder a pending query
+   * hands over. While it is false 「记录人」 is left out altogether: an empty list makes every
+   * author look like a member who left, and narrow has no sidebar to warm that query up.
+   */
+  membersReady: boolean;
   /** Opens the import batch a row came from; omitted when there is nothing to open. */
   onOpenBatch?(batchId: Uuid): void;
 }
@@ -127,11 +133,15 @@ export function transactionFacts(
     ...(tx.note !== null
       ? [{ id: 'note', label: ctx.t('transaction:form.note'), value: tx.note, wrap: true }]
       : []),
-    {
-      id: 'recorded-by',
-      label: ctx.t('transaction:form.summary_author'),
-      value: recordedBy(ctx, tx.created_by),
-    },
+    ...(ctx.membersReady
+      ? [
+          {
+            id: 'recorded-by',
+            label: ctx.t('transaction:form.summary_author'),
+            value: recordedBy(ctx, tx.created_by),
+          },
+        ]
+      : []),
     originFact(ctx, tx.import_batch_id),
   ];
 }
@@ -167,11 +177,15 @@ export function transferFacts(
     ...(outDetail === undefined
       ? []
       : [
-          {
-            id: 'recorded-by',
-            label: ctx.t('transaction:form.summary_author'),
-            value: recordedBy(ctx, outDetail.created_by),
-          },
+          ...(ctx.membersReady
+            ? [
+                {
+                  id: 'recorded-by',
+                  label: ctx.t('transaction:form.summary_author'),
+                  value: recordedBy(ctx, outDetail.created_by),
+                },
+              ]
+            : []),
           originFact(ctx, outDetail.import_batch_id),
         ]),
   ];

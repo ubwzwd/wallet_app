@@ -56,7 +56,10 @@ export function ImpactCard({
   const summary = useStatsSummary(ledgerId, month);
   const data = summary.data;
 
+  // The same guard `StatsPreview` puts before the same arithmetic: a summary in another
+  // base currency cannot be added to or subtracted from this row's converted magnitude.
   if (!data || amountBase === null) return null;
+  if (data.base_currency.toUpperCase() !== baseCurrency.toUpperCase()) return null;
 
   const id = testID ?? 'detail-impact';
   const shortMonth = formatMonthShort(month, lang);
@@ -180,8 +183,13 @@ export function TransferImpactCard({
 
 export interface SingleLegImpactProps {
   month: string;
-  /** Signed: a leg that receives money raises the net worth, one that sends it lowers it. */
-  amount: Money;
+  /**
+   * Signed **converted** magnitude: a leg that receives money raises the net worth, one that
+   * sends it lowers it. `null` (no rate for a foreign leg) drops the 净资产 line entirely —
+   * the raw foreign amount may not be printed in the base currency, and `ImpactCard` hides
+   * itself for the same reason.
+   */
+  amount: Money | null;
   currency: string;
   testID?: string;
 }
@@ -207,16 +215,19 @@ export function SingleLegImpactCard({
         <FactRow
           testID={`${id}-net`}
           onTint
+          last={amount === null}
           label={t('transaction:detail.impact.month_net', { month: shortMonth })}
           value={t('transaction:detail.impact.unchanged')}
         />
-        <FactRow
-          testID={`${id}-net-worth`}
-          onTint
-          last
-          label={t('transaction:detail.impact.net_worth')}
-          value={formatMoney(amount, currency, lang, { signDisplay: 'always' })}
-        />
+        {amount === null ? null : (
+          <FactRow
+            testID={`${id}-net-worth`}
+            onTint
+            last
+            label={t('transaction:detail.impact.net_worth')}
+            value={formatMoney(amount, currency, lang, { signDisplay: 'always' })}
+          />
+        )}
       </View>
     </TintSideCard>
   );

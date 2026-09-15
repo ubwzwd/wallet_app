@@ -32,6 +32,7 @@ import {
   makeCurrencyList,
   makeLedger,
   makeSource,
+  makeStatsSummary,
   makeTransaction,
   makeUser,
 } from '@/test/fixtures';
@@ -383,6 +384,64 @@ test('a refund that was never linked offers 「去关联」', async () => {
   expect(await router.findByTestId('tx-detail-origin-none')).toHaveTextContent('未关联原支出');
   expect(router.getByTestId('tx-detail-origin-pick')).toHaveTextContent('去关联');
   expect(router.queryByTestId('tx-detail-origin-unlink')).toBeNull();
+});
+
+// ---------------------------------------------------------------------- wide
+
+/**
+ * 屏幕稿 08 at 1440: 「对 9 月的影响」 answers the question the 删除 button raises, and the
+ * operations sit beside the headline instead of behind the sheet. The arithmetic is the
+ * card's own (the month's summary minus this row), so it is asserted on both signs of it.
+ */
+test('宽屏 prices what deleting this row would change, and keeps the actions in the headline', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(
+    `/ledgers/${LEDGER}/stats/summary`,
+    makeStatsSummary({
+      month: '2026-09',
+      expense_total: '8421.6600',
+      expense: [
+        {
+          code: 'shopping',
+          name_zh: '消费购物',
+          name_en: 'Shopping',
+          amount: '2310.5000',
+          share: 0.2743,
+          count: 4,
+          children: [],
+        },
+      ],
+    }),
+  );
+
+  const router = open(EXPENSE);
+
+  expect(await router.findByTestId('tx-detail-impact-total')).toHaveTextContent(
+    containing('¥8,421.66 · 含本笔 ¥598.00'),
+  );
+  expect(router.getByTestId('tx-detail-impact-category')).toHaveTextContent(
+    containing('¥2,310.50 · 含本笔 ¥598.00'),
+  );
+  // 8,421.66 − 598.00: an expense leaving the month takes its own magnitude with it.
+  expect(router.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
+    containing('删除后支出¥7,823.66'),
+  );
+
+  // Wide has no sheet: every operation is already on screen.
+  expect(router.getByTestId('tx-detail-actions-delete')).toBeTruthy();
+  expect(router.queryByTestId('tx-detail-actions-open')).toBeNull();
+  router.unmount();
+
+  // A refund lives on the expense side of the summary, offsetting it, so deleting one
+  // *raises* the month: 8,421.66 + 199.00.
+  queryClient.clear();
+  const second = open(REFUND);
+  expect(await second.findByTestId('tx-detail-impact-total')).toHaveTextContent(
+    containing('已冲减本笔 ¥199.00'),
+  );
+  expect(second.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
+    containing('删除后支出¥8,620.66'),
+  );
 });
 
 // -------------------------------------------------------------------- events

@@ -58,7 +58,7 @@ export function categoryPath(
   return child ? `${head} / ${categoryName(child, lang)}` : head;
 }
 
-/** A text link in the beige head; `hitSlop` takes the line to a 44 target. */
+/** A text link in the beige head: a caption line is 16 tall, so 14 each side makes 44. */
 function HeadLink({
   label,
   onPress,
@@ -78,7 +78,7 @@ function HeadLink({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      hitSlop={{ top: 12, bottom: 12, left: space['2'], right: space['2'] }}
+      hitSlop={{ top: 14, bottom: 14, left: space['2'], right: space['2'] }}
       testID={testID}
     >
       <Text variant="caption" weight={600} tone={disabled ? 'muted' : 'warning'}>

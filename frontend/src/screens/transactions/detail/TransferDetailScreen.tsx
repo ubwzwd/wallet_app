@@ -206,6 +206,7 @@ export default function TransferDetailScreen(): React.JSX.Element {
       baseCurrency,
       sources: sourceMap,
       members: members.data?.items ?? [],
+      membersReady: members.isSuccess,
       onOpenBatch: (batchId) => router.push(l.importBatch(batchId) as Href),
     },
     pair,

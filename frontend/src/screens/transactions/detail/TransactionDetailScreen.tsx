@@ -267,6 +267,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
       baseCurrency,
       sources: sourceMap,
       members: members.data?.items ?? [],
+      membersReady: members.isSuccess,
       onOpenBatch: (batchId) => router.push(l.importBatch(batchId) as Href),
     },
     tx,
@@ -296,7 +297,9 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         <SingleLegImpactCard
           testID="tx-detail-impact"
           month={monthOf(tx.occurred_at)}
-          amount={tx.amount_base ?? tx.amount}
+          /* Converted only: a foreign leg with no rate has no base-currency figure, so the
+             净资产 line is left out rather than printed with the wrong symbol. */
+          amount={tx.amount_base}
           currency={baseCurrency}
         />
       ) : null}
