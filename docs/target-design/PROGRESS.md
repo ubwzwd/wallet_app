@@ -20,6 +20,14 @@
 - Postgres 迁移测试用本机 docker 里的 `wallet_db` 容器（`postgresql://wallet_user:wallet_password@localhost:5432/wallet_db`，超级用户，可 `CREATE DATABASE`），通过环境变量 `TEST_POSTGRES_URL` 传入；不设则自动跳过。
 - 注意：本机 `wallet_db` 库里的 `alembic_version` 是 `9ebe856ac106`，不在仓库的迁移链里（链头是 `8a4f4d66d893`）。它只是开发库，第一阶段的迁移测试都在临时新建的库上跑；正式在这个库上升级前需要先把它重置或 `alembic stamp 8a4f4d66d893`。
 
+## 待办（第八阶段之前或之中处理，用户 2026-09-16 定的顺序：先放着，最后再搞）
+
+- **品牌标与应用名重新设计**（用户 2026-09-16 提出）：现在的品牌标是应用名「家庭记账」的首字「家」放在方块里，窄屏侧栏 / 登录页只剩一个「家」很怪；屏幕稿 17 画的是「账」方块，也只是占位。要出几个方向（名字 zh / en 一对 + 图形标），用户定稿后落到 `auth:brand`、`AuthLayout` 的 brand-mark、侧栏与顶栏、PWA 图标 / favicon / manifest（`frontend/public/`、`app.json`）。
+- **登录页的网络错误不该挂在口令框下面**：`LoginScreen` 把所有非字段错误都显示在口令下并弹 toast，网络错误应只弹 toast。
+- **05 章文件名** `05-import-and-llm.md` 早已不含 LLM，改名要连带 README 与各章链接。
+- **等后端补字段**：屏幕 11 页头「已入账 N 笔」、屏幕 02 页头「转账」段、币种多选筛选（见 2026-09-16 日志）。
+- **待用户追认的裁定**：§14.56、§14.58、§14.59。
+
 ## 日志
 
 - 2026-09-11：文档终稿合回 `main`（47ea5d8），GSD 记录归档（6598d03），第一阶段启动。
