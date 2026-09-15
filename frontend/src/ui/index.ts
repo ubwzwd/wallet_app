@@ -18,6 +18,7 @@ export * from './Divider';
 export * from './EmptyState';
 export * from './Icon';
 export * from './Page';
+export * from './Popover';
 export * from './ProgressBar';
 export * from './SegmentedControl';
 export * from './Select';

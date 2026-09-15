@@ -21,6 +21,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { type CategoryValue, CategoryPickerPanel } from './CategoryPickerPanel';
 import { Icon } from './Icon';
+import { Popover } from './Popover';
 import { Sheet } from './Sheet';
 import { Text } from './Text';
 import { TextField } from './TextField';
@@ -63,6 +64,7 @@ export function CategoryPicker({
 
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
+  const anchorRef = React.useRef<View>(null);
   const [activeL1, setActiveL1] = React.useState<string | null>(value.l1);
   const [stage, setStage] = React.useState<'l1' | 'l2'>('l1');
 
@@ -144,7 +146,7 @@ export function CategoryPicker({
       <Text variant="caption" tone="secondary">
         {title}
       </Text>
-      <View style={styles.anchor}>
+      <View style={styles.anchor} ref={anchorRef}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: open, disabled: isDisabled }}
@@ -176,33 +178,19 @@ export function CategoryPicker({
           <Icon name="chevron-down" size={18} color={colors['fg.muted']} />
         </Pressable>
 
-        {open && wide ? (
-          <>
-            {/* Clicking outside the panel closes it (04 §6.4); there is no modal above the
-                page on the web, so the panel carries its own invisible backdrop. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common:button.close')}
-              onPress={close}
-              testID={`${id}-backdrop`}
-              style={[styles.backdrop, { zIndex: z.dropdown - 1 }]}
-            />
-            <View
-              testID={`${id}-panel`}
-              style={[
-                styles.panel,
-                {
-                  backgroundColor: colors['bg.raised'],
-                  borderColor: colors['border.default'],
-                  shadowColor: colors['fg.primary'],
-                },
-              ]}
-            >
-              {searchBox}
-              {panel}
-            </View>
-          </>
-        ) : null}
+        {/* The wide-layout panel lives in a Popover (a root-level Modal): an absolutely
+            positioned sibling would paint behind the next field, see Popover.tsx. */}
+        <Popover
+          open={open && wide}
+          onClose={close}
+          anchorRef={anchorRef}
+          closeLabel={t('common:button.close')}
+          testID={id}
+          style={styles.panelGap}
+        >
+          {searchBox}
+          {panel}
+        </Popover>
       </View>
 
       {hasError ? (
@@ -240,20 +228,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space['2'],
   },
-  backdrop: { position: 'absolute', top: -2000, bottom: -2000, left: -2000, right: -2000 },
-  panel: {
-    position: 'absolute',
-    top: controls.textField.height + 4,
-    left: 0,
-    right: 0,
-    zIndex: z.dropdown,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: space['2'],
-    gap: space['2'],
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
+  panelGap: { gap: space['2'] },
 });
