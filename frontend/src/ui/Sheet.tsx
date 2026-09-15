@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { Modal, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Icon } from './Icon';
@@ -14,7 +15,9 @@ export interface SheetProps {
   open: boolean;
   onClose(): void;
   title?: string;
-  /** Accessible name of the × button; falls back to `title`. */
+  /** Accessible name of the × button; falls back to `title`. Passing it also makes the sheet
+   *  draw its header row, so a header-less sheet leaves it out and the backdrop falls back to
+   *  「关闭」 instead. */
   closeLabel?: string;
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -31,6 +34,7 @@ export function Sheet({
   testID,
 }: SheetProps): React.JSX.Element {
   const colors = useColors();
+  const { t } = useTranslation();
   return (
     <Modal
       visible={open}
@@ -40,9 +44,12 @@ export function Sheet({
       testID={testID}
     >
       <View style={styles.root}>
+        {/* The backdrop is a button of its own, so it needs a name of its own: a sheet that
+            draws no header row (the filter sheet, 屏幕稿 02 · 交易筛选 375) passes neither
+            `title` nor `closeLabel`, and reusing the × button's name left it unnamed. */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={closeLabel ?? title}
+          accessibilityLabel={closeLabel ?? title ?? t('common:button.close')}
           onPress={onClose}
           testID={testID ? `${testID}-backdrop` : 'sheet-backdrop'}
           style={[styles.backdrop, { backgroundColor: colors['fg.primary'], opacity: 0.35 }]}

@@ -31,11 +31,16 @@ import { Avatar, Button, Icon, type IconName, Text } from '@/ui';
 import { isActivePath } from './isActivePath';
 import { pickLandingLedger } from './LandingRedirect';
 import { LedgerSwitcherPopover } from './LedgerSwitcher';
-import { LedgerCard, LedgerCardPlaceholder, LedgerManageCard } from './SidebarCards';
+import {
+  LedgerCard,
+  LedgerCardPlaceholder,
+  LedgerManageCard,
+  showsLedgerManageCard,
+} from './SidebarCards';
 import { useLastLedgerId } from './useLastLedgerId';
 
 // Re-exported so the shell's tests and `src/navigation/index.ts` keep one import site.
-export { showsLedgerManageCard } from './SidebarCards';
+export { showsLedgerManageCard };
 
 /**
  * Screen 01 at 1440. The mockup's column is `width:252px;padding:20px 14px` with no
@@ -43,6 +48,9 @@ export { showsLedgerManageCard } from './SidebarCards';
  * is border-box, so the same 14 of padding needs the outer 280 here.
  */
 export const SIDEBAR_WIDTH = 280;
+
+/** One navigation row, mockup 01's `height:44px` — also the unit the cold placeholder uses. */
+const NAV_ROW_HEIGHT = 44;
 
 /** How a signed-in user is named in the chrome: display name, else the email's local part. */
 export function userLabel(user: Pick<User, 'display_name' | 'email'> | null): string {
@@ -232,41 +240,56 @@ export function Sidebar(): React.JSX.Element {
     />
   );
 
+  // Unreachable when `showsLedgerManageCard` says no (it answers `true` for an unknown
+  // ledger), but written as a guard rather than a `!` so the narrowing is the compiler's.
+  const ledgerCard =
+    ledger === undefined ? null : (
+      <View ref={cardRef} collapsable={false}>
+        <LedgerCard
+          ledger={ledger}
+          onOpenSwitcher={() => setSwitcherOpen(true)}
+          onOpenSettings={() => router.navigate(routes.l(ledger.id).settings())}
+        />
+        <LedgerSwitcherPopover
+          open={switcherOpen}
+          onClose={() => setSwitcherOpen(false)}
+          anchorRef={cardRef}
+          ledgers={chrome.ledgers}
+          currentId={ledger.id}
+          onPick={pickLedger}
+        />
+      </View>
+    );
+
   return (
     <View testID="sidebar" style={[styles.root, { backgroundColor: colors['bg.surface'] }]}>
-      {manage ? (
-        manageCard
-      ) : ledger !== undefined ? (
-        <View ref={cardRef} collapsable={false}>
-          <LedgerCard
-            ledger={ledger}
-            onOpenSwitcher={() => setSwitcherOpen(true)}
-            onOpenSettings={() => router.navigate(routes.l(ledger.id).settings())}
-          />
-          <LedgerSwitcherPopover
-            open={switcherOpen}
-            onClose={() => setSwitcherOpen(false)}
-            anchorRef={cardRef}
-            ledgers={chrome.ledgers}
-            currentId={ledger.id}
-            onPick={pickLedger}
-          />
-        </View>
-      ) : chrome.pending ? (
+      {/* Which card the column opens with — the placeholder only while the answer is still
+          in flight (a cold `/settings`), then whatever `showsLedgerManageCard` decides. */}
+      {chrome.pending ? (
         <LedgerCardPlaceholder />
-      ) : (
+      ) : showsLedgerManageCard(pathname, ledger) ? (
         manageCard
+      ) : (
+        ledgerCard
       )}
 
+      {/* The same reason the card has a placeholder: on a cold `/ledgers` the three entries
+          point at the ledger the user last had open, which is not known until `GET /ledgers`
+          lands, so without this the column would draw an empty nav area and pop three rows in
+          a round trip later. Everywhere else `destinations` is complete on the first frame. */}
       <View style={styles.nav}>
-        {destinations.map((item) => (
-          <NavRow
-            key={item.key}
-            item={item}
-            active={isActivePath(pathname, item.href, item.href === homeHref)}
-            onPress={() => router.navigate(item.href)}
-          />
-        ))}
+        {chrome.pending && manage ? (
+          <View testID="sidebar-nav-pending" style={styles.navPlaceholder} />
+        ) : (
+          destinations.map((item) => (
+            <NavRow
+              key={item.key}
+              item={item}
+              active={isActivePath(pathname, item.href, item.href === homeHref)}
+              onPress={() => router.navigate(item.href)}
+            />
+          ))
+        )}
       </View>
 
       {/* Mockup 13 draws no primary button: there is no open ledger to add a transaction to. */}
@@ -315,11 +338,13 @@ const styles = StyleSheet.create({
     gap: space['5'],
   },
   nav: { gap: 2 },
+  /** Three `navRow`s plus the two 2px gaps of `nav` — mockup 13's column, to the pixel. */
+  navPlaceholder: { height: NAV_ROW_HEIGHT * 3 + 2 * 2 },
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
-    height: 44,
+    height: NAV_ROW_HEIGHT,
     paddingHorizontal: space['3'],
     borderRadius: 12,
   },

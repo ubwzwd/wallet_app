@@ -524,6 +524,57 @@ describe('wide (>=1024)', () => {
     expect(showsLedgerManageCard('/settings', undefined)).toBe(true);
   });
 
+  test('a cold /ledgers holds the nav slot rather than popping three rows in', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
+    // Hold `GET /ledgers` open: until it lands there is no ledger for 首页 / 交易 / 导入 to
+    // point at, and an empty nav area that fills a round trip later is the same pop-in the
+    // card's placeholder exists to avoid.
+    const pending: { resolve?: (reply: [number, unknown]) => void } = {};
+    api.mock
+      .onGet(apiUrl('/ledgers'))
+      .reply(() => new Promise((resolve) => (pending.resolve = resolve)));
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+
+    expect(await router.findByTestId('sidebar-nav-pending')).toBeTruthy();
+    for (const key of ['home', 'transactions', 'imports']) {
+      expect(router.queryByTestId(`sidebar-${key}`)).toBeNull();
+    }
+
+    pending.resolve?.([200, { items: [makeLedger({ id: LEDGER_A, name: '家庭账本' })], total: 1 }]);
+
+    expect(await router.findByTestId('sidebar-home')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-nav-pending')).toBeNull();
+  });
+
+  test('/ledgers/new and /ledgers/join are full-bleed too for a 0-ledger user', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, null);
+    mockGet('/me', makeUser({ display_name: '阿狸', ledger_count: 0 }));
+    mockGet('/ledgers', { items: [], total: 0 });
+
+    // 屏幕稿 15 sends a user with nothing to list straight to these two pages; the column
+    // would name an empty list there just as it would on `/ledgers` itself, and both pages
+    // carry their own way back, so the whole `/ledgers*` subtree runs full-bleed.
+    const created = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
+    expect(await created.findByText('new-ledger-page')).toBeTruthy();
+    await waitFor(() => expect(created.queryByTestId('sidebar')).toBeNull());
+    expect(created.getByTestId('app-shell-wide')).toBeTruthy();
+    created.unmount();
+
+    const joined = renderRouter(ROUTES, { initialUrl: '/ledgers/join' });
+    expect(await joined.findByText('join-ledger-page')).toBeTruthy();
+    await waitFor(() => expect(joined.queryByTestId('sidebar')).toBeNull());
+  });
+
+  test('/ledgers/new keeps the column for a user who does have ledgers (屏幕稿 13)', async () => {
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
+
+    expect(await router.findByText('new-ledger-page')).toBeTruthy();
+    expect(await router.findByTestId('sidebar')).toBeTruthy();
+    // Mockup 13's card, on the sub-page as well as on the list itself.
+    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
+  });
+
 });
 
 describe('the language pack gate (04 §2)', () => {

@@ -27,6 +27,36 @@ function toNumber(amount: Money | number): number {
   return typeof amount === 'number' ? amount : Number(amount);
 }
 
+/**
+ * The symbol every mockup frame writes in front of an amount (§14.59a).
+ *
+ * `Intl` is not usable here: it swings the symbol with the *interface* language — CNY reads
+ * 「¥」 in zh-CN but 「CN¥」 in en-US, JPY the other way round — while the mockups write one
+ * symbol per currency whatever the language, because the symbol belongs to the money, not to
+ * the reader. 屏幕稿 09 prints 「S$4,120.80」 for the Singapore account and 「¥24,576.75」 for
+ * the base-currency total on the same row, so this table is the source of truth.
+ *
+ * A code that is not in the table keeps its ISO code and a space — 「MYR 1,234.56」 — which is
+ * what `Intl` does for an unknown symbol anyway.
+ */
+const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = {
+  CNY: '¥',
+  SGD: 'S$',
+  USD: '$',
+  HKD: 'HK$',
+  EUR: '€',
+  GBP: '£',
+  JPY: 'JP¥',
+  AUD: 'A$',
+  TWD: 'NT$',
+  KRW: '₩',
+};
+
+/** The symbol for a currency code, or `null` when it only has an ISO code to show. */
+export function currencySymbol(code: string): string | null {
+  return CURRENCY_SYMBOLS[code.toUpperCase()] ?? null;
+}
+
 export interface FormatMoneyOptions {
   /** Mirrors `Intl.NumberFormat`'s `signDisplay`, but applied to our own U+2212 sign
    *  rather than Intl's (which would use a plain hyphen and/or parentheses). */
@@ -36,8 +66,12 @@ export interface FormatMoneyOptions {
   compact?: boolean;
 }
 
-/** `Intl.NumberFormat` currency style; negative sign is always U+2212, never
- *  parentheses (04 §5.4). Decimal places follow the currency, not the locale. */
+/**
+ * An amount with its currency's symbol: `¥1,234.56`, `S$4,120.80`, `MYR 1,234.56`
+ * (§14.59a, 04 §5.4). Negative is always U+2212, never parentheses; decimal places follow
+ * the currency, not the locale. Only the grouping and the compact suffix follow `lang`
+ * (`¥1.2万` in zh, `¥12K` in en) — the symbol never does.
+ */
 export function formatMoney(
   amount: Money | number,
   currency: string,
@@ -51,20 +85,20 @@ export function formatMoney(
     LOCALE_TAG[lang],
     opts?.compact === true
       ? {
-          style: 'currency',
-          currency,
+          style: 'decimal',
           notation: 'compact',
           compactDisplay: 'short',
           maximumFractionDigits: 1,
         }
       : {
-          style: 'currency',
-          currency,
+          style: 'decimal',
           minimumFractionDigits: digits,
           maximumFractionDigits: digits,
         },
   );
-  const formattedAbs = formatter.format(Math.abs(value));
+  const symbol = currencySymbol(currency);
+  const prefix = symbol ?? `${currency.toUpperCase()} `;
+  const formattedAbs = prefix + formatter.format(Math.abs(value));
   if (value < 0 && signDisplay !== 'never') return MINUS + formattedAbs;
   if (value > 0 && signDisplay === 'always') return '+' + formattedAbs;
   return formattedAbs;
@@ -89,8 +123,17 @@ export function formatConverted(
   return `≈ ${formatMoney(amountBase, baseCurrency, lang, { signDisplay: 'never' })}`;
 }
 
-/** Plain digits + thousands separator, no currency symbol — for `AmountField`,
- *  where the currency is shown separately and the sign is read-only (04 §6.4). */
+/**
+ * The bare number: thousands separators, the currency's decimal places, a U+2212 in front
+ * of a negative one and nothing at all in front of a positive one (§14.59a).
+ *
+ * This is what every *base-currency* amount in a grid reads as — list rows, the two tinted
+ * home cards, the accounts total, category rows, the impact card, the refund progress, the
+ * summary bar, the review table — because the column header already names the currency and
+ * the mockups never repeat 「¥」 on every line. A caller that wants a 「+」 (an income row)
+ * prepends it itself; a caller that wants the symbol calls `formatMoney`. Also used by
+ * `AmountField`, where the currency sits in its own control next to the input (04 §6.4).
+ */
 export function formatAmountPlain(amount: Money | number, currency: string): string {
   const value = toNumber(amount);
   const digits = fractionDigitsFor(currency);
@@ -139,8 +182,12 @@ const EN_MONTHS_FULL = [
  * 「建于」 line (12), the form's summary card (04), the operations timeline (07 / 08) —
  * always in the mono face, never as 「8月14日」. It is deliberately language-independent,
  * which is also what the settings page promises: 「日期一律按账本的基准币种与地区走，不随
- * 语言变」. `lang` stays in the signature so every call site reads the same and switching
- * a single one back is a one-word change.
+ * 语言变」.
+ *
+ * @param _lang **deprecated** and ignored: the output has not depended on the language since
+ * 决策 §14.45. It is optional and stays in the signature for one round only, so the ~25 call
+ * sites that still thread `lang` in can be cleaned up page by page; the acceptance task drops
+ * the parameter once the last one is gone. New call sites pass the date and nothing else.
  */
 export function formatDate(iso: IsoDate, _lang?: Lang): string {
   return iso;
@@ -163,7 +210,7 @@ export function formatRelativeDay(iso: IsoDate, lang: Lang): string {
   const diffDays = Math.round((target.getTime() - todayLocal.getTime()) / 86_400_000);
   if (diffDays === 0) return lang === 'zh' ? '今天' : 'Today';
   if (diffDays === -1) return lang === 'zh' ? '昨天' : 'Yesterday';
-  return formatDate(iso, lang);
+  return formatDate(iso);
 }
 
 /** `'2026-08'` → '2026 年 8 月' / 'August 2026'. */
@@ -187,6 +234,20 @@ export function formatDateTime(isoDateTime: IsoDateTime, _lang: Lang): string {
   const date = new Date(isoDateTime);
   return (
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+  );
+}
+
+/**
+ * The same stamp with the year dropped, `'09-08 07:12'` — what 屏幕稿 07 / 08 write in the
+ * 「操作记录」 timeline, matching the year-less dates `formatDateShort` gives the columns
+ * next to it. `formatDateTime` keeps the year for the import history and the batch pages,
+ * where a row can be months old and the year is the point.
+ */
+export function formatDateTimeShort(isoDateTime: IsoDateTime): string {
+  const date = new Date(isoDateTime);
+  return (
+    `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
     `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
   );
 }
