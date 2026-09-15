@@ -58,9 +58,13 @@ test('a batch opened fresh still gets stat tiles — the ones the batch itself a
   await renderPanel(null);
 
   expect(screen.getByTestId('import-committed-stats')).toBeTruthy();
-  // 128 rows, 2 of them marked 跳过 in review, so 126 became transactions.
-  expect(screen.getByText('126 笔')).toBeTruthy();
-  expect(screen.getByText('2 笔')).toBeTruthy();
+  // 128 rows, 2 of them marked 跳过 in review, so 126 rows were booked. It is a *row* count
+  // and says so: a commit also creates a second leg per brand-new two-leg transfer, so the
+  // tile must not claim the 「建立交易」 label the commit response's counter owns.
+  expect(screen.getByText('入账行')).toBeTruthy();
+  expect(screen.queryByText('建立交易')).toBeNull();
+  expect(screen.getByText('126 行')).toBeTruthy();
+  expect(screen.getByText('2 行')).toBeTruthy();
   expect(
     screen.getByText(formatMoney('-4210.5500', 'CNY', 'zh', { signDisplay: 'always' })),
   ).toBeTruthy();
@@ -76,6 +80,8 @@ test('a batch opened fresh still gets stat tiles — the ones the batch itself a
 test('straight after a commit the five counters of the response win', async () => {
   await renderPanel(makeImportCommitResult());
 
+  expect(screen.getByText('建立交易')).toBeTruthy();
+  expect(screen.queryByText('入账行')).toBeNull();
   expect(screen.getByText('两腿转账')).toBeTruthy();
   expect(screen.getByText('配到已有转账')).toBeTruthy();
   expect(screen.getByTestId('import-committed-summary')).toHaveTextContent(/^已导入 121 条交易（其中/);

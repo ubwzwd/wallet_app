@@ -8,8 +8,13 @@
  * Which stats depends on what the screen knows. Straight after a commit it has the commit
  * response and shows all five of its counters. A page opened later — a link, a refresh —
  * has only the batch, and `ImportBatch` carries no commit counters (03 §5.38), so it shows
- * the three the batch *does* answer for (rows committed, rows skipped, net) rather than
+ * the three the batch *does* answer for (rows booked, rows skipped, net) rather than
  * inventing the pairing and refund numbers, and the sentence below says the shorter thing.
+ *
+ * Those three are *row* counts, and say so: 「入账行」, not 「建立交易」. A commit creates one
+ * transaction per bookable row plus a second leg for every brand-new two-leg transfer
+ * (03 §5.37), so `row_count - skipped` is not the number of transactions and must not
+ * borrow the label the commit response's true counter uses.
  *
  * Undoing is `undoBatch.ts` — the flow the history list runs, to the letter. Afterwards the
  * batch is gone from the history altogether (decision §14.22), so the caller decides where
@@ -66,6 +71,7 @@ export function CommittedPanel({
   const colors = useColors();
   const wide = useIsWide();
   const count = (n: number): string => t('import:committed.stat_value', { count: n });
+  const rows = (n: number): string => t('import:committed.stat_rows_value', { count: n });
 
   const filename =
     batch.source === 'paste' ? t('import:history.pasted_filename') : (batch.filename ?? '');
@@ -82,8 +88,8 @@ export function CommittedPanel({
         [t('import:committed.stat_skipped'), count(result.skipped_rows)],
       ]
     : [
-        [t('import:committed.stat_created'), count(Math.max(0, batch.row_count - skipped))],
-        [t('import:committed.stat_skipped'), count(skipped)],
+        [t('import:committed.stat_rows_booked'), rows(Math.max(0, batch.row_count - skipped))],
+        [t('import:committed.stat_skipped'), rows(skipped)],
         [
           t('import:history.stat_net'),
           formatMoney(batch.net_amount, batch.base_currency, lang, { signDisplay: 'always' }),

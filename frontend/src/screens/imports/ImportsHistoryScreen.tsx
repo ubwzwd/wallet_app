@@ -7,8 +7,8 @@
  * lives in the URL (`?status=`), so a filtered history is shareable and the back button is
  * right, and it is sent to the *server* as `status=`: the pager pages 20 batches at a time,
  * so a filter applied to the page in hand would silently hide matching batches on every
- * other page while the pager still counted the unfiltered list. Both the rows and the
- * numbers above them therefore describe one thing — the filtered page in hand.
+ * other page while the pager still counted the unfiltered list. The rows, the pager and
+ * the batch count in the header therefore all describe one list — the filtered history.
  *
  * A batch has exactly two states (decision §5): `ready` (a validated draft waiting to be
  * reviewed) and `committed`. There is no `reverted` — undoing an import deletes the batch,
@@ -75,11 +75,15 @@ export function resolveFilter(raw: string | string[] | undefined): HistoryFilter
   return HISTORY_FILTERS.includes(value as HistoryFilter) ? (value as HistoryFilter) : 'all';
 }
 
-/** 「4 批 · 1 批待提交 · 已入账 52 笔」 — read off the batches the page is holding.
- *  All three numbers describe the same set, the page in hand: mixing in the server's
- *  `total` would make the last two silently describe 20 of the 45. The pager keeps
- *  `total` to itself. */
-export function historyStats(items: readonly ImportBatchListItem[]): {
+/** 「4 批 · 1 批待提交 · 已入账 52 笔」 — the batch count is the server's `total` for the
+ *  filter in force, the same list the pager walks, so the header never reads 「20 批」 next
+ *  to 「第 1 / 3 页」. The other two are read off the batches the page is holding: no
+ *  endpoint totals them, and guessing them from 20 of 45 would be worse than counting the
+ *  page. `total` defaults to the page when the caller has no better number. */
+export function historyStats(
+  items: readonly ImportBatchListItem[],
+  total = items.length,
+): {
   batches: number;
   ready: number;
   rows: number;
@@ -90,7 +94,7 @@ export function historyStats(items: readonly ImportBatchListItem[]): {
     if (batch.status === 'ready') ready += 1;
     else rows += batch.row_count;
   }
-  return { batches: items.length, ready, rows };
+  return { batches: total, ready, rows };
 }
 
 interface RowProps {
@@ -180,10 +184,18 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const params = useLocalSearchParams<{ status?: string }>();
   const filter = resolveFilter(params.status);
 
+  // Page 1 of the new filter, not page 3 of the old one — derived rather than chased in an
+  // effect, so no request is ever sent with an offset that belonged to the previous filter.
   const [offset, setOffset] = React.useState(0);
+  const [offsetFilter, setOffsetFilter] = React.useState<HistoryFilter>(filter);
+  if (offsetFilter !== filter) {
+    setOffsetFilter(filter);
+    setOffset(0);
+  }
+  const pageOffset = offsetFilter === filter ? offset : 0;
   const query = useImports(ledgerId, {
     limit: IMPORTS_PAGE_SIZE,
-    offset,
+    offset: pageOffset,
     status: filter === 'all' ? undefined : [filter],
   });
   const memberNames = useMemberNames(ledgerId);
@@ -203,17 +215,14 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
 
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const stats = historyStats(items);
+  const stats = historyStats(items, total);
 
-  // Page 1 of the new filter, not page 3 of the old one — and page 1 again when the list
-  // shrank under the pager (the tail batches were undone or discarded), which would
-  // otherwise strand the user on an empty page with no pager to walk back with.
+  // Page 1 again when the list shrank under the pager (the tail batches were undone or
+  // discarded), which would otherwise strand the user on an empty page with no pager to
+  // walk back with.
   React.useEffect(() => {
-    setOffset(0);
-  }, [filter]);
-  React.useEffect(() => {
-    if (!query.isPending && items.length === 0 && offset > 0) setOffset(0);
-  }, [items.length, offset, query.isPending]);
+    if (!query.isPending && items.length === 0 && pageOffset > 0) setOffset(0);
+  }, [items.length, pageOffset, query.isPending]);
 
   // An empty history has nothing to count and nothing to filter, so 屏幕稿 15's header is
   // just the title and the way in. A filter that matches nothing is *not* that: the
@@ -277,7 +286,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
     );
   }
 
-  if (bare && offset === 0) {
+  if (bare && pageOffset === 0) {
     return (
       <Page testID="imports-history-screen">
         {header}
@@ -287,7 +296,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   }
 
   const pages = Math.max(1, Math.ceil(total / IMPORTS_PAGE_SIZE));
-  const page = Math.floor(offset / IMPORTS_PAGE_SIZE) + 1;
+  const page = Math.floor(pageOffset / IMPORTS_PAGE_SIZE) + 1;
 
   const rows = items.map((batch) => (
     <HistoryEntry
@@ -310,7 +319,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
           variant="soft"
           size="sm"
           disabled={page <= 1}
-          onPress={() => setOffset(Math.max(0, offset - IMPORTS_PAGE_SIZE))}
+          onPress={() => setOffset(Math.max(0, pageOffset - IMPORTS_PAGE_SIZE))}
         />
         <Text variant="caption" tone="secondary" mono testID="imports-pagination-page">
           {t('import:history.pagination.page', { page, pages })}
@@ -322,7 +331,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
           variant="soft"
           size="sm"
           disabled={page >= pages}
-          onPress={() => setOffset(offset + IMPORTS_PAGE_SIZE)}
+          onPress={() => setOffset(pageOffset + IMPORTS_PAGE_SIZE)}
         />
       </View>
     ) : null;

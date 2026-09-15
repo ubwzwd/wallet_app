@@ -326,6 +326,28 @@ test('cancelling the confirmation leaves the batch alone', async () => {
   expect(api.mock.history.delete).toHaveLength(1);
 });
 
+test('leaving the screen with the confirmation open cancels it instead of stranding it', async () => {
+  seed();
+  api.mock
+    .onDelete(apiUrl(`${IMPORTS_PATH}/${PASTED_ID}`))
+    .reply(200, makeImportDeleteResult({ batch_id: PASTED_ID, deleted: false }));
+  const first = renderHistory();
+
+  fireEvent.press(await screen.findByTestId(`import-batch-${PASTED_ID}-undo`));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+
+  // The host lives on this screen, not on the app shell: going away has to settle the
+  // pending question, or the next visit inherits a dialog that still deletes the old batch.
+  first.unmount();
+  renderHistory();
+
+  expect(await screen.findByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+  // Still only the dry run: nothing was deleted on the way out or on the way back in.
+  expect(api.mock.history.delete).toHaveLength(1);
+  expect(api.mock.history.delete[0].params).toEqual({ dry_run: true });
+});
+
 test('discarding a draft uses its own wording and needs no dry run', async () => {
   seed();
   api.mock
@@ -417,7 +439,13 @@ test('changing the filter goes back to page 1 instead of keeping the old offset'
   await waitFor(() =>
     expect(screen.getByTestId('imports-pagination-page').props.children).toBe('第 1 / 3 页'),
   );
-  expect(listRequests().at(-1)).toEqual({ limit: 20, offset: 0, status: ['committed'] });
+  // Every request, in order: no throwaway `{offset: 20, status: ['committed']}` in between,
+  // which is what an offset reset by effect rather than derived in render would have sent.
+  expect(listRequests()).toEqual([
+    { limit: 20, offset: 0 },
+    { limit: 20, offset: 20 },
+    { limit: 20, offset: 0, status: ['committed'] },
+  ]);
 });
 
 test('a page that empties under the user falls back to page 1 rather than stranding them', async () => {

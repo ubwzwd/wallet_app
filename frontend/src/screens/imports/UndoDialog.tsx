@@ -165,6 +165,18 @@ export function UndoDialogHost(): React.JSX.Element | null {
     setArmed(false);
   }, [id]);
 
+  // Unlike `ConfirmHost`, which is mounted once for the whole app, this host lives on the
+  // two screens that can undo. If one of them goes away with the dialog open (browser back,
+  // a deep link, any router replace), nothing else would ever resolve the promise:
+  // `undoImportBatch` would wait forever and the next screen would inherit a stale dialog
+  // that still deletes the batch the user already left. Leaving cancels whatever is pending.
+  React.useEffect(
+    () => () => {
+      if (pending !== null) settle(false);
+    },
+    [],
+  );
+
   if (!current) return null;
   const d = current.data;
 
@@ -381,6 +393,8 @@ const styles = StyleSheet.create({
     marginTop: space['4'],
     paddingHorizontal: space['6'],
     paddingVertical: space['4'],
+    // 屏幕稿 11 · 1440 rules the foot off from the body, the same hairline the sheet has.
+    borderTopWidth: 1,
   },
   footNarrow: {
     flexDirection: 'row',
