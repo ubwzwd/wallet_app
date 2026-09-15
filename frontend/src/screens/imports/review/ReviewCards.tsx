@@ -1,35 +1,41 @@
 /**
- * The phone layout of the review step (04 §4.11.9): the same rows as the wide grid, as a
- * card flow. Semantically equivalent, not a subset — every field is still editable, but the
- * two that get changed the most (kind and category) sit on the card while the rest moves
- * into an "edit details" sheet.
+ * The phone layout of the review step (04 §4.11.9, 屏幕稿 03 · 375): the same rows as the
+ * wide grid, as a card flow. Semantically equivalent, not a subset — every field is still
+ * editable, but the two that get changed the most (kind and category) sit on the card while
+ * the rest moves into an "edit details" sheet behind the ⋯ button.
  *
- * A transfer row keeps its whole link cell on the card: the pairing checkbox is prefilled
- * and checked whenever the server found a single candidate, and the spec is explicit that
- * the user has to see it — and be able to clear it — without opening anything.
+ * A card is 屏幕稿 03's: the checkbox, then the merchant with its row number, the date and
+ * account under it and a row of chips (kind, category, state, flags); the amount, coloured
+ * by kind, and the ⋯ button stand on the right. A transfer or refund row keeps its whole
+ * link band on the card — the pairing checkbox is prefilled and checked whenever the server
+ * found a single candidate, and the spec is explicit that the user has to see it, and be
+ * able to clear it, without opening anything.
  *
- * Bulk editing starts with a long press, which is just "select this row": the screen's bulk
- * bar appears as soon as the selection is non-empty.
+ * Bulk editing starts with the card's own checkbox (or a long press); the screen's bulk bar
+ * appears as soon as the selection is non-empty.
  */
 import React from 'react';
-import {
-  type LayoutChangeEvent,
-  Pressable,
-  ScrollView,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { type LayoutChangeEvent, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportRow } from '@/api/types';
 import { formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
-import { Button, Card, Checkbox, Divider, Sheet, Text } from '@/ui';
+import { useColors } from '@/theme/ThemeProvider';
+import { Button, Card, Checkbox, Divider, KIND_AMOUNT_TONE, Sheet, Text } from '@/ui';
 
 import { FlagBadges, SkipToggle } from './FlagBadges';
 import { LinkCell } from './LinkCell';
+import { LinkPanel, hasLinkPanel } from './LinkPanel';
 import { CategoryCell, CurrencyCell, KindCell } from './ReviewCells.picker';
-import { AmountCell, DateCell, RowNoCell, TextCell } from './ReviewCells.text';
+import {
+  AmountCell,
+  DateCell,
+  RowNoCell,
+  TextCell,
+  shortDate,
+  transferTitle,
+} from './ReviewCells.text';
 import type { ReviewViewProps } from './ReviewTable';
 
 const MERCHANT_MAX = 200;
@@ -44,18 +50,21 @@ const NOTE_MAX = 500;
  * The height is the viewport minus the page chrome above and below the list (the top bar,
  * the screen header, the slice control and the commit bar).
  */
-// 300 is the measured phone chrome at the C2 density, not a computed value; the row
+// 380 is the measured phone chrome at the C2 density (the top bar, the page header, the
+// banner, the slices and 屏幕稿 03 · 375's bottom bar), not a computed value; the row
 // virtualisation task that reworks this file replaces it with a measured height.
-const CARDS_CHROME_HEIGHT = 300;
+const CARDS_CHROME_HEIGHT = 380;
 const MIN_CARDS_HEIGHT = 240;
 
 export function ReviewCards({
   env,
   selection,
   highlight,
+  bannerJumpSignal = 0,
   testID,
 }: ReviewViewProps): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
   const id = testID ?? 'review-cards';
   const viewportSize = useWindowDimensions();
   const [detailFor, setDetailFor] = React.useState<string | null>(null);
@@ -65,11 +74,10 @@ export function ReviewCards({
 
   const rows = selection.visible;
   const detailRow = rows.find((row) => row.id === detailFor) ?? null;
-  const selecting = selection.count > 0;
   const highlightRowNo = highlight?.rowNo ?? null;
 
   // Bringing the highlighted card into view needs its position inside the scroll box, and a
-  // card with a link cell is much taller than a plain one, so a nominal row height would not
+  // card with a link band is much taller than a plain one, so a nominal row height would not
   // do. Two ways in, because a jump reaches a card in two different states:
   //  - the card is mounting for the first time (the jump widened the slice to reveal it) —
   //    its own `onLayout` reports where it landed and serves the pending request;
@@ -122,12 +130,24 @@ export function ReviewCards({
     // `highlightSeq` is the point: the same row twice is a new request to scroll to it.
   }, [highlightRowNo, highlightSeq, scrollToTop]);
 
+  // The page's blocking banner asked for the first uncategorized row (04 §4.11.8): on a
+  // phone that is the uncategorized slice, whose first card is exactly that row.
+  const sliceRef = React.useRef(selection.setSlice);
+  sliceRef.current = selection.setSlice;
+  const firstBannerJump = React.useRef(bannerJumpSignal);
+  React.useEffect(() => {
+    if (bannerJumpSignal === firstBannerJump.current) return;
+    firstBannerJump.current = bannerJumpSignal;
+    sliceRef.current('uncategorized');
+    scroller.current?.scrollTo({ y: 0, animated: true });
+  }, [bannerJumpSignal]);
+
   return (
     <ScrollView
       ref={scroller}
       testID={id}
       style={{ maxHeight: Math.max(MIN_CARDS_HEIGHT, viewportSize.height - CARDS_CHROME_HEIGHT) }}
-      contentContainerStyle={{ gap: space['2'] }}
+      contentContainerStyle={{ gap: space['3'] }}
     >
       {rows.length === 0 ? (
         <Text variant="body" tone="muted" testID={`${id}-empty`}>
@@ -136,9 +156,11 @@ export function ReviewCards({
       ) : null}
 
       {rows.map((row, index) => (
-        // touch-target-exempt: wraps a whole card, which is never shorter than one row of
-        // fields plus its padding — far past 44 at any density.
-        <Pressable
+        // 屏幕稿 03 · 375 draws the card body as plain surface: the checkbox selects, the
+        // ⋯ button opens the details sheet, and nothing else on the card is pressable. A
+        // Pressable here would also nest the checkbox and the button inside a <button>,
+        // which the browser refuses outright.
+        <View
           key={row.id}
           testID={`${id}-row-${row.row_no}`}
           ref={(node: View | null) => {
@@ -152,79 +174,115 @@ export function ReviewCards({
             pendingScroll.current = null;
             scrollToTop(y);
           }}
-          onLongPress={() => selection.toggle(row, index)}
-          accessibilityRole="button"
-          accessibilityLabel={t('import:review.select_row', { row: row.row_no })}
         >
           <Card
-            variant={row.row_no === highlightRowNo ? 'raised' : 'outlined'}
-            style={{ gap: space['2'], opacity: row.status === 'skipped' ? 0.55 : 1 }}
+            variant="raised"
+            style={{
+              gap: space['2'],
+              opacity: row.status === 'skipped' ? 0.55 : 1,
+              backgroundColor:
+                row.row_no === highlightRowNo ? colors['status.warning.bg'] : undefined,
+            }}
           >
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: space['2'],
-                flexWrap: 'wrap',
-              }}
-            >
-              {selecting ? (
-                <Checkbox
-                  testID={`${id}-select-${row.row_no}`}
-                  checked={selection.selected.has(row.id)}
-                  accessibilityLabel={t('import:review.select_row', { row: row.row_no })}
-                  onChange={() => selection.toggle(row, index)}
-                />
-              ) : null}
-              {/* The same cell the wide grid uses: the save-state dot and, when a cell
-                  edit was refused, the retry button (04 §4.11.5 — the phone is not
-                  allowed to be a dead end for a failed save). */}
-              <RowNoCell
-                row={row}
-                state={env.ctrl.saveStateOf(row.id)}
-                onRetry={() => env.ctrl.retry(row.id)}
-                testID={`review-${row.row_no}-row-no`}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space['2'] }}>
+              <Checkbox
+                testID={`${id}-select-${row.row_no}`}
+                checked={selection.selected.has(row.id)}
+                accessibilityLabel={t('import:review.select_row', { row: row.row_no })}
+                onChange={() => selection.toggle(row, index)}
               />
-              <Text variant="caption" tone="secondary" mono>
-                {row.date ?? t('import:review.missing_value')}
-              </Text>
-              <View style={{ flex: 1 }} />
-              <FlagBadges row={row} testIDPrefix={`review-${row.row_no}-flag`} />
-            </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }}>
-              <Text variant="subheading" numberOfLines={1} style={{ flex: 1 }}>
-                {row.kind === 'transfer' ? '—' : (row.merchant ?? '—')}
-              </Text>
-              <Text variant="subheading" mono testID={`${id}-amount-${row.row_no}`}>
-                {row.amount === null
-                  ? t('import:review.missing_value')
-                  : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
-                      signDisplay: 'always',
-                    })}
-              </Text>
-            </View>
+              <View style={{ flex: 1, minWidth: 0, gap: space['1'] }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space['2'] }}>
+                  <Text variant="subheading" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {row.kind === 'transfer'
+                      ? transferTitle(row, env, t)
+                      : (row.merchant ?? t('import:review.missing_value'))}
+                  </Text>
+                  {/* The row number, its save-state dot and — when a write was refused —
+                      the retry button, exactly as the wide grid shows them (§4.11.5). */}
+                  <RowNoCell
+                    row={row}
+                    state={env.ctrl.saveStateOf(row.id)}
+                    onRetry={() => env.ctrl.retry(row.id)}
+                    hash
+                    testID={`review-${row.row_no}-row-no`}
+                  />
+                </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }}>
-              <View style={{ flex: 1 }}>
-                <KindCell row={row} env={env} testID={`review-${row.row_no}-kind`} />
+                <Text variant="caption" tone="muted" numberOfLines={1}>
+                  {[
+                    row.date === null ? t('import:review.missing_value') : shortDate(row.date),
+                    env.batch.source_name,
+                  ].join(' · ')}
+                </Text>
+
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: space['1'],
+                    marginTop: space['1'],
+                  }}
+                >
+                  <KindCell row={row} env={env} testID={`review-${row.row_no}-kind`} />
+                  <CategoryCell
+                    row={row}
+                    env={env}
+                    level="l1"
+                    open={categoryOpen?.id === row.id && categoryOpen.level === 'l1'}
+                    onOpenChange={(open) =>
+                      setCategoryOpen(open ? { id: row.id, level: 'l1' } : null)
+                    }
+                    testID={`review-${row.row_no}-l1`}
+                  />
+                  <SkipToggle
+                    row={row}
+                    onToggle={(target) =>
+                      env.ctrl.patch(target, {
+                        status: target.status === 'skipped' ? 'pending' : 'skipped',
+                      })
+                    }
+                    testID={`review-${row.row_no}-skip`}
+                  />
+                  <FlagBadges row={row} testIDPrefix={`review-${row.row_no}-flag`} />
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <CategoryCell
-                  row={row}
-                  env={env}
-                  level="l1"
-                  open={categoryOpen?.id === row.id && categoryOpen.level === 'l1'}
-                  onOpenChange={(open) =>
-                    setCategoryOpen(open ? { id: row.id, level: 'l1' } : null)
+
+              <View style={{ alignItems: 'flex-end', gap: space['1'] }}>
+                <Text
+                  variant="subheading"
+                  mono
+                  tone={
+                    row.amount === null
+                      ? 'danger'
+                      : row.kind === null
+                        ? 'primary'
+                        : KIND_AMOUNT_TONE[row.kind]
                   }
-                  testID={`review-${row.row_no}-l1`}
+                  testID={`${id}-amount-${row.row_no}`}
+                >
+                  {row.amount === null
+                    ? t('import:review.missing_value')
+                    : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
+                        signDisplay: 'always',
+                      })}
+                </Text>
+                <Button
+                  testID={`${id}-details-${row.row_no}`}
+                  size="sm"
+                  variant="ghost"
+                  icon="more-horizontal"
+                  iconOnly
+                  accessibilityLabel={t('import:review.edit_details')}
+                  onPress={() => setDetailFor(row.id)}
                 />
               </View>
             </View>
 
-            {row.kind === 'transfer' ? (
-              <LinkCell row={row} env={env} testID={`review-${row.row_no}-link`} />
+            {hasLinkPanel(row) ? (
+              <LinkPanel row={row} env={env} testID={`review-${row.row_no}-link`} />
             ) : null}
 
             {row.hint !== null ? (
@@ -232,28 +290,8 @@ export function ReviewCards({
                 {row.hint}
               </Text>
             ) : null}
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }}>
-              <Button
-                testID={`${id}-details-${row.row_no}`}
-                size="sm"
-                variant="secondary"
-                label={t('import:review.edit_details')}
-                onPress={() => setDetailFor(row.id)}
-              />
-              <View style={{ flex: 1 }} />
-              <SkipToggle
-                row={row}
-                onToggle={(target) =>
-                  env.ctrl.patch(target, {
-                    status: target.status === 'skipped' ? 'pending' : 'skipped',
-                  })
-                }
-                testID={`review-${row.row_no}-skip`}
-              />
-            </View>
           </Card>
-        </Pressable>
+        </View>
       ))}
 
       <Sheet
@@ -297,6 +335,8 @@ export function ReviewCards({
               testID={`review-detail-l2`}
             />
             <Divider />
+            {/* The counterparty controls of a transfer row (the account / free-text pair);
+                the pairing itself is the band on the card. */}
             <LinkCell row={detailRow} env={env} testID={`review-detail-link`} />
           </View>
         ) : null}

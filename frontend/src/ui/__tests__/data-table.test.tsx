@@ -53,6 +53,7 @@ interface Options {
   focus?: DataTableCellPos | null;
   scrollToRow?: number | null;
   scrollSignal?: number;
+  footer?: React.ReactNode;
 }
 
 function renderTable(options: Options = {}) {
@@ -240,4 +241,23 @@ describe('DataTable row windowing', () => {
     expect(select.minHeight).toBe(DATA_TABLE_ROW_HEIGHT);
     expect(cell.minHeight).toBe(DATA_TABLE_ROW_HEIGHT);
   });
+});
+
+// ------------------------------------------------------------------ the card's own bottom bar
+
+test('the footer sits inside the card, outside both scroll boxes (屏幕稿 03)', () => {
+  renderTable({ footer: <Text variant="body">bar</Text> });
+
+  // It is part of the card, not a second one below it — and it is *not* inside the
+  // vertical scroll box, so scrolling the rows never moves it out of reach.
+  const footer = screen.getByTestId('grid-footer');
+  expect(footer).toBeTruthy();
+  expect(screen.getByText('bar')).toBeTruthy();
+  const inScroller = screen.getByTestId('grid').findAllByProps({ testID: 'grid-footer' });
+  expect(inScroller).toHaveLength(0);
+});
+
+test('no footer is drawn when none is asked for', () => {
+  renderTable();
+  expect(screen.queryByTestId('grid-footer')).toBeNull();
 });

@@ -76,15 +76,21 @@
     }
   },
   "review": {
-    "title": "{{filename}} → {{source}}",
-    "summary": "{{rows}} 行 · 待归类 {{uncategorized}}",
+    "page_title": "逐行确认",
+    "stat_rows_other": "{{count}} 行",
+    "stat_uncategorized_other": "{{count}} 行待归类",
+    "stat_skipped_other": "{{count}} 行已跳过",
+    "batch_line": "{{filename}} · 目标账户 {{source}}",
+    "change_file": "换个文件",
+    "discard": "放弃本次导入",
     "filter": {
       "all_other": "全部 {{count}}",
       "uncategorized_other": "待归类 {{count}}",
       "flagged_other": "有标记 {{count}}",
       "skipped_other": "已跳过 {{count}}"
     },
-    "selected_other": "已选 {{count}}",
+    "selected_other": "已选 {{count}} / {{total}} 行",
+    "transfer_title": "{{from}} → {{to}}",
     "bulk": {
       "set_category": "批量设分类",
       "set_kind": "批量设类型",
@@ -97,31 +103,36 @@
       "failed": "这一批没有改动，请检查选中的行"
     },
     "column": {
-      "row_no": "行号",
+      "row_no": "#",
       "date": "日期",
       "amount": "金额",
       "currency": "币种",
-      "kind": "类型",
+      "kind": "种类",
       "merchant": "商户",
       "note": "备注",
-      "category_l1": "一级",
-      "category_l2": "二级",
-      "linked": "关联 / 对手",
-      "flags": "标记"
+      "category_l1": "一级分类",
+      "category_l2": "二级分类",
+      "linked": "账户 · 对手",
+      "flags": "状态与标记"
     },
     "transfer_not_applicable": "—",
+    "status": {
+      "pending": "待处理",
+      "edited": "已改",
+      "skipped": "已跳过"
+    },
     "flag": {
       "duplicate": "可能重复",
       "refund_candidate": "疑似退款",
       "transfer_candidate": "可配对转账",
-      "needs_review": "需核对",
-      "uncategorized": "待归类",
-      "skipped": "已跳过",
-      "edited": "已编辑"
+      "needs_review": "需核对"
     },
     "linked": {
       "refund_pick": "选择原单",
-      "transfer_pair_confirm": "找到对方账户的另一半，关联为一笔转账？",
+      "refund_origin": "关联原单",
+      "refund_repick": "改选",
+      "refundable": "可退余额 {{amount}}",
+      "transfer_pair_confirm": "关联为一笔转账",
       "transfer_pair_hint": "配对后两条会统一成同一个子类型",
       "transfer_multi_hint": "找到 {{count}} 条可以配对的转账，请选一条",
       "transfer_pick_single": "选一条",
@@ -133,8 +144,10 @@
     "hint_duplicate_row": "本批内有相同的行（第 {{row}} 行）",
     "skip_row": "跳过",
     "unskip_row": "取消跳过",
-    "block_uncategorized_other": "还有 {{count}} 行没有一级分类，补齐后才能提交",
-    "jump_to_first": "跳到第一条",
+    "block_uncategorized_other": "还有 {{count}} 行待归类，补齐后才能提交",
+    "block_uncategorized_short_other": "{{count}} 行待归类，无法提交",
+    "jump_to_first": "定位第一行",
+    "submit": "提交入账",
     "submit_button": "提交 {{count}} 行",
     "submit_pairs_hint_other": "其中 {{count}} 对转账会合并成 {{count}} 笔",
     "keyboard_help_title": "键盘快捷键",
@@ -149,8 +162,8 @@
     "missing_value": "缺失",
     "select_all": "全选本页",
     "select_row": "选中第 {{row}} 行",
-    "pick_category": "选择分类",
-    "pick_category_l2": "选择二级",
+    "pick_category": "待归类",
+    "pick_category_l2": "选填",
     "no_rows_in_slice": "这一片没有行",
     "committing": "正在提交这批导入…",
     "block_incomplete_other": "还有 {{count}} 行缺日期、金额或币种，补齐后才能提交",
