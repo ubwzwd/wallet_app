@@ -22,11 +22,12 @@ import type { RefundOrigin, Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
-import { formatDate, formatMoney } from '@/i18n/format';
+import { formatDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { Icon, Text, raisedShadow } from '@/ui';
 
+import { useAmountText } from '../amount';
 import { ActionButton } from './ActionButton';
 import { TintSideCard } from './parts';
 
@@ -102,6 +103,8 @@ export function RefundOriginCard({
   const { t } = useTranslation();
   const lang = useLang();
   const { colors, scheme } = useTheme();
+  // 屏幕稿 08 writes the 原支出 figures bare: one currency, one card (§14.59a).
+  const money = useAmountText();
   const id = testID ?? 'detail-origin';
 
   if (!origin) {
@@ -202,7 +205,7 @@ export function RefundOriginCard({
             </Text>
           </View>
           <Text variant="body" tone="expense" mono weight={500} testID={`${id}-amount`}>
-            {formatMoney(origin.amount, origin.currency, lang)}
+            {money(origin.amount, origin.currency)}
           </Text>
         </Pressable>
 
@@ -215,10 +218,8 @@ export function RefundOriginCard({
           testID={`${id}-summary`}
         >
           {t('transaction:detail.refunds_summary', {
-            refunded: formatMoney(origin.refunded_total, origin.currency, lang, {
-              signDisplay: 'never',
-            }),
-            refundable: formatMoney(origin.refundable, origin.currency, lang),
+            refunded: money(origin.refunded_total, origin.currency, 'never'),
+            refundable: money(origin.refundable, origin.currency),
           })}
         </Text>
       </View>
@@ -237,7 +238,7 @@ export function RefundOriginCard({
                 {r.note ?? ''}
               </Text>
               <Text variant="caption" tone="refund" mono weight={500}>
-                {formatMoney(r.amount, r.currency, lang)}
+                {money(r.amount, r.currency)}
               </Text>
             </View>
           ))}

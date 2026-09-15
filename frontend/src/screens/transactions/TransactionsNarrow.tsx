@@ -146,7 +146,7 @@ export function TransactionsNarrow({
           testID="tx-load-more"
         />
       ) : null}
-      {summary && total > 0 ? <SummaryBar summary={summary} lang={lang} /> : null}
+      {summary && total > 0 ? <SummaryBar summary={summary} /> : null}
     </View>
   );
 

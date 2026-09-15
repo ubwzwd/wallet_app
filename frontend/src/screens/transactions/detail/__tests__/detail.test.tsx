@@ -189,11 +189,11 @@ test('an expense lists its refunds with the account the money went back to, plus
   expect(router.queryByText(EXPENSE.id)).toBeNull();
 
   expect(router.getByTestId('tx-detail-refunds-summary')).toHaveTextContent(
-    '已退 ¥399.00 / 可退 ¥199.00',
+    '已退 399.00 / 可退 199.00',
   );
   // `source_id` on a refund row is the returning account, mapped to its name (§14.53f).
   expect(router.getByTestId('tx-detail-refunds-account-r-1')).toHaveTextContent('建行信用卡');
-  expect(router.getByTestId('tx-detail-refunds-amount-r-1')).toHaveTextContent('¥399.00');
+  expect(router.getByTestId('tx-detail-refunds-amount-r-1')).toHaveTextContent('399.00');
 
   // And the row opens that refund.
   fireEvent.press(router.getByTestId('tx-detail-refunds-row-r-1'));
@@ -295,9 +295,9 @@ test('a refund shows the original expense and the other refunds against it, olde
   expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(
     containing('招行储蓄卡'),
   );
-  expect(router.getByTestId('tx-detail-origin-amount')).toHaveTextContent('−¥598.00');
+  expect(router.getByTestId('tx-detail-origin-amount')).toHaveTextContent('−598.00');
   expect(router.getByTestId('tx-detail-origin-summary')).toHaveTextContent(
-    '已退 ¥598.00 / 可退 ¥0.00',
+    '已退 598.00 / 可退 0.00',
   );
 
   const others = router.getAllByTestId(/^tx-detail-origin-other-/);
@@ -451,14 +451,14 @@ test('宽屏 prices what deleting this row would change, and keeps the actions i
   const router = open(EXPENSE);
 
   expect(await router.findByTestId('tx-detail-impact-total')).toHaveTextContent(
-    containing('¥8,421.66 · 含本笔 ¥598.00'),
+    containing('8,421.66 · 含本笔 598.00'),
   );
   expect(router.getByTestId('tx-detail-impact-category')).toHaveTextContent(
-    containing('¥2,310.50 · 含本笔 ¥598.00'),
+    containing('2,310.50 · 含本笔 598.00'),
   );
   // 8,421.66 − 598.00: an expense leaving the month takes its own magnitude with it.
   expect(router.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
-    containing('删除后支出¥7,823.66'),
+    containing('删除后支出7,823.66'),
   );
 
   // Wide has no sheet: every operation is already on screen.
@@ -472,10 +472,10 @@ test('宽屏 prices what deleting this row would change, and keeps the actions i
   seedSummary();
   const second = open(REFUND);
   expect(await second.findByTestId('tx-detail-impact-total')).toHaveTextContent(
-    containing('已冲减本笔 ¥199.00'),
+    containing('已冲减本笔 199.00'),
   );
   expect(second.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
-    containing('删除后支出¥8,620.66'),
+    containing('删除后支出8,620.66'),
   );
 });
 
@@ -491,13 +491,13 @@ test('宽屏 深链: 「对 N 月的影响」 fetches the row\'s own month inste
   const router = open(EXPENSE);
 
   expect(await router.findByTestId('tx-detail-impact-total')).toHaveTextContent(
-    containing('¥8,421.66 · 含本笔 ¥598.00'),
+    containing('8,421.66 · 含本笔 598.00'),
   );
   expect(api.mock.history.get.some((r) => (r.url ?? '').includes('/stats/summary'))).toBe(true);
 });
 
 /**
- * A category the summary does not report has no figure to print: 「¥0.00 · 含本笔 ¥299.00」
+ * A category the summary does not report has no figure to print: 「0.00 · 含本笔 299.00」
  * would be a number invented by the card, so the row drops out instead.
  */
 test('宽屏 drops the category line when the month\'s summary has no such node', async () => {

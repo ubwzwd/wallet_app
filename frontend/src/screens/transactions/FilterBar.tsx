@@ -123,6 +123,13 @@ function currencyCodesOf(props: FilterBarProps): string[] {
  * for good, so coming back to /transactions never reopens it by itself.
  */
 let drawerOpen = false;
+/**
+ * The wide panel's twin (§14.59b): once conditions are on, 屏幕稿 02's three-column card
+ * collapses to the 「已选条件」 strip and a 「筛选」 button, so the table starts at the top of
+ * the page instead of below a screenful of empty boxes. Module-level for the same reason as
+ * `drawerOpen`: every control writes the URL and the screen remounts.
+ */
+let panelOpen = false;
 /** Pending reset of `drawerOpen`, armed on unmount and cancelled by a remount in the same tick. */
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -131,9 +138,14 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
   const colors = useColors();
   const wide = useIsWide();
   const [sheetOpen, setSheetOpen] = React.useState(drawerOpen);
+  const [expanded, setExpanded] = React.useState(panelOpen);
   const setDrawer = React.useCallback((open: boolean): void => {
     drawerOpen = open;
     setSheetOpen(open);
+  }, []);
+  const setPanel = React.useCallback((open: boolean): void => {
+    panelOpen = open;
+    setExpanded(open);
   }, []);
   // A filter change remounts the screen, and the drawer must survive that; leaving the
   // screen must close it. Unmount arms a reset, a remount in the same tick cancels it.
@@ -145,6 +157,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     return () => {
       closeTimer = setTimeout(() => {
         drawerOpen = false;
+        panelOpen = false;
       }, 0);
     };
   }, []);
@@ -205,6 +218,33 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
   );
 
   if (wide) {
+    // Collapsed: one line of what is on, and the way back to the panel (§14.59b).
+    if (chips.length > 0 && !expanded) {
+      return (
+        <Card
+          testID={id}
+          style={{
+            paddingVertical: space['3'] + 2,
+            paddingHorizontal: space['5'],
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space['4'],
+            flexWrap: 'wrap',
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 240 }}>{chipStrip}</View>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="filter"
+            label={t('transaction:list.filter.open')}
+            onPress={() => setPanel(true)}
+            testID={`${id}-expand`}
+          />
+        </Card>
+      );
+    }
+
     return (
       <Card testID={id} style={{ padding: space['5'], gap: space['4'] }}>
         <View
@@ -213,13 +253,24 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
           <Text variant="subheading" weight={700}>
             {t('transaction:list.filter.title')}
           </Text>
-          <Button
-            variant="ghost"
-            size="sm"
-            label={t('transaction:list.filter.reset_all')}
-            onPress={props.onClear}
-            testID={`${id}-reset`}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['1'] }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              label={t('transaction:list.filter.reset_all')}
+              onPress={props.onClear}
+              testID={`${id}-reset`}
+            />
+            {chips.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                label={t('transaction:list.filter.collapse')}
+                onPress={() => setPanel(false)}
+                testID={`${id}-collapse`}
+              />
+            ) : null}
+          </View>
         </View>
 
         <View

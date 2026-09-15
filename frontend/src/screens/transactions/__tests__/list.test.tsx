@@ -218,7 +218,7 @@ test('the two legs of a transfer render as one row, and the header counts the en
 
   // Six legs came back and five rows are shown, but the header counts what the *server*
   // matched — a number that does not move as more pages arrive (see the paging test below).
-  expect(screen.getByTestId('tx-count')).toHaveTextContent('已加载 6 / 共 6 笔');
+  expect(screen.getByTestId('tx-count')).toHaveTextContent('共 6 笔');
 });
 
 test('the header count does not drift when a second page is loaded', async () => {
@@ -243,16 +243,15 @@ test('the header count does not drift when a second page is loaded', async () =>
 
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
-  expect(await screen.findByTestId('tx-count')).toHaveTextContent('已加载 6 / 共 8 笔');
+  // Five rows out of six legs, and the header still says what the server matched.
+  expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 8 笔');
 
   fireEvent.press(screen.getByTestId('tx-load-more'));
 
-  // The second page adds to what is loaded; the total it is measured against is the same
-  // number as before — merging the pair on page one may not eat into it.
-  await waitFor(() =>
-    expect(screen.getByTestId('tx-count')).toHaveTextContent('已加载 7 / 共 8 笔'),
-  );
+  // The second page arrives and the total stays the number the envelope gave: neither
+  // merging the pair on page one nor appending a page may move it.
   expect(await screen.findByTestId('tx-row-older')).toBeTruthy();
+  await waitFor(() => expect(screen.getByTestId('tx-count')).toHaveTextContent('共 8 笔'));
 });
 
 test('the wide pager counts the whole filtered result, not the page', async () => {
@@ -296,7 +295,7 @@ test('the wide layout is a seven-column table with a counted foot strip', async 
   // The foot strip counts the merged rows on screen against the server's `total`, and
   // takes the net from the response envelope — never from this page.
   expect(screen.getByTestId('tx-table-shown')).toHaveTextContent('5 / 6 笔已显示');
-  expect(screen.getByTestId('tx-table-net')).toHaveTextContent('净额 +¥17,000.01');
+  expect(screen.getByTestId('tx-table-net')).toHaveTextContent('净额 +17,000.01');
 });
 
 test('each day header carries that day\'s expense and income subtotal', async () => {
@@ -304,13 +303,13 @@ test('each day header carries that day\'s expense and income subtotal', async ()
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
   expect(await screen.findByTestId('tx-day-2026-09-10-total')).toHaveTextContent(
-    '当日支出 ¥45.00 · 收入 ¥18,000.00',
+    '当日支出 45.00 · 收入 18,000.00',
   );
   // The transfer pair is excluded from the day it falls on (decision §14.52 A14): only the
   // imported 66.20 expense counts there — and 屏幕稿 02 · 375 names only the non-zero kinds,
   // so that day's header says nothing about income.
   const quiet = screen.getByTestId('tx-day-2026-09-08-total');
-  expect(quiet).toHaveTextContent('当日支出 ¥66.20');
+  expect(quiet).toHaveTextContent('当日支出 66.20');
   expect(quiet).not.toHaveTextContent('收入');
 });
 
@@ -320,9 +319,9 @@ test('the bottom summary comes from the response, not from the rows on screen', 
 
   const expense = await screen.findByTestId('tx-summary-expense');
   // The page's own expenses add up to 111.20; the envelope says 999.99 and that is what wins.
-  expect(expense).toHaveTextContent('¥999.99');
-  expect(screen.getByTestId('tx-summary-income')).toHaveTextContent('¥18,000.00');
-  expect(screen.getByTestId('tx-summary-net')).toHaveTextContent('+¥17,000.01');
+  expect(expense).toHaveTextContent('999.99');
+  expect(screen.getByTestId('tx-summary-income')).toHaveTextContent('18,000.00');
+  expect(screen.getByTestId('tx-summary-net')).toHaveTextContent('+17,000.01');
   expect(screen.getByTestId('tx-summary-rate-missing')).toHaveTextContent('3 笔因暂无汇率未计入');
 });
 

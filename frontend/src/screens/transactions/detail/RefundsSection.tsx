@@ -14,11 +14,12 @@ import { useTranslation } from 'react-i18next';
 
 import type { Money, RefundRef, Uuid } from '@/api/types';
 import { useLang } from '@/i18n';
-import { formatDate, formatMoney } from '@/i18n/format';
+import { formatDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Icon, Text } from '@/ui';
 
+import { useAmountText } from '../amount';
 import { TintSideCard } from './parts';
 
 export interface RefundsSectionProps {
@@ -44,6 +45,8 @@ export function RefundsSection({
   const { t } = useTranslation();
   const lang = useLang();
   const colors = useColors();
+  // 屏幕稿 08 writes 「已退 0.00 / 66.20」 bare — the card counts in one currency (§14.59a).
+  const money = useAmountText();
   const id = testID ?? 'detail-refunds';
 
   return (
@@ -96,7 +99,7 @@ export function RefundsSection({
                   weight={500}
                   testID={`${id}-amount-${r.id}`}
                 >
-                  {formatMoney(r.amount, r.currency, lang)}
+                  {money(r.amount, r.currency)}
                 </Text>
               </Pressable>
             );
@@ -113,8 +116,8 @@ export function RefundsSection({
         testID={`${id}-summary`}
       >
         {t('transaction:detail.refunds_summary', {
-          refunded: formatMoney(refundedTotal, currency, lang, { signDisplay: 'never' }),
-          refundable: formatMoney(refundable, currency, lang),
+          refunded: money(refundedTotal, currency, 'never'),
+          refundable: money(refundable, currency),
         })}
       </Text>
     </TintSideCard>

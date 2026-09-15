@@ -10,8 +10,8 @@ import React from 'react';
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { IsoDate, Money, TxKind } from '@/api/types';
-import { type FormatMoneyOptions, formatAmountPlain, parseLocalDate } from '@/i18n/format';
+import type { IsoDate, SourceType, TxKind } from '@/api/types';
+import { parseLocalDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -20,6 +20,7 @@ import {
   type BadgeTone,
   KIND_ICON,
   KindIcon,
+  SourceTypeIcon,
   Text,
   type TextTone,
   kindLabelKey,
@@ -77,6 +78,12 @@ export function InfoBadge({
 
 export interface AccountRowProps {
   kind: TxKind;
+  /**
+   * The account's type. 屏幕稿 08 puts the **account** glyph on this strip — the row names
+   * an account, and the kind is already said twice above it (the pill and the sign on the
+   * headline). Falls back to the kind well when the account is gone (§14.59b).
+   */
+  sourceType?: SourceType | null;
   /** The merchant, or the account name when there is no merchant. */
   title: string;
   /** 「DBS Multiplier · 储蓄卡 · SGD」 */
@@ -87,18 +94,24 @@ export interface AccountRowProps {
 /** 屏幕稿 08: the tinted strip under the amount — icon well, merchant, account line. */
 export function AccountRow({
   kind,
+  sourceType,
   title,
   subtitle,
   testID,
 }: AccountRowProps): React.JSX.Element {
   const colors = useColors();
   const wide = useIsWide();
+  const size = wide ? 36 : 34;
   return (
     <View
       testID={testID}
       style={[styles.accountRow, { backgroundColor: colors['bg.canvas'] }]}
     >
-      <KindIcon kind={kind} size={wide ? 36 : 34} />
+      {sourceType ? (
+        <SourceTypeIcon type={sourceType} size={size} testID={testID ? `${testID}-icon` : undefined} />
+      ) : (
+        <KindIcon kind={kind} size={size} testID={testID ? `${testID}-icon` : undefined} />
+      )}
       <View style={styles.accountText}>
         <Text
           variant="subheading"
@@ -277,20 +290,10 @@ export function longDate(iso: IsoDate, t: (key: string) => string): string {
  * 「CNY · 账本内部搬钱…」, the leg's own 「储蓄卡 · CNY」), and repeating the symbol on a 40px
  * number is what made the phase-6 page look like a receipt.
  *
- * `formatAmountPlain` writes its own U+2212 and never a '+', so `never` drops that minus and
- * `always` adds the plus here — the same sign rules `formatMoney` applies.
+ * Re-exported from the feature's `amount.tsx`, which §14.59a made the one place that
+ * decides how a figure is written; the detail blocks keep importing it from here.
  */
-export function plainAmount(
-  amount: Money,
-  currency: string,
-  signDisplay: FormatMoneyOptions['signDisplay'],
-): string {
-  const value = Number(amount);
-  const digits = formatAmountPlain(amount, currency);
-  if (signDisplay === 'never') return value < 0 ? digits.slice(1) : digits;
-  if (signDisplay === 'always' && value > 0) return `+${digits}`;
-  return digits;
-}
+export { plainAmount } from '../amount';
 
 const styles = StyleSheet.create({
   accountRow: {

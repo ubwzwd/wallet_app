@@ -16,9 +16,10 @@ import { currentMonth, monthOf } from '@/domain/dates';
 import { addMoney, normalizeAmountInput, subMoney } from '@/domain/money';
 import { categoryName } from '@/i18n/category';
 import { useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
 import { qk, useCategories } from '@/queries';
 import { Text } from '@/ui';
+
+import { plainAmount } from '../amount';
 
 export interface StatsPreviewProps {
   ledgerId: Uuid;
@@ -91,8 +92,10 @@ export function StatsPreview({
     <Text variant="caption" tone="secondary" testID={testID ?? 'stats-preview'}>
       {t('transaction:form.impact_preview', {
         label,
-        before: formatMoney(before, summary.base_currency, lang),
-        after: formatMoney(after, summary.base_currency, lang),
+        // Both figures are this ledger's base currency (the guard above), so they are
+        // written bare like every other impact figure (§14.59a).
+        before: plainAmount(before, summary.base_currency),
+        after: plainAmount(after, summary.base_currency),
       })}
     </Text>
   );

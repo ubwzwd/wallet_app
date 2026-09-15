@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import type { Transaction } from '@/api/types';
 import { daysAgo } from '@/domain/dates';
 import { absMoney, cmpMoney, normalizeAmountInput, subMoney } from '@/domain/money';
-import { formatDate, formatMoney } from '@/i18n/format';
+import { formatDate } from '@/i18n/format';
 import { useTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { radius, space } from '@/theme/tokens';
@@ -23,6 +23,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Badge, Button, Chip, Icon, ProgressBar, Text, trimMoney } from '@/ui';
 
+import { useAmountText } from '../amount';
 import { TransactionPicker } from '../TransactionPicker';
 import { FieldLabel, FormCard } from './parts';
 import { RefundCandidateRow, RefundPickerHeader, refundableOf } from './RefundPickerRow';
@@ -126,6 +127,7 @@ export function RefundFields({
   const { t } = useTranslation();
   const colors = useColors();
   const wide = useIsWide();
+  const money = useAmountText();
   const { lang, values } = ctrl;
   const { origin } = state;
 
@@ -171,17 +173,16 @@ export function RefundFields({
                 {origin.merchant ?? origin.note ?? formatDate(origin.occurred_at, lang)}
               </Text>
               <Text variant="caption" tone="secondary" mono numberOfLines={2}>
-                {`${formatDate(origin.occurred_at, lang)} · ${formatMoney(
+                {`${formatDate(origin.occurred_at, lang)} · ${money(
                   origin.amount,
                   origin.currency,
-                  lang,
                 )}`}
               </Text>
             </View>
             <View style={styles.originRight}>
               <Text variant="caption" tone="secondary" mono testID="refund-origin-remaining">
                 {t('transaction:form.refund_remaining_label', {
-                  amount: formatMoney(remaining ?? '0', origin.currency, lang),
+                  amount: money(remaining ?? '0', origin.currency),
                 })}
               </Text>
               <Button
@@ -202,8 +203,8 @@ export function RefundFields({
           <View style={styles.originRow}>
             <Text variant="caption" tone="secondary" mono style={styles.grow}>
               {t('transaction:detail.refunds_summary', {
-                refunded: formatMoney(refunded, origin.currency, lang),
-                refundable: formatMoney(remaining ?? '0', origin.currency, lang),
+                refunded: money(refunded, origin.currency),
+                refundable: money(remaining ?? '0', origin.currency),
               })}
             </Text>
             <Button
@@ -243,7 +244,8 @@ export function RefundAmountChips({
   disabled = false,
 }: RefundFieldsProps): React.JSX.Element | null {
   const { t } = useTranslation();
-  const { lang, form } = ctrl;
+  const money = useAmountText();
+  const { form } = ctrl;
   const origin = state.origin;
   if (!origin) return null;
   const full = absMoney(origin.amount);
@@ -253,7 +255,7 @@ export function RefundAmountChips({
       <Chip
         testID="refund-chip-full"
         label={t('transaction:form.refund_full_amount', {
-          amount: formatMoney(full, origin.currency, lang),
+          amount: money(full, origin.currency),
         })}
         disabled={disabled}
         onPress={() => form.setValue('amount', trimMoney(full), { shouldDirty: true })}
@@ -262,7 +264,7 @@ export function RefundAmountChips({
         <Chip
           testID="refund-chip-remaining"
           label={t('transaction:form.refund_remaining_amount', {
-            amount: formatMoney(remaining, origin.currency, lang),
+            amount: money(remaining, origin.currency),
           })}
           disabled={disabled}
           onPress={() => form.setValue('amount', trimMoney(remaining), { shouldDirty: true })}
@@ -275,6 +277,7 @@ export function RefundAmountChips({
 /** The candidate dialog of mockup 06 — a table on 1440, full-screen cards on 375. */
 function RefundPicker({ ctrl, state }: RefundFieldsProps): React.JSX.Element {
   const { t } = useTranslation();
+  const money = useAmountText();
   const { lang, values } = ctrl;
   return (
     <TransactionPicker
@@ -310,7 +313,7 @@ function RefundPicker({ ctrl, state }: RefundFieldsProps): React.JSX.Element {
       rowSummary={(tx) =>
         t('transaction:form.picker_selected_summary', {
           name: tx.merchant ?? tx.note ?? formatDate(tx.occurred_at, lang),
-          amount: formatMoney(refundableOf(tx), tx.currency, lang),
+          amount: money(refundableOf(tx), tx.currency),
         })
       }
       renderRow={(tx, selected) => (
@@ -329,7 +332,8 @@ export function RefundOverWarning({
   state: RefundOriginState;
 }): React.JSX.Element | null {
   const { t } = useTranslation();
-  const { lang, values } = ctrl;
+  const money = useAmountText();
+  const { values } = ctrl;
   const origin = state.origin;
   if (!origin) return null;
   const current = normalizeAmountInput(values.amount);
@@ -340,9 +344,9 @@ export function RefundOverWarning({
   return (
     <Text variant="caption" tone="warning" testID="refund-over-warning" style={styles.warning}>
       {t('transaction:form.refund_over_hint', {
-        original: formatMoney(absMoney(origin.amount), origin.currency, lang),
-        refunded: formatMoney(origin.refunded_total ?? '0', origin.currency, lang),
-        current: formatMoney(current, values.currency, lang),
+        original: money(absMoney(origin.amount), origin.currency),
+        refunded: money(origin.refunded_total ?? '0', origin.currency),
+        current: money(current, values.currency),
       })}
     </Text>
   );

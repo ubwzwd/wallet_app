@@ -307,7 +307,15 @@ test('an empty result with two conditions fires exactly two limit=1 probes', asy
     /去掉「.+」会有 17 笔/,
   );
 
-  const probes = listRequests.filter((p) => p.limit === 1);
+  // The page header's own 「共 M 笔」 probe is a `limit=1` request too, but it carries no
+  // condition at all; the rescue probes are the ones that keep the rest of the filter set.
+  const headerProbes = listRequests.filter(
+    (p) => p.limit === 1 && p.kind === undefined && p.from === undefined,
+  );
+  expect(headerProbes).toHaveLength(1);
+  const probes = listRequests.filter(
+    (p) => p.limit === 1 && (p.kind !== undefined || p.from !== undefined),
+  );
   expect(probes).toHaveLength(2);
   // Decision §14.52 A15: one probe per candidate, never a full sweep.
   expect(probes[0].kind).toBeUndefined();

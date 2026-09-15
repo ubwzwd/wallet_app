@@ -16,7 +16,6 @@ import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import { formatMoney } from '@/i18n/format';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import {
@@ -29,6 +28,7 @@ import {
   type SelectOption,
 } from '@/ui';
 
+import { useAmountText } from './amount';
 import {
   AmountRangeField,
   CategoryField,
@@ -48,6 +48,8 @@ import {
 export function SourceField(props: FilterFieldProps & { inline?: boolean }): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
+  // 屏幕稿 02 · 筛选 375 lists 「12,480.35」 and 「S$4,120.80」 side by side (§14.59a).
+  const money = useAmountText();
   const values = props.filters.source_id ?? [];
 
   const toggle = (id: string): void => {
@@ -120,7 +122,7 @@ export function SourceField(props: FilterFieldProps & { inline?: boolean }): Rea
                 </Text>
               </View>
               <Text variant="caption" tone="secondary" mono numberOfLines={1}>
-                {formatMoney(source.balance, source.default_currency, props.lang)}
+                {money(source.balance, source.default_currency)}
               </Text>
             </Pressable>
           ))}

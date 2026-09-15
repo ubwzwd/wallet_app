@@ -33,7 +33,6 @@ import {
   type ListRow,
 } from '@/domain/transfers';
 import { useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
 import { useTopBar } from '@/navigation';
 import {
   TX_PAGE_SIZE,
@@ -51,12 +50,16 @@ import { Button, Page, PageHeader, Text, confirm, toast } from '@/ui';
 
 import { type CandidateCtx } from './EmptyFiltered';
 import { FilterBar } from './FilterBar';
+import { headerStatText } from './headerStats';
 import { Pagination } from './Pagination';
 import { leadTransaction } from './TransactionRow';
 import { EmptyFilteredState, EmptyNoData, ListError } from './TransactionsEmpty';
 import { TransactionsNarrow } from './TransactionsNarrow';
 import { TransactionsTable } from './TransactionsTable';
 import { useTxFilters } from './useTxFilters';
+
+/** The 「共 M 笔」 probe: the ledger's own count, no conditions, no rows. */
+const LEDGER_TOTAL_PARAMS = { limit: 1 } as const;
 
 export default function TransactionsScreen(): React.JSX.Element {
   const { t } = useTranslation();
@@ -95,9 +98,8 @@ export default function TransactionsScreen(): React.JSX.Element {
   const groups: DayGroupData[] = React.useMemo(() => groupByDay(rows), [rows]);
 
   // The whole filtered result, straight from the server: a number that does not move when
-  // another page arrives. `loaded` is what the infinite list has in hand so far.
+  // another page arrives.
   const total = pages[0]?.total ?? 0;
-  const loaded = items.length;
   const summary: TransactionSummary | undefined = pages[pages.length - 1]?.summary;
 
   const sourceName = React.useCallback(
@@ -109,7 +111,6 @@ export default function TransactionsScreen(): React.JSX.Element {
   // ------------------------------------------------------------------ actions
   const deleteTransaction = useDeleteTransaction(ledgerId);
   const deleteTransfer = useDeleteTransfer(ledgerId);
-  const [menuRow, setMenuRow] = React.useState<ListRow | null>(null);
 
   const pairIdOf = (row: ListRow): Uuid | null =>
     row.kind === 'pair' ? row.pairId : row.tx.transfer_pair_id;
@@ -159,17 +160,25 @@ export default function TransactionsScreen(): React.JSX.Element {
   );
 
   // -------------------------------------------------------------------- parts
-  const countLabel = wide
-    ? t('transaction:list.count', { count: total })
-    : t('transaction:list.count_loaded', { loaded, count: total });
+  // 屏幕稿 02 writes 「共 6 笔」 when nothing is filtered and, once conditions are on,
+  // 「6 笔命中 · 共 140 笔」 — the second number is what the ledger holds without them, so
+  // the reader can tell 「the filter is narrow」 from 「the ledger is empty」. It costs one
+  // `limit=1` request, and only while a filter is actually on.
+  const ledgerTotalQuery = useTransactions(
+    f.activeCount > 0 ? ledgerId : undefined,
+    LEDGER_TOTAL_PARAMS,
+  );
+  const ledgerTotal = ledgerTotalQuery.data?.total;
 
-  const summaryLabel = summary
-    ? t(wide ? 'transaction:list.summary' : 'transaction:list.summary_short', {
-        expense: formatMoney(summary.expense, summary.base_currency, lang),
-        income: formatMoney(summary.income, summary.base_currency, lang),
-        net: formatMoney(summary.net, summary.base_currency, lang, { signDisplay: 'always' }),
-      })
-    : null;
+  const countLabel =
+    f.activeCount > 0 && ledgerTotal !== undefined
+      ? t('transaction:list.count_matched', { count: total, total: ledgerTotal })
+      : t('transaction:list.count', { count: total });
+
+  // 屏幕稿 15 · 空交易列表 prints counts and nothing else: 「支出 0.00 · 收入 0.00」 on a
+  // ledger with no rows is noise, not information.
+  const summaryLabel =
+    summary && total > 0 ? headerStatText(t, summary, { withRefund: wide }) : null;
 
   const filterBar = (
     <FilterBar
@@ -227,9 +236,7 @@ export default function TransactionsScreen(): React.JSX.Element {
               <Text variant="body" tone="secondary" mono weight={500} testID="tx-count">
                 {countLabel}
               </Text>
-              {/* 屏幕稿 15 · 空交易列表 1440 prints counts and nothing else: 「支出 ¥0.00 ·
-                  收入 ¥0.00」 on a ledger with no rows is noise, not information. */}
-              {total > 0 && summaryLabel !== null ? (
+              {summaryLabel !== null ? (
                 <Text variant="body" tone="muted" mono testID="tx-summary-line">
                   {`· ${summaryLabel}`}
                 </Text>

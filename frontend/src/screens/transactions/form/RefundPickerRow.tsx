@@ -14,12 +14,14 @@ import type { Transaction } from '@/api/types';
 import { absMoney, cmpMoney } from '@/domain/money';
 import { categoryName } from '@/i18n/category';
 import type { Lang } from '@/i18n';
-import { formatDate, formatMoney } from '@/i18n/format';
+import { formatDate } from '@/i18n/format';
 import { useCategories } from '@/queries';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, KindIcon, ProgressBar, Text } from '@/ui';
 import { useColors } from '@/theme/ThemeProvider';
+
+import { useAmountText } from '../amount';
 
 /** `refundable` as the endpoints report it, or the full amount as a fallback. */
 export function refundableOf(tx: Transaction): string {
@@ -61,6 +63,8 @@ export function RefundCandidateRow({
   const colors = useColors();
   const wide = useIsWide();
   const { index } = useCategories();
+  // 屏幕稿 06 writes 原支出 / 已退 / 可退 bare — one table, one currency (§14.59a).
+  const money = useAmountText();
 
   const full = absMoney(tx.amount);
   const refunded = tx.refunded_total ?? '0';
@@ -87,7 +91,7 @@ export function RefundCandidateRow({
     >
       {left
         ? t('transaction:form.refund_remaining_label', {
-            amount: formatMoney(remaining, tx.currency, lang),
+            amount: money(remaining, tx.currency),
           })
         : t('transaction:picker.refunded_out')}
     </Text>
@@ -108,7 +112,7 @@ export function RefundCandidateRow({
           </View>
           <View style={styles.cardRight}>
             <Text variant="body" mono weight={500} tone="expense" numberOfLines={1}>
-              {formatMoney(tx.amount, tx.currency, lang)}
+              {money(tx.amount, tx.currency)}
             </Text>
             {remainingLine}
           </View>
@@ -117,8 +121,8 @@ export function RefundCandidateRow({
         <ProgressBar value={done} accessibilityLabel={name} style={styles.bar} />
         <Text variant="caption" tone="muted" mono numberOfLines={1}>
           {t('transaction:form.picker_refunded_of', {
-            refunded: formatMoney(refunded, tx.currency, lang),
-            total: formatMoney(full, tx.currency, lang),
+            refunded: money(refunded, tx.currency),
+            total: money(full, tx.currency),
           })}
         </Text>
       </View>
@@ -140,10 +144,10 @@ export function RefundCandidateRow({
         {category}
       </Text>
       <Text variant="body" mono weight={500} tone="expense" style={styles.colNumber} numberOfLines={1}>
-        {formatMoney(tx.amount, tx.currency, lang)}
+        {money(tx.amount, tx.currency)}
       </Text>
       <Text variant="body" mono tone="secondary" style={styles.colNumber} numberOfLines={1}>
-        {formatMoney(refunded, tx.currency, lang)}
+        {money(refunded, tx.currency)}
       </Text>
       <View style={styles.colRefundable}>
         {remainingLine}

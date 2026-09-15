@@ -19,8 +19,9 @@ import { maxAllowedDate } from '@/domain/dates';
 import { controls, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Button, Chip, DateField, Icon, SegmentedControl, Text, TextField } from '@/ui';
+import { Button, Chip, Icon, SegmentedControl, Text, TextField } from '@/ui';
 
+import { DateRowField } from './DateRowField';
 import { SourceField } from './SourceField';
 import { TransferAmount } from './TransferAmount';
 import { FieldColumns, FieldLabel, FormCard } from './parts';
@@ -311,7 +312,7 @@ export function TransferFields({
           control={control}
           name="occurred_at"
           render={({ field }) => (
-            <DateField
+            <DateRowField
               testID="transfer-date"
               label={t('transaction:form.date')}
               todayLabel={t('transaction:form.today')}
