@@ -22,13 +22,12 @@ import { ApiClientError } from '@/api';
 import type { ImportRow, ImportRowPatch, TxKind } from '@/api/types';
 import { kindOfCategoryTree } from '@/domain/kinds';
 import { cmpMoney } from '@/domain/money';
-import { controls, radius, space } from '@/theme/tokens';
+import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import {
   Button,
   Card,
   CategoryPickerPanel,
-  CurrencyPicker,
   Select,
   Sheet,
   Text,
@@ -230,34 +229,27 @@ export function BulkBar({
             if (next !== null) void run(bulkKindPatch(next as TxKind));
           }}
         />
-        {/* The inline currency trigger shows the code it holds, which a bulk edit never
-            has — so it is given the action's own label to wear. */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: space['1'],
-            height: controls.button.heights.sm,
-            paddingHorizontal: space['3'],
-            borderRadius: radius.md,
-            backgroundColor: colors['bg.subtle'],
-            opacity: env.ctrl.bulkPending ? 0.6 : 1,
+        {/* A bulk edit never holds a code, so the trigger wears the action's own label —
+            which means the whole control is the press target, like the kind picker beside
+            it, rather than a caption sitting outside a chevron. */}
+        <Select
+          testID={`${id}-currency`}
+          value={null}
+          placeholder={t('import:review.bulk.set_currency')}
+          closeLabel={t('common:button.close')}
+          searchable
+          searchPlaceholder={t('import:review.bulk.set_currency')}
+          emptyLabel={t('common:status.none')}
+          options={env.currencyCodes.map((code) => ({
+            value: code,
+            label: code,
+            hint: env.currencyNames[code],
+          }))}
+          disabled={env.ctrl.bulkPending}
+          onChange={(next) => {
+            if (next !== null) void run({ currency: next });
           }}
-        >
-          <Text variant="body" weight={600}>
-            {t('import:review.bulk.set_currency')}
-          </Text>
-          <CurrencyPicker
-            testID={`${id}-currency`}
-            variant="inline"
-            codes={env.currencyCodes}
-            names={env.currencyNames}
-            value={null}
-            label={t('import:review.bulk.set_currency')}
-            disabled={env.ctrl.bulkPending}
-            onChange={(next) => void run({ currency: next })}
-          />
-        </View>
+        />
         <Button
           testID={`${id}-skip`}
           size="sm"
@@ -275,16 +267,21 @@ export function BulkBar({
           disabled={env.ctrl.bulkPending}
           onPress={() => void run({ status: 'pending' })}
         />
-      <Button
-        testID={`${id}-clear`}
-        size="sm"
-        variant="ghost"
-        icon="x"
-        iconOnly
-        accessibilityLabel={t('common:button.cancel')}
-        onPress={selection.clear}
-      />
     </>
+  );
+
+  /* Dropping the selection must never be the thing that scrolled off the end of a phone
+     bar, so it is pinned beside the strip rather than carried inside it. */
+  const clear = (
+    <Button
+      testID={`${id}-clear`}
+      size="sm"
+      variant="ghost"
+      icon="x"
+      iconOnly
+      accessibilityLabel={t('common:button.cancel')}
+      onPress={selection.clear}
+    />
   );
 
   const count = (
@@ -320,6 +317,7 @@ export function BulkBar({
           >
             {actions}
           </ScrollView>
+          {clear}
         </View>
       ) : (
         <View
@@ -328,6 +326,7 @@ export function BulkBar({
           {count}
           <View style={{ width: 1, height: 24, backgroundColor: colors['border.default'] }} />
           {actions}
+          {clear}
         </View>
       )}
 

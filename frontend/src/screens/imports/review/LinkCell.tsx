@@ -15,8 +15,9 @@
  * When no opposite leg was found the server does not guess (decision §14.53c): the account
  * picker and the free-text field start empty and are mutually exclusive — filling one
  * greys out and clears the other. Both collapse entirely once a `matched_transaction_id` is
- * set, because an existing leg makes a second one wrong; the cell then names that leg's
- * account instead.
+ * set, because an existing leg makes a second one wrong; the cell then falls back to naming
+ * this row's own account, and the paired leg is named once — by the strip underneath, which
+ * is also the only place that fetches it.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -24,7 +25,6 @@ import { useTranslation } from 'react-i18next';
 
 import type { ImportRow, Transaction } from '@/api/types';
 import { formatMoney, parseLocalDate } from '@/i18n/format';
-import { useTransaction } from '@/queries';
 import { space } from '@/theme/tokens';
 import { Text, selectableSources } from '@/ui';
 
@@ -86,32 +86,19 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
   const [text, setText] = React.useState(row.counterparty ?? '');
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const matched = useTransaction(
-    env.ledgerId,
-    row.kind === 'transfer' && row.matched_transaction_id !== null
-      ? row.matched_transaction_id
-      : undefined,
-  );
-  const matchedSource = env.sources.find((s) => s.id === matched.data?.source_id)?.name;
-
   React.useEffect(() => {
     setText(row.counterparty ?? '');
   }, [row.counterparty]);
   React.useEffect(() => () => (timer.current ? clearTimeout(timer.current) : undefined), []);
 
   // Every non-transfer row books onto the batch's own account, and cannot be moved off it.
-  if (row.kind !== 'transfer') {
+  // A paired transfer is the same: its leg is settled, so the cell names this row's own
+  // account and the *other* leg is named by the strip underneath (`LinkPanel`), which is
+  // the one place that fetches the matched transaction.
+  if (row.kind !== 'transfer' || row.matched_transaction_id !== null) {
     return (
       <Text variant="body" tone="muted" numberOfLines={1} testID={testID}>
         {env.batch.source_name}
-      </Text>
-    );
-  }
-
-  if (row.matched_transaction_id !== null) {
-    return (
-      <Text variant="body" tone="muted" numberOfLines={1} testID={testID}>
-        {matchedSource ?? env.batch.source_name}
       </Text>
     );
   }

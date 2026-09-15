@@ -26,6 +26,10 @@ export const CELL_PILL_HEIGHT = 30;
 /** A pill is shorter than the 44px minimum, so every pressable one carries this slop. */
 export const CELL_HIT_SLOP = Math.ceil((44 - CELL_PILL_HEIGHT) / 2);
 
+/** The popover opens at the anchor's width; a cell is narrower than any readable list. */
+export const CELL_POPOVER_MIN_WIDTH = 240;
+export const CELL_POPOVER_MAX_WIDTH = 360;
+
 export type CellTone =
   | 'default'
   | 'muted'
@@ -255,6 +259,9 @@ export function CellSelect({
         anchorRef={anchorRef}
         closeLabel={closeLabel}
         testID={testID}
+        // `Popover` matches the anchor's width, and a grid cell is 80–124px wide — too
+        // narrow for an account name and its currency hint. Give the list a floor.
+        style={{ minWidth: CELL_POPOVER_MIN_WIDTH, maxWidth: CELL_POPOVER_MAX_WIDTH }}
       >
         {list}
       </Popover>

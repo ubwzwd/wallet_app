@@ -120,10 +120,7 @@
       "duplicate": "可能重复",
       "refund_candidate": "疑似退款",
       "transfer_candidate": "可配对转账",
-      "needs_review": "需核对",
-      "uncategorized": "待归类",
-      "skipped": "已跳过",
-      "edited": "已改"
+      "needs_review": "需核对"
     },
     "linked": {
       "refund_pick": "选择原单",

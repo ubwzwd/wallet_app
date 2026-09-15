@@ -127,10 +127,7 @@
       "duplicate": "Possible duplicate",
       "refund_candidate": "Looks like a refund",
       "transfer_candidate": "Transfer can be paired",
-      "needs_review": "Needs review",
-      "uncategorized": "Uncategorized",
-      "skipped": "Skipped",
-      "edited": "Edited"
+      "needs_review": "Needs review"
     },
     "linked": {
       "refund_pick": "Choose the original expense",

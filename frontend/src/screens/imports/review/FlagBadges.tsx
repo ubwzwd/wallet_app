@@ -83,15 +83,19 @@ export interface SkipToggleProps {
 export function SkipToggle({ row, onToggle, testID }: SkipToggleProps): React.JSX.Element {
   const { t } = useTranslation();
   const skipped = row.status === 'skipped';
+  const state = t(`import:review.status.${row.status}`);
+  const action = t(skipped ? 'import:review.unskip_row' : 'import:review.skip_row');
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={t(skipped ? 'import:review.unskip_row' : 'import:review.skip_row')}
+      // The visible pill is the row's state, so the accessible name starts with it and only
+      // then names the action pressing it performs (WCAG 2.5.3).
+      accessibilityLabel={`${state} · ${action}`}
       hitSlop={space['3']}
       onPress={() => onToggle(row)}
     >
-      <Badge label={t(`import:review.status.${row.status}`)} tone={STATUS_TONE[row.status]} />
+      <Badge label={state} tone={STATUS_TONE[row.status]} />
     </Pressable>
   );
 }
