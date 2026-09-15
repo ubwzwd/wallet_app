@@ -237,6 +237,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
       onSubmit={onSubmit}
       onCancel={onCancel}
       submitLabel={t('common:button.save')}
+      pageTitle={t('transaction:form.page_title_edit')}
       lockLegs={tx.kind === 'transfer'}
       statsBaseline={sameCategory ? absMoney(tx.amount) : null}
       testID="tx-edit"

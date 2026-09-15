@@ -22,6 +22,8 @@ export interface MerchantFieldProps {
   recent: readonly RecentMerchant[];
   /** Suggestions used with this level-1 category come first. */
   categoryL1: string | null;
+  /** The mockups' 「如『瑞幸咖啡』」 ghost text. */
+  placeholder?: string;
   disabled?: boolean;
   error?: string | null;
   testID?: string;
@@ -35,6 +37,7 @@ export function MerchantField({
   onChange,
   recent,
   categoryL1,
+  placeholder,
   disabled = false,
   error,
   testID,
@@ -75,6 +78,7 @@ export function MerchantField({
         label={t('transaction:form.merchant')}
         accessibilityLabel={t('transaction:form.merchant')}
         value={value}
+        placeholder={placeholder}
         onChangeText={onChange}
         onFocus={() => setOpen(true)}
         onBlur={scheduleClose}

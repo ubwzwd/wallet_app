@@ -182,10 +182,12 @@ test('a non-credit account already chosen is cleared when the subtype becomes �
   renderRouter(ROUTES, { initialUrl: TRANSFER_URL, wrapper: Wrapper });
 
   await chooseTo(USD_ACCOUNT.id);
-  expect(screen.getByTestId('transfer-to-trigger')).toHaveTextContent(USD_ACCOUNT.name);
+  expect(screen.getByTestId('transfer-to-trigger-value')).toHaveTextContent(USD_ACCOUNT.name);
 
   fireEvent.press(screen.getByTestId('transfer-subtype-repayment'));
-  expect(screen.getByTestId('transfer-to-trigger')).not.toHaveTextContent(USD_ACCOUNT.name);
+  expect(screen.getByTestId('transfer-to-trigger-value')).not.toHaveTextContent(
+    USD_ACCOUNT.name,
+  );
   expect(screen.getByText('还款的转入方必须是信用卡账户')).toBeTruthy();
 });
 
@@ -230,6 +232,6 @@ test('"改记为收入" switches to the income tab with the social-income catego
   fireEvent.press(screen.getByTestId('transfer-direction-in'));
   fireEvent.press(screen.getByTestId('transfer-switch-income'));
 
-  expect(await screen.findByTestId('tx-category-trigger')).toHaveTextContent('人情收入');
+  expect(await screen.findByTestId('tx-category-path')).toHaveTextContent('人情收入');
   expect(screen.getByTestId('tx-merchant')).toBeTruthy();
 });

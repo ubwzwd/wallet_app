@@ -190,6 +190,7 @@ export default function EditTransferScreen(): React.JSX.Element {
       onSubmit={onSubmit}
       onCancel={onCancel}
       submitLabel={t('common:button.save')}
+      pageTitle={t('transaction:form.page_title_edit')}
       lockShape
       testID="transfer-edit"
     />

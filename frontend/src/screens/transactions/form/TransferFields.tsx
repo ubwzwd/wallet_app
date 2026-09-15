@@ -1,11 +1,13 @@
 /**
  * The transfer tab — one form covering both shapes (04 §4.6.4, decisions §1.2 / §14.52
- * A10 / A11 / B16).
+ * A10 / A11 / B16), laid out as mockup 05 draws it: the two account rows side by side with
+ * a round arrow between them, then one 金额 block that grows a second box only when the
+ * two sides really are in different currencies.
  *
- * Two legs by default; ticking "the other side isn't in this app" collapses it to a single
- * leg with a direction and a free-text counterparty. Same currency on both sides means one
- * amount box; different currencies open the second one. There is deliberately **no
- * merchant box and no category control** here.
+ * Ticking 「不在应用里」 collapses the pair to a single leg: the side that is not an account
+ * becomes a free-text counterparty, the currency follows the remaining account and the
+ * 「跨币种」 badge turns into 「单腿 · 只填一次」. There is deliberately **no merchant box and
+ * no category control** here.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -14,21 +16,14 @@ import { useTranslation } from 'react-i18next';
 
 import type { TransferRole, TransferSubtype } from '@/api/types';
 import { maxAllowedDate } from '@/domain/dates';
-import { normalizeAmountInput } from '@/domain/money';
-import { formatDate } from '@/i18n/format';
-import { space } from '@/theme/tokens';
-import {
-  AmountField,
-  Button,
-  Checkbox,
-  Chip,
-  DateField,
-  SegmentedControl,
-  SourcePicker,
-  Text,
-  TextField,
-} from '@/ui';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { Button, Chip, DateField, Icon, SegmentedControl, Text, TextField } from '@/ui';
 
+import { SourceField } from './SourceField';
+import { TransferAmount } from './TransferAmount';
+import { FieldColumns, FieldLabel, FormCard } from './parts';
 import {
   COUNTERPARTY_MAX_LENGTH,
   NOTE_MAX_LENGTH,
@@ -39,12 +34,14 @@ import type { TxFormController } from './useTransactionForm';
 
 export interface TransferFieldsProps {
   ctrl: TxFormController;
+  /** The kind tabs; they share the card's first row with the subtype control. */
+  header?: React.ReactNode;
   /** "Record it as income instead" — only offered while creating (04 §4.6.4). */
   onSwitchToIncome?(): void;
-  /** Editing a pair: the shape is fixed, so the single-leg checkbox is not offered. */
+  /** Editing a pair: the shape is fixed, so the single-leg toggle is not offered. */
   lockShape?: boolean;
   /**
-   * Editing a single leg: the checkbox is gone as well, because untying it would ask
+   * Editing a single leg: the toggle is gone as well, because untying it would ask
    * `PATCH .../transactions/{id}` to grow a second leg — a conversion decision §1.2 does
    * not have. The direction stays editable (the PATCH sends `transfer_role` with it).
    */
@@ -54,20 +51,11 @@ export interface TransferFieldsProps {
   disabled?: boolean;
 }
 
-/** `1 USD ≈ 7.1694 CNY` from the two magnitudes the user typed; `null` if not computable. */
-export function referenceRate(amountOut: string, amountIn: string): string | null {
-  const out = normalizeAmountInput(amountOut);
-  const inbound = normalizeAmountInput(amountIn);
-  if (out === null || inbound === null) return null;
-  const outNum = Number(out);
-  if (!Number.isFinite(outNum) || outNum === 0) return null;
-  const rate = Number(inbound) / outNum;
-  if (!Number.isFinite(rate) || rate <= 0) return null;
-  return rate.toFixed(4);
-}
+export { referenceRate } from './TransferAmount';
 
 export function TransferFields({
   ctrl,
+  header,
   onSwitchToIncome,
   lockShape = false,
   lockLegs = false,
@@ -75,6 +63,8 @@ export function TransferFields({
   disabled = false,
 }: TransferFieldsProps): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
+  const wide = useIsWide();
   const {
     form,
     form: { control, formState },
@@ -114,10 +104,174 @@ export function TransferFields({
     }
   }
 
-  const rate = crossCurrency ? referenceRate(values.amount, values.amount_in) : null;
+  /** The single leg's free-text side is whichever end is not the account. */
+  const outIsAccount = !external || values.direction === 'out';
 
-  return (
-    <View style={styles.wrap}>
+  const externalToggle =
+    lockShape || lockLegs ? null : (
+      <Chip
+        testID="transfer-external"
+        label={t('transaction:form.transfer_external_toggle')}
+        icon={values.external ? 'check' : undefined}
+        selected={values.external}
+        disabled={disabled}
+        onPress={() => {
+          const next = !values.external;
+          form.setValue('external', next, { shouldDirty: true });
+          if (next) form.setValue('to_source_id', '', { shouldDirty: true });
+        }}
+      />
+    );
+
+  const accountLeg = (
+    <Controller
+      control={control}
+      name="source_id"
+      render={({ field }) => (
+        <SourceField
+          testID="transfer-from"
+          label={
+            outIsAccount
+              ? t('transaction:transfer.from_source')
+              : t('transaction:transfer.to_source')
+          }
+          labelRight={external ? undefined : externalToggle}
+          sources={sources}
+          value={field.value === '' ? null : field.value}
+          onChange={selectSource}
+          allowArchivedId={allowArchivedId}
+          lang={lang}
+          error={txValidationMessage(t, errors.source_id?.message)}
+          disabled={disabled}
+        />
+      )}
+    />
+  );
+
+  const toLeg = (
+    <Controller
+      control={control}
+      name="to_source_id"
+      render={({ field }) => (
+        <SourceField
+          testID="transfer-to"
+          label={t('transaction:transfer.to_source')}
+          sources={sources}
+          value={field.value === '' ? null : field.value}
+          onChange={chooseToSource}
+          filter={
+            values.subtype === 'repayment' ? (source) => source.type === 'credit' : undefined
+          }
+          allowArchivedId={allowArchivedId}
+          lang={lang}
+          hint={repaymentHint ? t('transaction:transfer.repayment_target_hint') : undefined}
+          error={txValidationMessage(t, errors.to_source_id?.message)}
+          disabled={disabled}
+        />
+      )}
+    />
+  );
+
+  const counterpartyLeg = (
+    <View>
+      <FieldLabel
+        label={
+          outIsAccount
+            ? t('transaction:form.transfer_counterparty_in')
+            : t('transaction:form.transfer_counterparty_out')
+        }
+        right={externalToggle}
+      />
+      <Controller
+        control={control}
+        name="counterparty"
+        render={({ field }) => (
+          <TextField
+            testID="transfer-counterparty"
+            accessibilityLabel={t('transaction:transfer.counterparty_label')}
+            placeholder={t('transaction:transfer.counterparty_label')}
+            value={field.value}
+            onChangeText={field.onChange}
+            maxLength={COUNTERPARTY_MAX_LENGTH}
+            error={txValidationMessage(t, errors.counterparty?.message)}
+            disabled={disabled}
+          />
+        )}
+      />
+      <Text variant="caption" tone="muted" style={styles.counterpartyHint}>
+        {t('transaction:form.transfer_counterparty_hint')}
+      </Text>
+      <Controller
+        control={control}
+        name="direction"
+        render={({ field }) => (
+          <SegmentedControl<TransferRole>
+            testID="transfer-direction"
+            size="sm"
+            accessibilityLabel={t('transaction:transfer.direction_label')}
+            value={field.value}
+            onChange={field.onChange}
+            options={[
+              { value: 'out', label: t('transaction:transfer.role.out') },
+              { value: 'in', label: t('transaction:transfer.role.in') },
+            ]}
+            style={styles.direction}
+          />
+        )}
+      />
+    </View>
+  );
+
+  const arrow = (
+    <View style={styles.arrowSlot}>
+      <View style={[styles.arrow, { backgroundColor: colors['bg.subtle'] }]}>
+        <Icon
+          name={wide ? 'chevron-right' : 'chevron-down'}
+          size={18}
+          color={colors['fg.secondary']}
+        />
+      </View>
+    </View>
+  );
+
+  const body = (
+    <>
+      <View style={styles.kindRow}>
+        <View style={styles.grow}>{header}</View>
+        <Controller
+          control={control}
+          name="subtype"
+          render={({ field }) => (
+            <SegmentedControl<TransferSubtype>
+              testID="transfer-subtype"
+              accessibilityLabel={t('transaction:transfer.subtype_label')}
+              value={field.value}
+              onChange={changeSubtype}
+              stretch={!wide}
+              options={[
+                {
+                  value: 'plain',
+                  label: t('transaction:transfer.subtype.plain'),
+                  icon: 'arrow-left-right',
+                },
+                {
+                  value: 'repayment',
+                  label: t('transaction:transfer.subtype.repayment'),
+                  icon: 'credit-card',
+                },
+              ]}
+            />
+          )}
+        />
+      </View>
+      {errors.subtype ? (
+        // Only a server-side 422 can land here (the schema has no rule of its own), and a
+        // message with nowhere to show would be a message the user never sees.
+        <Text variant="caption" tone="danger" testID="transfer-subtype-error">
+          {txValidationMessage(t, errors.subtype.message)}
+        </Text>
+      ) : null}
+
       {external && values.direction === 'in' && onSwitchToIncome ? (
         <View style={styles.banner} testID="transfer-income-suggestion">
           <Text variant="caption" tone="secondary">
@@ -133,253 +287,87 @@ export function TransferFields({
         </View>
       ) : null}
 
-      <Controller
-        control={control}
-        name="subtype"
-        render={({ field }) => (
-          <SegmentedControl<TransferSubtype>
-            testID="transfer-subtype"
-            accessibilityLabel={t('transaction:transfer.subtype_label')}
-            value={field.value}
-            onChange={changeSubtype}
-            options={[
-              { value: 'plain', label: t('transaction:transfer.subtype.plain') },
-              { value: 'repayment', label: t('transaction:transfer.subtype.repayment') },
-            ]}
-          />
-        )}
-      />
-      {errors.subtype ? (
-        // Only a server-side 422 can land here (the schema has no rule of its own), and a
-        // message with nowhere to show would be a message the user never sees.
-        <Text variant="caption" tone="danger" testID="transfer-subtype-error">
-          {txValidationMessage(t, errors.subtype.message)}
-        </Text>
-      ) : null}
+      <View style={wide ? styles.legsWide : styles.legsNarrow}>
+        <View style={styles.grow}>{outIsAccount ? accountLeg : counterpartyLeg}</View>
+        {arrow}
+        <View style={styles.grow}>{outIsAccount ? (external ? counterpartyLeg : toLeg) : accountLeg}</View>
+      </View>
 
-      <Controller
-        control={control}
-        name="source_id"
-        render={({ field }) => (
-          <SourcePicker
-            testID="transfer-from"
-            label={
-              external && values.direction === 'in'
-                ? t('transaction:transfer.to_source')
-                : t('transaction:transfer.from_source')
-            }
-            sources={sources}
-            value={field.value === '' ? null : field.value}
-            onChange={selectSource}
-            allowArchivedId={allowArchivedId}
-            lang={lang}
-            error={txValidationMessage(t, errors.source_id?.message)}
-            disabled={disabled}
-          />
-        )}
+      <TransferAmount
+        ctrl={ctrl}
+        crossCurrency={crossCurrency}
+        external={external}
+        autoFocusAmount={autoFocusAmount}
+        disabled={disabled}
       />
 
-      {lockShape || lockLegs ? null : (
-        <Checkbox
-          testID="transfer-external"
-          checked={values.external}
-          onChange={(next) => {
-            form.setValue('external', next, { shouldDirty: true });
-            if (next) form.setValue('to_source_id', '', { shouldDirty: true });
-          }}
-          label={t('transaction:transfer.counterparty_toggle')}
-          disabled={disabled}
-        />
-      )}
-
-      {external ? (
-        <>
-          <Controller
-            control={control}
-            name="direction"
-            render={({ field }) => (
-              <SegmentedControl<TransferRole>
-                testID="transfer-direction"
-                accessibilityLabel={t('transaction:transfer.direction_label')}
-                value={field.value}
-                onChange={field.onChange}
-                options={[
-                  { value: 'out', label: t('transaction:transfer.role.out') },
-                  { value: 'in', label: t('transaction:transfer.role.in') },
-                ]}
-              />
-            )}
-          />
-          <Controller
-            control={control}
-            name="counterparty"
-            render={({ field }) => (
-              <TextField
-                testID="transfer-counterparty"
-                label={t('transaction:transfer.counterparty_label')}
-                accessibilityLabel={t('transaction:transfer.counterparty_label')}
-                value={field.value}
-                onChangeText={field.onChange}
-                maxLength={COUNTERPARTY_MAX_LENGTH}
-                error={txValidationMessage(t, errors.counterparty?.message)}
-                disabled={disabled}
-              />
-            )}
-          />
-        </>
-      ) : (
+      <FieldColumns ratio={0.8}>
         <Controller
           control={control}
-          name="to_source_id"
+          name="occurred_at"
           render={({ field }) => (
-            <SourcePicker
-              testID="transfer-to"
-              label={t('transaction:transfer.to_source')}
-              sources={sources}
-              value={field.value === '' ? null : field.value}
-              onChange={chooseToSource}
-              filter={
-                values.subtype === 'repayment' ? (source) => source.type === 'credit' : undefined
-              }
-              allowArchivedId={allowArchivedId}
-              lang={lang}
-              hint={repaymentHint ? t('transaction:transfer.repayment_target_hint') : undefined}
-              error={txValidationMessage(t, errors.to_source_id?.message)}
+            <DateField
+              testID="transfer-date"
+              label={t('transaction:form.date')}
+              todayLabel={t('transaction:form.today')}
+              value={field.value}
+              onChange={field.onChange}
+              max={maxAllowedDate()}
+              error={txValidationMessage(t, errors.occurred_at?.message)}
               disabled={disabled}
             />
           )}
         />
-      )}
-
-      <Controller
-        control={control}
-        name="amount"
-        render={({ field }) => (
-          <Controller
-            control={control}
-            name="currency"
-            render={({ field: currencyField }) => (
-              <AmountField
-                testID="transfer-amount"
-                value={field.value}
-                onChange={field.onChange}
-                currency={currencyField.value}
-                // A single leg has no other side, so its currency is the account's,
-                // read-only (decision §14.52 A11).
-                onCurrencyChange={external ? undefined : currencyField.onChange}
-                codes={currencies.codes}
-                currencyNames={currencies.names}
-                quickAdd
-                allowExpression
-                autoFocus={autoFocusAmount}
-                disabled={disabled}
-                error={
-                  txValidationMessage(t, errors.amount?.message) ??
-                  txValidationMessage(t, errors.currency?.message)
-                }
-              />
-            )}
-          />
-        )}
-      />
-
-      {external ? (
-        <Text variant="caption" tone="muted" testID="transfer-currency-locked-hint">
-          {t('transaction:transfer.counterparty_currency_locked_hint')}
-        </Text>
-      ) : null}
-
-      {crossCurrency ? (
-        <>
-          {rate !== null ? (
-            <Chip
-              testID="transfer-rate"
-              label={t('transaction:transfer.rate_readonly_hint', {
-                from: values.currency,
-                rate,
-                to: values.currency_in,
-                date: formatDate(values.occurred_at, lang),
-              })}
-            />
-          ) : null}
-          <Controller
-            control={control}
-            name="amount_in"
-            render={({ field }) => (
-              <Controller
-                control={control}
-                name="currency_in"
-                render={({ field: currencyField }) => (
-                  <AmountField
-                    testID="transfer-amount-in"
-                    label={t('transaction:transfer.amount_in')}
-                    value={field.value}
-                    onChange={field.onChange}
-                    currency={currencyField.value}
-                    onCurrencyChange={currencyField.onChange}
-                    codes={currencies.codes}
-                    currencyNames={currencies.names}
-                    disabled={disabled}
-                    error={
-                      txValidationMessage(t, errors.amount_in?.message) ??
-                      txValidationMessage(t, errors.currency_in?.message)
-                    }
-                  />
-                )}
-              />
-            )}
-          />
-          <Text variant="caption" tone="muted">
-            {t('transaction:transfer.fee_hint')}
-          </Text>
-        </>
-      ) : null}
-
-      <Controller
-        control={control}
-        name="occurred_at"
-        render={({ field }) => (
-          <DateField
-            testID="transfer-date"
-            label={t('transaction:form.date')}
-            value={field.value}
-            onChange={field.onChange}
-            max={maxAllowedDate()}
-            error={txValidationMessage(t, errors.occurred_at?.message)}
-            disabled={disabled}
-          />
-        )}
-      />
-
-      <Controller
-        control={control}
-        name="note"
-        render={({ field }) => (
-          <TextField
-            testID="transfer-note"
+        <View>
+          <FieldLabel
             label={t('transaction:form.note')}
-            accessibilityLabel={t('transaction:form.note')}
-            value={field.value}
-            onChangeText={field.onChange}
-            multiline
-            maxLength={NOTE_MAX_LENGTH}
-            showCounter
-            error={txValidationMessage(t, errors.note?.message)}
-            disabled={disabled}
+            optional={t('transaction:form.optional')}
           />
-        )}
-      />
+          <Controller
+            control={control}
+            name="note"
+            render={({ field }) => (
+              <TextField
+                testID="transfer-note"
+                accessibilityLabel={t('transaction:form.note')}
+                placeholder={t('transaction:form.transfer_note_placeholder')}
+                value={field.value}
+                onChangeText={field.onChange}
+                maxLength={NOTE_MAX_LENGTH}
+                error={txValidationMessage(t, errors.note?.message)}
+                disabled={disabled}
+              />
+            )}
+          />
+        </View>
+      </FieldColumns>
 
       {external ? (
         <Text variant="caption" tone="muted" testID="transfer-single-leg-hint">
           {t('transaction:transfer.single_leg_hint')}
         </Text>
       ) : null}
-    </View>
+    </>
   );
+
+  return <FormCard style={styles.card}>{body}</FormCard>;
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space['3'], alignSelf: 'stretch' },
+  card: { gap: space['5'], alignSelf: 'stretch' },
+  grow: { flex: 1, minWidth: 0 },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'], flexWrap: 'wrap' },
   banner: { gap: space['1'] },
+  legsWide: { flexDirection: 'row', alignItems: 'flex-end', gap: space['3'] },
+  legsNarrow: { gap: space['2'] },
+  arrowSlot: { alignItems: 'center', justifyContent: 'center', paddingBottom: space['3'] },
+  arrow: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterpartyHint: { marginTop: space['1'] + 2 },
+  direction: { marginTop: space['2'] },
 });
