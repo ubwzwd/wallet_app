@@ -15,14 +15,14 @@
  * to nobody (§4.11.6).
  */
 import React from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { ApiClientError } from '@/api';
 import type { ImportRow, ImportRowPatch, TxKind } from '@/api/types';
 import { kindOfCategoryTree } from '@/domain/kinds';
 import { cmpMoney } from '@/domain/money';
-import { space } from '@/theme/tokens';
+import { controls, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import {
   Button,
@@ -208,26 +208,13 @@ export function BulkBar({
     setPickedL1(null);
   };
 
-  return (
-    <Card
-      variant="outlined"
-      testID={id}
-      style={{
-        gap: space['2'],
-        backgroundColor: colors['bg.raised'],
-        ...(compact ? { borderRadius: 0 } : {}),
-      }}
-    >
-      <View
-        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
-      >
-        <Text variant="caption" testID={`${id}-count`}>
-          {t('import:review.selected', { count: selection.count })}
-        </Text>
-        <Button
+  const actions = (
+    <>
+      <Button
           testID={`${id}-category`}
           size="sm"
-          variant="secondary"
+          variant="soft"
+          icon="tag"
           label={t('import:review.bulk.set_category')}
           disabled={kind === null || env.index === null || env.ctrl.bulkPending}
           onPress={() => setCategoryOpen(true)}
@@ -243,20 +230,39 @@ export function BulkBar({
             if (next !== null) void run(bulkKindPatch(next as TxKind));
           }}
         />
-        <CurrencyPicker
-          testID={`${id}-currency`}
-          variant="inline"
-          codes={env.currencyCodes}
-          names={env.currencyNames}
-          value={null}
-          label={t('import:review.bulk.set_currency')}
-          disabled={env.ctrl.bulkPending}
-          onChange={(next) => void run({ currency: next })}
-        />
+        {/* The inline currency trigger shows the code it holds, which a bulk edit never
+            has — so it is given the action's own label to wear. */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space['1'],
+            height: controls.button.heights.sm,
+            paddingHorizontal: space['3'],
+            borderRadius: radius.md,
+            backgroundColor: colors['bg.subtle'],
+            opacity: env.ctrl.bulkPending ? 0.6 : 1,
+          }}
+        >
+          <Text variant="body" weight={600}>
+            {t('import:review.bulk.set_currency')}
+          </Text>
+          <CurrencyPicker
+            testID={`${id}-currency`}
+            variant="inline"
+            codes={env.currencyCodes}
+            names={env.currencyNames}
+            value={null}
+            label={t('import:review.bulk.set_currency')}
+            disabled={env.ctrl.bulkPending}
+            onChange={(next) => void run({ currency: next })}
+          />
+        </View>
         <Button
           testID={`${id}-skip`}
           size="sm"
-          variant="secondary"
+          variant="soft"
+          icon="chevron-right"
           label={t('import:review.bulk.skip')}
           disabled={env.ctrl.bulkPending}
           onPress={() => void run({ status: 'skipped' })}
@@ -264,21 +270,66 @@ export function BulkBar({
         <Button
           testID={`${id}-unskip`}
           size="sm"
-          variant="secondary"
+          variant="soft"
           label={t('import:review.bulk.unskip')}
           disabled={env.ctrl.bulkPending}
           onPress={() => void run({ status: 'pending' })}
         />
-        <Button
-          testID={`${id}-clear`}
-          size="sm"
-          variant="ghost"
-          icon="x"
-          iconOnly
-          accessibilityLabel={t('common:button.cancel')}
-          onPress={selection.clear}
-        />
-      </View>
+      <Button
+        testID={`${id}-clear`}
+        size="sm"
+        variant="ghost"
+        icon="x"
+        iconOnly
+        accessibilityLabel={t('common:button.cancel')}
+        onPress={selection.clear}
+      />
+    </>
+  );
+
+  const count = (
+    <Text variant="body" mono tone="secondary" testID={`${id}-count`}>
+      {t('import:review.selected', { count: selection.count, total: selection.counts.all })}
+    </Text>
+  );
+
+  return (
+    <Card
+      variant="raised"
+      testID={id}
+      style={{
+        gap: space['2'],
+        ...(compact ? { borderRadius: 0 } : {}),
+      }}
+    >
+      {/* 屏幕稿 03's action bar: how many rows are selected, a hairline, then the actions —
+          the two the mockup names first, and the rest of §4.11.6 after them. On a phone the
+          row scrolls sideways instead of wrapping into three lines over the cards. */}
+      {compact ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }}>
+          {count}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space['2'],
+            }}
+          >
+            {actions}
+          </ScrollView>
+        </View>
+      ) : (
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+        >
+          {count}
+          <View style={{ width: 1, height: 24, backgroundColor: colors['border.default'] }} />
+          {actions}
+        </View>
+      )}
 
       {message !== null ? (
         <Text variant="caption" tone="danger" testID={`${id}-error`}>

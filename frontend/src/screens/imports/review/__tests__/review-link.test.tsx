@@ -261,9 +261,12 @@ test('a refund candidate shows its prefilled origin, and re-picking or clearing 
 
   const origin = await screen.findByTestId('review-4-link-origin');
   expect(String(origin.props.children)).toContain('淘宝');
+  // The band under the row is the carrier: the box is checked because the server prefilled
+  // `matched_transaction_id` (屏幕稿 03's 「关联原单」 strip).
+  expect(screen.getByTestId('review-4-link-pair').props.accessibilityState.checked).toBe(true);
 
-  // Clearing it means this row will not write `refund_of` on commit (decision §14.7).
-  fireEvent.press(screen.getByTestId('review-4-link-clear'));
+  // Unchecking it means this row will not write `refund_of` on commit (decision §14.7).
+  fireEvent.press(screen.getByTestId('review-4-link-pair'));
   await waitFor(() => expect(patchBodies()).toHaveLength(1));
   expect(patchBodies()[0]).toEqual({ matched_transaction_id: null });
   await waitFor(() => expect(screen.queryByTestId('review-4-link-origin')).toBeNull());

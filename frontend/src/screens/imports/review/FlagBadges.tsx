@@ -1,22 +1,22 @@
 /**
- * The "flags" cell of the review table (04 §4.11.4, decisions §5, §14.31).
+ * The 「状态与标记」 cell of the review table (04 §4.11.4, decisions §5, §14.31).
  *
- * There are exactly four server flags; everything else in this cell is derived from the row
- * itself — "uncategorized" (the commit blocker), "skipped" and "edited". A value outside the
- * four is not rendered at all: the table must not invent a badge for something the language
- * pack cannot name.
+ * Two kinds of pill sit here, exactly as 屏幕稿 03 draws them: the row's own state — 待处理
+ * / 已改 / 已跳过, pressable, because pressing it is how a row is skipped and unskipped —
+ * and one badge per server flag. There are exactly four flags; a value outside them is not
+ * rendered at all: the table must not invent a badge for something the language pack cannot
+ * name. The derived 「待归类」 is not a badge here — it is the ringed 「待归类」 chip in the
+ * level-1 category column, which is also where it gets fixed.
  *
  * Every badge carries a text label, never colour alone (04 §6.2 rule 7).
  */
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportFlag, ImportRow } from '@/api/types';
+import type { ImportFlag, ImportRow, ImportRowStatus } from '@/api/types';
 import { space } from '@/theme/tokens';
-import { Badge, type BadgeTone, Button, type IconName } from '@/ui';
-
-import { isUncategorized } from './useReviewSelection';
+import { Badge, type BadgeTone, type IconName } from '@/ui';
 
 /** The four flags, in the order the cell shows them (04 §4.11.4). */
 export const FLAG_ORDER: readonly ImportFlag[] = [
@@ -40,6 +40,12 @@ const FLAG_ICON: Readonly<Record<ImportFlag, IconName>> = {
   needs_review: 'alert-triangle',
 };
 
+const STATUS_TONE: Readonly<Record<ImportRowStatus, BadgeTone>> = {
+  pending: 'neutral',
+  edited: 'success',
+  skipped: 'neutral',
+};
+
 export interface FlagBadgesProps {
   row: ImportRow;
   testIDPrefix: string;
@@ -60,28 +66,6 @@ export function FlagBadges({ row, testIDPrefix }: FlagBadgesProps): React.JSX.El
           testID={`${testIDPrefix}-${flag}`}
         />
       ))}
-      {isUncategorized(row) ? (
-        <Badge
-          label={t('import:review.flag.uncategorized')}
-          tone="flag-uncategorized"
-          icon="tag"
-          testID={`${testIDPrefix}-uncategorized`}
-        />
-      ) : null}
-      {row.status === 'skipped' ? (
-        <Badge
-          label={t('import:review.flag.skipped')}
-          tone="neutral"
-          testID={`${testIDPrefix}-skipped`}
-        />
-      ) : null}
-      {row.status === 'edited' ? (
-        <Badge
-          label={t('import:review.flag.edited')}
-          tone="neutral"
-          testID={`${testIDPrefix}-edited`}
-        />
-      ) : null}
     </View>
   );
 }
@@ -92,17 +76,22 @@ export interface SkipToggleProps {
   testID: string;
 }
 
-/** Skip / unskip one row — it lives in the flags cell (04 §4.11.2) and on the phone card. */
+/**
+ * The row's state as a pill you can press: 待处理 / 已改 → 已跳过 and back (04 §4.11.2 puts
+ * the skip switch in this cell; 屏幕稿 03 makes the state badge itself the switch).
+ */
 export function SkipToggle({ row, onToggle, testID }: SkipToggleProps): React.JSX.Element {
   const { t } = useTranslation();
   const skipped = row.status === 'skipped';
   return (
-    <Button
+    <Pressable
       testID={testID}
-      size="sm"
-      variant="ghost"
-      label={t(skipped ? 'import:review.unskip_row' : 'import:review.skip_row')}
+      accessibilityRole="button"
+      accessibilityLabel={t(skipped ? 'import:review.unskip_row' : 'import:review.skip_row')}
+      hitSlop={space['3']}
       onPress={() => onToggle(row)}
-    />
+    >
+      <Badge label={t(`import:review.status.${row.status}`)} tone={STATUS_TONE[row.status]} />
+    </Pressable>
   );
 }

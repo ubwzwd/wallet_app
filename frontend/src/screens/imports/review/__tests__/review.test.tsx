@@ -402,6 +402,44 @@ test('the four slices count correctly and switching them keeps the selection', a
   );
 });
 
+// ------------------------------------ the standing blocker banner (04 §4.11.8, 屏幕稿 03)
+
+test('the banner names the blocker and its link widens the slice and focuses the first row', async () => {
+  const done = row({ id: 'row-1', row_no: 1, flags: ['needs_review'] });
+  const todo = row({ id: 'row-2', row_no: 2, category_l1: null, category_l2: null });
+  seed([done, todo]);
+  renderReview();
+
+  // One row is uncategorized, so the banner is up and says so.
+  expect(await screen.findByTestId('review-banner')).toBeTruthy();
+  expect(screen.getByText('还有 1 行待归类，补齐后才能提交')).toBeTruthy();
+
+  // Stand somewhere the row is not: the flagged slice holds row 1 only.
+  fireEvent.press(screen.getByText('有标记 1'));
+  expect(await screen.findByTestId('review-table-row-row-1')).toBeTruthy();
+  expect(screen.queryByTestId('review-table-row-row-2')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('review-banner-jump'));
+
+  // The slice widens to the whole batch and the keyboard focus lands on row 2 — which is
+  // what brings it into the grid's window (04 §4.11.7 / §4.11.8).
+  const cell = await screen.findByTestId('review-table-cell-row-2-row_no');
+  await waitFor(() => {
+    const style = cell.props.style as { borderColor?: string };
+    expect(style.borderColor).toBe(lightColors['border.focus']);
+  });
+  expect(screen.getByTestId('review-table-row-row-1')).toBeTruthy();
+});
+
+test('an ordinary row names the batch account it will be booked onto (decision §14.52 A5)', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  renderReview();
+
+  // One file is one target account: the column states it, and offers nothing to change.
+  expect((await screen.findByTestId('review-1-link')).props.children).toBe('招商 信用卡');
+  expect(screen.queryByTestId('review-1-link-counterpart-trigger')).toBeNull();
+});
+
 test('every badge carries a text label and an unknown flag renders nothing', async () => {
   const flagged = row({
     id: 'row-2',

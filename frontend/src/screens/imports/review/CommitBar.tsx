@@ -196,29 +196,7 @@ export function CommitBar({
   }, [submitSignal]);
 
   return (
-    <Card variant="outlined" testID={id} style={{ gap: space['2'] }}>
-      {blockers.uncategorized.length > 0 ? (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: space['2'],
-          }}
-        >
-          <Text variant="caption" tone="warning" style={{ flexShrink: 1 }} testID={`${id}-block`}>
-            {t('import:review.block_uncategorized', { count: blockers.uncategorized.length })}
-          </Text>
-          <Button
-            testID={`${id}-jump`}
-            size="sm"
-            variant="ghost"
-            label={t('import:review.jump_to_first')}
-            onPress={() => onJumpTo(blockers.uncategorized[0].row_no)}
-          />
-        </View>
-      ) : null}
-
+    <Card variant="raised" testID={id} style={{ gap: space['2'] }}>
       {blockers.incomplete.length > 0 ? (
         <Text variant="caption" tone="warning" testID={`${id}-block-incomplete`}>
           {t('import:review.block_incomplete', { count: blockers.incomplete.length })}
@@ -269,19 +247,30 @@ export function CommitBar({
         </View>
       ) : null}
 
+      {/* 屏幕稿 03's submit bar: what is still in the way, in grey, right beside the button
+          that it is disabling — the sand banner above the table is where it is explained. */}
       <View
-        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['3'] }}
       >
-        <View style={{ flex: 1, gap: space['1'] }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space['1'] }}>
           {pairCount > 0 ? (
             <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
               {t('import:review.submit_pairs_hint', { count: pairCount })}
             </Text>
           ) : null}
         </View>
+        {blockers.uncategorized.length > 0 ? (
+          <Text variant="body" tone="warning" testID={`${id}-block`}>
+            {t('import:review.block_uncategorized_short', {
+              count: blockers.uncategorized.length,
+            })}
+          </Text>
+        ) : null}
         <Button
           testID={`${id}-submit`}
-          label={t('import:review.submit_button', { count: submitCount })}
+          size="lg"
+          label={t('import:review.submit')}
+          accessibilityLabel={t('import:review.submit_button', { count: submitCount })}
           disabled={blocked}
           loading={commit.isPending}
           onPress={onSubmit}

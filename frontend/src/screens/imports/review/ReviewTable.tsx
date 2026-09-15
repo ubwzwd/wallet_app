@@ -1,14 +1,17 @@
 /**
- * The wide-screen review grid (04 §4.11.1–§4.11.7).
+ * The wide-screen review grid (04 §4.11.1–§4.11.7, 屏幕稿 03).
  *
- * Twelve columns, in the order §4.11.2 lists them, and **no account column**: one file is
- * one target account (decision §5, §14.52 A5) — only a transfer row picks a *counterparty*
- * account, which lives in the link cell. The server's read-only `hint` is a small line under
- * its row (§4.11.2), never folded into `note`.
+ * Twelve columns, in the order §4.11.2 lists them, inside one card: `☑ · # · 日期 · 金额 ·
+ * 币种 · 种类 · 商户 · 备注 · 一级分类 · 二级分类 · 账户 · 对手 · 状态与标记`. The account
+ * column is not editable — one file is one target account (decision §5, §14.52 A5) — it
+ * names the batch's account, and only a transfer row picks a *counterparty* in it. What a
+ * row links to (a refund's original expense, a transfer's opposite leg) is the tinted band
+ * under the row, next to the server's read-only `hint` (§4.11.2), never folded into `note`.
  *
  * This component owns the two pieces of state the keyboard drives — the focused cell and
- * the cell being edited — plus the category picker that `C` opens. Row data, the selection
- * and the commit bar belong to the screen, so the phone layout can reuse them untouched.
+ * the cell being edited — plus the category picker that `C` opens and the blocking banner's
+ * "jump to the first one". Row data, the selection and the commit bar belong to the screen,
+ * so the phone layout can reuse them untouched.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -16,22 +19,14 @@ import { useTranslation } from 'react-i18next';
 
 import type { ImportRow } from '@/api/types';
 import { space } from '@/theme/tokens';
-import { DataTable, type DataTableCellPos, type DataTableColumn, KeyboardHint, Text } from '@/ui';
+import { DataTable, type DataTableCellPos, KeyboardHint, Text } from '@/ui';
 
-import { FlagBadges, SkipToggle } from './FlagBadges';
-import { LinkCell } from './LinkCell';
-import { CategoryCell, CurrencyCell, KindCell } from './ReviewCells.picker';
-import { AmountCell, DateCell, RowNoCell, TextCell } from './ReviewCells.text';
+import { LinkPanel, hasLinkPanel } from './LinkPanel';
+import { ReviewBanner } from './ReviewBanner';
+import { type CategoryOpen, TEXT_COLUMNS, useReviewColumns } from './ReviewColumns';
 import type { EditorHandle, ReviewEnv } from './ReviewRow';
 import { useReviewKeys } from './useReviewKeys';
 import { isUncategorized, type ReviewSelection } from './useReviewSelection';
-
-/** Columns whose editor is a text box — clicking one starts typing straight away. */
-const TEXT_COLUMNS = new Set(['date', 'amount', 'merchant', 'note']);
-
-/** 03 §5.41: `merchant` ≤ 200, `note` ≤ 500. */
-const MERCHANT_MAX = 200;
-const NOTE_MAX = 500;
 
 /**
  * A one-shot "look at this row" signal (04 §4.11.8).
@@ -68,170 +63,29 @@ export function ReviewTable({
   const [focus, setFocus] = React.useState<DataTableCellPos | null>(null);
   const [editing, setEditing] = React.useState<DataTableCellPos | null>(null);
   const [revision, setRevision] = React.useState(0);
-  const [categoryOpen, setCategoryOpen] = React.useState<{ id: string; level: 'l1' | 'l2' } | null>(
-    null,
-  );
+  const [categoryOpen, setCategoryOpen] = React.useState<CategoryOpen>(null);
   const [helpOpen, setHelpOpen] = React.useState(false);
+  // Set by the banner's link: the slice has been widened, and the first row still missing a
+  // category is to be focused as soon as it is in `rows` (04 §4.11.8).
+  const [pendingJump, setPendingJump] = React.useState(false);
   const editor = React.useRef<EditorHandle | null>(null);
 
   const registerEditor = React.useCallback((handle: EditorHandle | null): void => {
     editor.current = handle;
   }, []);
 
-  const columns: DataTableColumn<ImportRow>[] = React.useMemo(() => {
-    const isEditing = (row: ImportRow, colIndex: number): boolean =>
-      editing !== null && rows[editing.row]?.id === row.id && editing.col === colIndex;
-    const cellId = (row: ImportRow, key: string): string => `review-${row.row_no}-${key}`;
+  const onEditDone = React.useCallback((): void => setEditing(null), []);
 
-    return [
-      {
-        key: 'row_no',
-        title: t('import:review.column.row_no'),
-        width: 76,
-        render: (row) => (
-          <RowNoCell
-            row={row}
-            state={env.ctrl.saveStateOf(row.id)}
-            onRetry={() => env.ctrl.retry(row.id)}
-            testID={cellId(row, 'row-no')}
-          />
-        ),
-      },
-      {
-        key: 'date',
-        title: t('import:review.column.date'),
-        width: 128,
-        render: (row, ctx) => (
-          <DateCell
-            row={row}
-            env={env}
-            editing={isEditing(row, ctx.colIndex)}
-            revision={revision + env.ctrl.revisionOf(row.id)}
-            registerEditor={registerEditor}
-            onEditDone={() => setEditing(null)}
-            testID={cellId(row, 'date')}
-          />
-        ),
-      },
-      {
-        key: 'amount',
-        title: t('import:review.column.amount'),
-        width: 128,
-        align: 'right',
-        render: (row, ctx) => (
-          <AmountCell
-            row={row}
-            env={env}
-            editing={isEditing(row, ctx.colIndex)}
-            revision={revision + env.ctrl.revisionOf(row.id)}
-            registerEditor={registerEditor}
-            testID={cellId(row, 'amount')}
-          />
-        ),
-      },
-      {
-        key: 'currency',
-        title: t('import:review.column.currency'),
-        width: 96,
-        render: (row) => <CurrencyCell row={row} env={env} testID={cellId(row, 'currency')} />,
-      },
-      {
-        key: 'kind',
-        title: t('import:review.column.kind'),
-        width: 128,
-        render: (row) => <KindCell row={row} env={env} testID={cellId(row, 'kind')} />,
-      },
-      {
-        key: 'merchant',
-        title: t('import:review.column.merchant'),
-        width: 160,
-        render: (row, ctx) => (
-          <TextCell
-            row={row}
-            env={env}
-            field="merchant"
-            maxLength={MERCHANT_MAX}
-            editing={isEditing(row, ctx.colIndex)}
-            revision={revision + env.ctrl.revisionOf(row.id)}
-            registerEditor={registerEditor}
-            testID={cellId(row, 'merchant')}
-          />
-        ),
-      },
-      {
-        key: 'note',
-        title: t('import:review.column.note'),
-        width: 160,
-        render: (row, ctx) => (
-          <TextCell
-            row={row}
-            env={env}
-            field="note"
-            maxLength={NOTE_MAX}
-            editing={isEditing(row, ctx.colIndex)}
-            revision={revision + env.ctrl.revisionOf(row.id)}
-            registerEditor={registerEditor}
-            testID={cellId(row, 'note')}
-          />
-        ),
-      },
-      {
-        key: 'category_l1',
-        title: t('import:review.column.category_l1'),
-        width: 150,
-        render: (row) => (
-          <CategoryCell
-            row={row}
-            env={env}
-            level="l1"
-            open={categoryOpen?.id === row.id && categoryOpen.level === 'l1'}
-            onOpenChange={(open) => setCategoryOpen(open ? { id: row.id, level: 'l1' } : null)}
-            testID={cellId(row, 'l1')}
-          />
-        ),
-      },
-      {
-        key: 'category_l2',
-        title: t('import:review.column.category_l2'),
-        width: 150,
-        render: (row) => (
-          <CategoryCell
-            row={row}
-            env={env}
-            level="l2"
-            open={categoryOpen?.id === row.id && categoryOpen.level === 'l2'}
-            onOpenChange={(open) => setCategoryOpen(open ? { id: row.id, level: 'l2' } : null)}
-            testID={cellId(row, 'l2')}
-          />
-        ),
-      },
-      {
-        key: 'linked',
-        title: t('import:review.column.linked'),
-        width: 280,
-        render: (row) => <LinkCell row={row} env={env} testID={cellId(row, 'link')} />,
-      },
-      {
-        key: 'flags',
-        title: t('import:review.column.flags'),
-        width: 220,
-        render: (row) => (
-          <View style={{ gap: space['1'] }}>
-            <FlagBadges row={row} testIDPrefix={`review-${row.row_no}-flag`} />
-            <SkipToggle
-              row={row}
-              onToggle={(target) =>
-                env.ctrl.patch(target, {
-                  status: target.status === 'skipped' ? 'pending' : 'skipped',
-                })
-              }
-              testID={`review-${row.row_no}-skip`}
-            />
-          </View>
-        ),
-      },
-    ];
-  }, [categoryOpen, editing, env, registerEditor, revision, rows, t]);
+  const columns = useReviewColumns({
+    env,
+    rows,
+    editing,
+    onEditDone,
+    revision,
+    registerEditor,
+    categoryOpen,
+    setCategoryOpen,
+  });
 
   const focusedRow = focus === null ? undefined : rows[focus.row];
 
@@ -250,6 +104,17 @@ export function ReviewTable({
     },
     [focus, rows],
   );
+
+  // The banner's link: widen to the whole batch first — the row it points at is very often
+  // not in the slice on screen — then focus the first uncategorized row of the new slice,
+  // which is what brings it into the window (`DataTable` keeps the focused row in view).
+  React.useEffect(() => {
+    if (!pendingJump) return;
+    const index = rows.findIndex(isUncategorized);
+    if (index < 0) return;
+    setPendingJump(false);
+    setFocus((prev) => ({ row: index, col: prev?.col ?? 0 }));
+  }, [pendingJump, rows]);
 
   useReviewKeys({
     rowCount: rows.length,
@@ -305,7 +170,15 @@ export function ReviewTable({
     highlightRowNo === null ? null : rows.findIndex((row) => row.row_no === highlightRowNo);
 
   return (
-    <View style={{ gap: space['2'] }} testID={`${id}-wrap`}>
+    <View style={{ gap: space['3'] }} testID={`${id}-wrap`}>
+      <ReviewBanner
+        count={selection.counts.uncategorized}
+        onJump={() => {
+          selection.setSlice('all');
+          setPendingJump(true);
+        }}
+      />
+
       <DataTable<ImportRow>
         testID={id}
         rows={rows}
@@ -323,13 +196,21 @@ export function ReviewTable({
           if (row.row_no === highlightRowNo) return 'highlight';
           return row.status === 'skipped' ? 'muted' : 'default';
         }}
-        rowBelow={(row) =>
-          row.hint === null ? null : (
-            <Text variant="micro" tone="muted" testID={`review-${row.row_no}-hint`}>
-              {row.hint}
-            </Text>
-          )
-        }
+        rowBelow={(row) => {
+          const hint =
+            row.hint === null ? null : (
+              <Text variant="micro" tone="muted" testID={`review-${row.row_no}-hint`}>
+                {row.hint}
+              </Text>
+            );
+          if (!hasLinkPanel(row)) return hint;
+          return (
+            <>
+              {hint}
+              <LinkPanel row={row} env={env} testID={`review-${row.row_no}-link`} />
+            </>
+          );
+        }}
         focus={focus}
         onFocusCell={(pos) => {
           setFocus(pos);

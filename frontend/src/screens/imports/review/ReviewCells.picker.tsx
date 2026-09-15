@@ -2,28 +2,42 @@
  * The review cells whose editor is a picker (04 §4.11.2, §4.11.5): currency, kind and the
  * two category levels. A picker commits the moment it closes — there is no draft to debounce.
  *
+ * 屏幕稿 03 draws all three as pills inside the row: the kind as its coloured badge with a
+ * chevron, the two category levels as tinted chips (an unset level-1 is ringed and reads
+ * 「选择分类」), the currency as a small mono chip. The controls are `CellControls.tsx`;
+ * what each one *does* is unchanged.
+ *
  * `kindChangePatch` is here too, because changing the kind is what makes the other pickers
  * appear and disappear: a transfer has no category (decision §10/§1.3) but *must* carry a
  * direction and a subtype (03 §5.41), and leaving a transfer drops both again.
  */
 import React from 'react';
+import { Pressable, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportRow, ImportRowPatch, TransferRole, TxKind } from '@/api/types';
 import { KINDS, applySign } from '@/domain/kinds';
 import { categoryName } from '@/i18n/category';
-import { radius } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import {
-  Button,
   CategoryPickerPanel,
   type CategoryValue,
   CurrencyPicker,
-  Select,
+  KIND_ICON,
   Sheet,
 } from '@/ui';
 
+import { CELL_HIT_SLOP, CELL_PILL_HEIGHT, CellPill, CellSelect, type CellTone } from './CellControls';
 import { type CellProps, CellFrame, Dash } from './ReviewRow';
+
+/** The pill tone each kind wears, in the grid and on the phone card alike. */
+const KIND_TONE: Readonly<Record<TxKind, CellTone>> = {
+  expense: 'expense',
+  income: 'income',
+  refund: 'refund',
+  transfer: 'transfer',
+};
 
 /**
  * The patch a kind change implies (04 §4.11.2, §8.4 case 3): the sign follows the new kind,
@@ -68,16 +82,30 @@ export function kindChangePatch(row: ImportRow, kind: TxKind): ImportRowPatch {
 // --------------------------------------------------------------------- currency
 
 export function CurrencyCell({ row, env, testID }: CellProps): React.JSX.Element {
+  const colors = useColors();
   return (
     <CellFrame row={row} env={env} field="currency" testID={testID}>
-      <CurrencyPicker
-        testID={testID}
-        variant="inline"
-        codes={env.currencyCodes}
-        names={env.currencyNames}
-        value={row.currency}
-        onChange={(next) => env.ctrl.patch(row, { currency: next })}
-      />
+      {/* The kit's inline currency trigger, wearing the grid's pill (屏幕稿 03). Its own
+          sheet — with the search a three-figure currency list needs — is untouched. */}
+      <View
+        style={{
+          height: CELL_PILL_HEIGHT,
+          alignSelf: 'flex-start',
+          justifyContent: 'center',
+          paddingHorizontal: space['2'],
+          borderRadius: radius.sm,
+          backgroundColor: colors['bg.subtle'],
+        }}
+      >
+        <CurrencyPicker
+          testID={testID}
+          variant="inline"
+          codes={env.currencyCodes}
+          names={env.currencyNames}
+          value={row.currency}
+          onChange={(next) => env.ctrl.patch(row, { currency: next })}
+        />
+      </View>
     </CellFrame>
   );
 }
@@ -86,15 +114,26 @@ export function CurrencyCell({ row, env, testID }: CellProps): React.JSX.Element
 
 export function KindCell({ row, env, testID }: CellProps): React.JSX.Element {
   const { t } = useTranslation();
+  const kind = row.kind;
   return (
     <CellFrame row={row} env={env} field="kind" testID={testID}>
-      <Select
+      <CellSelect
         testID={testID}
-        value={row.kind}
-        options={KINDS.map((kind) => ({ value: kind, label: t(`transaction:kind.${kind}`) }))}
+        value={kind}
+        options={KINDS.map((k) => ({
+          value: k,
+          label: t(`transaction:kind.${k}`),
+          icon: KIND_ICON[k],
+        }))}
+        placeholder={t('import:review.missing_value')}
         label={t('import:review.column.kind')}
+        closeLabel={t('common:button.close')}
+        tone={kind === null ? 'muted' : KIND_TONE[kind]}
+        icon={kind === null ? undefined : KIND_ICON[kind]}
+        // 屏幕稿 03 paints the kind as its plain badge, no chevron.
+        chevron={false}
         onChange={(next) => {
-          if (next === null || next === row.kind) return;
+          if (next === row.kind) return;
           env.ctrl.patch(row, kindChangePatch(row, next as TxKind));
         }}
       />
@@ -120,7 +159,6 @@ export function CategoryCell({
   testID,
 }: CategoryCellProps): React.JSX.Element {
   const { t } = useTranslation();
-  const colors = useColors();
   const [stage, setStage] = React.useState<'l1' | 'l2'>(level);
 
   const index = env.index;
@@ -145,6 +183,10 @@ export function CategoryCell({
 
   if (dead) return <Dash testID={testID} />;
 
+  const placeholder = t(
+    level === 'l1' ? 'import:review.pick_category' : 'import:review.pick_category_l2',
+  );
+
   return (
     <CellFrame
       row={row}
@@ -152,22 +194,22 @@ export function CategoryCell({
       field={level === 'l1' ? 'category_l1' : 'category_l2'}
       testID={testID}
     >
-      <Button
+      {/* An unset level-1 is what blocks the commit (04 §4.11.4), so 屏幕稿 03 rings it;
+          an unset level-2 is optional and stays a plain muted chip. */}
+      <Pressable
         testID={`${testID}-trigger`}
-        size="sm"
-        variant="ghost"
-        label={
-          label ??
-          t(level === 'l1' ? 'import:review.pick_category' : 'import:review.pick_category_l2')
-        }
+        accessibilityRole="button"
+        accessibilityLabel={t(`import:review.column.category_${level}`)}
+        accessibilityState={{ expanded: open }}
+        hitSlop={CELL_HIT_SLOP}
         onPress={() => onOpenChange(true)}
-        style={{
-          borderWidth: 1,
-          borderRadius: radius.sm,
-          borderColor:
-            label === null && level === 'l1' ? colors['flag.uncategorized'] : 'transparent',
-        }}
-      />
+      >
+        <CellPill
+          label={label ?? placeholder}
+          tone={label !== null ? 'default' : level === 'l1' ? 'missing' : 'muted'}
+          chevron
+        />
+      </Pressable>
       <Sheet
         open={open}
         onClose={close}

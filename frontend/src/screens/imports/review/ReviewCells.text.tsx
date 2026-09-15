@@ -2,6 +2,11 @@
  * The review cells whose editor is a text box, plus the row-number cell (04 §4.11.2,
  * §4.11.5). Shared plumbing — `useDraft`, `useEditorHandle`, the em dash — lives in
  * `ReviewRow.tsx`.
+ *
+ * 屏幕稿 03's typography for the row: the row number and the date are mono and grey, the
+ * amount is mono and carries its kind's colour (a transfer stays ink, `kindSemantics`), the
+ * merchant is the only 14/500 line and the note is the grey one beside it. The date is
+ * shown as `MM-DD` — a batch is one statement, and the column has to fit twelve others.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -13,7 +18,7 @@ import { normalizeAmountInput } from '@/domain/money';
 import { formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { Button, DateField, Text, TextField, trimMoney } from '@/ui';
+import { Button, DateField, KIND_AMOUNT_TONE, Text, TextField, trimMoney } from '@/ui';
 
 import {
   type CellProps,
@@ -32,41 +37,58 @@ export interface RowNoCellProps {
   row: ImportRow;
   state: RowSaveState;
   onRetry(): void;
+  /** The card flow writes it as `#4`; the grid's own column is headed `#` already. */
+  hash?: boolean;
   testID: string;
 }
 
-type SaveDotToken = 'fg.muted' | 'accent.solid' | 'status.danger.fg';
+type SaveDotToken = 'accent.solid' | 'status.danger.fg';
 
-const SAVE_DOT_TOKEN: Readonly<Record<RowSaveState, SaveDotToken>> = {
-  saved: 'fg.muted',
+const SAVE_DOT_TOKEN: Readonly<Record<'saving' | 'failed', SaveDotToken>> = {
   saving: 'accent.solid',
   failed: 'status.danger.fg',
 };
+
+/** `2026-09-10` → `09-10` (屏幕稿 03); anything else is shown as it came. */
+export function shortDate(iso: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.slice(5) : iso;
+}
 
 /**
  * Row number plus the save-state dot; a failed save turns the dot into a retry button.
  * The phone's card flow renders the very same cell (04 §4.11.9 — the narrow layout is a
  * different shape, not a smaller feature set).
+ *
+ * A saved row shows the number alone (屏幕稿 03): the dot is there to say "this row is not
+ * settled yet", so it appears while a write is in flight and stays, red, when one failed.
  */
-export function RowNoCell({ row, state, onRetry, testID }: RowNoCellProps): React.JSX.Element {
+export function RowNoCell({
+  row,
+  state,
+  onRetry,
+  hash = false,
+  testID,
+}: RowNoCellProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['1'] }}>
-      <Text variant="caption" tone="secondary" mono style={strikeIfSkipped(row)} testID={testID}>
-        {row.row_no}
+      <Text variant="caption" tone="muted" mono style={strikeIfSkipped(row)} testID={testID}>
+        {hash ? `#${row.row_no}` : row.row_no}
       </Text>
-      <View
-        testID={`${testID}-save-${state}`}
-        accessibilityRole="text"
-        accessibilityLabel={t(`import:review.save_state.${state}`)}
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: radius.pill,
-          backgroundColor: colors[SAVE_DOT_TOKEN[state]],
-        }}
-      />
+      {state !== 'saved' ? (
+        <View
+          testID={`${testID}-save-${state}`}
+          accessibilityRole="text"
+          accessibilityLabel={t(`import:review.save_state.${state}`)}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: radius.pill,
+            backgroundColor: colors[SAVE_DOT_TOKEN[state]],
+          }}
+        />
+      ) : null}
       {state === 'failed' ? (
         <Button
           testID={`${testID}-retry`}
@@ -101,8 +123,14 @@ export function DateCell({
   useEditorHandle(editing, registerEditor, flush, cancel);
 
   const body = !editing ? (
-    <Text variant="caption" mono tone={row.date === null ? 'danger' : 'primary'} testID={testID}>
-      {row.date ?? t('import:review.missing_value')}
+    <Text
+      variant="caption"
+      mono
+      tone={row.date === null ? 'danger' : 'secondary'}
+      style={strikeIfSkipped(row)}
+      testID={testID}
+    >
+      {row.date === null ? t('import:review.missing_value') : shortDate(row.date)}
     </Text>
   ) : (
     <DateField
@@ -150,7 +178,21 @@ export function AmountCell({
   useEditorHandle(editing, registerEditor, flush, cancel);
 
   const body = !editing ? (
-    <Text variant="caption" mono tone={row.amount === null ? 'danger' : 'primary'} testID={testID}>
+    <Text
+      variant="subheading"
+      mono
+      numberOfLines={1}
+      // 04 §6.2 rule 2: the amount carries its kind's colour, transfers excepted.
+      tone={
+        row.amount === null
+          ? 'danger'
+          : row.kind === null
+            ? 'primary'
+            : KIND_AMOUNT_TONE[row.kind]
+      }
+      style={strikeIfSkipped(row)}
+      testID={testID}
+    >
       {row.amount === null
         ? t('import:review.missing_value')
         : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
@@ -204,9 +246,10 @@ export function TextCell({
   if (dead) return <Dash testID={testID} />;
   const body = !editing ? (
     <Text
-      variant="caption"
+      variant="body"
+      weight={field === 'merchant' ? 500 : 400}
       numberOfLines={1}
-      tone={row[field] ? 'primary' : 'muted'}
+      tone={field === 'merchant' ? (row[field] ? 'primary' : 'muted') : 'muted'}
       style={strikeIfSkipped(row)}
       testID={testID}
     >

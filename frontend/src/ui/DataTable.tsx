@@ -1,7 +1,11 @@
 /**
  * DataTable (04 §6.4): the base the import review grid is built on — column definitions,
- * a sticky header, 44px rows (tighter than the C2 list density), a selection column with
+ * a sticky header, 52px rows (tighter than the C2 list density), a selection column with
  * select-all, an inline-edit slot per cell and a controlled keyboard focus ring.
+ *
+ * The frame is 屏幕稿 03's: one card with a rounded top, a tinted sticky header of small
+ * grey column titles, hairline row separators and a full-width slot under a row for what
+ * belongs to the row but not to any one cell (the server's `hint`, the link panel).
  *
  * It is presentation-only: it knows nothing about imports, the API or i18n. Every label
  * arrives as a prop, every piece of state (selection, focus, the row to scroll to) is
@@ -20,7 +24,7 @@
  * end, so the scrollbar's length and position are the ones the full grid would have. The
  * window is aimed by *index*, never by "the row is already mounted": `scrollToRow` and the
  * keyboard both move it first and scroll second, so a jump to row 1500 works from row 1.
- * Row heights are assumed to be the nominal 44 — a row carrying a hint line is taller,
+ * Row heights are assumed to be the nominal 52 — a row carrying a hint line is taller,
  * which costs the mapping a few pixels and nothing else.
  */
 import React from 'react';
@@ -38,17 +42,22 @@ import {
 } from 'react-native';
 
 import { radius, space } from '@/theme/tokens';
-import { useColors } from '@/theme/ThemeProvider';
+import { useTheme } from '@/theme/ThemeProvider';
 
+import { raisedShadow } from './Card';
 import { Checkbox } from './Checkbox';
 import { Text } from './Text';
 import { useRowWindow } from './useRowWindow';
 
-/** 04 §6.4: the review grid is tighter than the 56px list row. */
-export const DATA_TABLE_ROW_HEIGHT = 44;
+/** 屏幕稿 03: the review grid row — tighter than the 56px list row, roomy enough for the
+ *  pill-shaped cell editors it carries. */
+export const DATA_TABLE_ROW_HEIGHT = 52;
 
 /** Width of the leading selection column. */
-const SELECT_WIDTH = 44;
+const SELECT_WIDTH = 40;
+
+/** The card's own side padding, applied to the header and to every row alike. */
+const EDGE_PADDING = space['4'];
 
 /**
  * How much of the viewport the page keeps for everything that is not the table (the top
@@ -117,7 +126,8 @@ export interface DataTableProps<Row> {
   rowSelectLabel?(row: Row): string;
   /** Rendered inside the selection column, under the checkbox (the save-state dot). */
   rowLead?(row: Row): React.ReactNode;
-  /** A full-width second line below the row — the server's read-only `hint`. */
+  /** A full-width band below the row — the server's read-only `hint`, and the link panel
+   *  of a refund or transfer row (屏幕稿 03). */
   rowBelow?(row: Row): React.ReactNode;
   rowTone?(row: Row): DataTableRowTone;
   focus?: DataTableCellPos | null;
@@ -161,7 +171,7 @@ export function DataTable<Row>({
   style,
   testID,
 }: DataTableProps<Row>): React.JSX.Element {
-  const colors = useColors();
+  const { colors, scheme } = useTheme();
   const id = testID ?? 'data-table';
   const selectable = selected !== undefined;
   const scroller = React.useRef<ScrollView | null>(null);
@@ -181,7 +191,9 @@ export function DataTable<Row>({
   });
 
   const totalWidth =
-    (selectable ? SELECT_WIDTH : 0) + columns.reduce((sum, c) => sum + c.width, 0);
+    EDGE_PADDING * 2 +
+    (selectable ? SELECT_WIDTH : 0) +
+    columns.reduce((sum, c) => sum + c.width, 0);
 
   const allSelected = selectable && rows.length > 0 && rows.every((r) => selected.has(rowKey(r)));
   const someSelected = selectable && rows.some((r) => selected.has(rowKey(r)));
@@ -192,14 +204,15 @@ export function DataTable<Row>({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        minHeight: DATA_TABLE_ROW_HEIGHT,
+        minHeight: 44,
+        paddingHorizontal: EDGE_PADDING,
         backgroundColor: colors['bg.subtle'],
-        borderTopLeftRadius: radius.md,
-        borderTopRightRadius: radius.md,
+        borderBottomWidth: 1,
+        borderColor: colors['border.default'],
       }}
     >
       {selectable ? (
-        <View style={{ width: SELECT_WIDTH, paddingHorizontal: space['2'] }}>
+        <View style={{ width: SELECT_WIDTH }}>
           <Checkbox
             testID={`${id}-select-all`}
             checked={allSelected}
@@ -215,11 +228,11 @@ export function DataTable<Row>({
           testID={`${id}-header-${column.key}`}
           style={{
             width: column.width,
-            paddingHorizontal: space['2'],
+            paddingHorizontal: space['1'],
             alignItems: column.align === 'right' ? 'flex-end' : 'flex-start',
           }}
         >
-          <Text variant="micro" tone="secondary" numberOfLines={1}>
+          <Text variant="micro" tone="muted" weight={600} numberOfLines={1}>
             {column.title}
           </Text>
         </View>
@@ -244,7 +257,7 @@ export function DataTable<Row>({
         key={key}
         testID={`${id}-row-${key}`}
         style={{
-          borderTopWidth: 1,
+          borderBottomWidth: 1,
           borderColor: colors['border.default'],
           backgroundColor: rowBackground(tone),
           opacity: tone === 'muted' ? 0.55 : 1,
@@ -255,17 +268,11 @@ export function DataTable<Row>({
             flexDirection: 'row',
             alignItems: 'stretch',
             minHeight: DATA_TABLE_ROW_HEIGHT,
+            paddingHorizontal: EDGE_PADDING,
           }}
         >
           {selectable ? (
-            <View
-              style={{
-                width: SELECT_WIDTH,
-                paddingHorizontal: space['2'],
-                justifyContent: 'center',
-                gap: space['1'],
-              }}
-            >
+            <View style={{ width: SELECT_WIDTH, justifyContent: 'center', gap: space['1'] }}>
               {/* The press target is this wrapper rather than the Checkbox itself: only a
                   press handler sees the event, and the event is where Shift lives. The
                   box inside is the plain visual, with its own press target switched off. */}
@@ -321,7 +328,12 @@ export function DataTable<Row>({
         {below ? (
           <View
             testID={`${id}-below-${key}`}
-            style={{ paddingHorizontal: space['3'], paddingBottom: space['1'] }}
+            style={{
+              paddingLeft: EDGE_PADDING + (selectable ? SELECT_WIDTH : 0),
+              paddingRight: EDGE_PADDING,
+              paddingBottom: space['3'],
+              gap: space['2'],
+            }}
           >
             {below}
           </View>
@@ -331,43 +343,51 @@ export function DataTable<Row>({
   });
 
   return (
-    <ScrollView
-      horizontal
-      testID={`${id}-hscroll`}
-      style={[{ flexGrow: 0 }, style]}
-      contentContainerStyle={{ minWidth: '100%' }}
+    <View
+      style={[
+        { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors['bg.surface'] },
+        raisedShadow(colors, scheme),
+        style,
+      ]}
     >
       <ScrollView
-        ref={scroller}
-        testID={id}
-        stickyHeaderIndices={[0]}
-        style={{ maxHeight: boxHeight }}
-        scrollEventThrottle={16}
-        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-          onScroll(event.nativeEvent.contentOffset.y);
-        }}
-        onLayout={(event: LayoutChangeEvent) => {
-          onLayout(event.nativeEvent.layout.height);
-        }}
-        contentContainerStyle={{ width: totalWidth, minWidth: '100%' }}
+        horizontal
+        testID={`${id}-hscroll`}
+        style={{ flexGrow: 0 }}
+        contentContainerStyle={{ minWidth: '100%' }}
       >
-        {header}
-        {rows.length === 0 && emptyLabel !== undefined ? (
-          <View style={{ padding: space['4'] }} testID={`${id}-empty`}>
-            <Text variant="body" tone="muted">
-              {emptyLabel}
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* The two spacers stand in for the rows that are not mounted, so the content
-                is as tall as the whole grid and the scrollbar behaves as if it were. */}
-            <View testID={`${id}-spacer-top`} style={{ height: topPad }} />
-            {body}
-            <View testID={`${id}-spacer-bottom`} style={{ height: bottomPad }} />
-          </>
-        )}
+        <ScrollView
+          ref={scroller}
+          testID={id}
+          stickyHeaderIndices={[0]}
+          style={{ maxHeight: boxHeight }}
+          scrollEventThrottle={16}
+          onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            onScroll(event.nativeEvent.contentOffset.y);
+          }}
+          onLayout={(event: LayoutChangeEvent) => {
+            onLayout(event.nativeEvent.layout.height);
+          }}
+          contentContainerStyle={{ width: totalWidth, minWidth: '100%' }}
+        >
+          {header}
+          {rows.length === 0 && emptyLabel !== undefined ? (
+            <View style={{ padding: space['6'] }} testID={`${id}-empty`}>
+              <Text variant="body" tone="muted">
+                {emptyLabel}
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* The two spacers stand in for the rows that are not mounted, so the content
+                  is as tall as the whole grid and the scrollbar behaves as if it were. */}
+              <View testID={`${id}-spacer-top`} style={{ height: topPad }} />
+              {body}
+              <View testID={`${id}-spacer-bottom`} style={{ height: bottomPad }} />
+            </>
+          )}
+        </ScrollView>
       </ScrollView>
-    </ScrollView>
+    </View>
   );
 }
