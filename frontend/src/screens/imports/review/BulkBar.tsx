@@ -213,11 +213,15 @@ export function BulkBar({
     setPickedL1(null);
   };
 
+  // 屏幕稿 03 draws the bulk buttons at the full 44 in the 1440 bar; the phone strip, which
+  // scrolls sideways, keeps them at 36.
+  const actionSize = compact ? 'sm' : 'md';
+
   const actions = (
     <>
       <Button
         testID={`${id}-category`}
-        size="sm"
+        size={actionSize}
         variant="soft"
         icon="tag"
         label={t('import:review.bulk.set_category')}
@@ -258,7 +262,7 @@ export function BulkBar({
       />
       <Button
         testID={`${id}-skip`}
-        size="sm"
+        size={actionSize}
         variant="soft"
         icon="chevron-right"
         label={t('import:review.bulk.skip')}
@@ -267,7 +271,7 @@ export function BulkBar({
       />
       <Button
         testID={`${id}-unskip`}
-        size="sm"
+        size={actionSize}
         variant="soft"
         label={t('import:review.bulk.unskip')}
         disabled={off}
