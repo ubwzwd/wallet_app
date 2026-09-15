@@ -8,8 +8,9 @@
 import React from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { radius, space, z } from '@/theme/tokens';
-import { useColors } from '@/theme/ThemeProvider';
+import { useTheme } from '@/theme/ThemeProvider';
 import { Button } from './Button';
+import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 import { TextField } from './TextField';
 
@@ -27,6 +28,10 @@ export interface ConfirmOptions {
   confirmAgainLabel?: string;
   /** Accessible name / placeholder for the `requireText` input; falls back to the word. */
   requireTextLabel?: string;
+  /** The glyph in the dialog's round well (mockups 11 / 12); omit for no well. */
+  icon?: IconName;
+  /** The mono line under the title: which file, which batch, which ledger. */
+  meta?: string;
 }
 
 interface PendingConfirm {
@@ -87,7 +92,7 @@ export interface ConfirmHostProps {
 
 export function ConfirmHost({ labels }: ConfirmHostProps): React.JSX.Element | null {
   const current = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const colors = useColors();
+  const { colors } = useTheme();
   const [typed, setTyped] = React.useState('');
   const [armed, setArmed] = React.useState(false);
 
@@ -128,10 +133,41 @@ export function ConfirmHost({ labels }: ConfirmHostProps): React.JSX.Element | n
           testID="confirm-dialog"
           style={[
             styles.dialog,
-            { backgroundColor: colors['bg.raised'], borderColor: colors['border.default'] },
+            {
+              backgroundColor: colors['bg.raised'],
+              // A dangerous dialog wears a warm edge so it does not look like a save prompt.
+              borderColor: danger ? colors['status.danger.bg'] : colors['border.default'],
+            },
           ]}
         >
-          <Text variant="heading">{o.title}</Text>
+          <View style={styles.head}>
+            {o.icon !== undefined ? (
+              <View
+                style={[
+                  styles.well,
+                  {
+                    backgroundColor: danger ? colors['status.danger.bg'] : colors['accent.subtle'],
+                  },
+                ]}
+              >
+                <Icon
+                  name={o.icon}
+                  size={22}
+                  color={danger ? colors['status.danger.fg'] : colors['accent.solid']}
+                />
+              </View>
+            ) : null}
+            <View style={styles.headText}>
+              <Text variant="heading" weight={700}>
+                {o.title}
+              </Text>
+              {o.meta !== undefined ? (
+                <Text variant="caption" tone="muted" mono testID="confirm-meta">
+                  {o.meta}
+                </Text>
+              ) : null}
+            </View>
+          </View>
           {o.body !== undefined ? (
             <Text variant="body" tone="secondary">
               {o.body}
@@ -151,7 +187,7 @@ export function ConfirmHost({ labels }: ConfirmHostProps): React.JSX.Element | n
           <View style={styles.actions}>
             <Button
               label={o.cancelLabel ?? labels.cancel}
-              variant="ghost"
+              variant="secondary"
               onPress={() => settle(false)}
               testID="confirm-cancel"
             />
@@ -180,5 +216,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
   },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: space['2'] },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: space['2'],
+    marginTop: space['1'],
+  },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: space['3'] + 2 },
+  headText: { flex: 1, minWidth: 0, gap: space['1'] },
+  well: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

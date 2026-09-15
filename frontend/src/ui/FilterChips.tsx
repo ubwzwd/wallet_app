@@ -1,6 +1,7 @@
 /**
- * The row of active filters under the transaction list's filter bar (04 §4.5, §6.2 rule 4):
- * round, dismissible `Chip`s — one per active condition — plus "清空筛选".
+ * The row of active filters under the transaction list's filter bar (04 §4.5, §6.2 rule 4,
+ * mockup 02's 「已选条件」 strip): one solid accent `Chip` per active condition, each with
+ * its own ×, plus a soft "清空筛选" chip.
  *
  * A `key` may appear more than once (two kinds, three accounts), so removal is addressed by
  * `(key, value)`, which is exactly what the URL query needs.
@@ -47,6 +48,7 @@ export function FilterChips({
         <Chip
           key={`${chip.key}:${chip.value}`}
           label={chip.label}
+          variant="solid"
           onRemove={() => onRemove(chip.key, chip.value)}
           // The × needs an accessible name that says what pressing it *does*; repeating the
           // chip's own text tells a screen reader nothing. `filter.remove_filter` is not in

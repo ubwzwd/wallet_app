@@ -2,6 +2,9 @@
  * Badge (04 §6.4, §6.2 rule 4): a read-only square pill, height 26, radius 8. It marks what
  * the system decided about a row; colour is never the only carrier (rule 7), so a badge
  * always shows text and may add an icon.
+ *
+ * The mockups use two heights: 26 in a table cell and 28 on a detail page's headline row
+ * (screen 08), where the label steps up to 13/600.
  */
 import React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
@@ -12,6 +15,7 @@ import { Text } from './Text';
 
 export type BadgeTone =
   | 'neutral'
+  | 'accent'
   | 'info'
   | 'warning'
   | 'danger'
@@ -24,6 +28,8 @@ export type BadgeTone =
   | 'flag-needs_review'
   | 'flag-uncategorized';
 
+export type BadgeSize = 'md' | 'lg';
+
 interface BadgePaint {
   fg: ColorToken;
   bg: ColorToken;
@@ -31,6 +37,7 @@ interface BadgePaint {
 
 export const BADGE_TONES: Readonly<Record<BadgeTone, BadgePaint>> = {
   neutral: { fg: 'fg.secondary', bg: 'bg.subtle' },
+  accent: { fg: 'accent.solid', bg: 'accent.subtle' },
   info: { fg: 'status.info.fg', bg: 'status.info.bg' },
   warning: { fg: 'status.warning.fg', bg: 'status.warning.bg' },
   danger: { fg: 'status.danger.fg', bg: 'status.danger.bg' },
@@ -44,9 +51,16 @@ export const BADGE_TONES: Readonly<Record<BadgeTone, BadgePaint>> = {
   'flag-uncategorized': { fg: 'flag.uncategorized', bg: 'bg.subtle' },
 };
 
+/** Height, horizontal padding and label step per size. */
+const SIZES = {
+  md: { height: controls.badge.height, padding: space['2'], variant: 'micro' as const },
+  lg: { height: 28, padding: space['3'] - 2, variant: 'caption' as const },
+};
+
 export interface BadgeProps {
   label: string;
   tone?: BadgeTone;
+  size?: BadgeSize;
   icon?: IconName;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -55,21 +69,23 @@ export interface BadgeProps {
 export function Badge({
   label,
   tone = 'neutral',
+  size = 'md',
   icon,
   style,
   testID,
 }: BadgeProps): React.JSX.Element {
   const colors = useColors();
   const paint = BADGE_TONES[tone];
+  const step = SIZES[size];
   return (
     <View
       testID={testID}
       accessibilityRole="text"
       style={[
         {
-          height: controls.badge.height,
+          height: step.height,
           borderRadius: radius.sm,
-          paddingHorizontal: space['2'],
+          paddingHorizontal: step.padding,
           flexDirection: 'row',
           alignItems: 'center',
           gap: space['1'],
@@ -80,7 +96,12 @@ export function Badge({
       ]}
     >
       {icon ? <Icon name={icon} size={14} color={colors[paint.fg]} /> : null}
-      <Text variant="micro" style={{ color: colors[paint.fg] }} numberOfLines={1}>
+      <Text
+        variant={step.variant}
+        weight={600}
+        style={{ color: colors[paint.fg] }}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>

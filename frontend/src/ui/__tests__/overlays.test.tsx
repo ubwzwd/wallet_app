@@ -107,6 +107,24 @@ describe('confirm', () => {
     await expect(refused).resolves.toBe(false);
   });
 
+  test('a dangerous dialog can carry its own glyph and the batch it is about', async () => {
+    renderThemed(<ConfirmHost labels={CONFIRM_LABELS} />);
+    let result!: Promise<boolean>;
+    act(() => {
+      result = confirm({
+        title: '撤销这批导入？',
+        tone: 'danger',
+        icon: 'undo-2',
+        meta: 'dbs-09.csv · 导入于 09-09 08:02',
+        body: '会删掉本批 11 笔交易。',
+      });
+    });
+    expect(screen.getByText('撤销这批导入？')).toBeTruthy();
+    expect(screen.getByTestId('confirm-meta')).toHaveTextContent('dbs-09.csv · 导入于 09-09 08:02');
+    fireEvent.press(screen.getByTestId('confirm-cancel'));
+    await expect(result).resolves.toBe(false);
+  });
+
   test('requireText keeps the confirm button disabled until the word matches', async () => {
     renderThemed(<ConfirmHost labels={CONFIRM_LABELS} />);
     let result: Promise<boolean> | undefined;

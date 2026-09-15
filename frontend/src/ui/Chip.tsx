@@ -1,6 +1,10 @@
 /**
  * Chip (04 §6.4, §6.2 rule 4): a round pill the user can toggle or dismiss — filters,
  * "from import #12", the review slices. Never used for system marks (that is `Badge`).
+ *
+ * Two looks, both from mockup 02: `soft` is the selectable pill (tinted fill, no border
+ * until it is chosen, then an accent ring), `solid` is an already-applied condition —
+ * accent fill, inverse text, a × that takes it off again.
  */
 import React from 'react';
 import { Pressable, type StyleProp, View, type ViewStyle } from 'react-native';
@@ -9,8 +13,11 @@ import { useColors } from '@/theme/ThemeProvider';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
+export type ChipVariant = 'soft' | 'solid';
+
 export interface ChipProps {
   label: string;
+  variant?: ChipVariant;
   selected?: boolean;
   icon?: IconName;
   onPress?: () => void;
@@ -24,6 +31,7 @@ export interface ChipProps {
 
 export function Chip({
   label,
+  variant = 'soft',
   selected = false,
   icon,
   onPress,
@@ -34,16 +42,19 @@ export function Chip({
   testID,
 }: ChipProps): React.JSX.Element {
   const colors = useColors();
-  const fg = disabled
-    ? colors['fg.muted']
-    : selected
-      ? colors['accent.solid']
-      : colors['fg.primary'];
+  const solid = variant === 'solid';
+  const fg = solid
+    ? colors['accent.fg']
+    : disabled
+      ? colors['fg.muted']
+      : selected
+        ? colors['accent.solid']
+        : colors['fg.secondary'];
 
   const body = (
     <>
       {icon ? <Icon name={icon} size={16} color={fg} /> : null}
-      <Text variant="body" style={{ color: fg }} numberOfLines={1}>
+      <Text variant="body" weight={600} style={{ color: fg }} numberOfLines={1}>
         {label}
       </Text>
       {onRemove ? (
@@ -52,7 +63,7 @@ export function Chip({
           accessibilityLabel={removeLabel ?? label}
           onPress={onRemove}
           disabled={disabled}
-          hitSlop={space['2']}
+          hitSlop={space['2'] + 2}
           testID={testID ? `${testID}-remove` : 'chip-remove'}
         >
           <Icon name="x" size={16} color={fg} />
@@ -64,14 +75,20 @@ export function Chip({
   const shape: ViewStyle = {
     height: controls.chip.height,
     borderRadius: radius.pill,
-    paddingHorizontal: space['3'],
+    paddingHorizontal: space['3'] + 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space['2'],
+    gap: space['2'] - 1,
     alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: selected ? colors['accent.solid'] : colors['border.default'],
-    backgroundColor: selected ? colors['bg.selected'] : colors['bg.subtle'],
+    // The mockups give an unselected pill no outline at all; the ring is what "chosen"
+    // looks like, so it must not be there before the user chooses.
+    borderWidth: 1.5,
+    borderColor: solid || !selected ? 'transparent' : colors['accent.solid'],
+    backgroundColor: solid
+      ? colors['accent.solid']
+      : selected
+        ? colors['bg.selected']
+        : colors['bg.subtle'],
   };
 
   if (!onPress) {
@@ -92,7 +109,9 @@ export function Chip({
       hitSlop={{ top: 5, bottom: 5 }}
       style={({ pressed }) => [
         shape,
-        pressed && !disabled ? { backgroundColor: colors['bg.hover'] } : null,
+        pressed && !disabled
+          ? { backgroundColor: solid ? colors['accent.solid'] : colors['bg.hover'], opacity: solid ? 0.86 : 1 }
+          : null,
         style,
       ]}
     >
