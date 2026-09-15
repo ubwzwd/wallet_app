@@ -140,7 +140,6 @@ export function SingleFields({
           value={field.value === '' ? null : field.value}
           onChange={selectSource}
           allowArchivedId={allowArchivedId}
-          lang={lang}
           error={txValidationMessage(t, errors.source_id?.message)}
           disabled={disabled}
         />

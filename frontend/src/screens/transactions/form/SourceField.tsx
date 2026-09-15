@@ -13,7 +13,6 @@ import { ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from 're
 import { useTranslation } from 'react-i18next';
 
 import type { FinanceSource, Uuid } from '@/api/types';
-import { type Lang, useLang } from '@/i18n';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -30,7 +29,6 @@ export interface SourceFieldProps {
   filter?(source: FinanceSource): boolean;
   /** Keeps this archived account selectable (edit mode only, 04 §4.7). */
   allowArchivedId?: Uuid | null;
-  lang?: Lang;
   label: string;
   /** Sits to the right of the label — the 「不在应用里」 toggle of mockup 05. */
   labelRight?: React.ReactNode;
@@ -59,7 +57,6 @@ export function SourceField({
   onChange,
   filter,
   allowArchivedId,
-  lang,
   label,
   labelRight,
   hint,
@@ -70,8 +67,6 @@ export function SourceField({
   testID,
 }: SourceFieldProps): React.JSX.Element {
   const { t } = useTranslation();
-  const activeLang = useLang();
-  const l = lang ?? activeLang;
   const wide = useIsWide();
   const colors = useColors();
   // 屏幕稿 04 / 05 write the ledger-currency balance bare and a foreign one with its

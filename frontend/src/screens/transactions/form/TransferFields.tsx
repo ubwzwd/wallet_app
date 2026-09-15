@@ -69,7 +69,6 @@ export function TransferFields({
   const {
     form,
     form: { control, formState },
-    lang,
     selectSource,
     selectToSource,
     sources,
@@ -144,7 +143,6 @@ export function TransferFields({
           value={field.value === '' ? null : field.value}
           onChange={selectSource}
           allowArchivedId={allowArchivedId}
-          lang={lang}
           error={txValidationMessage(t, errors.source_id?.message)}
           disabled={disabled}
         />
@@ -168,7 +166,6 @@ export function TransferFields({
             values.subtype === 'repayment' ? (source) => source.type === 'credit' : undefined
           }
           allowArchivedId={allowArchivedId}
-          lang={lang}
           hint={repaymentHint ? t('transaction:transfer.repayment_target_hint') : undefined}
           error={txValidationMessage(t, errors.to_source_id?.message)}
           disabled={disabled}
