@@ -20,7 +20,6 @@ import { useTranslation } from 'react-i18next';
 import type { Transaction, TransferRole, Uuid } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
-import { useLang } from '@/i18n';
 import { formatDate, parseLocalDate } from '@/i18n/format';
 import { usePairTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
@@ -62,7 +61,6 @@ export function PairSection({
   testID,
 }: PairSectionProps): React.JSX.Element {
   const { t } = useTranslation();
-  const lang = useLang();
   const router = useRouter();
   const { ledgerId } = useLedgerContext();
   const money = useAmountText();
@@ -139,7 +137,7 @@ export function PairSection({
       renderRow={(row) => (
         <View style={styles.pickerRow}>
           <Text variant="body" mono>
-            {formatDate(row.occurred_at, lang)}
+            {formatDate(row.occurred_at)}
           </Text>
           <Text variant="body" numberOfLines={1} style={styles.pickerMain}>
             {sourceNames[row.source_id] ?? row.note ?? ''}

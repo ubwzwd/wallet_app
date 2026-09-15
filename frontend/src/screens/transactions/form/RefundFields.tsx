@@ -128,7 +128,7 @@ export function RefundFields({
   const colors = useColors();
   const wide = useIsWide();
   const money = useAmountText();
-  const { lang, values } = ctrl;
+  const { values } = ctrl;
   const { origin } = state;
 
   const full = origin ? absMoney(origin.amount) : null;
@@ -170,10 +170,10 @@ export function RefundFields({
             </View>
             <View style={styles.grow}>
               <Text variant="subheading" weight={600} numberOfLines={1}>
-                {origin.merchant ?? origin.note ?? formatDate(origin.occurred_at, lang)}
+                {origin.merchant ?? origin.note ?? formatDate(origin.occurred_at)}
               </Text>
               <Text variant="caption" tone="secondary" mono numberOfLines={2}>
-                {`${formatDate(origin.occurred_at, lang)} · ${money(
+                {`${formatDate(origin.occurred_at)} · ${money(
                   origin.amount,
                   origin.currency,
                 )}`}
@@ -312,7 +312,7 @@ function RefundPicker({ ctrl, state }: RefundFieldsProps): React.JSX.Element {
       tableHeader={<RefundPickerHeader />}
       rowSummary={(tx) =>
         t('transaction:form.picker_selected_summary', {
-          name: tx.merchant ?? tx.note ?? formatDate(tx.occurred_at, lang),
+          name: tx.merchant ?? tx.note ?? formatDate(tx.occurred_at),
           amount: money(refundableOf(tx), tx.currency),
         })
       }

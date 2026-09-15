@@ -64,9 +64,9 @@ export function filterChipLabel(chip: DomainFilterChip, ctx: FilterLabelCtx): st
       });
     }
     case 'from':
-      return t('transaction:list.chip.from', { value: formatDate(chip.value, lang) });
+      return t('transaction:list.chip.from', { value: formatDate(chip.value) });
     case 'to':
-      return t('transaction:list.chip.to', { value: formatDate(chip.value, lang) });
+      return t('transaction:list.chip.to', { value: formatDate(chip.value) });
     case 'currency':
       return t('transaction:list.chip.currency', { value: chip.value });
     case 'min_amount':

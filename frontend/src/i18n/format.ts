@@ -182,14 +182,9 @@ const EN_MONTHS_FULL = [
  * 「建于」 line (12), the form's summary card (04), the operations timeline (07 / 08) —
  * always in the mono face, never as 「8月14日」. It is deliberately language-independent,
  * which is also what the settings page promises: 「日期一律按账本的基准币种与地区走，不随
- * 语言变」.
- *
- * @param _lang **deprecated** and ignored: the output has not depended on the language since
- * 决策 §14.45. It is optional and stays in the signature for one round only, so the ~25 call
- * sites that still thread `lang` in can be cleaned up page by page; the acceptance task drops
- * the parameter once the last one is gone. New call sites pass the date and nothing else.
+ * 语言变」. It therefore takes no `lang`: the date is the date in either language.
  */
-export function formatDate(iso: IsoDate, _lang?: Lang): string {
+export function formatDate(iso: IsoDate): string {
   return iso;
 }
 
@@ -221,11 +216,17 @@ export function formatMonth(month: string, lang: Lang): string {
   return lang === 'zh' ? `${y} 年 ${m} 月` : `${EN_MONTHS_FULL[m - 1]} ${y}`;
 }
 
-/** `'2026-08'` → '8月' / 'Aug' — the trend chart's axis labels (04 §4.4). */
+/**
+ * `'2026-08'` → '8 月' / 'Aug' — the trend chart's axis labels (04 §4.4).
+ *
+ * The zh form keeps a space between the digits and 「月」, the way every mockup frame
+ * sets it (屏幕稿 01 「9 月支出」 and its 「10 月 … 9 月」 axis, 08 「对 9 月的影响」):
+ * Latin digits next to a CJK character need the gap to stop reading as one glyph run.
+ */
 export function formatMonthShort(month: string, lang: Lang): string {
   const m = parseInt(month.split('-')[1] ?? '', 10);
   if (!Number.isInteger(m) || m < 1 || m > 12) return month;
-  return lang === 'zh' ? `${m}月` : EN_MONTHS_SHORT[m - 1];
+  return lang === 'zh' ? `${m} 月` : EN_MONTHS_SHORT[m - 1];
 }
 
 /** UTC ISO datetime → local `'YYYY-MM-DD HH:mm'` (24h, locale-invariant — used in the

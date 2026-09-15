@@ -77,7 +77,7 @@ describe('BarChart', () => {
     expect(screen.getByTestId('trend-value-2026-01')).toHaveTextContent('1.0k');
     expect(screen.getByTestId('trend-value-2026-12').props.numberOfLines).toBe(1);
     // The amount a screen reader hears keeps its currency.
-    expect(screen.getByTestId('trend-point-2026-12').props.accessibilityLabel).toBe('12月 ¥1.2万');
+    expect(screen.getByTestId('trend-point-2026-12').props.accessibilityLabel).toBe('12 月 ¥1.2万');
   });
 
   test('a wide bar stops below its label so the label stays inside the chart box', () => {
@@ -199,7 +199,7 @@ describe('BarChart', () => {
   });
 
   test('the axis uses short month names in both languages', () => {
-    expect(monthAbbrev('2026-08', 'zh')).toBe('8月');
+    expect(monthAbbrev('2026-08', 'zh')).toBe('8 月');
     expect(monthAbbrev('2026-08', 'en')).toBe('Aug');
   });
 });

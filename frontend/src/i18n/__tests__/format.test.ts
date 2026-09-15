@@ -134,7 +134,7 @@ describe('formatMoney compact', () => {
 
 describe('formatMonthShort', () => {
   test("'2026-08' reads as 8月 / Aug", () => {
-    expect(formatMonthShort('2026-08', 'zh')).toBe('8月');
+    expect(formatMonthShort('2026-08', 'zh')).toBe('8 月');
     expect(formatMonthShort('2026-08', 'en')).toBe('Aug');
   });
 
@@ -189,8 +189,7 @@ describe('local-date parsing is timezone-safe (04 §5.4, §8.1)', () => {
     'formatDate never shifts a day under %s',
     (tz) => {
       process.env.TZ = tz;
-      expect(formatDate('2026-08-14', 'zh')).toContain('14');
-      expect(formatDate('2026-08-14', 'en')).toContain('14');
+      expect(formatDate('2026-08-14')).toContain('14');
     },
   );
 });
@@ -198,12 +197,10 @@ describe('local-date parsing is timezone-safe (04 §5.4, §8.1)', () => {
 describe('formatDate', () => {
   // 屏幕稿 04 / 06 / 07 / 12 all write a date as the plain numeric day, and the settings
   // page promises dates do not follow the interface language (决策 §14.45).
-  test('is the numeric day, with the year, in either language', () => {
+  test('is the ISO calendar day, year included, whatever the language', () => {
     const thisYear = new Date().getFullYear();
-    expect(formatDate(`${thisYear}-08-14`, 'zh')).toBe(`${thisYear}-08-14`);
-    expect(formatDate(`${thisYear}-08-14`, 'en')).toBe(`${thisYear}-08-14`);
-    expect(formatDate('2019-08-14', 'zh')).toBe('2019-08-14');
-    expect(formatDate('2019-08-14', 'en')).toBe('2019-08-14');
+    expect(formatDate(`${thisYear}-08-14`)).toBe(`${thisYear}-08-14`);
+    expect(formatDate('2019-08-14')).toBe('2019-08-14');
   });
 });
 
@@ -242,7 +239,7 @@ describe('formatRelativeDay', () => {
   });
 
   test('falls back to formatDate for anything else', () => {
-    expect(formatRelativeDay('2019-08-14', 'en')).toBe(formatDate('2019-08-14', 'en'));
+    expect(formatRelativeDay('2019-08-14', 'en')).toBe(formatDate('2019-08-14'));
   });
 });
 

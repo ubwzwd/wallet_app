@@ -221,7 +221,7 @@ test('the wide table gives every account a row, and the foot strip the total of 
 
   // 折算 column: the converted value plus the rate date, 「—」 in the base currency.
   expect(textOf('source-balance-base-src-other')).toContain('1,000.00');
-  expect(textOf('source-rate-date-src-other')).toContain(formatDate('2026-09-11', 'zh'));
+  expect(textOf('source-rate-date-src-other')).toContain(formatDate('2026-09-11'));
   expect(textOf('source-converted-src-cash')).toBe('—');
 
   // 余额 · 原币: 屏幕稿 09 writes a base-currency balance bare — the 币种 column already
@@ -271,7 +271,7 @@ test('?include_archived=1 expands the section, greying each row with its archive
   expect(await screen.findByTestId('source-row-src-archived')).toBeTruthy();
   expect(
     String(screen.getByTestId('source-row-src-archived-amount-sub').props.children),
-  ).toContain(formatDate('2026-08-20', 'zh'));
+  ).toContain(formatDate('2026-08-20'));
   // The block says out loud that these balances are out of net worth.
   expect(textOf('sources-archived-hint')).toContain('不计入净资产');
   // Still out of the three numbers while expanded.
@@ -289,7 +289,7 @@ test('the expanded archived block keeps the table columns and stamps each row', 
   expect(textOf('sources-archived-count')).toContain('1');
   // The wide rows reuse the table grid, with 折算 swapped for 「归档于 …」.
   expect(screen.getByTestId('source-row-src-archived')).toBeTruthy();
-  expect(textOf('source-archived-at-src-archived')).toContain(formatDate('2026-08-20', 'zh'));
+  expect(textOf('source-archived-at-src-archived')).toContain(formatDate('2026-08-20'));
   // Both cards sit in the same horizontal scroller, so their columns stay lined up.
   expect(screen.getByTestId('sources-archived-hscroll')).toBeTruthy();
 });

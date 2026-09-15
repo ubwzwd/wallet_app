@@ -308,7 +308,7 @@ test('the month totals sit in the header, expense first (screen 01)', async () =
     containing('8,421.66'),
   );
   expect(router.getByTestId('home-expense-total')).not.toHaveTextContent(containing('¥'));
-  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('9月支出'));
+  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('9 月支出'));
   expect(router.getByTestId('home-income-total')).toHaveTextContent(containing('23,500.00'));
 });
 
@@ -540,7 +540,7 @@ test('the trend keeps the monthly average and the peak, and a column switches th
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   expect(await router.findByTestId('home-trend-average')).toHaveTextContent('月均 1,400.00');
-  expect(router.getByTestId('home-trend-peak')).toHaveTextContent('峰值 3,600.00（4月）');
+  expect(router.getByTestId('home-trend-peak')).toHaveTextContent('峰值 3,600.00（4 月）');
 
   fireEvent.press(router.getByTestId('home-trend-chart-point-2026-04'));
   await waitFor(() => expect(router.getSearchParams().month).toBe('2026-04'));

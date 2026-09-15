@@ -171,7 +171,7 @@ export function TransactionPicker({
     return (
       <View style={styles.rowBody}>
         <Text variant="body" mono>
-          {formatDate(tx.occurred_at, lang)}
+          {formatDate(tx.occurred_at)}
         </Text>
         <View style={styles.rowMain}>
           <Text variant="body" numberOfLines={1}>

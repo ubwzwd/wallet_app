@@ -83,7 +83,7 @@ export function RateLine({
 
   const converted = formatConverted(amount, currency, amountBase, baseCurrency, lang);
   const rate = t('transaction:detail.rate_used', {
-    date: formatDate(rateDate, lang),
+    date: formatDate(rateDate),
     from: currency,
     rate: trimRate(rateUsed),
     to: baseCurrency,
@@ -105,7 +105,7 @@ export function RateLine({
       </Text>
       {rateDate !== occurredAt ? (
         <Text variant="caption" tone="muted" testID={`${id}-fallback`}>
-          {t('transaction:detail.rate_fallback_hint', { date: formatDate(rateDate, lang) })}
+          {t('transaction:detail.rate_fallback_hint', { date: formatDate(rateDate) })}
         </Text>
       ) : null}
     </View>

@@ -69,9 +69,9 @@ export function dropCandidates(
       id: 'date',
       label: t('transaction:list.chip.date_range', {
         from: filters.from
-          ? formatDate(filters.from, lang)
+          ? formatDate(filters.from)
           : t('transaction:list.chip.unbounded'),
-        to: filters.to ? formatDate(filters.to, lang) : t('transaction:list.chip.unbounded'),
+        to: filters.to ? formatDate(filters.to) : t('transaction:list.chip.unbounded'),
       }),
       without: { ...filters, from: undefined, to: undefined },
     });

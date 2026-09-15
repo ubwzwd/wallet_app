@@ -196,10 +196,10 @@ export function RefundOriginCard({
           </View>
           <View style={styles.originMain}>
             <Text variant="body" weight={500} numberOfLines={1} testID={`${id}-merchant`}>
-              {origin.merchant ?? formatDate(origin.occurred_at, lang)}
+              {origin.merchant ?? formatDate(origin.occurred_at)}
             </Text>
             <Text variant="caption" tone="warning" mono numberOfLines={1} testID={`${id}-meta`}>
-              {[formatDate(origin.occurred_at, lang), category, account]
+              {[formatDate(origin.occurred_at), category, account]
                 .filter((s): s is string => Boolean(s))
                 .join(' · ')}
             </Text>
@@ -232,7 +232,7 @@ export function RefundOriginCard({
           {others.map((r) => (
             <View key={r.id} style={styles.otherRow} testID={`${id}-other-${r.id}`}>
               <Text variant="caption" tone="secondary" mono>
-                {formatDate(r.occurred_at, lang)}
+                {formatDate(r.occurred_at)}
               </Text>
               <Text variant="caption" tone="muted" numberOfLines={1} style={styles.otherNote}>
                 {r.note ?? ''}

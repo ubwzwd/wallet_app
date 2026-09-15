@@ -79,7 +79,7 @@ export function RefundCandidateRow({
       : l2
         ? `${categoryName(l1, lang)} / ${categoryName(l2, lang)}`
         : categoryName(l1, lang);
-  const name = tx.merchant ?? tx.note ?? formatDate(tx.occurred_at, lang);
+  const name = tx.merchant ?? tx.note ?? formatDate(tx.occurred_at);
 
   const remainingLine = (
     <Text
@@ -107,7 +107,7 @@ export function RefundCandidateRow({
               {name}
             </Text>
             <Text variant="caption" tone="muted" numberOfLines={2}>
-              {`${formatDate(tx.occurred_at, lang)} · ${category}`}
+              {`${formatDate(tx.occurred_at)} · ${category}`}
             </Text>
           </View>
           <View style={styles.cardRight}>
@@ -132,7 +132,7 @@ export function RefundCandidateRow({
   return (
     <View style={styles.row}>
       <Text variant="caption" mono tone="secondary" style={styles.colDate} numberOfLines={1}>
-        {formatDate(tx.occurred_at, lang)}
+        {formatDate(tx.occurred_at)}
       </Text>
       <View style={[styles.colMerchant, styles.merchantCell]}>
         <KindIcon kind="expense" size={30} />
