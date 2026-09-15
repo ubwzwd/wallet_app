@@ -1,6 +1,10 @@
 /**
- * `/l/:ledgerId/imports/new` — step 1 (04 §4.10, §8.5 cases 2–6; decisions §5, §14.30,
- * §14.47, §14.52 A18, §14.53d/f).
+ * `/l/:ledgerId/imports/new` — the merged import page (04 §4.10, §8.5 cases 1–6; decisions
+ * §5, §14.30, §14.47, §14.52 A18, §14.53d/f, §14.56).
+ *
+ * Since the guide and the upload form became one page, the skill text lives here: the two
+ * tabs, the copy and the download are the first half of §8.5 case 1 (the column table and
+ * the sample stayed on `/imports/guide`, see `guide.test.tsx`).
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -13,6 +17,7 @@ import { initI18n } from '@/i18n';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { qk } from '@/queries';
 import { AuthProvider, LedgerProvider } from '@/store';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
 import {
@@ -20,6 +25,7 @@ import {
   LEDGER_ID,
   SOURCE_ID,
   makeImportBatch,
+  makeImportFormat,
   makeImportUploadResult,
   makeLedger,
   makeSource,
@@ -48,6 +54,12 @@ const pickFileMock = pickFile as jest.MockedFunction<typeof pickFile>;
 let queryClient: QueryClient;
 let handlers: TestQueryHandlers;
 let api: MockApi;
+let wideSpy: jest.SpyInstance;
+
+function setWide(wide: boolean): void {
+  wideSpy?.mockRestore();
+  wideSpy = jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(wide);
+}
 
 const LEDGER = makeLedger({ base_currency: 'CNY' });
 const SOURCE = makeSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
@@ -121,8 +133,11 @@ beforeEach(async () => {
   queryClient = makeTestQueryClient(handlers);
   await initI18n();
   await i18next.changeLanguage('zh');
+  setWide(true);
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
   mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE, ARCHIVED], total: 2 });
+  mockGet('/import-format', makeImportFormat());
+  mockGet(IMPORTS_PATH, { items: [], total: 0 });
   pickFileMock.mockReset();
   pickFileMock.mockResolvedValue(null);
 });
@@ -131,6 +146,8 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  wideSpy?.mockRestore();
+  delete (globalThis as { document?: unknown }).document;
   jest.restoreAllMocks();
 });
 
@@ -167,8 +184,12 @@ test('a successful upload goes straight to review without a second request', asy
   expect(
     queryClient.getQueryData([...qk.ledger(LEDGER_ID).importRows(result.batch.id), {}]),
   ).toEqual({ items: result.rows, total: result.rows.length });
-  // … so nothing was fetched back from the import endpoints.
-  const imported = api.mock.history.get.filter((r) => (r.url ?? '').includes('/imports'));
+  // … so nothing about THIS batch was fetched back: the only import GET the page makes is
+  // the short 「最近导入」 list of the upload card, which never touches the new batch.
+  const imported = api.mock.history.get
+    .map((r) => r.url ?? '')
+    .filter((url) => url.includes('/imports'))
+    .filter((url) => !url.endsWith('/imports'));
   expect(imported).toEqual([]);
   expect(api.mock.history.post).toHaveLength(1);
 });
@@ -179,7 +200,6 @@ test('pasted CSV posts a JSON body and lands on the same review screen', async (
   const router = renderUpload();
 
   await chooseSource();
-  fireEvent.press(screen.getByTestId('upload-mode-paste'));
   fireEvent.changeText(
     await screen.findByTestId('upload-paste-input'),
     '# version: 2026-09-10\ndate,amount\n2026-08-03,-1\n',
@@ -370,5 +390,87 @@ test('the batch fixture id is what review is opened with', async () => {
   await chooseFile(csvFile());
   fireEvent.press(screen.getByTestId('upload-submit'));
 
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${BATCH_ID}`));
+});
+
+test('the two tabs show skill_markdown and skill_text, and copy writes the shown one', async () => {
+  const writeText = jest.fn().mockResolvedValue(undefined);
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    value: { writeText },
+    configurable: true,
+  });
+  mockGet(
+    '/import-format',
+    makeImportFormat({
+      skill_markdown: '# SKILL for Claude',
+      skill_text: 'Instructions for ChatGPT',
+    }),
+  );
+  renderUpload();
+
+  expect(await screen.findByTestId('guide-skill-text')).toBeTruthy();
+  expect(screen.getByTestId('guide-skill-text').props.children).toBe('# SKILL for Claude');
+
+  fireEvent.press(screen.getByTestId('guide-skill-copy'));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('# SKILL for Claude'));
+
+  fireEvent.press(screen.getByTestId('guide-skill-tabs-chatgpt'));
+  await waitFor(() =>
+    expect(screen.getByTestId('guide-skill-text').props.children).toBe('Instructions for ChatGPT'),
+  );
+  fireEvent.press(screen.getByTestId('guide-skill-copy'));
+  await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('Instructions for ChatGPT'));
+});
+
+test('downloading SKILL.md writes exactly what the response carried', async () => {
+  const blobs: Blob[] = [];
+  const names: string[] = [];
+  (globalThis as { document?: unknown }).document = {
+    createElement: () => {
+      const node: Record<string, unknown> & { click(): void } = {
+        click: () => {
+          names.push(String(node.download));
+        },
+      };
+      return node;
+    },
+    body: { appendChild: () => {}, removeChild: () => {} },
+  };
+  jest.spyOn(URL, 'createObjectURL').mockImplementation((blob: Blob | MediaSource) => {
+    blobs.push(blob as Blob);
+    return 'blob:import-skill';
+  });
+  const format = makeImportFormat({ skill_markdown: '# SKILL\nbody' });
+  mockGet('/import-format', format);
+  renderUpload();
+
+  fireEvent.press(await screen.findByTestId('guide-skill-download'));
+
+  expect(names).toEqual(['SKILL.md']);
+  await expect(blobs[0].text()).resolves.toBe(format.skill_markdown);
+});
+
+test('the three steps are on the page and step 3 links to the standard format', async () => {
+  const router = renderUpload();
+
+  expect(await screen.findByTestId('import-step-1')).toBeTruthy();
+  expect(screen.getByTestId('import-step-2')).toBeTruthy();
+  expect(screen.getByTestId('import-step-3')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('upload-format-link'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/guide`));
+});
+
+test('the recent imports list names the last batches and opens one', async () => {
+  mockGet(IMPORTS_PATH, {
+    items: [makeImportBatch({ id: BATCH_ID, filename: 'cmb-08.csv', row_count: 32 })],
+    total: 1,
+  });
+  const router = renderUpload();
+
+  expect(await screen.findByTestId(`upload-recent-${BATCH_ID}`)).toBeTruthy();
+  expect(screen.getByText('cmb-08.csv')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId(`upload-recent-${BATCH_ID}`));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${BATCH_ID}`));
 });

@@ -12,7 +12,9 @@
  */
 import type { TFunction } from 'i18next';
 
-import type { ImportDeleteResult } from '@/api/types';
+import type { ImportBatch, ImportBatchListItem, ImportDeleteResult } from '@/api/types';
+import type { Lang } from '@/i18n';
+import { formatDateTime } from '@/i18n/format';
 import type { ImportDeleteVars } from '@/queries';
 import { confirm, toast } from '@/ui';
 
@@ -20,14 +22,30 @@ export interface UndoImportBatchOptions {
   /** `useDeleteImport(ledgerId, batchId).mutateAsync`, already bound to the batch. */
   remove(vars?: ImportDeleteVars): Promise<ImportDeleteResult>;
   t: TFunction;
+  /** The mono line under the dialog's title: which file, uploaded when (屏幕稿 11 · 撤销确认). */
+  meta?: string;
   /** Ran once the batch is really gone; the caller decides where to go afterwards. */
   onDone?(): void;
+}
+
+/** 屏幕稿 11's 「dbs-09.csv · 09-09 08:02 · 目标账户 DBS Multiplier」. */
+export function undoMeta(
+  batch: ImportBatch | ImportBatchListItem,
+  t: TFunction,
+  lang: Lang,
+): string {
+  const filename =
+    batch.source === 'paste' ? t('import:history.pasted_filename') : (batch.filename ?? '');
+  return [filename, formatDateTime(batch.created_at, lang), batch.source_name]
+    .filter((part) => part.length > 0)
+    .join(' · ');
 }
 
 /** Resolves `true` only when the batch was actually deleted. */
 export async function undoImportBatch({
   remove,
   t,
+  meta,
   onDone,
 }: UndoImportBatchOptions): Promise<boolean> {
   // Ask first: how much would this delete, and which refunds does it disturb?
@@ -56,6 +74,9 @@ export async function undoImportBatch({
     confirmLabel: t('import:history.undo'),
     tone: 'danger',
     doubleTap: true,
+    // 屏幕稿 11 · 撤销确认: the round undo well and the mono line naming the batch.
+    icon: 'undo-2',
+    meta,
   });
   if (!ok) return false;
 

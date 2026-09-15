@@ -1,9 +1,11 @@
 /**
- * `/l/:ledgerId/imports/guide` — step 0 (04 §4.10, §8.5 case 1; decisions §6, §14.52 A18).
+ * `/l/:ledgerId/imports/guide` — 「标准格式说明」, the reference page step 3 of the import
+ * page links to (04 §4.10, §8.5 case 1; decisions §6, §14.52 A18, §14.56).
  *
  * The page is a pure projection of `GET /import-format`, so the tests below change the
  * mocked response and assert the screen follows: nothing about the format may be baked
- * into the component.
+ * into the component. The skill text and its copy / download live on the import page now
+ * and are covered in `upload.test.tsx`.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -15,6 +17,7 @@ import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { AuthProvider, LedgerProvider } from '@/store';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
 import {
@@ -32,8 +35,14 @@ import ImportGuideScreen from '../ImportGuideScreen';
 
 let queryClient: QueryClient;
 let api: MockApi;
+let wideSpy: jest.SpyInstance;
 
 const LEDGER = makeLedger({ base_currency: 'CNY' });
+
+function setWide(wide: boolean): void {
+  wideSpy?.mockRestore();
+  wideSpy = jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(wide);
+}
 
 function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
@@ -112,6 +121,7 @@ beforeEach(async () => {
   queryClient = makeTestQueryClient();
   await initI18n();
   await i18next.changeLanguage('zh');
+  setWide(true);
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
 });
 
@@ -119,6 +129,7 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  wideSpy?.mockRestore();
   delete (globalThis as { document?: unknown }).document;
   jest.restoreAllMocks();
 });
@@ -154,50 +165,6 @@ test('the version line and footer print the version the server sent', async () =
   expect(screen.getByTestId('guide-version-line').props.children).toContain('2027-01-31');
 });
 
-test('the two tabs show skill_markdown and skill_text, and copy writes the shown one', async () => {
-  const writeText = installClipboard();
-  mockGet(
-    '/import-format',
-    makeImportFormat({
-      skill_markdown: '# SKILL for Claude',
-      skill_text: 'Instructions for ChatGPT',
-    }),
-  );
-  renderGuide();
-
-  expect(await screen.findByTestId('guide-skill-text')).toBeTruthy();
-  expect(screen.getByTestId('guide-skill-text').props.children).toBe('# SKILL for Claude');
-
-  fireEvent.press(screen.getByTestId('guide-skill-copy'));
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith('# SKILL for Claude'));
-
-  fireEvent.press(screen.getByTestId('guide-skill-tabs-chatgpt'));
-  await waitFor(() =>
-    expect(screen.getByTestId('guide-skill-text').props.children).toBe(
-      'Instructions for ChatGPT',
-    ),
-  );
-  fireEvent.press(screen.getByTestId('guide-skill-copy'));
-  await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('Instructions for ChatGPT'));
-});
-
-test('downloading SKILL.md and the sample writes exactly what the response carried', async () => {
-  const capture = installDownloadCapture();
-  const format = makeImportFormat({
-    skill_markdown: '# SKILL\nbody',
-    sample_csv: '# version: 2026-09-10\na,b\n1,2\n',
-  });
-  mockGet('/import-format', format);
-  renderGuide();
-
-  fireEvent.press(await screen.findByTestId('guide-skill-download'));
-  fireEvent.press(screen.getByTestId('guide-sample-download'));
-
-  expect(capture.names).toEqual(['SKILL.md', 'sample.csv']);
-  await expect(capture.blobs[0].text()).resolves.toBe(format.skill_markdown);
-  await expect(capture.blobs[1].text()).resolves.toBe(format.sample_csv);
-});
-
 test('the sample CSV is rendered as a grid and copied verbatim', async () => {
   const writeText = installClipboard();
   const sample = '# version: 2026-09-10\ndate,amount\n2026-08-03,-128.50\n';
@@ -213,10 +180,26 @@ test('the sample CSV is rendered as a grid and copied verbatim', async () => {
   await waitFor(() => expect(writeText).toHaveBeenCalledWith(sample));
 });
 
-test('step 3 leads to the upload page, and no skill version of the user is claimed', async () => {
+test('downloading the sample writes exactly what the response carried', async () => {
+  const capture = installDownloadCapture();
+  const format = makeImportFormat({ sample_csv: '# version: 2026-09-10\na,b\n1,2\n' });
+  mockGet('/import-format', format);
+  renderGuide();
+
+  fireEvent.press(await screen.findByTestId('guide-sample-download'));
+
+  expect(capture.names).toEqual(['sample.csv']);
+  await expect(capture.blobs[0].text()).resolves.toBe(format.sample_csv);
+});
+
+test('the breadcrumb leads back to the import page, and no skill version of the user is claimed', async () => {
   mockGet('/import-format', makeImportFormat());
   const router = renderGuide();
 
-  fireEvent.press(await screen.findByTestId('guide-go-upload'));
+  expect(await screen.findByTestId('guide-format')).toBeTruthy();
+  // The app never claims to know which skill version the user installed (§14.52 A18).
+  expect(screen.queryByTestId('upload-skill-meta')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('guide-header-back'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
 });
