@@ -90,8 +90,9 @@
       "skipped_one": "Skipped {{count}}",
       "skipped_other": "Skipped {{count}}"
     },
-    "selected_one": "{{count}} selected",
-    "selected_other": "{{count}} selected",
+    "selected_one": "{{count}} / {{total}} rows selected",
+    "selected_other": "{{count}} / {{total}} rows selected",
+    "transfer_title": "{{from}} → {{to}}",
     "bulk": {
       "set_category": "Set category in bulk",
       "set_kind": "Set type in bulk",
@@ -104,7 +105,7 @@
       "failed": "Nothing in this batch was changed — check the selected rows"
     },
     "column": {
-      "row_no": "Row",
+      "row_no": "#",
       "date": "Date",
       "amount": "Amount",
       "currency": "Currency",
@@ -113,22 +114,27 @@
       "note": "Note",
       "category_l1": "Category",
       "category_l2": "Subcategory",
-      "linked": "Link / counterparty",
-      "flags": "Flags"
+      "linked": "Account · counterparty",
+      "flags": "State & flags"
     },
     "transfer_not_applicable": "—",
+    "status": {
+      "pending": "Pending",
+      "edited": "Edited",
+      "skipped": "Skipped"
+    },
     "flag": {
       "duplicate": "Possible duplicate",
       "refund_candidate": "Looks like a refund",
       "transfer_candidate": "Transfer can be paired",
-      "needs_review": "Needs review",
-      "uncategorized": "Uncategorized",
-      "skipped": "Skipped",
-      "edited": "Edited"
+      "needs_review": "Needs review"
     },
     "linked": {
       "refund_pick": "Choose the original expense",
-      "transfer_pair_confirm": "Found the other side on that account — link it as one transfer?",
+      "refund_origin": "Linked to the original expense",
+      "refund_repick": "Change",
+      "refundable": "{{amount}} still refundable",
+      "transfer_pair_confirm": "Link as one transfer",
       "transfer_pair_hint": "Pairing will unify both legs onto the same subtype",
       "transfer_multi_hint": "Found {{count}} transfers that could be paired — pick one",
       "transfer_pick_single": "Pick one",
@@ -142,7 +148,12 @@
     "unskip_row": "Unskip",
     "block_uncategorized_one": "{{count}} row still needs a category before you can submit",
     "block_uncategorized_other": "{{count}} rows still need a category before you can submit",
-    "jump_to_first": "Jump to the first one",
+    "block_uncategorized_short_one": "{{count}} row uncategorized — cannot submit",
+    "block_uncategorized_short_other": "{{count}} rows uncategorized — cannot submit",
+    "jump_to_first": "Go to the first one",
+    "submit": "Submit import",
+    "submit_blocked_suffix_one": "{{count}} row uncategorized",
+    "submit_blocked_suffix_other": "{{count}} rows uncategorized",
     "submit_button": "Submit {{count}} rows",
     "submit_pairs_hint_one": "{{count}} transfer pair will be merged into {{count}} transaction",
     "submit_pairs_hint_other": "{{count}} transfer pairs will be merged into {{count}} transactions",
@@ -158,8 +169,8 @@
     "missing_value": "Missing",
     "select_all": "Select all rows shown",
     "select_row": "Select row {{row}}",
-    "pick_category": "Pick a category",
-    "pick_category_l2": "Pick a subcategory",
+    "pick_category": "Uncategorized",
+    "pick_category_l2": "Optional",
     "no_rows_in_slice": "No rows in this slice",
     "committing": "Committing this import…",
     "block_incomplete_one": "{{count}} row still has no date, amount or currency",

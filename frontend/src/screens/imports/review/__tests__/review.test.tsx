@@ -4,7 +4,7 @@
 import React from 'react';
 import { ScrollView, Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
@@ -175,7 +175,8 @@ test('a transfer row has no merchant cell and no category cell, and neither acce
 
   // Both cells render the em dash, and pressing the merchant cell opens no editor.
   expect((await screen.findByTestId('review-3-merchant')).props.children).toBe('—');
-  expect(screen.getByTestId('review-3-l1').props.children).toBe('—');
+  // 屏幕稿 03 draws the dead cell as a pill, so the dash is the pill's text.
+  expect(within(screen.getByTestId('review-3-l1')).getByText('—')).toBeTruthy();
   fireEvent.press(screen.getByTestId('review-table-cell-row-3-merchant'));
   expect(screen.queryByTestId('review-3-merchant-input')).toBeNull();
 });
@@ -223,7 +224,7 @@ test('changing kind rewrites the sign, clears the category and wakes the link ce
     transfer_subtype: 'plain',
   });
   expect(await screen.findByTestId('review-2-link-role')).toBeTruthy();
-  expect(screen.getByTestId('review-2-l1').props.children).toBe('—');
+  expect(within(screen.getByTestId('review-2-l1')).getByText('—')).toBeTruthy();
 });
 
 test('a refund turned into a transfer drops the link it had to the original expense', async () => {
@@ -402,6 +403,44 @@ test('the four slices count correctly and switching them keeps the selection', a
   );
 });
 
+// ------------------------------------ the standing blocker banner (04 §4.11.8, 屏幕稿 03)
+
+test('the banner names the blocker and its link widens the slice and focuses the first row', async () => {
+  const done = row({ id: 'row-1', row_no: 1, flags: ['needs_review'] });
+  const todo = row({ id: 'row-2', row_no: 2, category_l1: null, category_l2: null });
+  seed([done, todo]);
+  renderReview();
+
+  // One row is uncategorized, so the banner is up and says so.
+  expect(await screen.findByTestId('review-banner')).toBeTruthy();
+  expect(screen.getByText('还有 1 行待归类，补齐后才能提交')).toBeTruthy();
+
+  // Stand somewhere the row is not: the flagged slice holds row 1 only.
+  fireEvent.press(screen.getByText('有标记 1'));
+  expect(await screen.findByTestId('review-table-row-row-1')).toBeTruthy();
+  expect(screen.queryByTestId('review-table-row-row-2')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('review-banner-jump'));
+
+  // The slice widens to the whole batch and the keyboard focus lands on row 2 — which is
+  // what brings it into the grid's window (04 §4.11.7 / §4.11.8).
+  const cell = await screen.findByTestId('review-table-cell-row-2-row_no');
+  await waitFor(() => {
+    const style = cell.props.style as { borderColor?: string };
+    expect(style.borderColor).toBe(lightColors['border.focus']);
+  });
+  expect(screen.getByTestId('review-table-row-row-1')).toBeTruthy();
+});
+
+test('an ordinary row names the batch account it will be booked onto (decision §14.52 A5)', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  renderReview();
+
+  // One file is one target account: the column states it, and offers nothing to change.
+  expect((await screen.findByTestId('review-1-link')).props.children).toBe('招商 信用卡');
+  expect(screen.queryByTestId('review-1-link-counterpart-trigger')).toBeNull();
+});
+
 test('every badge carries a text label and an unknown flag renders nothing', async () => {
   const flagged = row({
     id: 'row-2',
@@ -492,6 +531,24 @@ test('a narrow viewport renders the card flow, with kind, category and the pairi
   // The prefilled pairing checkbox has to be visible (and clearable) without opening anything.
   const pair = screen.getByTestId('review-3-link-pair');
   expect(pair.props.accessibilityState.checked).toBe(true);
+});
+
+test('the phone submit button is full width and carries the blocker in its own label', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  seed([
+    row({ id: 'row-1', row_no: 1, category_l1: null, category_l2: null, merchant: '星巴克' }),
+    row({ id: 'row-2', row_no: 2, merchant: '京东' }),
+  ]);
+  renderReview();
+
+  // 屏幕稿「03 导入 review 375」: one stretched primary button, the blocker inside its
+  // label — there is no room beside it for the grey line the 1440 bar carries.
+  const submit = await screen.findByTestId('review-commit-submit');
+  expect(submit.props.accessibilityState.disabled).toBe(true);
+  expect(screen.queryByTestId('review-commit-block')).toBeNull();
+  expect(within(submit).getByText('提交入账 · 1 行待归类')).toBeTruthy();
+  // The spoken name still counts the rows that would be committed, as it does when wide.
+  expect(submit.props.accessibilityLabel).toContain('2');
 });
 
 // ------------------------------------------------- the batch is not one page (03 §5.40)

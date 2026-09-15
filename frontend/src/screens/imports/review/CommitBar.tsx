@@ -27,6 +27,7 @@ import { cmpMoney } from '@/domain/money';
 import { useCommitImport } from '@/queries';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, ProgressBar, Text } from '@/ui';
 
 import type { ReviewEnv } from './ReviewRow';
@@ -126,6 +127,7 @@ export function CommitBar({
 }: CommitBarProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
+  const wide = useIsWide();
   const id = testID ?? 'review-commit';
   const commit = useCommitImport(env.ledgerId, env.batch.id);
 
@@ -140,6 +142,13 @@ export function CommitBar({
     blockers.incomplete.length > 0 ||
     blockers.failed.length > 0 ||
     blockers.allSkipped;
+
+  const submitLabel =
+    !wide && blockers.uncategorized.length > 0
+      ? `${t('import:review.submit')} · ${t('import:review.submit_blocked_suffix', {
+          count: blockers.uncategorized.length,
+        })}`
+      : t('import:review.submit');
 
   // A ref, not `commit.isPending`: two clicks in the same tick both see the old render's
   // pending flag, and 04 §4.11.8 wants one commit per press, not one 409 per press.
@@ -196,29 +205,7 @@ export function CommitBar({
   }, [submitSignal]);
 
   return (
-    <Card variant="outlined" testID={id} style={{ gap: space['2'] }}>
-      {blockers.uncategorized.length > 0 ? (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: space['2'],
-          }}
-        >
-          <Text variant="caption" tone="warning" style={{ flexShrink: 1 }} testID={`${id}-block`}>
-            {t('import:review.block_uncategorized', { count: blockers.uncategorized.length })}
-          </Text>
-          <Button
-            testID={`${id}-jump`}
-            size="sm"
-            variant="ghost"
-            label={t('import:review.jump_to_first')}
-            onPress={() => onJumpTo(blockers.uncategorized[0].row_no)}
-          />
-        </View>
-      ) : null}
-
+    <Card variant="raised" testID={id} style={{ gap: space['2'] }}>
       {blockers.incomplete.length > 0 ? (
         <Text variant="caption" tone="warning" testID={`${id}-block-incomplete`}>
           {t('import:review.block_incomplete', { count: blockers.incomplete.length })}
@@ -269,19 +256,42 @@ export function CommitBar({
         </View>
       ) : null}
 
+      {/* 屏幕稿 03's submit bar: what is still in the way, in grey, right beside the button
+          that it is disabling — the sand banner above the table is where it is explained.
+          屏幕稿「03 导入 review 375」 has no room for that grey line beside a right-aligned
+          button, so the phone bar stretches the button across the card and carries the
+          blocker inside its own label instead. The spoken name is the same in both. */}
       <View
-        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['3'] }}
       >
-        <View style={{ flex: 1, gap: space['1'] }}>
-          {pairCount > 0 ? (
-            <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
-              {t('import:review.submit_pairs_hint', { count: pairCount })}
-            </Text>
-          ) : null}
-        </View>
+        {wide ? (
+          <>
+            <View style={{ flex: 1, minWidth: 0, gap: space['1'] }}>
+              {pairCount > 0 ? (
+                <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
+                  {t('import:review.submit_pairs_hint', { count: pairCount })}
+                </Text>
+              ) : null}
+            </View>
+            {blockers.uncategorized.length > 0 ? (
+              <Text variant="body" tone="warning" testID={`${id}-block`}>
+                {t('import:review.block_uncategorized_short', {
+                  count: blockers.uncategorized.length,
+                })}
+              </Text>
+            ) : null}
+          </>
+        ) : pairCount > 0 ? (
+          <Text variant="micro" tone="muted" testID={`${id}-pairs`}>
+            {t('import:review.submit_pairs_hint', { count: pairCount })}
+          </Text>
+        ) : null}
         <Button
           testID={`${id}-submit`}
-          label={t('import:review.submit_button', { count: submitCount })}
+          size="lg"
+          style={wide ? undefined : { width: '100%' }}
+          label={submitLabel}
+          accessibilityLabel={t('import:review.submit_button', { count: submitCount })}
           disabled={blocked}
           loading={commit.isPending}
           onPress={onSubmit}

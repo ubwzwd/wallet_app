@@ -1,40 +1,34 @@
 /**
- * The "link / counterparty" cell (04 §4.11.3) — one cell with three shapes.
+ * The 「账户 · 对手」 column (04 §4.11.2, §4.11.3; 屏幕稿 03).
  *
- * Refund rows point at the original expense; transfer rows carry the pairing checkbox plus
- * the counterparty controls; everything else is an em dash.
+ * One file is one target account (decision §5, §14.52 A5), so every ordinary row simply
+ * names it, greyed out — it is not editable and never was. Only a transfer row picks a
+ * *counterparty*, and that is what this cell offers: the account picker and the free-text
+ * box, mutually exclusive (decision §14.53c). The pairing itself — the checkbox, the
+ * candidate summary, the "pick one" button, the direction and subtype switches — is the
+ * band under the row, `LinkPanel.tsx`.
  *
  * The one thing to keep straight: **pairing has a single carrier**, `matched_transaction_id`
- * (decision §14.53b). The checkbox reads it and writes it, unchecking sends
- * `{matched_transaction_id: null}` and nothing else, and the candidate list behind the
- * "pick one" button is not stored anywhere — it is a plain transaction-list query. The
- * `transfer_candidate` flag records that a candidate *existed*; it never decides anything.
+ * (decision §14.53b). Nothing here writes it; the panel does, and the candidate list behind
+ * the "pick one" button is not stored anywhere — it is a plain transaction-list query.
  *
  * When no opposite leg was found the server does not guess (decision §14.53c): the account
  * picker and the free-text field start empty and are mutually exclusive — filling one
  * greys out and clears the other. Both collapse entirely once a `matched_transaction_id` is
- * set, because an existing leg makes a second one wrong.
+ * set, because an existing leg makes a second one wrong; the cell then falls back to naming
+ * this row's own account, and the paired leg is named once — by the strip underneath, which
+ * is also the only place that fetches it.
  */
 import React from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportRow, Transaction, TransferRole, TransferSubtype } from '@/api/types';
-import { absMoney, cmpMoney } from '@/domain/money';
-import { applySign } from '@/domain/kinds';
+import type { ImportRow, Transaction } from '@/api/types';
 import { formatMoney, parseLocalDate } from '@/i18n/format';
-import { useTransaction } from '@/queries';
 import { space } from '@/theme/tokens';
-import {
-  Button,
-  Checkbox,
-  SegmentedControl,
-  SourcePicker,
-  Text,
-  TextField,
-} from '@/ui';
-import { TransactionPicker } from '@/screens/transactions/TransactionPicker';
+import { Text, selectableSources } from '@/ui';
 
+import { CellTextInput, CellSelect } from './CellControls';
 import type { CellProps } from './ReviewRow';
 import { CELL_DEBOUNCE_MS } from './ReviewRow';
 
@@ -47,8 +41,11 @@ export const REFUND_LOOKBACK_DAYS = 90;
 /** `counterparty` is capped at 100 characters (03 §5.41). */
 export const COUNTERPARTY_MAX = 100;
 
+/** The option that puts the counterparty account back to "none". */
+const NO_SOURCE = '__none__';
+
 /** `iso` moved by whole days, staying on the local calendar. */
-function shiftIso(iso: string, days: number): string {
+export function shiftIso(iso: string, days: number): string {
   const d = parseLocalDate(iso);
   d.setDate(d.getDate() + days);
   const pad = (n: number): string => (n < 10 ? `0${n}` : String(n));
@@ -69,7 +66,7 @@ export function isMultiCandidate(row: ImportRow): boolean {
   );
 }
 
-function summarize(
+export function summarize(
   tx: Transaction | undefined,
   sourceName: string | undefined,
   lang: 'zh' | 'en',
@@ -80,83 +77,32 @@ function summarize(
   return [tx.merchant ?? sourceName, tx.occurred_at, money].filter(Boolean).join(' · ');
 }
 
+/**
+ * The cell itself: the batch's target account for every ordinary row, the counterparty
+ * controls for an unpaired transfer, the paired leg's account for a paired one.
+ */
 export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
   const { t } = useTranslation();
-  const [pickerOpen, setPickerOpen] = React.useState(false);
   const [text, setText] = React.useState(row.counterparty ?? '');
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const matched = useTransaction(env.ledgerId, row.matched_transaction_id ?? undefined);
-  const matchedTx = matched.data;
-  const matchedSource = env.sources.find((s) => s.id === matchedTx?.source_id)?.name;
 
   React.useEffect(() => {
     setText(row.counterparty ?? '');
   }, [row.counterparty]);
   React.useEffect(() => () => (timer.current ? clearTimeout(timer.current) : undefined), []);
 
-  if (row.kind !== 'refund' && row.kind !== 'transfer') {
+  // Every non-transfer row books onto the batch's own account, and cannot be moved off it.
+  // A paired transfer is the same: its leg is settled, so the cell names this row's own
+  // account and the *other* leg is named by the strip underneath (`LinkPanel`), which is
+  // the one place that fetches the matched transaction.
+  if (row.kind !== 'transfer' || row.matched_transaction_id !== null) {
     return (
-      <Text variant="caption" tone="muted" testID={testID}>
-        —
+      <Text variant="body" tone="muted" numberOfLines={1} testID={testID}>
+        {env.batch.source_name}
       </Text>
     );
   }
 
-  const summary = summarize(matchedTx, matchedSource, env.lang);
-
-  // ---------------------------------------------------------------- refund
-  if (row.kind === 'refund') {
-    return (
-      <View style={{ gap: space['1'] }}>
-        {row.matched_transaction_id !== null ? (
-          <Text variant="caption" numberOfLines={2} testID={`${testID}-origin`}>
-            {summary ?? t('transaction:picker.linked_title')}
-          </Text>
-        ) : null}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['1'] }}>
-          <Button
-            testID={`${testID}-pick`}
-            size="sm"
-            variant="ghost"
-            icon="link"
-            label={t('import:review.linked.refund_pick')}
-            onPress={() => setPickerOpen(true)}
-          />
-          {row.matched_transaction_id !== null ? (
-            <Button
-              testID={`${testID}-clear`}
-              size="sm"
-              variant="ghost"
-              label={t('transaction:picker.unlink')}
-              onPress={() => env.ctrl.patch(row, { matched_transaction_id: null })}
-            />
-          ) : null}
-        </View>
-        <TransactionPicker
-          testID={`${testID}-picker`}
-          open={pickerOpen}
-          onClose={() => setPickerOpen(false)}
-          onSelect={(tx) => {
-            env.ctrl.patch(row, { matched_transaction_id: tx.id });
-            setPickerOpen(false);
-          }}
-          title={t('transaction:picker.title_refund_origin')}
-          // A refund may only ever point at an expense (decision §1.1, §14.52 B11).
-          fixed={{ kind: ['expense'] }}
-          initial={{
-            source_id: [env.batch.source_id],
-            from: row.date ? shiftIso(row.date, -REFUND_LOOKBACK_DAYS) : undefined,
-          }}
-        />
-      </View>
-    );
-  }
-
-  // ---------------------------------------------------------------- transfer
-  const paired = row.matched_transaction_id !== null;
-  const multi = isMultiCandidate(row);
-  const candidate = row.flags.includes('transfer_candidate');
   const sourceDisabled = text.trim() !== '';
   const textDisabled = row.counterpart_source_id !== null;
 
@@ -169,145 +115,46 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
   }
 
   return (
-    <View style={{ gap: space['1'] }}>
-      {paired ? (
-        <>
-          <Checkbox
-            testID={`${testID}-pair`}
-            checked
-            label={t('import:review.linked.transfer_pair_confirm')}
-            onChange={() => env.ctrl.patch(row, { matched_transaction_id: null })}
-          />
-          {summary !== null ? (
-            <Text variant="micro" tone="secondary" testID={`${testID}-pair-summary`}>
-              {summary}
-            </Text>
-          ) : null}
-          <Text variant="micro" tone="muted">
-            {t('import:review.linked.transfer_pair_hint')}
-          </Text>
-        </>
-      ) : null}
-
-      {/* A candidate was found but is not linked: the box stays, unchecked, so pairing is
-          one press away — and several candidates add the explicit "pick one" button. */}
-      {!paired && candidate ? (
-        <>
-          <Checkbox
-            testID={`${testID}-pair`}
-            checked={false}
-            label={t('import:review.linked.transfer_pair_confirm')}
-            onChange={() => setPickerOpen(true)}
-          />
-          {multi ? (
-            <Button
-              testID={`${testID}-pick-one`}
-              size="sm"
-              variant="secondary"
-              label={t('import:review.linked.transfer_pick_single')}
-              onPress={() => setPickerOpen(true)}
-            />
-          ) : null}
-        </>
-      ) : null}
-
-      {/* The server found the opposite leg but it is already half of another transfer, so
-          it re-flagged the row `duplicate` instead of pairing it (04 §4.11.3, last case).
-          Say so in the cell — the row's `hint` alone is too easy to miss. */}
-      {!paired && row.flags.includes('duplicate') ? (
-        <Text variant="micro" tone="muted" testID={`${testID}-already-paired`}>
-          {t('import:review.linked.transfer_already_paired')}
-        </Text>
-      ) : null}
-
-      {!paired ? (
-        <>
-          <SourcePicker
-            testID={`${testID}-counterpart`}
-            sources={env.sources}
-            value={row.counterpart_source_id}
-            disabled={sourceDisabled}
-            label={t('import:review.linked.counterpart_source_label')}
-            lang={env.lang}
-            // The batch's own account is this row's account; the counterparty is another one.
-            filter={(s) => s.id !== env.batch.source_id}
-            onChange={(next) =>
-              env.ctrl.patch(row, { counterpart_source_id: next, counterparty: null })
-            }
-          />
-          <TextField
-            testID={`${testID}-counterparty`}
-            label={t('import:review.linked.counterpart_text_label')}
-            value={text}
-            disabled={textDisabled}
-            maxLength={COUNTERPARTY_MAX}
-            onChangeText={(next) => {
-              setText(next);
-              if (timer.current) clearTimeout(timer.current);
-              timer.current = setTimeout(() => commitText(next), CELL_DEBOUNCE_MS);
-            }}
-            onBlur={() => {
-              if (timer.current) clearTimeout(timer.current);
-              commitText(text);
-            }}
-          />
-        </>
-      ) : null}
-
-      {/* Both are non-null on any transfer row (03 §5.41): the server guarantees it for the
-          rows it parsed, and `kindChangePatch` fills them in for a row the user turned into
-          a transfer. The fallbacks below are the same defaults that patch writes, so what
-          is painted here is never a value the server has not been told about. */}
-      <SegmentedControl<TransferRole>
-        testID={`${testID}-role`}
-        value={row.transfer_role ?? 'out'}
+    <View style={{ gap: space['1'], minWidth: 0 }}>
+      <CellSelect
+        testID={`${testID}-counterpart`}
+        value={row.counterpart_source_id}
+        // The batch's own account is this row's account; the counterparty is another one.
         options={[
-          { value: 'out', label: t('transaction:transfer.role.out') },
-          { value: 'in', label: t('transaction:transfer.role.in') },
+          ...selectableSources(env.sources, (s) => s.id !== env.batch.source_id).map((s) => ({
+            value: s.id,
+            label: s.name,
+            hint: s.default_currency,
+          })),
+          { value: NO_SOURCE, label: t('common:status.none') },
         ]}
+        placeholder={t('import:review.linked.counterpart_source_label')}
+        label={t('import:review.linked.counterpart_source_label')}
+        closeLabel={t('common:button.close')}
+        disabled={sourceDisabled}
         onChange={(next) =>
           env.ctrl.patch(row, {
-            transfer_role: next,
-            // The sign belongs to the leg's direction (decision §1).
-            ...(row.amount !== null ? { amount: applySign(row.amount, 'transfer', next) } : {}),
+            counterpart_source_id: next === NO_SOURCE ? null : next,
+            counterparty: null,
           })
         }
       />
-      <SegmentedControl<TransferSubtype>
-        testID={`${testID}-subtype`}
-        value={row.transfer_subtype ?? 'plain'}
-        options={[
-          { value: 'plain', label: t('transaction:transfer.subtype.plain') },
-          { value: 'repayment', label: t('transaction:transfer.subtype.repayment') },
-        ]}
-        onChange={(next) => env.ctrl.patch(row, { transfer_subtype: next })}
-      />
-
-      <TransactionPicker
-        testID={`${testID}-picker`}
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(tx) => {
-          env.ctrl.patch(row, { matched_transaction_id: tx.id });
-          setPickerOpen(false);
+      <CellTextInput
+        testID={`${testID}-counterparty`}
+        accessibilityLabel={t('import:review.linked.counterpart_text_label')}
+        placeholder={t('import:review.linked.counterpart_text_label')}
+        value={text}
+        disabled={textDisabled}
+        maxLength={COUNTERPARTY_MAX}
+        onChangeText={(next) => {
+          setText(next);
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => commitText(next), CELL_DEBOUNCE_MS);
         }}
-        title={t('import:review.linked.transfer_pick_single')}
-        emptyText={t('import:review.linked.transfer_pick_none')}
-        // Only a transfer can be another transfer's leg (decision §14.34).
-        fixed={{ kind: ['transfer'] }}
-        initial={{
-          from: row.date ? shiftIso(row.date, -PAIR_WINDOW_DAYS) : undefined,
-          to: row.date ? shiftIso(row.date, PAIR_WINDOW_DAYS) : undefined,
+        onBlur={() => {
+          if (timer.current) clearTimeout(timer.current);
+          commitText(text);
         }}
-        // Still one-legged, on another account, opposite direction, same amount and currency.
-        filterRows={(tx) =>
-          tx.transfer_pair_id === null &&
-          tx.source_id !== env.batch.source_id &&
-          (row.currency === null || tx.currency === row.currency) &&
-          (row.amount === null ||
-            (cmpMoney(absMoney(tx.amount), absMoney(row.amount)) === 0 &&
-              cmpMoney(tx.amount, row.amount) !== 0))
-        }
       />
     </View>
   );
