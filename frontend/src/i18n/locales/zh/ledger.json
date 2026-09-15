@@ -79,6 +79,8 @@
     },
     "currency": {
       "title": "基准币种 · {{code}} {{name}}",
+      "title_short": "{{code}} · {{name}}",
+      "section": "基准币种",
       "subtitle": "所有折算、净资产、分类统计都按它算",
       "change": "修改",
       "warning_title": "改基准币种会重算全部历史",

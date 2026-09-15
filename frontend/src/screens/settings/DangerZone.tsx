@@ -29,6 +29,7 @@ import { Button, Icon, type IconName, ListCard, Select, Text, confirm, toast } f
 import type { TintTone } from '@/ui';
 
 import { IconWell } from './IconWell';
+import { SectionLabel } from './SectionLabel';
 
 export interface DangerZoneProps {
   ledgerId: Uuid;
@@ -187,15 +188,17 @@ export function DangerZone({
     })();
   };
 
-  const head = (
-    <View style={{ paddingHorizontal: wide ? space['5'] : space['4'], paddingVertical: space['2'] }}>
+  // 屏幕稿 12 1440 heads the card from inside; the 375 frame sets a small mono label in the
+  // danger ink above it instead.
+  const head = wide ? (
+    <View style={{ paddingHorizontal: space['5'], paddingVertical: space['2'] }}>
       <Text variant="subheading" weight={700} tone="danger" accessibilityRole="header">
         {t('ledger:settings.danger.title')}
       </Text>
     </View>
-  );
+  ) : undefined;
 
-  return (
+  const card = (
     <ListCard divided header={head} testID="danger-zone">
       {isOwner ? (
         <View>
@@ -275,6 +278,14 @@ export function DangerZone({
         />
       ) : null}
     </ListCard>
+  );
+
+  if (wide) return card;
+  return (
+    <View>
+      <SectionLabel title={t('ledger:settings.danger.title')} danger />
+      {card}
+    </View>
   );
 }
 

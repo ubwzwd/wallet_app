@@ -22,6 +22,8 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Avatar, Badge, Icon, ListCard, Skeleton, Text, confirm, toast } from '@/ui';
 
+import { SectionLabel } from './SectionLabel';
+
 /** Decision §2 / §14.52 B7: a ledger holds at most 10 people. */
 export const MAX_MEMBERS = 10;
 
@@ -222,24 +224,30 @@ export function MembersCard({
     })();
   };
 
-  const head = (
+  const count = (
+    <Text variant="caption" tone="muted" mono weight={450} testID="member-count">
+      {t('ledger:settings.members.count', { count: members.length })}
+    </Text>
+  );
+
+  // 屏幕稿 12 1440 heads the card from inside; the 375 frame puts a small mono label above
+  // it instead, so the narrow card has no head strip at all.
+  const head = wide ? (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'baseline',
         gap: space['3'],
-        paddingHorizontal: wide ? GRID_PADDING : space['4'],
+        paddingHorizontal: GRID_PADDING,
         paddingVertical: space['2'],
       }}
     >
-      <Text variant={wide ? 'heading' : 'subheading'} weight={700} style={{ flex: 1 }}>
+      <Text variant="heading" weight={700} style={{ flex: 1 }}>
         {t('ledger:settings.members.title')}
       </Text>
-      <Text variant="caption" tone="muted" mono weight={450} testID="member-count">
-        {t('ledger:settings.members.count', { count: members.length })}
-      </Text>
+      {count}
     </View>
-  );
+  ) : undefined;
 
   const columns = wide ? (
     <View
@@ -273,7 +281,7 @@ export function MembersCard({
       <View style={{ padding: wide ? space['4'] : space['3'] }}>{invite}</View>
     );
 
-  return (
+  const card = (
     <ListCard divided header={head} footer={footer} testID="members-section">
       {columns}
       {loading ? (
@@ -291,6 +299,14 @@ export function MembersCard({
         ))
       )}
     </ListCard>
+  );
+
+  if (wide) return card;
+  return (
+    <View>
+      <SectionLabel title={t('ledger:settings.members.title')} trailing={count} />
+      {card}
+    </View>
   );
 }
 

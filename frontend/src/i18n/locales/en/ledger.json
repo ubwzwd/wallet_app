@@ -80,6 +80,8 @@
     },
     "currency": {
       "title": "Base currency · {{code}} {{name}}",
+      "title_short": "{{code}} · {{name}}",
+      "section": "Base currency",
       "subtitle": "Every conversion, the net worth and the category totals follow it",
       "change": "Change",
       "warning_title": "Changing the base currency re-converts all history",

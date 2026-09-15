@@ -20,6 +20,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, CurrencyPicker, Icon, Text, toast } from '@/ui';
 
 import { IconWell } from './IconWell';
+import { SectionLabel } from './SectionLabel';
 
 export interface BaseCurrencyCardProps {
   ledgerId: Uuid;
@@ -65,13 +66,15 @@ export function BaseCurrencyCard({
     );
   };
 
-  return (
+  const card = (
     <Card variant="raised" testID="ledger-base-currency-card" style={{ padding: space['5'] }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['3'] + 2 }}>
         <IconWell name="banknote" tone="accent" size={38} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text variant="subheading" weight={700} testID="ledger-base-currency">
-            {t('ledger:settings.currency.title', {
+            {/* 屏幕稿 12 375 moves 「基准币种」 out to the section label, so the row there
+                reads 「CNY · 人民币」 alone. */}
+            {t(wide ? 'ledger:settings.currency.title' : 'ledger:settings.currency.title_short', {
               code: current,
               name: currencies.names?.[current] ?? '',
             })}
@@ -161,6 +164,14 @@ export function BaseCurrencyCard({
         </View>
       ) : null}
     </Card>
+  );
+
+  if (wide) return card;
+  return (
+    <View>
+      <SectionLabel title={t('ledger:settings.currency.section')} />
+      {card}
+    </View>
   );
 }
 

@@ -27,6 +27,13 @@ import { MAX_MEMBERS } from './MembersCard';
 /** Decision §2: a code lives ten minutes; the bar is drawn against that span. */
 const DEFAULT_LIFETIME_SECONDS = 600;
 
+/**
+ * Placeholder handed to the countdown template so the sentence can be cut where its
+ * number goes. Written as an escape — a literal NUL in the source would make `file`,
+ * `grep` and `git` treat this module as a binary blob.
+ */
+const SPLIT = '\u0000';
+
 /** Seconds left until `expires_at`, floored at 0. */
 function secondsUntil(expiresAt: string, now: number): number {
   return Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
@@ -236,7 +243,7 @@ export function InviteCard({
   // The countdown is one sentence with one mono number in it, and the number sits before
   // the words in Chinese and after them in English — so the template is split rather than
   // interpolated, and the two halves keep the language pack's own word order.
-  const [before, after] = t('ledger:settings.invite.expires_in', { time: ' ' }).split(' ');
+  const [before, after] = t('ledger:settings.invite.expires_in', { time: SPLIT }).split(SPLIT);
 
   return (
     <View
@@ -246,7 +253,11 @@ export function InviteCard({
         padding: wide ? space['5'] : space['4'],
         gap: space['4'],
         backgroundColor: colors['bg.selected'],
-        flexDirection: wide ? 'row' : 'column',
+        // Both frames of 屏幕稿 12 draw this block stacked — tiles, countdown, a bar across
+        // the whole panel, then 复制 / 作废. The mockup writes it as `flex-wrap:wrap` with a
+        // `min-width:200px` second half, which inside a column this narrow always wraps; the
+        // column is that outcome without depending on the panel landing under the threshold.
+        flexDirection: 'column',
         alignItems: wide ? 'flex-start' : 'stretch',
       }}
     >
@@ -270,7 +281,7 @@ export function InviteCard({
         </View>
       </View>
 
-      <View style={{ flex: wide ? 1 : undefined, minWidth: 0, gap: space['2'] + 2 }}>
+      <View style={{ alignSelf: 'stretch', minWidth: 0, gap: space['2'] + 2 }}>
         {expired ? (
           <Text variant="body" tone="warning" weight={600} testID="invite-expired">
             {t('ledger:settings.invite.expired')}

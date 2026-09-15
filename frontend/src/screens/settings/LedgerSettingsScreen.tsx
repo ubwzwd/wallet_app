@@ -4,7 +4,8 @@
  * Wide: the ledger's own page head — square avatar, name, 「建于 … · N 笔交易 · 基准币种 CNY」
  * and 「改名字」 — over two columns at roughly 1.25 : 1. Left holds the members table with
  * the invite panel inside it and the base-currency card; right holds 权限 and 危险操作.
- * Narrow stacks the same blocks in that order under the top bar's title.
+ * Narrow stacks 成员 / 基准币种 / 危险操作 under the top bar's title, each behind its own
+ * small mono section label and without the 权限 card (屏幕稿 12 375).
  *
  * Which blocks are on screen is decided by `myRole` (decision §2). The role comes from
  * the member list rather than the ledger list, so handing ownership to someone else
@@ -69,7 +70,9 @@ export default function LedgerSettingsScreen(): React.JSX.Element {
 
   const right = (
     <>
-      <PermissionsCard />
+      {/* 屏幕稿 12 375 has no 权限 card: the narrow frame is header / 成员 / 基准币种 /
+          危险操作 and nothing else. */}
+      {wide ? <PermissionsCard /> : null}
       <DangerZone
         ledgerId={ledgerId}
         detail={detail.data}

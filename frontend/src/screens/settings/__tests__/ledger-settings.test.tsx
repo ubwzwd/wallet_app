@@ -98,6 +98,8 @@ async function renderSettings(
   role: Ledger['role'],
   members: LedgerMember[],
   detail: LedgerDetail = makeDetail(),
+  /** Left undefined the window keeps its default width; the two layout tests pin it. */
+  wide?: boolean,
 ): Promise<Awaited<ReturnType<typeof renderWithProviders>>> {
   mockGet(`/ledgers/${LEDGER_ID}`, detail);
   mockGet(`/ledgers/${LEDGER_ID}/members`, { items: members, total: members.length });
@@ -106,12 +108,15 @@ async function renderSettings(
     <LedgerProvider ledgerId={LEDGER_ID} ledgers={ledgers}>
       <LedgerSettingsScreen />
     </LedgerProvider>,
-    { auth: { status: 'authenticated', user: makeUser() } },
+    { auth: { status: 'authenticated', user: makeUser() }, wide },
   );
 }
 
 test('a member sees the permission block but none of the owner-only actions', async () => {
-  await renderSettings('member', [makeMember({ role: 'member' }), { ...BOB, role: 'owner' }]);
+  // Pinned wide: 屏幕稿 12 375 has no 权限 card at all, so the block this asserts on only
+  // exists in the 1440 frame's right column.
+  const members = [makeMember({ role: 'member' }), { ...BOB, role: 'owner' as const }];
+  await renderSettings('member', members, makeDetail(), true);
 
   const hint = await screen.findByTestId('permission-hint');
   expect(hint).toHaveTextContent(/导入/);
