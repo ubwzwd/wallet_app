@@ -21,7 +21,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatchListItem, ImportStatus, Uuid } from '@/api/types';
+import type { ImportBatchListItem, Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLang, type Lang } from '@/i18n';
 import { useTopBar } from '@/navigation';
@@ -195,10 +195,13 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const stats = historyStats(items, total);
   const shown = filter === 'all' ? items : items.filter((batch) => batch.status === filter);
 
+  // An empty history has nothing to count and nothing to filter, so 屏幕稿 15's header is
+  // just the title and the way in.
+  const bare = items.length === 0;
   const header = (
     <PageHeader
       title={t('import:history.title')}
-      meta={query.data ? t('import:history.stats', stats) : undefined}
+      meta={bare ? undefined : t('import:history.stats', stats)}
       testID="imports-header"
       actions={
         <>
@@ -209,17 +212,19 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
             size="sm"
             onPress={goNew}
           />
-          <SegmentedControl<HistoryFilter>
-            testID="imports-filter"
-            size="sm"
-            value={filter}
-            onChange={setFilter}
-            accessibilityLabel={t('import:history.filter_label')}
-            options={HISTORY_FILTERS.map((value) => ({
-              value,
-              label: t(`import:history.filter.${value}`),
-            }))}
-          />
+          {bare ? null : (
+            <SegmentedControl<HistoryFilter>
+              testID="imports-filter"
+              size="sm"
+              value={filter}
+              onChange={setFilter}
+              accessibilityLabel={t('import:history.filter_label')}
+              options={HISTORY_FILTERS.map((value) => ({
+                value,
+                label: t(`import:history.filter.${value}`),
+              }))}
+            />
+          )}
         </>
       }
     />

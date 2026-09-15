@@ -268,7 +268,12 @@ export default function NewImportScreen(): React.JSX.Element {
     <Page testID="import-new-screen">
       <PageHeader
         title={t('import:upload.title')}
-        subtitle={t('import:upload.subtitle')}
+        // 屏幕稿 10 keeps the explainer on the title's own baseline, in sans, not mono.
+        meta={
+          <Text variant="caption" tone="muted" style={styles.subtitle} testID="import-new-subtitle">
+            {t('import:upload.subtitle')}
+          </Text>
+        }
         testID="import-new-header"
       />
       {wide ? (
@@ -292,4 +297,5 @@ const styles = StyleSheet.create({
   columnWide: { flex: 1, minWidth: 0, gap: space['4'] },
   stack: { alignSelf: 'stretch', gap: space['3'] },
   submitRow: { alignItems: 'flex-start' },
+  subtitle: { maxWidth: 560 },
 });

@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   centered: { textAlign: 'center' },
   actionsWide: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'], marginTop: space['3'] },
   actionsNarrow: { alignSelf: 'stretch', gap: space['2'], marginTop: space['3'] },
-  previewWide: { width: 400, flexGrow: 0, flexShrink: 1, maxWidth: '100%' },
+  previewWide: { width: 400, flexGrow: 0, flexShrink: 1, maxWidth: '100%', alignSelf: 'flex-start' },
   previewNarrow: { alignSelf: 'stretch', maxWidth: '100%' },
   rule: { borderTopWidth: 1 },
 });

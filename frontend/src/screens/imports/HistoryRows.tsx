@@ -14,7 +14,7 @@
  * destructive actions are the caller's callbacks (the discard confirm and `undoBatch.ts`).
  */
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportBatchListItem } from '@/api/types';
@@ -180,7 +180,6 @@ function StatusBadge({ parts, status }: { parts: Parts; status: string }): React
 export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
-  const [hovered, setHovered] = React.useState(false);
   const p = useParts(props.batch, props.lang, props.totalFlags);
 
   const cells: Record<string, React.ReactNode> = {
@@ -188,22 +187,21 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
       <View style={styles.fileCell}>
         <FileWell ready={p.ready} />
         <View style={styles.grow}>
+          <Text
+            variant="body"
+            mono
+            weight={500}
+            numberOfLines={1}
+            testID={`${p.id}-filename`}
+          >
+            {p.filename}
+          </Text>
           <View style={styles.fileLine}>
-            <Text
-              variant="body"
-              mono
-              weight={500}
-              numberOfLines={1}
-              style={styles.shrink}
-              testID={`${p.id}-filename`}
-            >
-              {p.filename}
+            <Text variant="caption" tone="muted" mono testID={`${p.id}-created-at`}>
+              {p.time}
             </Text>
             <FileTag parts={p} />
           </View>
-          <Text variant="caption" tone="muted" mono numberOfLines={1} testID={`${p.id}-created-at`}>
-            {p.time}
-          </Text>
         </View>
       </View>
     ),
@@ -288,24 +286,16 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
     ),
   };
 
+  // Not a pressable row: every action on a batch is one of the buttons in the last cell,
+  // and a button inside a button is neither valid DOM nor reachable by a screen reader.
   return (
-    // touch-target-exempt: the row is 60 tall (a 34 well with 13 of padding above and below).
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={p.filename}
-      onPress={p.ready ? props.onContinue : props.onView}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
+    <View
       testID={p.id}
-      style={({ pressed }) => [
+      style={[
         historyGridRow,
         styles.tableRow,
         {
-          backgroundColor: p.ready
-            ? colors['status.warning.bg']
-            : pressed || hovered
-              ? colors['bg.hover']
-              : 'transparent',
+          backgroundColor: p.ready ? colors['status.warning.bg'] : 'transparent',
         },
       ]}
     >
@@ -314,7 +304,7 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
           {cells[column.key]}
         </View>
       ))}
-    </Pressable>
+    </View>
   );
 }
 
