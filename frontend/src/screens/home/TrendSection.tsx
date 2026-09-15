@@ -14,7 +14,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { Money, StatsTrend } from '@/api/types';
 import { cmpMoney, formatMoney4, parseMoney } from '@/domain';
 import { useLang } from '@/i18n';
-import { formatMoney, formatMonthShort } from '@/i18n/format';
+import { formatAmountPlain, formatMonthShort } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
@@ -70,8 +70,9 @@ export function TrendSection({
     stats === null || stats.peakMonth === null ? undefined : (
       <View style={styles.meta}>
         <Text variant="caption" tone="secondary" mono weight={500} testID="home-trend-average">
+          {/* 屏幕稿 01 writes 「月均 6,220 · 峰值 8,100（4 月）」 bare (§14.59a). */}
           {t('stats:home.trend_average', {
-            amount: formatMoney(stats.average, baseCurrency, lang),
+            amount: formatAmountPlain(stats.average, baseCurrency),
           })}
         </Text>
         {wide ? (
@@ -81,7 +82,7 @@ export function TrendSection({
             </Text>
             <Text variant="caption" tone="secondary" mono weight={500} testID="home-trend-peak">
               {t('stats:home.trend_peak', {
-                amount: formatMoney(stats.peak, baseCurrency, lang),
+                amount: formatAmountPlain(stats.peak, baseCurrency),
                 month: formatMonthShort(stats.peakMonth, lang),
               })}
             </Text>

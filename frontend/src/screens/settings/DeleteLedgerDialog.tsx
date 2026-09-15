@@ -30,6 +30,11 @@ import { Button, Icon, Text, TextField } from '@/ui';
 /** 屏幕稿 12 · 1440 draws a 600 dialog; narrow gets a bottom sheet instead. */
 const DIALOG_MAX_WIDTH = 600;
 
+/** The glyph 屏幕稿 12 sets in front of 「还差「本」字」. It is a character rather than an
+ *  `Icon` because it has to ride inside `TextField`'s error string, which is plain text
+ *  (the same reason `import:history.flags_value` carries its own ⚑). */
+const ALERT_GLYPH = 'ⓘ';
+
 export interface DeleteLedgerCounts {
   transactions: number;
   sources: number;
@@ -146,7 +151,9 @@ export function DeleteLedgerDialog({
 
       {/* 屏幕稿 12 rings the box in the danger ink and prints what is still missing under
           it, for as long as what is typed is not the ledger's name yet. `TextField`'s
-          error state is exactly that treatment. */}
+          error state is exactly that treatment, down to the glyph the mockup sets in front
+          of 「还差「本」字」 — which rides on the string here rather than on `TextField`,
+          whose error line draws no icon of its own (that is `src/ui`'s to add). */}
       <TextField
         value={typed}
         onChangeText={setTyped}
@@ -158,9 +165,10 @@ export function DeleteLedgerDialog({
         error={
           hint === null
             ? null
-            : hint.key === 'remaining'
-              ? t('ledger:settings.danger.delete_remaining', { text: hint.text })
-              : t('ledger:settings.danger.delete_mismatch')
+            : `${ALERT_GLYPH} ` +
+              (hint.key === 'remaining'
+                ? t('ledger:settings.danger.delete_remaining', { text: hint.text })
+                : t('ledger:settings.danger.delete_mismatch'))
         }
         testID="confirm-require-text"
       />

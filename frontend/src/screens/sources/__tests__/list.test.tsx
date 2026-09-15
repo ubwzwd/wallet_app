@@ -182,11 +182,12 @@ test('accounts are grouped into the four types, each with its converted subtotal
     expect(screen.getByTestId(`source-group-${type}`)).toBeTruthy();
   }
   // The archived checking account is NOT part of its group's subtotal (decision §14.50).
-  expect(textOf('source-subtotal-checking')).toContain(formatMoney('10000.0000', 'CNY', 'zh'));
-  expect(textOf('source-subtotal-credit')).toContain(formatMoney('-3204.0000', 'CNY', 'zh'));
-  expect(textOf('source-subtotal-cash')).toContain(formatMoney('500.0000', 'CNY', 'zh'));
+  // Every subtotal is in the base currency and therefore bare (§14.59a).
+  expect(textOf('source-subtotal-checking')).toContain(formatAmountPlain('10000.0000', 'CNY'));
+  expect(textOf('source-subtotal-credit')).toContain(formatAmountPlain('-3204.0000', 'CNY'));
+  expect(textOf('source-subtotal-cash')).toContain(formatAmountPlain('500.0000', 'CNY'));
   // The SGD account's subtotal is its converted value, not its own-currency balance.
-  expect(textOf('source-subtotal-other')).toContain(formatMoney('1000.0000', 'CNY', 'zh'));
+  expect(textOf('source-subtotal-other')).toContain(formatAmountPlain('1000.0000', 'CNY'));
 });
 
 test('a credit card shows its debt as a negative amount, and a foreign account its converted value', async () => {
@@ -196,7 +197,7 @@ test('a credit card shows its debt as a negative amount, and a foreign account i
   expect(await screen.findByTestId('source-row-src-credit-amount')).toBeTruthy();
   // 屏幕稿 09 paints the debt as a signed number in the expense colour.
   const debt = screen.getByTestId('source-row-src-credit-amount');
-  expect(String(debt.props.children)).toBe(formatMoney('-3204.0000', 'CNY', 'zh'));
+  expect(String(debt.props.children)).toBe(formatAmountPlain('-3204.0000', 'CNY'));
   expect(debt).toHaveStyle({ color: lightColors['kind.expense'] });
 
   expect(String(screen.getByTestId('source-row-src-other-amount-sub').props.children)).toContain(
@@ -251,8 +252,9 @@ test('archived accounts stay out of the three numbers and are folded away by def
 
   expect(await screen.findByTestId('sources-assets')).toBeTruthy();
   // assets = 10000 + 500 + 1000 (SGD converted); the archived 700 is excluded.
-  expect(textOf('sources-assets')).toContain(formatMoney('11500.0000', 'CNY', 'zh'));
-  expect(textOf('sources-liabilities')).toContain(formatMoney('3204.0000', 'CNY', 'zh'));
+  // 屏幕稿 09 · 375: 「资产 37,842.10 · 负债 3,215.00」 — bare; only the net worth keeps 「¥」.
+  expect(textOf('sources-assets')).toContain(formatAmountPlain('11500.0000', 'CNY'));
+  expect(textOf('sources-liabilities')).toContain(formatAmountPlain('3204.0000', 'CNY'));
   expect(textOf('sources-net-worth')).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
   expect(textOf('sources-excluded-archived')).toContain('1');
 

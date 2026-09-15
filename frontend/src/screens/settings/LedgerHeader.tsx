@@ -16,7 +16,6 @@ import { z } from 'zod';
 
 import type { LedgerDetail, Uuid } from '@/api/types';
 import { formatDate } from '@/i18n/format';
-import { useLang } from '@/i18n';
 import { useUpdateLedger } from '@/queries';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -45,7 +44,6 @@ export function LedgerHeader({
   canEdit,
 }: LedgerHeaderProps): React.JSX.Element {
   const { t } = useTranslation();
-  const lang = useLang();
   const wide = useIsWide();
   // Not `{ silent: true }`: the header renders no server error of its own, so a failed
   // rename has to reach the user through the global error Toast.
@@ -85,7 +83,7 @@ export function LedgerHeader({
     );
   };
 
-  const created = detail ? formatDate(detail.created_at.slice(0, 10), lang) : '';
+  const created = detail ? formatDate(detail.created_at.slice(0, 10)) : '';
   const meta = detail
     ? wide
       ? t('ledger:settings.header.meta', {

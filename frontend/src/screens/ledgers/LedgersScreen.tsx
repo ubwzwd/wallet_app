@@ -21,6 +21,7 @@ import { useAuth } from '@/store';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
+import { PREF_NAMES, getPrefSync } from '@/utils/prefs';
 import { Button, EmptyState, Icon, Page, PageHeader, Skeleton, Text } from '@/ui';
 
 import { LedgerCard } from './LedgerCard';
@@ -73,8 +74,14 @@ export default function LedgersScreen(): React.JSX.Element {
   const wide = useIsWide();
   const query = useLedgers();
   const { user } = useAuth();
-  // The card marked 「当前」 is the one `/` would open (screen 13).
-  const currentId = useLastLedgerId();
+  // The card marked 「当前」 is the one `/` would open (screen 13). `useLastLedgerId` answers
+  // one frame late, so where the preference can be read synchronously (web: localStorage) the
+  // first frame reads it there, and where it cannot the badge is simply withheld until it
+  // lands — 「当前」 must never appear on the first card and then jump to another one.
+  const remembered = useLastLedgerId();
+  const syncId = React.useMemo(() => getPrefSync(PREF_NAMES.lastLedgerId), []);
+  const currentId = remembered === undefined ? syncId : remembered;
+  const decided = remembered !== undefined || syncId !== null;
 
   const [gridWidth, setGridWidth] = React.useState(0);
   const onGridLayout = React.useCallback(
@@ -166,7 +173,7 @@ export default function LedgersScreen(): React.JSX.Element {
     );
   }
 
-  const current = pickLandingLedger(items, currentId ?? null);
+  const current = decided ? pickLandingLedger(items, currentId) : null;
   const cardWidth =
     wide && gridWidth > 0 ? Math.floor((gridWidth - GRID_GAP * (COLUMNS - 1)) / COLUMNS) : undefined;
 

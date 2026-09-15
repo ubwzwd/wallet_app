@@ -14,6 +14,7 @@ import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
+import { qk } from '@/queries';
 import { makeLedger, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
@@ -110,6 +111,27 @@ test('the ledger the user was last in is the one marked as current', async () =>
 
   const current = await screen.findByTestId('ledger-card-led-2');
   await waitFor(() => expect(current.props.accessibilityState.selected).toBe(true));
+  expect(screen.getByTestId('ledger-card-led-1').props.accessibilityState.selected).toBe(false);
+});
+
+test('no card claims 「当前」 until the remembered ledger is known', async () => {
+  // The list can be on screen before the preference is: 「账本管理」 from the sidebar warms
+  // this query, and `useLastLedgerId` is asynchronous. Guessing at `items[0]` on that first
+  // frame is what made the badge jump from the first card to the remembered one.
+  await setPref(PREF_NAMES.lastLedgerId, 'led-2');
+  const items = [makeLedger({ id: 'led-1', name: 'A' }), makeLedger({ id: 'led-2', name: 'B' })];
+  mockGet('/ledgers', { items, total: 2 });
+  queryClient.setQueryData(qk.global.ledgers(), { items, total: 2 });
+  renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  // First frame: the cards are already drawn off the warm cache, and none of them is 「当前」.
+  expect(screen.getByTestId('ledger-card-led-1').props.accessibilityState.selected).toBe(false);
+  expect(screen.getByTestId('ledger-card-led-2').props.accessibilityState.selected).toBe(false);
+
+  // Once the preference lands the badge appears, on the remembered card and only there.
+  await waitFor(() =>
+    expect(screen.getByTestId('ledger-card-led-2').props.accessibilityState.selected).toBe(true),
+  );
   expect(screen.getByTestId('ledger-card-led-1').props.accessibilityState.selected).toBe(false);
 });
 

@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { FinanceSource, Money, SourceType } from '@/api/types';
 import type { Lang } from '@/i18n';
-import { formatConverted, formatDate, formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatConverted, formatDate } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { ListCard, ListRow, SourceTypeIcon, Text, sourceTypeLabelKey } from '@/ui';
 
@@ -40,7 +40,7 @@ function amountSubOf(
   if (source.archived) {
     return source.archived_at === null
       ? undefined
-      : t('source:list.archived_at', { date: formatDate(source.archived_at.slice(0, 10), lang) });
+      : t('source:list.archived_at', { date: formatDate(source.archived_at.slice(0, 10)) });
   }
   if (!isForeign(source, baseCurrency)) return undefined;
   if (source.balance_base === null) return t('source:list.no_rate_cell');
@@ -74,7 +74,7 @@ export function SourceListRow({
           icon={<SourceTypeIcon type={source.type} size={34} />}
           title={source.name}
           subtitle={`${t(sourceTypeLabelKey(source.type))} · ${source.default_currency}`}
-          amount={balanceText(source, lang)}
+          amount={balanceText(source, lang, baseCurrency)}
           amountTone={balanceTone(source, muted)}
           amountSub={amountSubOf(source, baseCurrency, lang, t)}
           onPress={() => onOpen(source)}
@@ -136,8 +136,10 @@ export function SourceGroup({
         >
           {t(sourceTypeLabelKey(type))}
         </Text>
+        {/* 屏幕稿 09 writes every group subtotal bare — the page header above already
+            says 「折算 CNY」 (§14.59a). */}
         <Text variant="micro" tone="muted" mono testID={`source-subtotal-${type}`}>
-          {formatMoney(subtotal, baseCurrency, lang)}
+          {formatAmountPlain(subtotal, baseCurrency)}
         </Text>
       </View>
       <ListCard testID={`source-group-card-${type}`}>

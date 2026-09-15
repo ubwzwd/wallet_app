@@ -153,6 +153,12 @@ test('the default currency is patched on its own', async () => {
   await renderSettings(user);
   mockPatch('/me', { ...user, base_currency: 'SGD' });
 
+  // 屏幕稿 14 reads 「CNY 人民币」 on the closed field, not the code alone and not the
+  // server's un-localised 「Chinese Yuan」.
+  const trigger = await screen.findByTestId('settings-base-currency-trigger');
+  expect(trigger).toHaveTextContent('CNY 人民币');
+  expect(trigger).not.toHaveTextContent('Chinese Yuan');
+
   fireEvent.press(await screen.findByTestId('settings-base-currency-trigger'));
   fireEvent.press(await screen.findByTestId('settings-base-currency-option-SGD'));
 

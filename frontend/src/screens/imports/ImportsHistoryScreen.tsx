@@ -6,9 +6,10 @@
  * its right, the way in plus the small 全部 / 待提交 / 已提交 segmented control. Both numbers
  * are server totals — the batch count for the filter in force and a one-row
  * `status=ready` probe — so the sentence never mixes 「all 45」 with 「the 20 in hand」.
- * 屏幕稿 11 also prints 「已入账 52 笔」; no endpoint totals the committed rows of a history
- * (03 §5 answers with counts of batches only), so that third number is not drawn rather
- * than counted off one page. That choice
+ * 屏幕稿 11's third number, 「已入账 52 笔」, has no endpoint of its own — 03 §5 totals
+ * batches, never their rows — so it is added up from the committed batches themselves, and
+ * only while every one of them is in hand (`committedRowTotal`): a sum off one page of a
+ * longer history would be a smaller number stated as a total. The filter
  * lives in the URL (`?status=`), so a filtered history is shareable and the back button is
  * right, and it is sent to the *server* as `status=`: the pager pages 20 batches at a time,
  * so a filter applied to the page in hand would silently hide matching batches on every
@@ -28,7 +29,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatchListItem } from '@/api/types';
+import type { ImportBatchListItem, Paged } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
@@ -62,6 +63,26 @@ export { totalFlags };
 
 /** 04 §4.10: the history pages 20 batches at a time. */
 export const IMPORTS_PAGE_SIZE = 20;
+
+/**
+ * How many committed batches the 「已入账 N 笔」 probe will add up. 200 is the server's page
+ * cap (`pagination`, 03 §5.38), so a ledger with more committed batches than this simply
+ * does not get the number — see `committedRowTotal`.
+ */
+const COMMITTED_PROBE_LIMIT = 200;
+
+/**
+ * The rows 屏幕稿 11 calls 「已入账」: every row of every committed batch that was not
+ * skipped. `undefined` — draw nothing — until the probe has answered, and also when it came
+ * back short, because then the sum is a page's worth and not the history's.
+ */
+export function committedRowTotal(page: Paged<ImportBatchListItem> | undefined): number | undefined {
+  if (page === undefined || page.total > page.items.length) return undefined;
+  return page.items.reduce(
+    (n, b) => n + Math.max(0, b.row_count - b.row_status_summary.skipped),
+    0,
+  );
+}
 
 /** The three segments of 屏幕稿 11; `all` is the absence of a `?status=`. */
 export const HISTORY_FILTERS = ['all', 'ready', 'committed'] as const;
@@ -125,6 +146,13 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
     limit: 1,
     status: ['ready'],
   });
+  // 「已入账 N 笔」 counts rows, which only the batches themselves carry, so this probe asks
+  // for the committed batches rather than for a total. Same gate as the one above: the
+  // sentence is ledger-wide, so it is only true next to a ledger-wide batch count.
+  const committedQuery = useImports(filter === 'all' ? ledgerId : undefined, {
+    limit: COMMITTED_PROBE_LIMIT,
+    status: ['committed'],
+  });
   const memberNames = useMemberNames(ledgerId);
 
   const goNew = React.useCallback(
@@ -143,6 +171,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const items: readonly ImportBatchListItem[] = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
   const readyTotal = readyQuery.data?.total;
+  const postedTotal = committedRowTotal(committedQuery.data);
 
   // Page 1 again when the list shrank under the pager (the tail batches were undone or
   // discarded), which would otherwise strand the user on an empty page with no pager to
@@ -163,12 +192,22 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   // both halves.
   // The probe answers a moment after the list does, and 「0 批待提交」 is a claim, not a
   // placeholder — so until it has answered the sentence is simply the batch count.
+  // Each half is drawn only once its own server answer is in, so the sentence grows from
+  // 「4 批」 to 「4 批 · 1 批待提交 · 已入账 52 笔」 instead of claiming a zero it has not read.
   const meta =
     items.length === 0
       ? undefined
-      : filter === 'all' && readyTotal !== undefined
-        ? t('import:history.stats', { batches: total, ready: readyTotal })
-        : t('import:history.stats_batches', { batches: total });
+      : [
+          t('import:history.stat_batches', { batches: total }),
+          filter === 'all' && readyTotal !== undefined
+            ? t('import:history.stat_ready', { ready: readyTotal })
+            : null,
+          filter === 'all' && postedTotal !== undefined
+            ? t('import:history.stat_posted', { posted: postedTotal })
+            : null,
+        ]
+          .filter((part): part is string => part !== null)
+          .join(' · ');
   const header = (
     <PageHeader
       title={t('import:history.title')}

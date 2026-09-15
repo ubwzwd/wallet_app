@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 
 import { isApiClientError } from '@/api/errors';
 import { deviceLanguage } from '@/i18n';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { errorMessage } from '@/i18n/errorCodes';
 import { formatCountdown } from '@/i18n/format';
 import { qk, useConfig, useCurrencies } from '@/queries';
@@ -56,6 +57,8 @@ export default function RegisterScreen(): React.JSX.Element {
   const next = safeNext(params.next);
   const config = useConfig();
   const currencies = useCurrencies();
+  // 屏幕稿 09 / 13 / 17 read 「CNY 人民币」, not the server's ISO English name.
+  const currencyNames = useCurrencyNames(currencies.names);
 
   const [closedAfterSubmit, setClosedAfterSubmit] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -279,7 +282,7 @@ export default function RegisterScreen(): React.JSX.Element {
               testID="register-currency"
               label={t('auth:register.base_currency_label')}
               codes={codes}
-              names={currencies.names}
+              names={currencyNames}
               value={field.value === '' ? null : field.value}
               onChange={field.onChange}
               error={validationMessage(t, errors.base_currency?.message)}

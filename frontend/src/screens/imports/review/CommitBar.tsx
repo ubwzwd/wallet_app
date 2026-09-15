@@ -290,7 +290,12 @@ export function CommitBar({
       size="lg"
       style={wide ? undefined : { width: '100%' }}
       label={t('import:review.submit')}
-      accessibilityLabel={t('import:review.submit_button', { count: submitCount })}
+      /* WCAG 2.5.3 (Label in Name): the accessible name has to start with the visible
+         one, or 「点击 提交入账」 matches nothing. The count follows it, so a screen
+         reader still hears how many rows are about to go in. */
+      accessibilityLabel={`${t('import:review.submit')} · ${t('import:review.submit_button', {
+        count: submitCount,
+      })}`}
       disabled={blocked}
       loading={commit.isPending}
       onPress={onSubmit}

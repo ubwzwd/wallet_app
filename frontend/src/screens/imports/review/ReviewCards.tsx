@@ -11,19 +11,23 @@
  * found a single candidate, and the spec is explicit that the user has to see it, and be
  * able to clear it, without opening anything.
  *
- * Bulk editing starts with the card's own checkbox (or a long press); the screen's bulk bar
- * appears as soon as the selection is non-empty.
+ * The checkbox and the ⋯ button are the card's only two press targets: the card itself is
+ * not pressable, because a card-wide `Pressable` wrapping them would nest a button inside a
+ * button (invalid on the web, and it swallows the inner click). So there is no long press
+ * to 「进入多选模式」 either, and 04 §4.11.9's sentence about one is a deviation for the
+ * docs: the bulk strip lives on the bottom bar at all times and greys out while nothing is
+ * selected, rather than appearing with a selection.
  */
 import React from 'react';
 import { type LayoutChangeEvent, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportRow } from '@/api/types';
-import { formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Button, Card, Checkbox, Divider, KIND_AMOUNT_TONE, Sheet, Text } from '@/ui';
 
+import { importAmountText } from '../amountFormat';
 import { FlagBadges, SkipToggle } from './FlagBadges';
 import { LinkCell } from './LinkCell';
 import { LinkPanel, hasLinkPanel } from './LinkPanel';
@@ -265,9 +269,12 @@ export function ReviewCards({
                 >
                   {row.amount === null
                     ? t('import:review.missing_value')
-                    : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
-                        signDisplay: 'always',
-                      })}
+                    : importAmountText(
+                        row.amount,
+                        row.currency ?? env.batch.base_currency,
+                        env.batch.base_currency,
+                        env.lang,
+                      )}
                 </Text>
                 <Button
                   testID={`${id}-details-${row.row_no}`}

@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next';
 import type { Uuid } from '@/api/types';
 import { currentMonth, isAfterMonth, routes, type ListRow as TxListRow } from '@/domain';
 import { useLang } from '@/i18n';
-import { formatMoney, formatMonthShort } from '@/i18n/format';
+import { formatAmountPlain, formatMonthShort } from '@/i18n/format';
 import {
   TREND_MONTHS,
   useCategories,
@@ -166,15 +166,17 @@ export default function HomeScreen(): React.JSX.Element {
   const totals =
     noAccounts || summary.data === undefined ? undefined : (
       <>
+        {/* 屏幕稿 01 writes the two tiles bare — 「6,842.50」, 「18,000.00」 — because the
+            net-worth line right above them already says 「折算 CNY」 (§14.59a). */}
         {tile(
           'expense',
-          formatMoney(summary.data.expense_total, baseCurrency, lang),
+          formatAmountPlain(summary.data.expense_total, baseCurrency),
           t('stats:home.month_expense', { month: shortMonth }),
           'home-expense-total',
         )}
         {tile(
           'income',
-          formatMoney(summary.data.income_total, baseCurrency, lang),
+          formatAmountPlain(summary.data.income_total, baseCurrency),
           t('stats:home.month_income', { month: shortMonth }),
           'home-income-total',
         )}
