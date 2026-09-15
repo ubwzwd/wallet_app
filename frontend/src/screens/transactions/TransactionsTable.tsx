@@ -20,11 +20,12 @@ import type { CategoryIndex } from '@/domain/categories';
 import { absMoney } from '@/domain/money';
 import type { ListRow } from '@/domain/transfers';
 import { type Lang } from '@/i18n';
-import { formatDateShort, formatMoney } from '@/i18n/format';
+import { formatDateShort } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { KindBadge, ListCard, MoneyText, Text } from '@/ui';
+import { KindBadge, ListCard, Text } from '@/ui';
 
+import { RowAmount, plainAmount } from './amount';
 import { RowBadges, categoryPath, leadTransaction, rowKey } from './TransactionRow';
 
 /** 屏幕稿 02: 13px of padding above and below a 26-high badge — a 52 row. */
@@ -122,9 +123,7 @@ export function TransactionsTable(props: TransactionsTableProps): React.JSX.Elem
               mono
               tone={Number(props.summary.net) < 0 ? 'expense' : 'income'}
             >
-              {formatMoney(props.summary.net, props.summary.base_currency, props.lang, {
-                signDisplay: 'always',
-              })}
+              {plainAmount(props.summary.net, props.summary.base_currency, 'always')}
             </Text>
           </Text>
         ) : null}
@@ -226,16 +225,18 @@ function TableRow({
     row.kind === 'pair' ? (
       crossLeg ? (
         <View style={{ alignItems: 'flex-end' }}>
-          <MoneyText
+          <RowAmount
             amount={row.out.amount}
             currency={row.out.currency}
+            baseCurrency={baseCurrency}
             kind="transfer"
             lang={lang}
             testID={`${rowId}-amount-out`}
           />
-          <MoneyText
+          <RowAmount
             amount={row.in.amount}
             currency={row.in.currency}
+            baseCurrency={baseCurrency}
             kind="transfer"
             lang={lang}
             signDisplay="always"
@@ -244,9 +245,10 @@ function TableRow({
           />
         </View>
       ) : (
-        <MoneyText
+        <RowAmount
           amount={absMoney(row.out.amount)}
           currency={row.out.currency}
+          baseCurrency={baseCurrency}
           kind="transfer"
           lang={lang}
           style={{ alignItems: 'flex-end' }}
@@ -254,9 +256,10 @@ function TableRow({
         />
       )
     ) : (
-      <MoneyText
+      <RowAmount
         amount={tx.amount}
         currency={tx.currency}
+        baseCurrency={baseCurrency}
         kind={tx.kind}
         lang={lang}
         base={{ amount_base: tx.amount_base, base_currency: baseCurrency }}

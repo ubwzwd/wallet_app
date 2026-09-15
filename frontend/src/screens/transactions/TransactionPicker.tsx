@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { Transaction, TransactionListParams } from '@/api/types';
 import { useLang } from '@/i18n';
-import { formatDate, formatMoney } from '@/i18n/format';
+import { formatDate } from '@/i18n/format';
 import { categoryName } from '@/i18n/category';
 import { useCategories, useSources, useTransactions } from '@/queries';
 import { useLedgerContext } from '@/store';
@@ -27,6 +27,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, Sheet, Text, Skeleton, raisedShadow } from '@/ui';
 
+import { useAmountText } from './amount';
 import {
   PickerFilters,
   PickerFooter,
@@ -108,6 +109,8 @@ export function TransactionPicker({
   const wide = useIsWide();
   const { ledgerId } = useLedgerContext();
   const { index } = useCategories();
+  // 屏幕稿 06's candidate table writes every figure bare (§14.59a).
+  const money = useAmountText();
   // The picker stays mounted (rendering nothing) next to the form that owns it, so both
   // queries wait for it to actually open — otherwise merely showing the refund tab would
   // fetch the accounts a second time, under a key the form does not share.
@@ -181,7 +184,7 @@ export function TransactionPicker({
           ) : null}
         </View>
         <Text variant="body" mono>
-          {formatMoney(tx.amount, tx.currency, lang)}
+          {money(tx.amount, tx.currency)}
         </Text>
       </View>
     );

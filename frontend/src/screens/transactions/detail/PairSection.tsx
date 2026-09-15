@@ -21,12 +21,13 @@ import type { Transaction, TransferRole, Uuid } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
-import { formatDate, formatMoney, parseLocalDate } from '@/i18n/format';
+import { formatDate, parseLocalDate } from '@/i18n/format';
 import { usePairTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { Checkbox, Text, confirm, toast } from '@/ui';
 
+import { useAmountText } from '../amount';
 import { TransactionPicker } from '../TransactionPicker';
 
 /** How far around this leg's date the candidate search starts (04 §4.7). */
@@ -64,6 +65,7 @@ export function PairSection({
   const lang = useLang();
   const router = useRouter();
   const { ledgerId } = useLedgerContext();
+  const money = useAmountText();
   const id = testID ?? 'detail-pair';
 
   // "Same currency and same amount" — on by default, because that is what a real pair looks
@@ -118,7 +120,7 @@ export function PairSection({
             checked={strict}
             onChange={setStrict}
             label={t('transaction:detail.pair_same_amount_toggle', {
-              amount: formatMoney(amount, tx.currency, lang),
+              amount: money(amount, tx.currency),
             })}
           />
           <Text variant="caption" tone="muted">
@@ -143,7 +145,7 @@ export function PairSection({
             {sourceNames[row.source_id] ?? row.note ?? ''}
           </Text>
           <Text variant="body" mono>
-            {formatMoney(row.amount, row.currency, lang)}
+            {money(row.amount, row.currency)}
           </Text>
         </View>
       )}

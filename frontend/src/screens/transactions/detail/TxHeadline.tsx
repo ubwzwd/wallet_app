@@ -126,6 +126,7 @@ export function TxHeadline({
             <AccountRow
               testID="tx-detail-header-account"
               kind={tx.kind}
+              sourceType={source?.type ?? null}
               title={tx.merchant ?? source?.name ?? tx.source_id}
               subtitle={
                 source

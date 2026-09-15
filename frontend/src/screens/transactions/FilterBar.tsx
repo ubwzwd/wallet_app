@@ -123,6 +123,13 @@ function currencyCodesOf(props: FilterBarProps): string[] {
  * for good, so coming back to /transactions never reopens it by itself.
  */
 let drawerOpen = false;
+/**
+ * The wide panel's twin (§14.59b): once conditions are on, 屏幕稿 02's three-column card
+ * collapses to the 「已选条件」 strip and a 「筛选」 button, so the table starts at the top of
+ * the page instead of below a screenful of empty boxes. Module-level for the same reason as
+ * `drawerOpen`: every control writes the URL and the screen remounts.
+ */
+let panelOpen = false;
 /** Pending reset of `drawerOpen`, armed on unmount and cancelled by a remount in the same tick. */
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -131,9 +138,14 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
   const colors = useColors();
   const wide = useIsWide();
   const [sheetOpen, setSheetOpen] = React.useState(drawerOpen);
+  const [expanded, setExpanded] = React.useState(panelOpen);
   const setDrawer = React.useCallback((open: boolean): void => {
     drawerOpen = open;
     setSheetOpen(open);
+  }, []);
+  const setPanel = React.useCallback((open: boolean): void => {
+    panelOpen = open;
+    setExpanded(open);
   }, []);
   // A filter change remounts the screen, and the drawer must survive that; leaving the
   // screen must close it. Unmount arms a reset, a remount in the same tick cancels it.
@@ -145,10 +157,25 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     return () => {
       closeTimer = setTimeout(() => {
         drawerOpen = false;
+        panelOpen = false;
       }, 0);
     };
   }, []);
   const id = props.testID ?? 'tx-filter-bar';
+  // Every control *inside* the wide panel pins it open (§14.59b): 屏幕稿 02 · 1440 draws the
+  // card expanded with four 「已选条件」 chips, so the collapse belongs to arriving at a URL
+  // that already carries conditions — not to the click that sets the first one. Collapsing
+  // there would pull the card out from under the user: the caret out of the keyword box,
+  // and the second half of 日期区间 / 金额区间 out of reach before it could be filled.
+  function pin<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => void {
+    return (...args: A): void => {
+      setPanel(true);
+      fn(...args);
+    };
+  }
+  const onQType = pin(props.onQChange);
+  const onPatchInPanel = pin(props.onPatch);
+  const onRemoveInPanel = pin(props.onRemove);
 
   const sourceName = React.useCallback(
     (sid: Uuid): string => props.sources.find((s) => s.id === sid)?.name ?? sid.slice(0, 6),
@@ -171,7 +198,8 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
 
   const fields: FilterFieldProps = {
     filters: props.filters,
-    onPatch: props.onPatch,
+    // The narrow sheet stays on the raw patch — it has its own open flag and 「应用」 button.
+    onPatch: wide ? onPatchInPanel : props.onPatch,
     index: props.index,
     sources: props.sources,
     currencyCodes: currencyCodesOf(props),
@@ -180,31 +208,62 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     id,
   };
 
-  const chipStrip = (
-    <View
-      testID={`${id}-applied`}
-      style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
-    >
-      <Text variant="caption" tone="secondary" weight={600}>
-        {t('transaction:list.filter.applied_label')}
-      </Text>
-      {chips.length === 0 ? (
-        <Text variant="body" tone="muted">
-          {t('transaction:list.filter.no_filters')}
+  /** The 「已选条件」 line. Inside the open card its chips pin the card open; on the collapsed
+   *  strip they must not, or dropping a condition there would spring the panel back. */
+  function chipStrip(onRemove: FilterBarProps['onRemove']): React.JSX.Element {
+    return (
+      <View
+        testID={`${id}-applied`}
+        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+      >
+        <Text variant="caption" tone="secondary" weight={600}>
+          {t('transaction:list.filter.applied_label')}
         </Text>
-      ) : (
-        <FilterChips
-          chips={chips}
-          clearFrom={1}
-          onRemove={(key, value) => props.onRemove(key as keyof TransactionListParams, value)}
-          onClear={props.onClear}
-          testID={`${id}-chips`}
-        />
-      )}
-    </View>
-  );
+        {chips.length === 0 ? (
+          <Text variant="body" tone="muted">
+            {t('transaction:list.filter.no_filters')}
+          </Text>
+        ) : (
+          <FilterChips
+            chips={chips}
+            clearFrom={1}
+            onRemove={(key, value) => onRemove(key as keyof TransactionListParams, value)}
+            onClear={props.onClear}
+            testID={`${id}-chips`}
+          />
+        )}
+      </View>
+    );
+  }
 
   if (wide) {
+    // Collapsed: one line of what is on, and the way back to the panel (§14.59b).
+    if (chips.length > 0 && !expanded) {
+      return (
+        <Card
+          testID={id}
+          style={{
+            paddingVertical: space['3'] + 2,
+            paddingHorizontal: space['5'],
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space['4'],
+            flexWrap: 'wrap',
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 240 }}>{chipStrip(props.onRemove)}</View>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="filter"
+            label={t('transaction:list.filter.open')}
+            onPress={() => setPanel(true)}
+            testID={`${id}-expand`}
+          />
+        </Card>
+      );
+    }
+
     return (
       <Card testID={id} style={{ padding: space['5'], gap: space['4'] }}>
         <View
@@ -213,13 +272,24 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
           <Text variant="subheading" weight={700}>
             {t('transaction:list.filter.title')}
           </Text>
-          <Button
-            variant="ghost"
-            size="sm"
-            label={t('transaction:list.filter.reset_all')}
-            onPress={props.onClear}
-            testID={`${id}-reset`}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['1'] }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              label={t('transaction:list.filter.reset_all')}
+              onPress={props.onClear}
+              testID={`${id}-reset`}
+            />
+            {chips.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                label={t('transaction:list.filter.collapse')}
+                onPress={() => setPanel(false)}
+                testID={`${id}-collapse`}
+              />
+            ) : null}
+          </View>
         </View>
 
         <View
@@ -227,7 +297,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
           style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['5'] }}
         >
           {[
-            <KeywordField key="q" value={props.qDraft} onChange={props.onQChange} id={`${id}-q`} />,
+            <KeywordField key="q" value={props.qDraft} onChange={onQType} id={`${id}-q`} />,
             <SourceField key="source" {...fields} />,
             <CurrencyChips key="currency" {...fields} />,
             <AmountRangeField key="amount" {...fields} />,
@@ -248,7 +318,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
         <Divider />
         <KindChips {...fields} />
         <Divider />
-        {chipStrip}
+        {chipStrip(onRemoveInPanel)}
       </Card>
     );
   }

@@ -24,7 +24,9 @@ import { categoryName } from '@/i18n/category';
 import { type Lang } from '@/i18n';
 import { density, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { Badge, Button, KindIcon, MoneyText, Sheet, Text } from '@/ui';
+import { Badge, Button, KindIcon, Sheet, Text } from '@/ui';
+
+import { RowAmount } from './amount';
 
 export interface TransactionRowProps {
   row: ListRow;
@@ -229,16 +231,18 @@ export function TransactionRow({
     row.kind === 'pair' ? (
       crossLegCurrencies ? (
         <View style={{ alignItems: 'flex-end' }}>
-          <MoneyText
+          <RowAmount
             amount={row.out.amount}
             currency={row.out.currency}
+            baseCurrency={baseCurrency}
             kind="transfer"
             lang={lang}
             testID={`${id}-amount-out`}
           />
-          <MoneyText
+          <RowAmount
             amount={row.in.amount}
             currency={row.in.currency}
+            baseCurrency={baseCurrency}
             kind="transfer"
             lang={lang}
             size="caption"
@@ -247,9 +251,10 @@ export function TransactionRow({
           />
         </View>
       ) : (
-        <MoneyText
+        <RowAmount
           amount={absMoney(row.out.amount)}
           currency={row.out.currency}
+          baseCurrency={baseCurrency}
           kind="transfer"
           lang={lang}
           style={{ alignItems: 'flex-end' }}
@@ -257,9 +262,10 @@ export function TransactionRow({
         />
       )
     ) : (
-      <MoneyText
+      <RowAmount
         amount={tx.amount}
         currency={tx.currency}
+        baseCurrency={baseCurrency}
         kind={tx.kind}
         lang={lang}
         base={{ amount_base: tx.amount_base, base_currency: baseCurrency }}

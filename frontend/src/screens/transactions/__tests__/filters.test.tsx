@@ -103,6 +103,12 @@ function searchOf(router: { getSearchParams(): Record<string, string | string[] 
 }
 
 beforeEach(async () => {
+  // The filter bar keeps 「drawer open」 / 「panel open」 in module-level flags so they
+  // survive the remount every URL write causes (FilterBar.tsx). The previous test's
+  // unmount armed the reset; let it land, or one test's open panel leaks into the next.
+  act(() => {
+    jest.advanceTimersByTime(1);
+  });
   api = mockApi();
   listRequests = [];
   queryClient.clear();
@@ -208,6 +214,56 @@ test('typing in the search box writes `q` once, 300ms after the last keystroke',
   expect(listRequests.filter((p) => p.q !== undefined).map((p) => p.q)).toEqual(['咖啡']);
 });
 
+test('the wide panel stays open while the search box is being typed in', async () => {
+  // §14.59b collapses the wide panel once conditions are on, but the keyword the user is
+  // still typing is not a finished condition: collapsing there would unmount the box under
+  // the caret and force a press on 「筛选」 to type a second character.
+  serveList(() => ({ items: [], total: 0 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.changeText(await screen.findByTestId('tx-filter-bar-q'), '咖');
+  await waitFor(() => expect(searchOf(router).q).toBe('咖'));
+
+  expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-expand')).toBeNull();
+
+  // And refining it keeps working, which is the whole point.
+  fireEvent.changeText(screen.getByTestId('tx-filter-bar-q'), '咖啡');
+  await waitFor(() => expect(searchOf(router).q).toBe('咖啡'));
+  expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
+});
+
+test('setting the first condition from inside the wide panel does not collapse it', async () => {
+  // §14.59b collapses the panel for someone who *arrives* with conditions on; it must not
+  // yank the card away on the first pill pressed inside it — worst for 日期区间 / 金额区间,
+  // whose second box would unmount before it could be filled.
+  serveList(() => ({ items: [], total: 0 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('tx-filter-bar-kind-expense'));
+  await waitFor(() => expect(searchOf(router).kind).toBe('expense'));
+
+  expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-expand')).toBeNull();
+
+  // And a second condition still lands, with the card still under the user's hands.
+  fireEvent.press(screen.getByTestId('tx-filter-bar-kind-income'));
+  await waitFor(() => expect(searchOf(router).kind).toEqual(['expense', 'income']));
+  expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
+});
+
+test('a filter set from elsewhere still collapses the wide panel to the chip strip', async () => {
+  serveList(() => ({ items: [], total: 0 }));
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions?kind=expense` });
+
+  expect(await screen.findByTestId('tx-filter-bar-expand')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-expand'));
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+});
+
 test('a shared URL is restored verbatim, repeated keys included', async () => {
   serveList(() => ({ items: [], total: 0 }));
   const router = renderRouter(ROUTES, {
@@ -307,7 +363,15 @@ test('an empty result with two conditions fires exactly two limit=1 probes', asy
     /去掉「.+」会有 17 笔/,
   );
 
-  const probes = listRequests.filter((p) => p.limit === 1);
+  // The page header's own 「共 M 笔」 probe is a `limit=1` request too, but it carries no
+  // condition at all; the rescue probes are the ones that keep the rest of the filter set.
+  const headerProbes = listRequests.filter(
+    (p) => p.limit === 1 && p.kind === undefined && p.from === undefined,
+  );
+  expect(headerProbes).toHaveLength(1);
+  const probes = listRequests.filter(
+    (p) => p.limit === 1 && (p.kind !== undefined || p.from !== undefined),
+  );
   expect(probes).toHaveLength(2);
   // Decision §14.52 A15: one probe per candidate, never a full sweep.
   expect(probes[0].kind).toBeUndefined();
