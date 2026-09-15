@@ -1,5 +1,8 @@
 /**
- * The five ways an upload can be refused (04 §4.10 step 1's table).
+ * The five ways an upload can be refused (04 §4.10 step 1's table), drawn as 屏幕稿 10's
+ * two failure cards: a tinted strip carrying the icon, the headline and the explanation,
+ * then the detail, then a foot strip with the hint on the left and the actions on the
+ * right. Structural failures wear the red tint, an outdated skill the warm one.
  *
  * All five stop the user on the upload page and none of them produces a batch, so the
  * card is the whole failure UI — the mutations that feed it are `{ silent: true }` and
@@ -15,14 +18,15 @@
  *    no "ignore and continue": a version mismatch is a hard refusal (decision §14.30).
  */
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { type ApiClientError } from '@/api/errors';
 import type { ImportFileError } from '@/api/types';
 import { errorMessage } from '@/i18n/errorCodes';
 import { space } from '@/theme/tokens';
-import { Button, Card, Text, toast } from '@/ui';
+import { useColors } from '@/theme/ThemeProvider';
+import { Button, Icon, ListCard, Text, toast } from '@/ui';
 
 import { copyText } from './useCopyText';
 
@@ -53,6 +57,41 @@ function rowCountFromDetail(detail: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+interface StripProps {
+  tone: 'danger' | 'warning';
+  title: string;
+  body: string;
+  bodyTestID?: string;
+  testID: string;
+}
+
+/** The card's tinted head: icon well, headline, one explaining sentence. */
+function Strip({ tone, title, body, bodyTestID, testID }: StripProps): React.JSX.Element {
+  const colors = useColors();
+  return (
+    <View
+      style={[
+        styles.strip,
+        { backgroundColor: colors[tone === 'danger' ? 'status.danger.bg' : 'status.warning.bg'] },
+      ]}
+    >
+      <Icon
+        name="alert-triangle"
+        size={20}
+        color={colors[tone === 'danger' ? 'status.danger.fg' : 'status.warning.fg']}
+      />
+      <View style={styles.stripText}>
+        <Text variant="subheading" weight={700} testID={`${testID}-title`}>
+          {title}
+        </Text>
+        <Text variant="body" tone={tone} testID={bodyTestID}>
+          {body}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export function UploadErrorCard({
   error,
   onReselect,
@@ -60,6 +99,7 @@ export function UploadErrorCard({
   testID = 'upload-error',
 }: UploadErrorCardProps): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
   const [expanded, setExpanded] = React.useState(false);
   const body = fileError(error);
 
@@ -80,83 +120,110 @@ export function UploadErrorCard({
     <Button
       testID={`${testID}-reselect`}
       label={t('import:upload.error.reselect')}
-      variant="secondary"
-      size="sm"
       onPress={onReselect}
     />
+  );
+
+  const foot = (hint: string, actions: React.ReactNode): React.JSX.Element => (
+    <View style={[styles.foot, { backgroundColor: colors['bg.canvas'] }]}>
+      <Text variant="caption" tone="muted" style={styles.hint} testID={`${testID}-copy-hint`}>
+        {hint}
+      </Text>
+      <View style={styles.actions}>{actions}</View>
+    </View>
   );
 
   if (error.code === 'import_format_invalid') {
     const shown = expanded ? lineErrors : lineErrors.slice(0, MAX_LISTED_ERRORS);
     const hidden = lineErrors.length - shown.length;
     return (
-      <Card variant="outlined" style={{ gap: space['2'] }} testID={testID}>
-        <Text variant="heading" tone="danger" testID={`${testID}-title`}>
-          {t('import:upload.error.structure_title')}
-        </Text>
-        <Text variant="body" tone="secondary">
-          {errorMessage(t, error)}
-        </Text>
-        <View style={{ gap: space['1'] }} testID={`${testID}-lines`}>
+      <ListCard
+        divided
+        testID={testID}
+        header={
+          <Strip
+            tone="danger"
+            testID={testID}
+            title={t('import:upload.error.structure_title')}
+            body={errorMessage(t, error)}
+          />
+        }
+        footer={foot(
+          t('import:upload.error.copy_hint'),
+          <>
+            <Button
+              testID={`${testID}-copy`}
+              label={t('import:upload.error.copy_errors')}
+              icon="copy"
+              variant="soft"
+              onPress={() => {
+                void copyText(errorText).then((ok) => {
+                  if (ok) toast.success(t('import:upload.error.copied_toast'));
+                });
+              }}
+            />
+            {reselect}
+          </>,
+        )}
+      >
+        <View style={styles.lines} testID={`${testID}-lines`}>
           {shown.map((e, i) => (
-            <Text key={`${e.line}-${i}`} variant="caption" mono testID={`${testID}-line-${i}`}>
+            <Text
+              key={`${e.line}-${i}`}
+              variant="caption"
+              mono
+              tone="danger"
+              style={styles.line}
+              testID={`${testID}-line-${i}`}
+            >
               {t('import:upload.error.line_error', { line: e.line, message: e.message })}
             </Text>
           ))}
+          {hidden > 0 ? (
+            <Button
+              testID={`${testID}-more`}
+              label={t('import:upload.error.more_hidden', { count: hidden })}
+              variant="ghost"
+              size="sm"
+              onPress={() => setExpanded(true)}
+            />
+          ) : null}
         </View>
-        {hidden > 0 ? (
-          <Button
-            testID={`${testID}-more`}
-            label={t('import:upload.error.more_hidden', { count: hidden })}
-            variant="ghost"
-            size="sm"
-            onPress={() => setExpanded(true)}
-          />
-        ) : null}
-        <Text variant="caption" tone="muted" testID={`${testID}-copy-hint`}>
-          {t('import:upload.error.copy_hint')}
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
-          <Button
-            testID={`${testID}-copy`}
-            label={t('import:upload.error.copy_errors')}
-            icon="copy"
-            variant="secondary"
-            size="sm"
-            onPress={() => {
-              void copyText(errorText).then((ok) => {
-                if (ok) toast.success(t('import:upload.error.copied_toast'));
-              });
-            }}
-          />
-          {reselect}
-        </View>
-      </Card>
+      </ListCard>
     );
   }
 
   if (error.code === 'skill_outdated') {
     return (
-      <Card variant="outlined" style={{ gap: space['2'] }} testID={testID}>
-        <Text variant="heading" tone="warning" testID={`${testID}-title`}>
-          {t('import:upload.error.skill_outdated_title')}
-        </Text>
-        <Text variant="body" tone="secondary" testID={`${testID}-versions`}>
-          {t('import:upload.error.skill_outdated_body', {
-            fileVersion: body?.file_version ?? '—',
-            currentVersion: body?.current_version ?? '—',
-          })}
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
+      <ListCard
+        testID={testID}
+        header={
+          <Strip
+            tone="warning"
+            testID={testID}
+            bodyTestID={`${testID}-versions`}
+            title={t('import:upload.error.skill_outdated_title')}
+            body={t('import:upload.error.skill_outdated_body', {
+              fileVersion: body?.file_version ?? '—',
+              currentVersion: body?.current_version ?? '—',
+            })}
+          />
+        }
+      >
+        <View style={styles.plainActions}>
           <Button
             testID={`${testID}-guide`}
             label={t('import:upload.error.go_to_guide')}
-            size="sm"
             onPress={() => onOpenGuide(body?.guide_url)}
           />
-          {reselect}
+          <Button
+            testID={`${testID}-reselect`}
+            label={t('import:upload.error.reselect')}
+            variant="soft"
+            onPress={onReselect}
+          />
         </View>
-      </Card>
+      </ListCard>
     );
   }
 
@@ -175,16 +242,52 @@ export function UploadErrorCard({
           : errorMessage(t, error);
 
   return (
-    <Card variant="outlined" style={{ gap: space['2'] }} testID={testID}>
-      <Text variant="heading" tone="danger" testID={`${testID}-title`}>
-        {t('import:upload.error.generic_title')}
-      </Text>
-      <Text variant="body" tone="secondary" testID={`${testID}-message`}>
-        {message}
-      </Text>
-      <View style={{ flexDirection: 'row', gap: space['2'] }}>{reselect}</View>
-    </Card>
+    <ListCard
+      testID={testID}
+      header={
+        <Strip
+          tone="danger"
+          testID={testID}
+          bodyTestID={`${testID}-message`}
+          title={t('import:upload.error.generic_title')}
+          body={message}
+        />
+      }
+    >
+      <View style={styles.plainActions}>{reselect}</View>
+    </ListCard>
   );
 }
+
+const styles = StyleSheet.create({
+  strip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space['3'],
+    paddingHorizontal: space['5'],
+    paddingVertical: space['4'],
+  },
+  stripText: { flex: 1, minWidth: 0, gap: space['1'] },
+  lines: { paddingHorizontal: space['5'], paddingVertical: space['3'], gap: space['2'] },
+  line: { lineHeight: 18 },
+  foot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: space['3'],
+    paddingHorizontal: space['5'],
+    paddingVertical: space['3'],
+  },
+  hint: { flexShrink: 1, minWidth: 0 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] },
+  plainActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space['2'],
+    paddingHorizontal: space['5'],
+    paddingVertical: space['4'],
+  },
+});
 
 export default UploadErrorCard;

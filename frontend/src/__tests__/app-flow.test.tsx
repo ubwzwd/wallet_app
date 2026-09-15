@@ -366,23 +366,18 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
   expect(await screen.findByTestId('imports-empty')).toBeTruthy();
 
-  // ── 2. the empty state's action is the guide, step one of the flow ────────────────
+  // ── 2. the empty state's action is the import page, step one of the flow ─────────
   fireEvent.press(screen.getByTestId('imports-empty-primary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/guide`));
-  expect(await screen.findByTestId('guide-sample-table')).toBeTruthy();
-
-  // ── 3. the guide hands over to the upload page ────────────────────────────────────
-  fireEvent.press(await screen.findByTestId('guide-go-upload'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/new`));
+  expect(await screen.findByTestId('guide-skill-text')).toBeTruthy();
 
-  // ── 4. pick the target account, paste the statement, send it ─────────────────────
+  // ── 3. pick the target account, paste the statement, send it ─────────────────────
   fireEvent.press(await screen.findByTestId('upload-source-picker-trigger'));
   fireEvent.press(await screen.findByTestId(`upload-source-picker-option-${CREDIT.id}`));
-  fireEvent.press(screen.getByTestId('upload-mode-paste'));
   fireEvent.changeText(await screen.findByTestId('upload-paste-input'), PASTED_CSV);
   fireEvent.press(screen.getByTestId('upload-submit'));
 
-  // ── 5. review, on the batch the 201 came back with ────────────────────────────────
+  // ── 4. review, on the batch the 201 came back with ────────────────────────────────
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`));
   expect(requestedPaths('post')).toEqual(['/auth/login', IMPORTS_PATH]);
   expect(JSON.parse(String(api.mock.history.post[1].data))).toEqual({
@@ -398,7 +393,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
     true,
   );
 
-  // ── 6. fill the category in — one PATCH, and the blocker goes away ───────────────
+  // ── 5. fill the category in — one PATCH, and the blocker goes away ───────────────
   // The category picker only wakes up once `GET /categories` has landed.
   fireEvent.press(await screen.findByTestId('review-2-l1-trigger'));
   fireEvent.press(await screen.findByTestId('review-2-l1-l1-shopping'));
@@ -409,7 +404,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   });
   await waitFor(() => expect(screen.queryByTestId('review-commit-block')).toBeNull());
 
-  // ── 7. commit, and land on the committed panel (step three of 04 §4.10) ──────────
+  // ── 6. commit, and land on the committed panel (step three of 04 §4.10) ──────────
   fireEvent.press(screen.getByTestId('review-commit-submit'));
   expect(await screen.findByTestId('import-committed')).toBeTruthy();
   // The detailed sentence, built from the commit response's five counters — not the

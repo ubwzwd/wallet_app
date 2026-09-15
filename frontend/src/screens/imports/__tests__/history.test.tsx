@@ -1,6 +1,10 @@
 /**
  * `/l/:ledgerId/imports` — the batch history and the two destructive actions
- * (04 §4.10, §8.5 cases 7–8; decisions §14.22, §14.40, §14.43, §14.52 A17 / B24).
+ * (04 §4.10, §8.5 cases 7–8; decisions §14.22, §14.40, §14.43, §14.52 A17 / B24, §14.56).
+ *
+ * The wide table (屏幕稿 11) and the narrow cards name the same things with the same test
+ * ids, so most cases run on the default (wide) layout and only the layout-specific ones
+ * flip `useIsWide`.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -14,6 +18,7 @@ import { initI18n } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { AuthProvider, LedgerProvider } from '@/store';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
 import {
@@ -35,6 +40,12 @@ import ImportsHistoryScreen from '../ImportsHistoryScreen';
 
 let queryClient: QueryClient;
 let api: MockApi;
+let wideSpy: jest.SpyInstance;
+
+function setWide(wide: boolean): void {
+  wideSpy?.mockRestore();
+  wideSpy = jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(wide);
+}
 
 const LEDGER = makeLedger({ base_currency: 'CNY' });
 const IMPORTS_PATH = `/ledgers/${LEDGER_ID}/imports`;
@@ -134,6 +145,7 @@ beforeEach(async () => {
   queryClient = makeTestQueryClient();
   await initI18n();
   await i18next.changeLanguage('zh');
+  setWide(true);
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
   mockGet(`/ledgers/${LEDGER_ID}/members`, { items: MEMBERS, total: MEMBERS.length });
 });
@@ -142,6 +154,7 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  wideSpy?.mockRestore();
   jest.restoreAllMocks();
 });
 
@@ -156,14 +169,18 @@ test('each row carries the uploader, the net amount, the flag count and its stat
   expect(screen.getByTestId(`import-batch-${PASTED_ID}-uploader`).props.children).toBe('liang');
 
   expect(screen.getByTestId(`import-batch-${BATCH_ID}-net`).props.children).toBe(
-    formatMoney('-4210.5500', 'CNY', 'zh'),
+    formatMoney('-4210.5500', 'CNY', 'zh', { signDisplay: 'always' }),
+  );
+  expect(screen.getByTestId(`import-batch-${PASTED_ID}-net`).props.children).toBe(
+    formatMoney('900.0000', 'CNY', 'zh', { signDisplay: 'always' }),
   );
   expect(screen.getByTestId(`import-batch-${BATCH_ID}-flags`).props.children).toBe('⚑ 13');
   expect(screen.getByTestId(`import-batch-${PASTED_ID}-flags`).props.children).toBe('⚑ 0');
 
-  // Only two statuses exist — no "reverted" (decision §14.22).
-  expect(screen.getByText('待提交')).toBeTruthy();
-  expect(screen.getByText('已提交')).toBeTruthy();
+  // Only two statuses exist — no "reverted" (decision §14.22). The badges carry them; the
+  // same two words also name two of the filter's segments, so they are read by test id.
+  expect(screen.getByTestId(`import-batch-${BATCH_ID}-status`)).toHaveTextContent('待提交');
+  expect(screen.getByTestId(`import-batch-${PASTED_ID}-status`)).toHaveTextContent('已提交');
   expect(screen.queryByText('已撤销')).toBeNull();
 });
 
@@ -308,16 +325,75 @@ test('discarding a draft uses its own wording and needs no dry run', async () =>
   expect(await screen.findByText('已丢弃这批草稿')).toBeTruthy();
 });
 
-test('the empty state points at the guide, and the header always offers both entries', async () => {
+test('the empty state offers the import page and the guide, and the header keeps both entries', async () => {
   seed([]);
   const router = renderHistory();
 
   expect(await screen.findByTestId('imports-empty')).toBeTruthy();
-  expect(screen.getByText('还没有导入过账单')).toBeTruthy();
+  expect(screen.getByText('还没导入过账单')).toBeTruthy();
   expect(screen.getByTestId('imports-new')).toBeTruthy();
 
   fireEvent.press(screen.getByTestId('imports-empty-primary'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
+});
+
+test('the empty state still leads to the guide', async () => {
+  seed([]);
+  const router = renderHistory();
+
+  fireEvent.press(await screen.findByTestId('imports-empty-secondary'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/guide`));
+});
+
+test('the header counts the batches and the status filter narrows the list through the URL', async () => {
+  seed();
+  const router = renderHistory();
+
+  // 「2 批 · 1 批待提交 · 已入账 12 笔」: the committed batch's rows are the ones on the books.
+  const meta = await screen.findByTestId('imports-header-meta');
+  expect(String(meta.props.children)).toBe(
+    i18next.t('import:history.stats', { batches: 2, ready: 1, rows: 12 }),
+  );
+
+  fireEvent.press(screen.getByTestId('imports-filter-ready'));
+  await waitFor(() => expect(router.getSearchParams().status).toBe('ready'));
+  expect(screen.getByTestId(`import-batch-${BATCH_ID}`)).toBeTruthy();
+  expect(screen.queryByTestId(`import-batch-${PASTED_ID}`)).toBeNull();
+
+  fireEvent.press(screen.getByTestId('imports-filter-committed'));
+  await waitFor(() => expect(router.getSearchParams().status).toBe('committed'));
+  expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
+  expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull();
+
+  // Filtering is a view over the page in hand — it costs no second request.
+  const listed = api.mock.history.get.filter((r) => (r.url ?? '').endsWith('/imports'));
+  expect(listed).toHaveLength(1);
+});
+
+test('an empty filter slice says so, instead of claiming the ledger has no imports', async () => {
+  seed([COMMITTED]);
+  renderHistory();
+
+  // The ledger has one committed batch and nothing ready; 待提交 must not read as 屏幕稿 15.
+  fireEvent.press(await screen.findByTestId('imports-filter-ready'));
+
+  const slice = await screen.findByTestId('imports-filter-empty');
+  expect(slice).toBeTruthy();
+  expect(screen.getByText('这个筛选下没有批次')).toBeTruthy();
+  expect(screen.queryByText('还没导入过账单')).toBeNull();
+  expect(screen.queryByTestId('imports-empty')).toBeNull();
+});
+
+test('a draft row says how many rows still need a category, on both layouts', async () => {
+  seed([{ ...READY, uncategorized_count: 3 }]);
+  renderHistory();
+
+  expect(await screen.findByText('3 行待归类')).toBeTruthy();
+
+  setWide(false);
+  seed([{ ...READY, uncategorized_count: 3 }]);
+  renderHistory();
+  expect(await screen.findByText('还有 3 行待归类，补齐后才能提交')).toBeTruthy();
 });
 
 test('the history pages 20 at a time', async () => {

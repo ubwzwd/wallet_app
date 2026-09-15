@@ -29,15 +29,7 @@ import {
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import {
-  Button,
-  Card,
-  EmptyState,
-  Page,
-  SegmentedControl,
-  Skeleton,
-  Text,
-} from '@/ui';
+import { EmptyState, Page, SegmentedControl, Skeleton, Text } from '@/ui';
 
 import { BulkBar } from './review/BulkBar';
 import { CommitBar } from './review/CommitBar';
@@ -46,7 +38,8 @@ import { ReviewTable, type ReviewHighlight } from './review/ReviewTable';
 import type { ReviewEnv } from './review/ReviewRow';
 import { useReviewRows } from './review/useReviewRows';
 import { REVIEW_SLICES, type ReviewSlice, useReviewSelection } from './review/useReviewSelection';
-import { undoImportBatch } from './undoBatch';
+import { CommittedPanel } from './CommittedPanel';
+import { undoImportBatch, undoMeta } from './undoBatch';
 
 /** Room under the phone's scroll content for the pinned bulk bar (04 §4.11.9). */
 const BULK_BAR_CLEARANCE = 96;
@@ -65,70 +58,46 @@ const BULK_BAR_CLEARANCE = 96;
 const ROWS_PAGE_LIMIT = 500;
 const REST_OFFSETS = [100, 600, 1100, 1600] as const;
 
-interface CommittedPanelProps {
+/**
+ * The committed panel is its own module (屏幕稿 11's language); this screen only wires it to
+ * the batch, to `undoBatch.ts` — the very flow the history list runs — and to where the
+ * user lands afterwards: this URL 404s once the batch is gone (decision §14.22), so it
+ * goes back to the history.
+ */
+function CommittedView({
+  ledgerId,
+  batch,
+  result,
+}: {
   ledgerId: Uuid;
   batch: ImportBatch;
   result: ImportCommitResult | null;
-}
-
-/**
- * Step 3 (04 §4.10). The detailed sentence needs the commit response's five counters; a
- * page opened later (a link, a refresh) only has the batch, so it says the shorter thing
- * rather than inventing numbers.
- */
-function CommittedPanel({ ledgerId, batch, result }: CommittedPanelProps): React.JSX.Element {
+}): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  const lang = useLang();
   const remove = useDeleteImport(ledgerId, batch.id);
 
-  // The same flow the history list runs (`undoBatch.ts`) — there is exactly one of it. The
-  // only difference is where it leaves the user: this screen's URL 404s once the batch is
-  // gone (decision §14.22), so it goes back to the history.
   const onUndo = React.useCallback((): void => {
     void undoImportBatch({
       remove: remove.mutateAsync,
       t,
+      meta: undoMeta(batch, t, lang),
       onDone: () => router.replace(routes.l(ledgerId).imports() as Href),
     });
-  }, [ledgerId, remove, router, t]);
+  }, [batch, lang, ledgerId, remove, router, t]);
 
   return (
-    <Card variant="outlined" style={{ gap: space['3'] }} testID="import-committed">
-      <Text variant="body" testID="import-committed-summary">
-        {result
-          ? t('import:committed.summary', {
-              created: result.created_transactions,
-              pairs: result.created_transfer_pairs,
-              paired: result.paired_existing_transfers,
-              refunds: result.linked_refunds,
-              skipped: result.skipped_rows,
-            })
-          : t('import:committed.summary_fallback', { rows: batch.row_count })}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] }}>
-        <Button
-          testID="import-committed-view"
-          label={t('import:committed.view_transactions')}
-          onPress={() =>
-            router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href)
-          }
-        />
-        <Button
-          testID="import-committed-again"
-          variant="secondary"
-          label={t('import:committed.import_another')}
-          onPress={() => router.push(routes.l(ledgerId).importsNew() as Href)}
-        />
-        <Button
-          testID="import-committed-undo"
-          variant="danger"
-          icon="undo-2"
-          label={t('import:committed.undo')}
-          loading={remove.isPending}
-          onPress={onUndo}
-        />
-      </View>
-    </Card>
+    <CommittedPanel
+      batch={batch}
+      result={result}
+      undoing={remove.isPending}
+      onUndo={onUndo}
+      onViewTransactions={() =>
+        router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href)
+      }
+      onImportAnother={() => router.push(routes.l(ledgerId).importsNew() as Href)}
+    />
   );
 }
 
@@ -276,7 +245,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
     return (
       <Page wide testID="import-batch-screen">
         {header}
-        <CommittedPanel ledgerId={ledgerId} batch={batch} result={committed} />
+        <CommittedView ledgerId={ledgerId} batch={batch} result={committed} />
       </Page>
     );
   }
