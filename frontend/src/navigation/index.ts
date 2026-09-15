@@ -4,6 +4,7 @@ export { BottomTabBar, TAB_BAR_HEIGHT, type BottomTabBarProps } from './BottomTa
 export { LandingRedirect, pickLandingLedger } from './LandingRedirect';
 export { LedgerGone, type LedgerGoneProps } from './LedgerGone';
 export { LedgerSwitcher, type LedgerSwitcherProps } from './LedgerSwitcher';
+export { LetterAvatar, type LetterAvatarProps } from './LetterAvatar';
 export { AppSkeleton, RequireAuth, useCurrentUrl, type RequireAuthProps } from './RequireAuth';
 export {
   RequireLedger,
@@ -17,6 +18,7 @@ export {
   SIDEBAR_WIDTH,
   Sidebar,
   isActivePath,
+  useLastLedgerId,
   useSidebarDestinations,
   userLabel,
   type NavDestination,
