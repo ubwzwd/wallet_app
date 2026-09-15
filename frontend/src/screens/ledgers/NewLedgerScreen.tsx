@@ -2,11 +2,14 @@
  * `/ledgers/new` (04 §4.3): name (1–100, decision §14.13) plus the base currency, which
  * defaults to the user's own `base_currency` (decision §2).
  *
+ * Screen 13 has no frame of its own for this page, so it borrows the join page's: the same
+ * standalone header, the same centred white card, one primary button at the bottom.
+ *
  * `useCreateLedger` already invalidates the ledger list on success, so this screen only
  * has to navigate into the ledger it just made.
  */
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,13 +26,18 @@ import {
 } from '@/screens/auth/schemas';
 import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
-import { Button, Page, Text, TextField, toast } from '@/ui';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { Button, Card, Page, Text, TextField, toast } from '@/ui';
 import { CurrencyPicker } from '@/ui';
 
-import { MAX_LEDGERS } from './LedgersScreen';
+import { MAX_LEDGERS } from './ledgerLimits';
+import { StandaloneHeader } from './StandaloneHeader';
+
+const CARD_MAX_WIDTH = 520;
 
 export default function NewLedgerScreen(): React.JSX.Element {
   const { t } = useTranslation();
+  const wide = useIsWide();
   const router = useRouter();
   const { user } = useAuth();
   const currencies = useCurrencies();
@@ -74,63 +82,87 @@ export default function NewLedgerScreen(): React.JSX.Element {
 
   const submit = handleSubmit(onSubmit);
   const blocked = create.isPending || atLimit;
+  const goBack = React.useCallback(() => router.replace(routes.ledgers() as Href), [router]);
 
   return (
-    <Page testID="new-ledger-screen">
-      <Text variant="title" accessibilityRole="header">
-        {t('ledger:create.title')}
-      </Text>
-      <View style={{ gap: space['3'], maxWidth: 520, width: '100%' }}>
-        <Controller
-          control={control}
-          name="name"
-          render={({ field }) => (
-            <TextField
-              testID="new-ledger-name"
-              label={t('ledger:create.name_label')}
-              accessibilityLabel={t('ledger:create.name_label')}
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              onSubmitEditing={() => void submit()}
-              error={validationMessage(t, errors.name?.message)}
-              disabled={blocked}
-              maxLength={LEDGER_NAME_MAX_LENGTH}
-              showCounter
-              returnKeyType="go"
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="base_currency"
-          render={({ field }) => (
-            <CurrencyPicker
-              testID="new-ledger-currency"
-              label={t('ledger:create.base_currency_label')}
-              codes={currencies.codes}
-              names={currencies.names}
-              value={field.value === '' ? null : field.value}
-              onChange={field.onChange}
-              error={validationMessage(t, errors.base_currency?.message)}
-              disabled={blocked}
-            />
-          )}
-        />
-        {atLimit ? (
-          <Text variant="caption" tone="danger" testID="new-ledger-limit">
-            {t('ledger:create.limit_reached')}
+    <Page testID="new-ledger-screen" contentStyle={styles.page}>
+      <StandaloneHeader title={t('ledger:create.title')} onBack={goBack} testID="new-ledger-header" />
+
+      <View style={[styles.centre, wide ? styles.centreWide : null]}>
+        <View style={[styles.column, { maxWidth: CARD_MAX_WIDTH }]}>
+          <Text variant="body" tone="muted" style={styles.lead}>
+            {t('ledger:create.subtitle')}
           </Text>
-        ) : null}
-        <Button
-          testID="new-ledger-submit"
-          label={t('ledger:create.submit')}
-          onPress={() => void submit()}
-          loading={create.isPending}
-          disabled={blocked}
-          fullWidth
-        />
+          <Card variant="raised" style={styles.card}>
+            <Controller
+              control={control}
+              name="name"
+              render={({ field }) => (
+                <TextField
+                  testID="new-ledger-name"
+                  label={t('ledger:create.name_label')}
+                  accessibilityLabel={t('ledger:create.name_label')}
+                  placeholder={t('ledger:create.name_placeholder')}
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onBlur={field.onBlur}
+                  onSubmitEditing={() => void submit()}
+                  error={validationMessage(t, errors.name?.message)}
+                  disabled={blocked}
+                  maxLength={LEDGER_NAME_MAX_LENGTH}
+                  showCounter
+                  returnKeyType="go"
+                />
+              )}
+            />
+            <View style={styles.pickerBlock}>
+              <Controller
+                control={control}
+                name="base_currency"
+                render={({ field }) => (
+                  <CurrencyPicker
+                    testID="new-ledger-currency"
+                    label={t('ledger:create.base_currency_label')}
+                    codes={currencies.codes}
+                    names={currencies.names}
+                    value={field.value === '' ? null : field.value}
+                    onChange={field.onChange}
+                    error={validationMessage(t, errors.base_currency?.message)}
+                    disabled={blocked}
+                  />
+                )}
+              />
+              <Text variant="caption" tone="muted">
+                {t('ledger:create.base_currency_hint')}
+              </Text>
+            </View>
+            {atLimit ? (
+              <Text variant="caption" tone="danger" testID="new-ledger-limit">
+                {t('ledger:create.limit_reached')}
+              </Text>
+            ) : null}
+            <Button
+              testID="new-ledger-submit"
+              label={t('ledger:create.submit')}
+              size="lg"
+              onPress={() => void submit()}
+              loading={create.isPending}
+              disabled={blocked}
+              fullWidth
+            />
+          </Card>
+        </View>
       </View>
     </Page>
   );
 }
+
+const styles = StyleSheet.create({
+  page: { flexGrow: 1, gap: space['4'] },
+  centre: { flex: 1, alignItems: 'center' },
+  centreWide: { justifyContent: 'center' },
+  column: { width: '100%', gap: space['3'] },
+  lead: { paddingHorizontal: space['1'] },
+  card: { padding: space['5'], gap: space['4'] },
+  pickerBlock: { gap: space['1'] },
+});

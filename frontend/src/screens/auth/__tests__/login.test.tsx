@@ -145,3 +145,15 @@ test('a malformed email never reaches the network', async () => {
   expect(await screen.findByText('邮箱格式不对')).toBeTruthy();
   expect(api.mock.history.post.length).toBe(0);
 });
+
+test('the link under the card goes to register, carrying a legal ?next=', async () => {
+  const router = renderRouter(ROUTES, {
+    initialUrl: '/login?next=%2Fl%2Fabc%2Ftransactions',
+    wrapper: Wrapper,
+  });
+
+  fireEvent.press(await screen.findByTestId('login-register-link'));
+
+  await waitFor(() => expect(router.getPathname()).toBe('/register'));
+  expect(router.getSearchParams().next).toBe('/l/abc/transactions');
+});

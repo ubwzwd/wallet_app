@@ -1,88 +1,84 @@
 /**
- * `/ledgers` (04 §4.3): every ledger the user belongs to.
+ * `/ledgers` (04 §4.3, screen 13): every ledger the user belongs to, as a grid of cards —
+ * there are only ever two or three of them, so a list row would be the wrong shape.
  *
- * A card carries only what one `GET /ledgers` already knows — name, base currency, member
- * count, my role and when it last changed. No net worth and no transaction count
- * (decision §14.52 A16: both would cost one accounts+rates round trip per ledger).
+ * Wide: a page header (title, the grey "switching takes every page with it" line, the two
+ * actions) over three columns, the last cell of which is the dashed "new ledger" tile —
+ * an empty slot is its own entry point. Narrow: the same cards stacked, with the two
+ * actions moved to the foot of the page where a thumb is.
+ *
+ * With no ledgers at all the page is screen 15's onboarding instead (`NoLedgerGuide`).
  */
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { Ledger } from '@/api/types';
 import { routes } from '@/domain/routes';
-import { formatRelativeDay } from '@/i18n/format';
-import { useLang } from '@/i18n';
+import { pickLandingLedger } from '@/navigation';
 import { useLedgers } from '@/queries';
-import { density, radius, space } from '@/theme/tokens';
+import { useAuth } from '@/store';
+import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { Badge, Button, Card, EmptyState, Page, Skeleton, Text } from '@/ui';
+import { useIsWide } from '@/theme/useBreakpoint';
+import { Button, EmptyState, Icon, Page, PageHeader, Skeleton, Text } from '@/ui';
+import { PREF_NAMES, getPref, getPrefSync } from '@/utils/prefs';
 
-/** Soft cap of decision §2: the 11th ledger is refused by the server. */
-export const MAX_LEDGERS = 10;
+import { LedgerCard } from './LedgerCard';
+import { MAX_LEDGERS } from './ledgerLimits';
+import { NoLedgerGuide } from './NoLedgerGuide';
+
+export { MAX_LEDGERS };
 
 /** Skeleton cards shown while `GET /ledgers` is in flight (04 §4.3). */
 const SKELETON_CARDS = 3;
 
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
+/** Screen 13's wide frame draws exactly three columns. */
+const COLUMNS = 3;
+const GRID_GAP = space['4'];
+
+/** The ledger `/` would open — the one the cards mark as 「当前」 (screen 13). */
+function useLastLedgerId(): string | null {
+  const [id, setId] = React.useState<string | null>(() => getPrefSync(PREF_NAMES.lastLedgerId));
+  React.useEffect(() => {
+    let alive = true;
+    void getPref(PREF_NAMES.lastLedgerId).then((value) => {
+      if (alive && value) setId(value);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return id;
 }
 
-/** The local calendar day an `IsoDateTime` falls on — what the relative label needs. */
-function localDayOf(isoDateTime: string): string {
-  const d = new Date(isoDateTime);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-function LedgerCard({ ledger, onPress }: { ledger: Ledger; onPress(): void }): React.JSX.Element {
-  const { t } = useTranslation();
-  const lang = useLang();
+/** The dashed last cell of the wide grid. */
+function NewLedgerTile({ onPress }: { onPress(): void }): React.JSX.Element {
   const colors = useColors();
-
+  const { t } = useTranslation();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={ledger.name}
+      accessibilityLabel={t('ledger:list.new_card.title')}
       onPress={onPress}
-      testID={`ledger-card-${ledger.id}`}
-      style={({ pressed }) => ({
-        minHeight: 44,
-        borderRadius: radius.lg,
-        backgroundColor: pressed ? colors['bg.hover'] : 'transparent',
-      })}
+      testID="ledgers-create-tile"
+      style={({ pressed }) => [
+        styles.tile,
+        {
+          backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'],
+          borderColor: colors['border.strong'],
+        },
+      ]}
     >
-      <Card variant="outlined" style={{ gap: space['2'] }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }}>
-          <Text variant="heading" numberOfLines={1} style={{ flex: 1 }}>
-            {ledger.name}
-          </Text>
-          <Badge
-            label={
-              ledger.role === 'owner'
-                ? t('ledger:list.card.role_owner')
-                : t('ledger:list.card.role_member')
-            }
-            tone={ledger.role === 'owner' ? 'info' : 'neutral'}
-            testID={`ledger-role-${ledger.id}`}
-          />
-        </View>
-        <View
-          style={{ flexDirection: 'row', alignItems: 'center', gap: space['3'], flexWrap: 'wrap' }}
-        >
-          <Text variant="caption" tone="secondary" mono>
-            {ledger.base_currency}
-          </Text>
-          <Text variant="caption" tone="secondary">
-            {t('ledger:list.card.member_count', { count: ledger.member_count })}
-          </Text>
-          <Text variant="caption" tone="muted">
-            {t('ledger:list.card.updated_at', {
-              time: formatRelativeDay(localDayOf(ledger.updated_at), lang),
-            })}
-          </Text>
-        </View>
-      </Card>
+      <View style={[styles.tileGlyph, { backgroundColor: colors['accent.subtle'] }]}>
+        <Icon name="plus" size={22} color={colors['accent.solid']} />
+      </View>
+      <Text variant="subheading" weight={600}>
+        {t('ledger:list.new_card.title')}
+      </Text>
+      <Text variant="caption" tone="muted" style={styles.tileBody}>
+        {t('ledger:list.new_card.body')}
+      </Text>
     </Pressable>
   );
 }
@@ -90,20 +86,67 @@ function LedgerCard({ ledger, onPress }: { ledger: Ledger; onPress(): void }): R
 export default function LedgersScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  const wide = useIsWide();
   const query = useLedgers();
+  const { user } = useAuth();
+  const currentId = useLastLedgerId();
 
-  const goCreate = React.useCallback(
-    () => router.push(routes.ledgersNew() as Href),
-    [router],
+  const [gridWidth, setGridWidth] = React.useState(0);
+  const onGridLayout = React.useCallback(
+    (e: LayoutChangeEvent) => setGridWidth(e.nativeEvent.layout.width),
+    [],
   );
+
+  const goCreate = React.useCallback(() => router.push(routes.ledgersNew() as Href), [router]);
   const goJoin = React.useCallback(() => router.push(routes.ledgersJoin() as Href), [router]);
+  const goProfile = React.useCallback(() => router.push(routes.settings() as Href), [router]);
+
+  const items = query.data?.items ?? [];
+  const atLimit = items.length >= MAX_LEDGERS;
+
+  const header = wide ? (
+    <PageHeader
+      title={t('ledger:list.title')}
+      meta={
+        <Text variant="caption" tone="muted">
+          {t('ledger:list.subtitle')}
+        </Text>
+      }
+      actions={
+        <>
+          <Button
+            testID="ledgers-join"
+            label={t('ledger:list.empty.join_button')}
+            icon="key-round"
+            variant="secondary"
+            onPress={goJoin}
+          />
+          <Button
+            testID="ledgers-create"
+            label={t('ledger:list.empty.create_button')}
+            icon="plus"
+            onPress={goCreate}
+            disabled={atLimit}
+          />
+        </>
+      }
+      testID="ledgers-header"
+    />
+  ) : (
+    <View style={styles.narrowHeader} testID="ledgers-header">
+      <Text variant="title" accessibilityRole="header">
+        {t('ledger:list.title')}
+      </Text>
+      <Text variant="body" tone="muted">
+        {t('ledger:list.subtitle')}
+      </Text>
+    </View>
+  );
 
   if (query.isPending) {
     return (
       <Page testID="ledgers-screen">
-        <Text variant="title" accessibilityRole="header">
-          {t('ledger:list.title')}
-        </Text>
+        {header}
         {Array.from({ length: SKELETON_CARDS }, (_, i) => (
           <Skeleton key={i} variant="card" testID={`ledger-skeleton-${i}`} />
         ))}
@@ -114,9 +157,7 @@ export default function LedgersScreen(): React.JSX.Element {
   if (query.isError) {
     return (
       <Page testID="ledgers-screen">
-        <Text variant="title" accessibilityRole="header">
-          {t('ledger:list.title')}
-        </Text>
+        {header}
         <EmptyState
           icon="alert-triangle"
           title={t('ledger:list.error_retry')}
@@ -127,67 +168,102 @@ export default function LedgersScreen(): React.JSX.Element {
     );
   }
 
-  const items = query.data?.items ?? [];
-
   if (items.length === 0) {
     return (
-      <Page testID="ledgers-screen">
-        <EmptyState
-          icon="wallet"
-          title={t('ledger:list.empty.title')}
-          primaryAction={{ label: t('ledger:list.empty.create_button'), onPress: goCreate }}
-          secondaryAction={{ label: t('ledger:list.empty.join_button'), onPress: goJoin }}
-          testID="ledgers-empty"
+      <Page testID="ledgers-screen" contentStyle={styles.guidePage}>
+        <NoLedgerGuide
+          email={user?.email ?? ''}
+          onOpenProfile={goProfile}
+          onCreate={goCreate}
+          onJoin={goJoin}
         />
       </Page>
     );
   }
 
-  const atLimit = items.length >= MAX_LEDGERS;
+  const current = pickLandingLedger(items, currentId);
+  const cardWidth =
+    wide && gridWidth > 0 ? Math.floor((gridWidth - GRID_GAP * (COLUMNS - 1)) / COLUMNS) : undefined;
 
   return (
     <Page testID="ledgers-screen">
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: space['2'],
-          flexWrap: 'wrap',
-        }}
-      >
-        <Text variant="title" accessibilityRole="header" style={{ flex: 1 }}>
-          {t('ledger:list.title')}
-        </Text>
-        <Button
-          testID="ledgers-create"
-          label={t('ledger:list.empty.create_button')}
-          icon="plus"
-          size="sm"
-          onPress={goCreate}
-          disabled={atLimit}
-        />
-        <Button
-          testID="ledgers-join"
-          label={t('ledger:list.empty.join_button')}
-          variant="secondary"
-          size="sm"
-          onPress={goJoin}
-        />
+      {header}
+      <View style={[styles.grid, wide ? styles.gridWide : null]} onLayout={onGridLayout}>
+        {items.map((ledger) => (
+          <View key={ledger.id} style={{ width: cardWidth }}>
+            <LedgerCard
+              ledger={ledger}
+              current={ledger.id === current?.id}
+              wide={wide}
+              onPress={() => router.push(routes.l(ledger.id).home() as Href)}
+            />
+          </View>
+        ))}
+        {wide && !atLimit ? (
+          <View style={{ width: cardWidth }}>
+            <NewLedgerTile onPress={goCreate} />
+          </View>
+        ) : null}
       </View>
+
       {atLimit ? (
         <Text variant="caption" tone="muted" testID="ledgers-limit-hint">
           {t('ledger:create.limit_reached')}
         </Text>
       ) : null}
-      <View style={{ gap: density.cardGap }}>
-        {items.map((ledger) => (
-          <LedgerCard
-            key={ledger.id}
-            ledger={ledger}
-            onPress={() => router.push(routes.l(ledger.id).home() as Href)}
+
+      {wide ? null : (
+        <View style={styles.narrowActions}>
+          <Button
+            testID="ledgers-create"
+            label={t('ledger:list.empty.create_button')}
+            icon="plus"
+            size="lg"
+            onPress={goCreate}
+            disabled={atLimit}
+            fullWidth
           />
-        ))}
-      </View>
+          <Button
+            testID="ledgers-join"
+            label={t('ledger:list.empty.join_button')}
+            icon="key-round"
+            variant="secondary"
+            size="lg"
+            onPress={goJoin}
+            fullWidth
+          />
+          <Text variant="caption" tone="muted" style={styles.footnote}>
+            {t('ledger:list.footnote')}
+          </Text>
+        </View>
+      )}
     </Page>
   );
 }
+
+const styles = StyleSheet.create({
+  guidePage: { flexGrow: 1, gap: 0 },
+  narrowHeader: { gap: space['1'] },
+  grid: { gap: space['3'] },
+  gridWide: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: GRID_GAP },
+  narrowActions: { gap: space['3'] },
+  footnote: { paddingHorizontal: space['1'] },
+  tile: {
+    minHeight: 280,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: space['5'],
+  },
+  tileGlyph: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileBody: { textAlign: 'center', maxWidth: 200 },
+});

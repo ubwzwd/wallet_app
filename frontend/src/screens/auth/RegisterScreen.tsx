@@ -1,14 +1,15 @@
 /**
- * `/register` (04 §4.2). `GET /config` is read on mount (decision §14.46): while it is in
- * flight the form is a skeleton, and `registration_open === false` replaces the whole form
- * with one explanatory card — never a disabled form.
+ * `/register` (04 §4.2, screen 17). `GET /config` is read on mount (decision §14.46): while
+ * it is in flight the form is a skeleton, and `registration_open === false` replaces the
+ * whole form with one explanatory card — never a disabled form.
  *
  * Fields are exactly the four of decision §14.54: email, password, confirmation and the
- * default currency. No display name (it is NULL at registration, 03 §5.1) and no
- * "locked after N failures" copy — the server only rate-limits.
+ * default currency. No display name (it is NULL at registration, 03 §5.1 — screen 17 draws
+ * one, but §14.54 is the later word) and no "locked after N failures" copy: the server only
+ * rate-limits.
  */
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
@@ -22,8 +23,9 @@ import { formatCountdown } from '@/i18n/format';
 import { qk, useConfig, useCurrencies } from '@/queries';
 import { routes, safeNext } from '@/domain/routes';
 import { useAuth } from '@/store';
-import { space } from '@/theme/tokens';
-import { Button, Skeleton, Text, TextField, toast } from '@/ui';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { Button, Icon, Skeleton, Text, TextField, toast } from '@/ui';
 import { CurrencyPicker } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
@@ -31,6 +33,9 @@ import { AuthLayout, useRetryCountdown } from './AuthLayout';
 import { registerSchema, type RegisterFormValues, validationMessage } from './schemas';
 
 const DEFAULT_RETRY_AFTER = 30;
+
+/** The neutral tile of screen 17's "registration is closed" card — grey, never error red. */
+const TILE_SIZE = 48;
 
 /** Decision §2 / 04 §4.2: guess from the device language, `zh-*` → CNY, else USD. */
 export function guessBaseCurrency(deviceLang: string | null, codes: readonly string[]): string {
@@ -41,6 +46,7 @@ export function guessBaseCurrency(deviceLang: string | null, codes: readonly str
 
 export default function RegisterScreen(): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
   const router = useRouter();
   const qc = useQueryClient();
   const { register } = useAuth();
@@ -126,16 +132,28 @@ export default function RegisterScreen(): React.JSX.Element {
   if (registrationClosed) {
     return (
       <AuthLayout
-        title={t('auth:register.closed.title')}
+        title={t('auth:register.title')}
         subtitle={t('auth:register.subtitle')}
         testID="register-screen"
       >
-        <Text variant="body" tone="secondary" testID="register-closed-body">
-          {t('auth:register.closed.body')}
-        </Text>
+        {/* Screen 17: the same card in the same place as the form, holding one paragraph
+            instead. The tile is neutral grey — this is not something the user did wrong. */}
+        <View style={[styles.tile, { backgroundColor: colors['bg.subtle'] }]}>
+          <Icon name="info" size={22} color={colors['fg.secondary']} />
+        </View>
+        <View style={styles.closedText}>
+          <Text variant="heading" weight={700}>
+            {t('auth:register.closed.title')}
+          </Text>
+          <Text variant="subheading" weight={400} tone="secondary" testID="register-closed-body">
+            {t('auth:register.closed.body')}
+          </Text>
+        </View>
         <Button
           testID="register-closed-login"
           label={t('auth:register.closed.login_button')}
+          variant="soft"
+          size="lg"
           onPress={goToLogin}
           fullWidth
         />
@@ -158,10 +176,30 @@ export default function RegisterScreen(): React.JSX.Element {
     );
   }
 
+  const footer = (
+    <>
+      <Text variant="subheading" weight={400} tone="secondary">
+        {t('auth:register.has_account')}
+      </Text>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={t('auth:register.login_link')}
+        testID="register-login-link"
+        hitSlop={space['3']}
+        onPress={goToLogin}
+      >
+        <Text variant="subheading" weight={600}>
+          {t('auth:register.login_link')}
+        </Text>
+      </Pressable>
+    </>
+  );
+
   return (
     <AuthLayout
       title={t('auth:register.title')}
       subtitle={t('auth:register.subtitle')}
+      footer={footer}
       testID="register-screen"
     >
       <Controller
@@ -172,6 +210,8 @@ export default function RegisterScreen(): React.JSX.Element {
             testID="register-email"
             label={t('auth:register.email_label')}
             accessibilityLabel={t('auth:register.email_label')}
+            placeholder={t('auth:register.email_placeholder')}
+            mono
             value={field.value}
             onChangeText={field.onChange}
             onBlur={field.onBlur}
@@ -192,6 +232,7 @@ export default function RegisterScreen(): React.JSX.Element {
             testID="register-password"
             label={t('auth:register.password_label')}
             accessibilityLabel={t('auth:register.password_label')}
+            placeholder={t('auth:register.password_placeholder')}
             value={field.value}
             onChangeText={field.onChange}
             onBlur={field.onBlur}
@@ -214,6 +255,7 @@ export default function RegisterScreen(): React.JSX.Element {
             testID="register-confirm-password"
             label={t('auth:register.confirm_password_label')}
             accessibilityLabel={t('auth:register.confirm_password_label')}
+            placeholder={t('auth:register.confirm_password_placeholder')}
             value={field.value}
             onChangeText={field.onChange}
             onBlur={field.onBlur}
@@ -230,32 +272,39 @@ export default function RegisterScreen(): React.JSX.Element {
           />
         )}
       />
-      <Controller
-        control={control}
-        name="base_currency"
-        render={({ field }) => (
-          <CurrencyPicker
-            testID="register-currency"
-            label={t('auth:register.base_currency_label')}
-            codes={codes}
-            names={currencies.names}
-            value={field.value === '' ? null : field.value}
-            onChange={field.onChange}
-            error={validationMessage(t, errors.base_currency?.message)}
-            disabled={blocked}
-          />
-        )}
-      />
+      <View style={styles.pickerBlock}>
+        <Controller
+          control={control}
+          name="base_currency"
+          render={({ field }) => (
+            <CurrencyPicker
+              testID="register-currency"
+              label={t('auth:register.base_currency_label')}
+              codes={codes}
+              names={currencies.names}
+              value={field.value === '' ? null : field.value}
+              onChange={field.onChange}
+              error={validationMessage(t, errors.base_currency?.message)}
+              disabled={blocked}
+            />
+          )}
+        />
+        <Text variant="caption" tone="muted">
+          {t('auth:register.base_currency_hint')}
+        </Text>
+      </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['3'] }}>
+      <View style={styles.submitRow}>
         <Button
           testID="register-submit"
           label={t('auth:register.submit')}
+          size="lg"
           onPress={() => void submit()}
           loading={submitting}
           disabled={blocked}
-          fullWidth={countdown.seconds === 0}
-          style={countdown.seconds === 0 ? undefined : { flex: 1 }}
+          // `flex: 1` and not `fullWidth`: the button shares a row with the countdown, and
+          // in a row `alignSelf: stretch` only fills the cross axis.
+          style={styles.submitButton}
         />
         {countdown.seconds > 0 ? (
           <Text variant="subheading" tone="muted" mono testID="register-countdown">
@@ -263,29 +312,20 @@ export default function RegisterScreen(): React.JSX.Element {
           </Text>
         ) : null}
       </View>
-
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: space['1'],
-        }}
-      >
-        <Text variant="caption" tone="muted">
-          {t('auth:register.has_account')}
-        </Text>
-        <Text
-          variant="caption"
-          tone="accent"
-          accessibilityRole="link"
-          accessibilityLabel={t('auth:register.login_link')}
-          testID="register-login-link"
-          onPress={goToLogin}
-        >
-          {t('auth:register.login_link')}
-        </Text>
-      </View>
     </AuthLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  submitRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
+  submitButton: { flex: 1 },
+  tile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closedText: { gap: space['1'] },
+  pickerBlock: { gap: space['1'] },
+});
