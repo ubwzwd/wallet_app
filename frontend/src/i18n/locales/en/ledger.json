@@ -1,31 +1,71 @@
 {
   "list": {
     "title": "My ledgers",
+    "subtitle": "Switching takes every page with it",
+    "current_badge": "Current",
+    "enter": "Open this one",
+    "switch_to": "Switch to this one",
+    "footnote": "A ledger you create is yours to own; one you join with a code makes you a member, who cannot change the base currency or the member list.",
     "card": {
-      "member_count_one": "{{count}} member",
-      "member_count_other": "{{count}} members",
       "role_owner": "Owner",
       "role_member": "Member",
-      "updated_at": "Updated {{time}}"
+      "role_line_owner": "You're the owner · can invite and delete",
+      "role_line_member": "You're a member · someone invited you",
+      "members_label": "Members",
+      "currency_label": "Base currency"
+    },
+    "new_card": {
+      "title": "New ledger",
+      "body": "One for a trip, one for your parents. Ledgers are completely independent."
     },
     "empty": {
-      "title": "You don't have any ledgers yet",
       "create_button": "Create a ledger",
-      "join_button": "Join someone else's ledger"
+      "join_button": "Join with an invite code"
+    },
+    "onboarding": {
+      "title": "Start with a ledger",
+      "body": "Transactions, accounts and statistics all hang off a ledger. Create one, or join someone else’s with the invite code they gave you.",
+      "footnote": "You can be in several ledgers at once — “Household” and “Travel”, say.",
+      "create": {
+        "title": "New ledger",
+        "body": "You'll be the owner: pick a name and a base currency, then generate invite codes for the family.",
+        "body_short": "You'll be the owner, set the currency, invite others",
+        "button": "Create a ledger"
+      },
+      "join": {
+        "title": "Join with an invite code",
+        "body": "They generate a 6-digit code in their ledger settings; entering it makes you a member of that ledger.",
+        "body_short": "They generate a 6-digit code in their ledger settings",
+        "button": "Enter an invite code"
+      }
     },
     "error_retry": "Couldn't load. Retry."
   },
   "create": {
     "title": "New ledger",
+    "subtitle": "A ledger holds everything: its transactions, accounts and statistics.",
     "name_label": "Ledger name",
+    "name_placeholder": "e.g. “Household”",
     "base_currency_label": "Base currency",
+    "base_currency_hint": "Every amount is converted into it for statistics. It cannot be changed later.",
     "submit": "Create",
     "limit_reached": "You've reached the limit of 10 ledgers",
     "success_toast": "Created “{{name}}”"
   },
   "join": {
     "title": "Join a ledger",
-    "code_hint": "Enter the 6-digit invite code",
+    "card_title": "Enter the 6-digit invite code",
+    "code_hint": "They generate it in their ledger settings; a code is valid for 10 minutes",
+    "paste_hint": "Pasting fills all six cells · digits only",
+    "submit": "Join",
+    "retry_button": "Start over",
+    "error_title": "This code didn't work",
+    "benefits": {
+      "title": "Once you join",
+      "one": "You can see every transaction and account in this ledger.",
+      "two": "You can add, import and recategorise — but not change the base currency or the members.",
+      "three": "Your own ledgers are untouched; you can switch back any time."
+    },
     "rate_limited_countdown": "Too busy right now — retrying in {{seconds}}s",
     "success_toast": "Joined \"{{name}}\""
   },

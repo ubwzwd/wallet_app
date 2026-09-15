@@ -1,30 +1,71 @@
 {
   "list": {
     "title": "我的账本",
+    "subtitle": "切换后所有页面都跟着这本走",
+    "current_badge": "当前",
+    "enter": "进入这本",
+    "switch_to": "切到这本",
+    "footnote": "新建的账本你是 owner；用码加入的账本你是成员，改不了基准币种和成员。",
     "card": {
-      "member_count_other": "{{count}} 位成员",
       "role_owner": "创建者",
       "role_member": "成员",
-      "updated_at": "最近更新 {{time}}"
+      "role_line_owner": "你是 owner · 可邀请与删除",
+      "role_line_member": "你是成员 · 由别人邀请",
+      "members_label": "成员",
+      "currency_label": "基准币种"
+    },
+    "new_card": {
+      "title": "新建账本",
+      "body": "比如给旅行、给爸妈各开一本。账本之间完全独立。"
     },
     "empty": {
-      "title": "你还没有账本",
       "create_button": "新建账本",
-      "join_button": "加入别人的账本"
+      "join_button": "用邀请码加入"
+    },
+    "onboarding": {
+      "title": "先有一本账",
+      "body": "所有交易、账户和统计都挂在账本下面。新建一本，或者用别人给的邀请码加入他的账本。",
+      "footnote": "一个人可以同时在多本账里，比如「家庭账本」和「旅行账本」。",
+      "create": {
+        "title": "新建账本",
+        "body": "你是 owner：定账本名和基准币种，之后可以生成邀请码叫家人进来。",
+        "body_short": "你是 owner，定基准币种、邀请别人",
+        "button": "新建账本"
+      },
+      "join": {
+        "title": "用邀请码加入",
+        "body": "对方在他的账本设置里生成 6 位码，输进来就成为这本账的成员。",
+        "body_short": "对方在他的账本设置里生成 6 位码",
+        "button": "输入邀请码"
+      }
     },
     "error_retry": "加载失败，请重试"
   },
   "create": {
     "title": "新建账本",
+    "subtitle": "账本是一切的容器：交易、账户和统计都挂在它下面。",
     "name_label": "账本名",
+    "name_placeholder": "比如「家庭账本」",
     "base_currency_label": "基准币种",
+    "base_currency_hint": "账本里所有金额都换算成它统计；建好之后改不了。",
     "submit": "创建",
     "limit_reached": "你的账本数已达上限（10 本）",
     "success_toast": "已创建《{{name}}》"
   },
   "join": {
     "title": "加入账本",
-    "code_hint": "输入 6 位邀请码",
+    "card_title": "输入 6 位邀请码",
+    "code_hint": "让对方在他的账本设置里生成，码 10 分钟内有效",
+    "paste_hint": "粘贴时会自动填满 6 格 · 只接受数字",
+    "submit": "加入",
+    "retry_button": "重新输入",
+    "error_title": "这个码用不了",
+    "benefits": {
+      "title": "加入之后",
+      "one": "你能看到这本账的全部交易和账户。",
+      "two": "你可以记账、导入、改分类，但改不了基准币种和成员。",
+      "three": "你原来的账本不受影响，可以随时切回去。"
+    },
     "rate_limited_countdown": "现在人太多，{{seconds}} 秒后自动重试",
     "success_toast": "已加入《{{name}}》"
   },

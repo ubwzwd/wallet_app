@@ -166,3 +166,33 @@ test('429 counts down, keeps the code valid in the copy, then retries it once', 
     jest.useRealTimers();
   }
 });
+
+test('the join button stays disabled until all six cells are filled', async () => {
+  mockPost('/ledgers/join', makeLedger());
+  renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  await typeDigits('12345');
+
+  // Screen 13: the button is the visible half of "the code is complete"; five digits is
+  // not a code, and nothing has been sent.
+  expect(screen.getByTestId('join-submit').props.accessibilityState.disabled).toBe(true);
+  expect(joinRequests()).toEqual([]);
+});
+
+test('a rejected code swaps the join button for a fresh start', async () => {
+  mockPost('/ledgers/join', { detail: 'Invite invalid', code: 'invite_invalid' }, 400);
+  renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  await pasteCode('123456');
+
+  // The red state of screen 13: an explained failure, and one way on — "start over".
+  expect(await screen.findByTestId('join-error')).toBeTruthy();
+  const restart = await screen.findByTestId('join-restart');
+  expect(screen.queryByTestId('join-submit')).toBeNull();
+
+  fireEvent.press(restart);
+
+  await waitFor(() => expect(screen.queryByTestId('join-error')).toBeNull());
+  expect(screen.getByTestId('join-submit')).toBeTruthy();
+  expect(screen.getByTestId('join-code-0').props.value).toBe('');
+});
