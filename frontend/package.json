@@ -10,7 +10,7 @@
     "build:web": "EXPO_PUBLIC_API_BASE_URL=/api/v1 expo export -p web && npx workbox generateSW workbox-config.cjs",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test && npm run build:web && node scripts/verify-pwa.mjs --all && node scripts/verify-touch-targets.mjs"
+    "verify": "npm run typecheck && npm test && npm run build:web && node scripts/verify-pwa.mjs --all && node scripts/verify-touch-targets.mjs && node scripts/verify-contrast.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/figtree": "^0.4.1",

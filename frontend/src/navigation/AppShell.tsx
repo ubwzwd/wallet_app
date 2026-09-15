@@ -13,16 +13,21 @@
  * `narrowChrome={false}` keeps the wide column and drops that narrow bar, for pages whose
  * own 375 frame already draws a header (mockup 13's ledger list, new ledger, join).
  *
+ * The one page with no chrome at either width is `/ledgers` with nothing to list: mockup
+ * 15 「无账本引导」 is full-bleed, and `showSidebar` below takes the column away for it.
+ *
  * The shell owns exactly one piece of state, the ledger switcher sheet, because three
  * different affordances open it (the sidebar header, the top bar's ledger line, and the
  * "me" sheet). Page titles travel the other way, through `TopBarProvider`.
  */
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
+import { routes } from '@/domain/routes';
+import { useAuth } from '@/store/AuthContext';
 import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -30,6 +35,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, Text } from '@/ui';
 
 import { BottomTabBar, TAB_BAR_HEIGHT } from './BottomTabBar';
+import { isActivePath } from './isActivePath';
 import { LedgerSwitcher } from './LedgerSwitcher';
 import { Sidebar } from './Sidebar';
 import { TopBarProvider, TopBarSurface, useTopBarTitle } from './TopBar';
@@ -121,6 +127,8 @@ function Chrome({ children, narrowChrome = true }: AppShellProps): React.JSX.Ele
   const colors = useColors();
   const wide = useIsWide();
   const ledger = useOptionalLedgerContext();
+  const { user } = useAuth();
+  const pathname = usePathname();
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const openSwitcher = React.useCallback(() => setSwitcherOpen(true), []);
   const closeSwitcher = React.useCallback(() => setSwitcherOpen(false), []);
@@ -128,6 +136,14 @@ function Chrome({ children, narrowChrome = true }: AppShellProps): React.JSX.Ele
   // Every tab is ledger-scoped, so outside a ledger there is no bottom bar at all.
   const showTabs = !wide && ledger !== null;
   usePublishBottomTabInset(showTabs ? TAB_BAR_HEIGHT : 0);
+
+  // Mockup 15 「无账本引导」 at 1440 has no column at all: on `/ledgers` with nothing to
+  // list, every destination in the column points at nothing and its card would name an
+  // empty list. The onboarding page draws its own brand bar and account pill instead, so
+  // the shell steps out of the way and the page runs full-bleed. Personal settings keeps
+  // the column even then — it is the only way back out of that page.
+  const onLedgerList = isActivePath(pathname, routes.ledgers(), false);
+  const showSidebar = wide && !(onLedgerList && user !== null && user.ledger_count === 0);
 
   return (
     <View
@@ -138,9 +154,9 @@ function Chrome({ children, narrowChrome = true }: AppShellProps): React.JSX.Ele
         backgroundColor: colors['bg.canvas'],
       }}
     >
-      {wide ? (
+      {showSidebar ? (
         <Sidebar />
-      ) : !narrowChrome ? null : ledger ? (
+      ) : wide || !narrowChrome ? null : ledger ? (
         <TopBarSurface onPressLedger={openSwitcher} />
       ) : (
         <PlainTopBar />

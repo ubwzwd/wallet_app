@@ -132,17 +132,27 @@ const EN_MONTHS_FULL = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-/** List style: this year → '8月14日' / 'Aug 14'; other years → with the year. */
-export function formatDate(iso: IsoDate, lang: Lang): string {
-  const date = parseLocalDate(iso);
-  const thisYear = new Date().getFullYear();
-  const y = date.getFullYear();
-  const m = date.getMonth();
-  const d = date.getDate();
-  if (lang === 'zh') {
-    return y === thisYear ? `${m + 1}月${d}日` : `${y}年${m + 1}月${d}日`;
-  }
-  return y === thisYear ? `${EN_MONTHS_SHORT[m]} ${d}` : `${EN_MONTHS_SHORT[m]} ${d}, ${y}`;
+/**
+ * List style: the plain numeric day, `2026-08-14`.
+ *
+ * Every mockup frame writes dates this way — the refund picker (06), the ledger's
+ * 「建于」 line (12), the form's summary card (04), the operations timeline (07 / 08) —
+ * always in the mono face, never as 「8月14日」. It is deliberately language-independent,
+ * which is also what the settings page promises: 「日期一律按账本的基准币种与地区走，不随
+ * 语言变」. `lang` stays in the signature so every call site reads the same and switching
+ * a single one back is a one-word change.
+ */
+export function formatDate(iso: IsoDate, _lang?: Lang): string {
+  return iso;
+}
+
+/**
+ * The compact form the tables and the home card use, `08-14` — for columns and meta lines
+ * narrow enough that the mockups drop the year (01 「最近」, 02's 日期 column, 03's review
+ * table, the detail breadcrumb).
+ */
+export function formatDateShort(iso: IsoDate): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.slice(5) : iso;
 }
 
 /** Today / yesterday (local calendar day), otherwise falls back to `formatDate`. */

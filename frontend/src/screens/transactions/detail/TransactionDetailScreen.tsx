@@ -27,7 +27,7 @@ import { monthOf } from '@/domain/dates';
 import { absMoney } from '@/domain/money';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
-import { formatDate } from '@/i18n/format';
+import { formatDateShort } from '@/i18n/format';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import {
@@ -88,12 +88,12 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         t('transaction:list.title'),
         ...(singleLeg
           ? [
-              formatDate(tx.occurred_at, lang),
+              formatDateShort(tx.occurred_at),
               t('transaction:list.row.counterparty', {
                 name: tx.counterparty ?? t('transaction:detail.counterparty_external'),
               }),
             ]
-          : [tx.merchant ?? formatDate(tx.occurred_at, lang)]),
+          : [tx.merchant ?? formatDateShort(tx.occurred_at)]),
       ].join(' · ')
     : t('transaction:list.title');
   useTopBar(crumb);

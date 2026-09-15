@@ -192,7 +192,7 @@ test('both legs are shown with their own account and amount, and no running bala
 
   // 屏幕稿 07 (B16): the bar names the move, not just 「交易」.
   expect(router.getByTestId('top-bar-title')).toHaveTextContent(
-    '交易 · 9月8日 · 招行储蓄卡 → 建行信用卡',
+    '交易 · 09-08 · 招行储蓄卡 → 建行信用卡',
   );
 });
 
@@ -223,10 +223,10 @@ test('a cross-currency pair gives each leg its own rate line', async () => {
   const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
 
   expect(await router.findByTestId('transfer-detail-legs-out-rate-text')).toHaveTextContent(
-    containing('按 9月8日 汇率 1 USD = 7.1694 CNY'),
+    containing('按 2026-09-08 汇率 1 USD = 7.1694 CNY'),
   );
   expect(router.getByTestId('transfer-detail-legs-in-rate-text')).toHaveTextContent(
-    containing('按 9月7日 汇率 1 EUR = 7.7928 CNY'),
+    containing('按 2026-09-07 汇率 1 EUR = 7.7928 CNY'),
   );
   // Only the in leg fell back to another day's quote.
   expect(router.getByTestId('transfer-detail-legs-in-rate-fallback')).toHaveTextContent(
@@ -392,8 +392,8 @@ test('a single leg names the other side and offers 「关联为转账对腿」',
   expect(await router.findByTestId('tx-detail-pair-counterparty')).toHaveTextContent('工资卡');
   await openActions(router, 'tx-detail-actions');
   expect(router.getByTestId('tx-detail-actions-pair')).toBeTruthy();
-  // 屏幕稿 07 (B16): 「交易 · 9月5日 · 对方：工资卡」.
-  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易 · 9月5日 · 对方：工资卡');
+  // 屏幕稿 07 (B16): 「交易 · 09-05 · 对方：工资卡」.
+  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易 · 09-05 · 对方：工资卡');
   // A single leg has nothing to unpair.
   expect(router.queryByTestId('tx-detail-actions-unpair')).toBeNull();
 });

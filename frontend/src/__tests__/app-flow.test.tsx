@@ -419,3 +419,70 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   expect(screen.queryByTestId('review-commit-submit')).toBeNull();
   expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`);
 });
+
+test('the wide shell walks its five destinations, the ledger card and 「＋ 记一笔」', async () => {
+  // 屏幕稿 01 / 09 / 12 / 14 at 1440 (决策 §14.56): no general top bar, one sidebar carrying
+  // the ledger card, 首页 / 交易 / 账户 / 导入 / 我的, the permanent add button and the
+  // signed-in member — the shell the narrow journeys above never see.
+  wideSpy.mockReturnValue(true);
+  mockGet(IMPORTS_PATH, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}`, {
+    ...makeLedger({ id: LEDGER, name: '家庭账本', base_currency: 'CNY' }),
+    counts: { transactions: 1, sources: 2, import_batches: 0 },
+  });
+
+  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
+
+  // ── sign in first: the shell only exists behind the session guard ────────────────
+  await waitFor(() => expect(router.getPathname()).toBe('/login'));
+  fireEvent.changeText(await screen.findByTestId('login-email'), EMAIL);
+  fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
+  fireEvent.press(screen.getByTestId('login-submit'));
+
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+
+  // ── the wide chrome, not the narrow one ─────────────────────────────────────────
+  expect(await screen.findByTestId('app-shell-wide')).toBeTruthy();
+  expect(screen.getByTestId('sidebar')).toBeTruthy();
+  expect(screen.queryByTestId('bottom-tab-bar')).toBeNull();
+  expect(screen.queryByTestId('top-bar')).toBeNull();
+  expect(screen.getByTestId('sidebar-ledger')).toHaveTextContent(/家庭账本/);
+  expect(screen.getByTestId('sidebar-user')).toBeTruthy();
+  expect(await screen.findByTestId('home-networth')).toBeTruthy();
+
+  // ── the ledger card's chevron: 账本设置 is not a nav entry (§14.56) ──────────────
+  fireEvent.press(screen.getByTestId('sidebar-ledger-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  expect(await screen.findByTestId('ledger-settings-screen')).toBeTruthy();
+
+  // ── 交易 ─────────────────────────────────────────────────────────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-transactions'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
+
+  // ── 账户: its own destination since this phase (屏幕稿 09) ───────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-sources'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources`));
+  expect(await screen.findByTestId('sources-screen')).toBeTruthy();
+
+  // ── 导入 ─────────────────────────────────────────────────────────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-imports'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports`));
+  expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
+
+  // ── 「＋ 记一笔」 is permanent chrome on every ledger page ────────────────────────
+  fireEvent.press(screen.getByTestId('sidebar-add'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  expect(await screen.findByTestId('tx-new')).toBeTruthy();
+
+  // ── 我的 = personal settings, the only nav entry that leaves the ledger ──────────
+  fireEvent.press(screen.getByTestId('sidebar-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe('/settings'));
+  expect(await screen.findByTestId('personal-settings-screen')).toBeTruthy();
+  // 04 §1.4: the column survives the trip outside the ledger, so nothing strands there,
+  // and its 「账本设置」 row leads back to the ledger the column is still naming.
+  expect(screen.getByTestId('sidebar')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('settings-ledger-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+});

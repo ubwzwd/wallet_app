@@ -13,10 +13,10 @@ import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
-import type { ImportRow, ImportRowPatch } from '@/api/types';
+import type { ImportRow, ImportRowPatch, IsoDate } from '@/api/types';
 import { applySign } from '@/domain/kinds';
 import { normalizeAmountInput } from '@/domain/money';
-import { formatMoney } from '@/i18n/format';
+import { formatDateShort, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Button, DateField, KIND_AMOUNT_TONE, Text, TextField, trimMoney } from '@/ui';
@@ -52,7 +52,7 @@ const SAVE_DOT_TOKEN: Readonly<Record<'saving' | 'failed', SaveDotToken>> = {
 
 /** `2026-09-10` → `09-10` (屏幕稿 03); anything else is shown as it came. */
 export function shortDate(iso: string): string {
-  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.slice(5) : iso;
+  return formatDateShort(iso as IsoDate);
 }
 
 /**

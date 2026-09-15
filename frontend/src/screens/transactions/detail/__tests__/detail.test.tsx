@@ -288,7 +288,7 @@ test('a refund shows the original expense and the other refunds against it, olde
 
   expect(await router.findByTestId('tx-detail-origin-merchant')).toHaveTextContent('京东订单');
   // Date, category and the original's own account all come off `refund_of_detail` (§14.53f).
-  expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(containing('9月2日'));
+  expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(containing('2026-09-02'));
   expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(
     containing('消费购物 / 数码'),
   );

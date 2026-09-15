@@ -17,7 +17,7 @@ import { absMoney, mergeTransferRows, type ListRow as TxListRow } from '@/domain
 import type { CategoryIndex } from '@/domain/categories';
 import { useLang, type Lang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
-import { formatConverted, formatDate, formatMoney } from '@/i18n/format';
+import { formatConverted, formatDateShort, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
@@ -219,7 +219,7 @@ export function RecentSection({
                       numberOfLines={1}
                       testID={`${id}-meta`}
                     >
-                      {amountSub ?? formatDate(tx.occurred_at, lang)}
+                      {amountSub ?? formatDateShort(tx.occurred_at)}
                     </Text>
                   </View>
                 </View>
