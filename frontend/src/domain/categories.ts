@@ -68,6 +68,27 @@ export interface CategoryHit {
  * names and the level-1 `desc_*` classification hint (decision §1.3's "用完就没了" example) —
  * finding "纸巾算哪类" by searching the judging criterion, not just the name.
  */
+/** Character bigrams of a string ("用完就扔" → 用完 / 完就 / 就扔). */
+function bigrams(s: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < s.length - 1; i += 1) out.push(s.slice(i, i + 2));
+  return out;
+}
+
+/**
+ * Does a judging-criterion text match a query typed from memory? A substring always does;
+ * failing that, a query of three or more characters matches when at least half of its
+ * character bigrams occur in the text — "用完就扔" still finds "用完就没了". Names are
+ * not matched this loosely (they are two to four characters, the noise would drown them).
+ */
+export function descMatches(desc: string, q: string): boolean {
+  if (desc.includes(q)) return true;
+  if (q.length < 3) return false;
+  const grams = bigrams(q);
+  const found = grams.filter((g) => desc.includes(g)).length;
+  return found * 2 >= grams.length;
+}
+
 export function searchCategories(
   index: CategoryIndex,
   kind: TxKind,
@@ -80,8 +101,8 @@ export function searchCategories(
   const hits: CategoryHit[] = [];
   for (const l1 of index.kindAllows(kind)) {
     const name = (lang === 'zh' ? l1.name_zh : l1.name_en).toLowerCase();
-    const desc = (lang === 'zh' ? l1.desc_zh : l1.desc_en) ?? '';
-    if (name.includes(q) || desc.toLowerCase().includes(q)) {
+    const desc = ((lang === 'zh' ? l1.desc_zh : l1.desc_en) ?? '').toLowerCase();
+    if (name.includes(q) || descMatches(desc, q)) {
       hits.push({ l1: l1.code });
     }
     for (const l2 of l1.children) {

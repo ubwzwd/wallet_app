@@ -1,6 +1,6 @@
 /** 04 §2.3, decision §1.3: kind -> allowed tree, judging-criterion search over desc_*. */
 import type { CategoryTree } from '@/api/types';
-import { buildCategoryIndex, searchCategories } from '../categories';
+import { buildCategoryIndex, descMatches, searchCategories } from '../categories';
 
 const tree: CategoryTree = {
   version: '2026-09-10',
@@ -85,6 +85,17 @@ describe('searchCategories', () => {
   test('matches the judging-criterion text ("用完就没了"), not just the name', () => {
     const hits = searchCategories(index, 'expense', '用完就没了', 'zh');
     expect(hits).toEqual([{ l1: 'groceries' }]);
+  });
+
+  test('a criterion typed from memory still lands ("用完就扔" for "用完就没了")', () => {
+    const hits = searchCategories(index, 'expense', '用完就扔', 'zh');
+    expect(hits).toContainEqual({ l1: 'groceries' });
+  });
+
+  test('the loose match needs at least half the bigrams and three characters', () => {
+    expect(descMatches('用完就没了', '用完就扔')).toBe(true);
+    expect(descMatches('用完就没了', '扔掉')).toBe(false);
+    expect(descMatches('用完就没了', '吃喝玩乐')).toBe(false);
   });
 
   test('matches level-2 category names', () => {
