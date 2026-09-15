@@ -240,7 +240,10 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   columns: { flexDirection: 'row', gap: space['2'] },
   split: { width: 1, alignSelf: 'stretch' },
-  column: { flexGrow: 0, flexBasis: 0, flex: 1, maxHeight: 360 },
+  // Longhands on purpose: `flex: 1` next to an explicit `flexGrow: 0` resolved to a
+  // zero-width column (both here and on native), so the rows rendered but nobody saw them.
+  // `flexBasis: 'auto'` keeps the single-column narrow layout content-sized.
+  column: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0, maxHeight: 360 },
   row: {
     minHeight: density.listRowHeight,
     flexDirection: 'row',
