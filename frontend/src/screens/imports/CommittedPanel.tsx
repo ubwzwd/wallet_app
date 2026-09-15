@@ -2,12 +2,19 @@
  * Step 3 of the import flow (04 §4.10): the batch is committed.
  *
  * A white card in the language of 屏幕稿 11 — the green 「已提交」 badge and the file name on a
- * tinted strip, the commit response's five counters as mono stats, the sentence that reads
- * them back, and the three ways on: 查看这批交易 / 再导一份 / 撤销这批导入.
+ * tinted strip, a row of mono stats, the sentence that reads them back, and the three ways
+ * on: 查看这批交易 / 再导一份 / 撤销这批导入.
  *
- * The detailed sentence needs the commit response's counters; a page opened later (a link,
- * a refresh) only has the batch, so it says the shorter thing rather than inventing
- * numbers.
+ * Which stats depends on what the screen knows. Straight after a commit it has the commit
+ * response and shows all five of its counters. A page opened later — a link, a refresh —
+ * has only the batch, and `ImportBatch` carries no commit counters (03 §5.38), so it shows
+ * the three the batch *does* answer for (rows booked, rows skipped, net) rather than
+ * inventing the pairing and refund numbers, and the sentence below says the shorter thing.
+ *
+ * Those three are *row* counts, and say so: 「入账行」, not 「建立交易」. A commit creates one
+ * transaction per bookable row plus a second leg for every brand-new two-leg transfer
+ * (03 §5.37), so `row_count - skipped` is not the number of transactions and must not
+ * borrow the label the commit response's true counter uses.
  *
  * Undoing is `undoBatch.ts` — the flow the history list runs, to the letter. Afterwards the
  * batch is gone from the history altogether (decision §14.22), so the caller decides where
@@ -19,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ImportBatch, ImportCommitResult } from '@/api/types';
 import { useLang } from '@/i18n';
-import { formatDateTime } from '@/i18n/format';
+import { formatDateTime, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -63,20 +70,31 @@ export function CommittedPanel({
   const lang = useLang();
   const colors = useColors();
   const wide = useIsWide();
+  const count = (n: number): string => t('import:committed.stat_value', { count: n });
+  const rows = (n: number): string => t('import:committed.stat_rows_value', { count: n });
 
   const filename =
     batch.source === 'paste' ? t('import:history.pasted_filename') : (batch.filename ?? '');
   const when = batch.committed_at ?? batch.created_at;
 
-  const stats: Array<[string, number]> = result
+  // Rows the review marked 「跳过」 are exactly the rows a commit does not create.
+  const skipped = batch.row_status_summary.skipped ?? 0;
+  const stats: Array<[string, string]> = result
     ? [
-        [t('import:committed.stat_created'), result.created_transactions],
-        [t('import:committed.stat_pairs'), result.created_transfer_pairs],
-        [t('import:committed.stat_paired'), result.paired_existing_transfers],
-        [t('import:committed.stat_refunds'), result.linked_refunds],
-        [t('import:committed.stat_skipped'), result.skipped_rows],
+        [t('import:committed.stat_created'), count(result.created_transactions)],
+        [t('import:committed.stat_pairs'), count(result.created_transfer_pairs)],
+        [t('import:committed.stat_paired'), count(result.paired_existing_transfers)],
+        [t('import:committed.stat_refunds'), count(result.linked_refunds)],
+        [t('import:committed.stat_skipped'), count(result.skipped_rows)],
       ]
-    : [];
+    : [
+        [t('import:committed.stat_rows_booked'), rows(Math.max(0, batch.row_count - skipped))],
+        [t('import:committed.stat_skipped'), rows(skipped)],
+        [
+          t('import:history.stat_net'),
+          formatMoney(batch.net_amount, batch.base_currency, lang, { signDisplay: 'always' }),
+        ],
+      ];
 
   return (
     <ListCard
@@ -99,11 +117,7 @@ export function CommittedPanel({
         {stats.length > 0 ? (
           <View style={styles.stats} testID={`${testID}-stats`}>
             {stats.map(([label, value]) => (
-              <Stat
-                key={label}
-                label={label}
-                value={t('import:committed.stat_value', { count: value })}
-              />
+              <Stat key={label} label={label} value={value} />
             ))}
           </View>
         ) : null}

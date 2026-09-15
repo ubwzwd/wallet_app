@@ -39,7 +39,8 @@ import type { ReviewEnv } from './review/ReviewRow';
 import { useReviewRows } from './review/useReviewRows';
 import { REVIEW_SLICES, type ReviewSlice, useReviewSelection } from './review/useReviewSelection';
 import { CommittedPanel } from './CommittedPanel';
-import { undoImportBatch, undoMeta } from './undoBatch';
+import { UndoDialogHost } from './UndoDialog';
+import { undoImportBatch } from './undoBatch';
 
 /** Room under the phone's scroll content for the pinned bulk bar (04 §4.11.9). */
 const BULK_BAR_CLEARANCE = 96;
@@ -81,23 +82,28 @@ function CommittedView({
   const onUndo = React.useCallback((): void => {
     void undoImportBatch({
       remove: remove.mutateAsync,
+      batch,
       t,
-      meta: undoMeta(batch, t, lang),
+      lang,
       onDone: () => router.replace(routes.l(ledgerId).imports() as Href),
     });
   }, [batch, lang, ledgerId, remove, router, t]);
 
   return (
-    <CommittedPanel
-      batch={batch}
-      result={result}
-      undoing={remove.isPending}
-      onUndo={onUndo}
-      onViewTransactions={() =>
-        router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href)
-      }
-      onImportAnother={() => router.push(routes.l(ledgerId).importsNew() as Href)}
-    />
+    <>
+      <CommittedPanel
+        batch={batch}
+        result={result}
+        undoing={remove.isPending}
+        onUndo={onUndo}
+        onViewTransactions={() =>
+          router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href)
+        }
+        onImportAnother={() => router.push(routes.l(ledgerId).importsNew() as Href)}
+      />
+      {/* 屏幕稿 11 · 撤销确认 lives with the screen that can undo (see `UndoDialog.tsx`). */}
+      <UndoDialogHost />
+    </>
   );
 }
 
