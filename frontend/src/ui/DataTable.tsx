@@ -24,8 +24,13 @@
  * end, so the scrollbar's length and position are the ones the full grid would have. The
  * window is aimed by *index*, never by "the row is already mounted": `scrollToRow` and the
  * keyboard both move it first and scroll second, so a jump to row 1500 works from row 1.
- * Row heights are assumed to be the nominal 52 — a row carrying a hint line is taller,
- * which costs the mapping a few pixels and nothing else.
+ * The window is aimed with the nominal 52 as every row's height, and that is a lower
+ * bound, not a measurement: a row carrying the server's hint line, or the link band of a
+ * refund or transfer, is two to three times taller. The offset→anchor mapping degrades in
+ * proportion — on a batch where most rows carry one, a given scroll offset lands several
+ * rows below the one the nominal arithmetic names. The overscan of a viewport at each end
+ * absorbs it, and the index-aimed jumps (`scrollToRow`, the keyboard) are exact regardless,
+ * so the cost is mounted rows, never a blank grid.
  */
 import React from 'react';
 import {

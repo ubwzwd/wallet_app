@@ -210,63 +210,63 @@ export function BulkBar({
   const actions = (
     <>
       <Button
-          testID={`${id}-category`}
-          size="sm"
-          variant="soft"
-          icon="tag"
-          label={t('import:review.bulk.set_category')}
-          disabled={kind === null || env.index === null || env.ctrl.bulkPending}
-          onPress={() => setCategoryOpen(true)}
-        />
-        <Select
-          testID={`${id}-kind`}
-          value={null}
-          placeholder={t('import:review.bulk.set_kind')}
-          // Only the kinds the selection's amounts allow — the rest would be a certain 400.
-          options={kindOptions.map((k) => ({ value: k, label: t(`transaction:kind.${k}`) }))}
-          disabled={kindOptions.length === 0 || env.ctrl.bulkPending}
-          onChange={(next) => {
-            if (next !== null) void run(bulkKindPatch(next as TxKind));
-          }}
-        />
-        {/* A bulk edit never holds a code, so the trigger wears the action's own label —
-            which means the whole control is the press target, like the kind picker beside
-            it, rather than a caption sitting outside a chevron. */}
-        <Select
-          testID={`${id}-currency`}
-          value={null}
-          placeholder={t('import:review.bulk.set_currency')}
-          closeLabel={t('common:button.close')}
-          searchable
-          searchPlaceholder={t('import:review.bulk.set_currency')}
-          emptyLabel={t('common:status.none')}
-          options={env.currencyCodes.map((code) => ({
-            value: code,
-            label: code,
-            hint: env.currencyNames[code],
-          }))}
-          disabled={env.ctrl.bulkPending}
-          onChange={(next) => {
-            if (next !== null) void run({ currency: next });
-          }}
-        />
-        <Button
-          testID={`${id}-skip`}
-          size="sm"
-          variant="soft"
-          icon="chevron-right"
-          label={t('import:review.bulk.skip')}
-          disabled={env.ctrl.bulkPending}
-          onPress={() => void run({ status: 'skipped' })}
-        />
-        <Button
-          testID={`${id}-unskip`}
-          size="sm"
-          variant="soft"
-          label={t('import:review.bulk.unskip')}
-          disabled={env.ctrl.bulkPending}
-          onPress={() => void run({ status: 'pending' })}
-        />
+        testID={`${id}-category`}
+        size="sm"
+        variant="soft"
+        icon="tag"
+        label={t('import:review.bulk.set_category')}
+        disabled={kind === null || env.index === null || env.ctrl.bulkPending}
+        onPress={() => setCategoryOpen(true)}
+      />
+      <Select
+        testID={`${id}-kind`}
+        value={null}
+        placeholder={t('import:review.bulk.set_kind')}
+        // Only the kinds the selection's amounts allow — the rest would be a certain 400.
+        options={kindOptions.map((k) => ({ value: k, label: t(`transaction:kind.${k}`) }))}
+        disabled={kindOptions.length === 0 || env.ctrl.bulkPending}
+        onChange={(next) => {
+          if (next !== null) void run(bulkKindPatch(next as TxKind));
+        }}
+      />
+      {/* A bulk edit never holds a code, so the trigger wears the action's own label —
+          which means the whole control is the press target, like the kind picker beside
+          it, rather than a caption sitting outside a chevron. */}
+      <Select
+        testID={`${id}-currency`}
+        value={null}
+        placeholder={t('import:review.bulk.set_currency')}
+        closeLabel={t('common:button.close')}
+        searchable
+        searchPlaceholder={t('import:review.bulk.set_currency')}
+        emptyLabel={t('common:status.none')}
+        options={env.currencyCodes.map((code) => ({
+          value: code,
+          label: code,
+          hint: env.currencyNames[code],
+        }))}
+        disabled={env.ctrl.bulkPending}
+        onChange={(next) => {
+          if (next !== null) void run({ currency: next });
+        }}
+      />
+      <Button
+        testID={`${id}-skip`}
+        size="sm"
+        variant="soft"
+        icon="chevron-right"
+        label={t('import:review.bulk.skip')}
+        disabled={env.ctrl.bulkPending}
+        onPress={() => void run({ status: 'skipped' })}
+      />
+      <Button
+        testID={`${id}-unskip`}
+        size="sm"
+        variant="soft"
+        label={t('import:review.bulk.unskip')}
+        disabled={env.ctrl.bulkPending}
+        onPress={() => void run({ status: 'pending' })}
+      />
     </>
   );
 

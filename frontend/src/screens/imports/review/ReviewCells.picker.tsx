@@ -29,7 +29,7 @@ import {
 } from '@/ui';
 
 import { CELL_HIT_SLOP, CELL_PILL_HEIGHT, CellPill, CellSelect, type CellTone } from './CellControls';
-import { type CellProps, CellFrame, Dash } from './ReviewRow';
+import { DASH, type CellProps, CellFrame } from './ReviewRow';
 
 /** The pill tone each kind wears, in the grid and on the phone card alike. */
 const KIND_TONE: Readonly<Record<TxKind, CellTone>> = {
@@ -181,7 +181,9 @@ export function CategoryCell({
     onOpenChange(false);
   };
 
-  if (dead) return <Dash testID={testID} />;
+  // 屏幕稿 03 draws a transfer's two category cells as pills too — the same chip rhythm as
+  // the row above, holding the em dash 04 §4.11.2 prescribes instead of a bare line of text.
+  if (dead) return <CellPill label={DASH} tone="muted" chevron testID={testID} />;
 
   const placeholder = t(
     level === 'l1' ? 'import:review.pick_category' : 'import:review.pick_category_l2',

@@ -39,12 +39,17 @@ export function hasLinkPanel(row: ImportRow): boolean {
   return row.kind === 'refund' || row.kind === 'transfer';
 }
 
+/**
+ * 屏幕稿 03 tints the band only where there is a pairing to show — a candidate, a settled
+ * pair, a duplicate. An ordinary transfer, which carries nothing but its two switches,
+ * gets `tone: null`: the same row of controls without the empty coloured half beside them.
+ */
 function Strip({
   tone,
   children,
   testID,
 }: {
-  tone: 'refund' | 'transfer';
+  tone: 'refund' | 'transfer' | null;
   children: React.ReactNode;
   testID?: string;
 }): React.JSX.Element {
@@ -52,16 +57,23 @@ function Strip({
   return (
     <View
       testID={testID}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: space['2'],
-        paddingVertical: space['2'],
-        paddingHorizontal: space['3'],
-        borderRadius: radius.md,
-        backgroundColor: colors[tone === 'refund' ? 'kind.refund.subtle' : 'kind.transfer.subtle'],
-      }}
+      style={[
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: space['2'],
+        },
+        tone === null
+          ? null
+          : {
+              paddingVertical: space['2'],
+              paddingHorizontal: space['3'],
+              borderRadius: radius.md,
+              backgroundColor:
+                colors[tone === 'refund' ? 'kind.refund.subtle' : 'kind.transfer.subtle'],
+            },
+      ]}
     >
       {children}
     </View>
@@ -144,9 +156,11 @@ export function LinkPanel({ row, env, testID }: CellProps): React.JSX.Element | 
   // ---------------------------------------------------------------- transfer
   const multi = isMultiCandidate(row);
   const candidate = row.flags.includes('transfer_candidate');
+  // Nothing to pair with and nothing paired: the switches stand on the row's own ground.
+  const bare = !paired && !candidate && !multi && !row.flags.includes('duplicate');
 
   return (
-    <Strip tone="transfer" testID={`${testID}-panel`}>
+    <Strip tone={bare ? null : 'transfer'} testID={`${testID}-panel`}>
       {paired || candidate ? (
         // Unchecking sends `{matched_transaction_id: null}` and nothing else; checking an
         // empty box opens the candidate list (decision §14.53b).

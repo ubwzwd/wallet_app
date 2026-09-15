@@ -26,6 +26,15 @@ export const CELL_PILL_HEIGHT = 30;
 /** A pill is shorter than the 44px minimum, so every pressable one carries this slop. */
 export const CELL_HIT_SLOP = Math.ceil((44 - CELL_PILL_HEIGHT) / 2);
 
+/**
+ * A text box in a cell is taller than the pill beside it, because its text is taller:
+ * `public/pwa.css` forces `input, select, textarea { font-size: 16px !important }` on the
+ * web to stop iOS zooming the page on focus, and that `!important` beats the inline font
+ * size react-native-web emits — so the caption size below is what the box asks for, never
+ * what it gets. 34px is the height that 16px line needs without pressing on the border.
+ */
+export const CELL_INPUT_HEIGHT = 34;
+
 /** The popover opens at the anchor's width; a cell is narrower than any readable list. */
 export const CELL_POPOVER_MIN_WIDTH = 240;
 export const CELL_POPOVER_MAX_WIDTH = 360;
@@ -310,7 +319,7 @@ export function CellTextInput({
   return (
     <View
       style={{
-        height: CELL_PILL_HEIGHT,
+        height: CELL_INPUT_HEIGHT,
         justifyContent: 'center',
         paddingHorizontal: space['2'],
         borderRadius: radius.sm,
@@ -341,6 +350,8 @@ export function CellTextInput({
           outlineWidth: 0,
           color: disabled ? colors['fg.muted'] : colors['fg.primary'],
           fontFamily: fontFamilyFor(500, mono),
+          // Asked for, not granted: pwa.css's `!important` 16px wins on the web. The box
+          // is sized for that (CELL_INPUT_HEIGHT); this is the size everywhere else.
           fontSize: type.caption.size,
         }}
       />

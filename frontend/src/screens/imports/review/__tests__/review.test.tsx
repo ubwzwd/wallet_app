@@ -4,7 +4,7 @@
 import React from 'react';
 import { ScrollView, Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
@@ -175,7 +175,8 @@ test('a transfer row has no merchant cell and no category cell, and neither acce
 
   // Both cells render the em dash, and pressing the merchant cell opens no editor.
   expect((await screen.findByTestId('review-3-merchant')).props.children).toBe('—');
-  expect(screen.getByTestId('review-3-l1').props.children).toBe('—');
+  // 屏幕稿 03 draws the dead cell as a pill, so the dash is the pill's text.
+  expect(within(screen.getByTestId('review-3-l1')).getByText('—')).toBeTruthy();
   fireEvent.press(screen.getByTestId('review-table-cell-row-3-merchant'));
   expect(screen.queryByTestId('review-3-merchant-input')).toBeNull();
 });
@@ -223,7 +224,7 @@ test('changing kind rewrites the sign, clears the category and wakes the link ce
     transfer_subtype: 'plain',
   });
   expect(await screen.findByTestId('review-2-link-role')).toBeTruthy();
-  expect(screen.getByTestId('review-2-l1').props.children).toBe('—');
+  expect(within(screen.getByTestId('review-2-l1')).getByText('—')).toBeTruthy();
 });
 
 test('a refund turned into a transfer drops the link it had to the original expense', async () => {
@@ -530,6 +531,24 @@ test('a narrow viewport renders the card flow, with kind, category and the pairi
   // The prefilled pairing checkbox has to be visible (and clearable) without opening anything.
   const pair = screen.getByTestId('review-3-link-pair');
   expect(pair.props.accessibilityState.checked).toBe(true);
+});
+
+test('the phone submit button is full width and carries the blocker in its own label', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  seed([
+    row({ id: 'row-1', row_no: 1, category_l1: null, category_l2: null, merchant: '星巴克' }),
+    row({ id: 'row-2', row_no: 2, merchant: '京东' }),
+  ]);
+  renderReview();
+
+  // 屏幕稿「03 导入 review 375」: one stretched primary button, the blocker inside its
+  // label — there is no room beside it for the grey line the 1440 bar carries.
+  const submit = await screen.findByTestId('review-commit-submit');
+  expect(submit.props.accessibilityState.disabled).toBe(true);
+  expect(screen.queryByTestId('review-commit-block')).toBeNull();
+  expect(within(submit).getByText('提交入账 · 1 行待归类')).toBeTruthy();
+  // The spoken name still counts the rows that would be committed, as it does when wide.
+  expect(submit.props.accessibilityLabel).toContain('2');
 });
 
 // ------------------------------------------------- the batch is not one page (03 §5.40)
