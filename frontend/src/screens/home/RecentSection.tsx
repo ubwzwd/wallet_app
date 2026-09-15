@@ -12,12 +12,23 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { UseQueryResult } from '@tanstack/react-query';
 
-import type { FinanceSource, Transaction, TransactionListResponse, Uuid } from '@/api/types';
+import type {
+  FinanceSource,
+  Money,
+  Transaction,
+  TransactionListResponse,
+  Uuid,
+} from '@/api/types';
 import { absMoney, mergeTransferRows, type ListRow as TxListRow } from '@/domain';
 import type { CategoryIndex } from '@/domain/categories';
 import { useLang, type Lang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
-import { formatConverted, formatDateShort, formatMoney } from '@/i18n/format';
+import {
+  formatAmountPlain,
+  formatConverted,
+  formatDateShort,
+  formatMoney,
+} from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
@@ -174,10 +185,25 @@ export function RecentSection({
           const subtitle = parts.filter((part): part is string => Boolean(part)).join(' · ');
 
           // ------------------------------------------------------------ amount
+          // 屏幕稿 01 writes 「−45.00」 / 「+18,000.00」 / 「+199.00」 in the 最近 list: a
+          // base-currency amount is bare, a foreign one keeps its symbol (§14.59a), and both
+          // carry their sign. A transfer is the one kind that carries none — it is neither
+          // income nor expense, and the mockup writes it 「3,000.00」 — so its direction is
+          // left to the 种类 badge and to the row's own 「A → B」 title.
+          const signed = tx.kind !== 'transfer';
+          const money = (value: Money, currency: string): string => {
+            if (currency !== baseCurrency) {
+              return formatMoney(value, currency, lang, {
+                signDisplay: signed ? 'always' : 'auto',
+              });
+            }
+            const text = formatAmountPlain(value, currency);
+            return signed && Number(value) > 0 ? `+${text}` : text;
+          };
           const amount =
             row.kind === 'pair'
-              ? formatMoney(absMoney(row.out.amount), row.out.currency, lang)
-              : formatMoney(tx.amount, tx.currency, lang);
+              ? money(absMoney(row.out.amount), row.out.currency)
+              : money(tx.amount, tx.currency);
           const converted =
             row.kind === 'pair'
               ? ''

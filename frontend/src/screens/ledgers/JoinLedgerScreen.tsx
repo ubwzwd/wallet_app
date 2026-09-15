@@ -75,7 +75,8 @@ export default function JoinLedgerScreen(): React.JSX.Element {
               return;
             }
             // The digits stay: screen 13 · 失效 turns the six cells red around the code
-            // that was refused. 「重新输入」 (or the next keystroke) is what empties them.
+            // that was refused. The next keystroke only clears the red (`handleChange`);
+            // 「重新输入」 is the one thing that empties the row.
             setShakeToken((n) => n + 1);
           },
         },

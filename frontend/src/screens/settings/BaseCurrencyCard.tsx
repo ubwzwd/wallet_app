@@ -13,6 +13,7 @@ import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { LedgerDetail, Uuid } from '@/api/types';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useCurrencies, useUpdateLedger } from '@/queries';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -21,7 +22,6 @@ import { Button, Card, CurrencyPicker, Icon, Text, toast } from '@/ui';
 
 import { IconWell } from './IconWell';
 import { SectionLabel } from './SectionLabel';
-import { useCurrencyNames } from './currencyNames';
 
 export interface BaseCurrencyCardProps {
   ledgerId: Uuid;

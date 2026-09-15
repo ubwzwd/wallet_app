@@ -101,6 +101,7 @@
     "selected_one": "{{count}} / {{total}} rows selected",
     "selected_other": "{{count}} / {{total}} rows selected",
     "transfer_title": "{{from}} → {{to}}",
+    "transfer_counterparty": "Counterparty: {{name}}",
     "bulk": {
       "set_category": "Set category in bulk",
       "set_kind": "Set type in bulk",
@@ -235,8 +236,9 @@
   },
   "history": {
     "title": "Import history",
-    "stats": "{{batches}} batches · {{ready}} waiting to be submitted",
-    "stats_batches": "{{batches}} batches",
+    "stat_batches": "{{batches}} batches",
+    "stat_ready": "{{ready}} waiting to be submitted",
+    "stat_posted": "{{posted}} entries posted",
     "filter": {
       "all": "All",
       "ready": "Ready",

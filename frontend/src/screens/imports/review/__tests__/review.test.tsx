@@ -168,22 +168,42 @@ test('uncategorized rows block the commit; skipping or filling one unblocks it, 
 test('a transfer row names its two legs instead of a merchant, and takes no input', async () => {
   const transfer = row({
     id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
-    merchant: null, amount: '1000.0000',
+    merchant: null, amount: '1000.0000', counterpart_source_id: 'src-other',
   });
   seed([transfer]);
   renderReview();
 
   // A transfer has no merchant (decision §14.52 B16). 屏幕稿 03 fills the column with the
-  // two ends of the leg instead of an em dash — the batch's account and whatever this row
-  // knows about the other side — in the grid exactly as in the phone's card flow.
+  // two ends of the leg instead of an em dash — the batch's account and the account on the
+  // other side — in the grid exactly as in the phone's card flow.
   expect((await screen.findByTestId('review-3-merchant')).props.children).toBe(
-    '招商 信用卡 → 缺失',
+    '招商 信用卡 → 招行储蓄卡',
   );
   // The category cell stays the dead one: 屏幕稿 03 draws it as a pill, dash and all.
   expect(within(screen.getByTestId('review-3-l1')).getByText('—')).toBeTruthy();
   // Neither cell accepts input: pressing the merchant cell opens no editor.
   fireEvent.press(screen.getByTestId('review-table-cell-row-3-merchant'));
   expect(screen.queryByTestId('review-3-merchant-input')).toBeNull();
+});
+
+test('a single-leg transfer names its counterparty in words, and an unknown one names nobody', async () => {
+  // 屏幕稿 03 row 8 / 屏幕稿 16: a leg whose other end is only a name reads 「对方：工资卡」,
+  // never 「招商 信用卡 → 工资卡」 — there is no second account to draw an arrow to.
+  const named = row({
+    id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
+    merchant: null, amount: '1000.0000', transfer_role: 'in', counterparty: '工资卡',
+  });
+  // And a row that knows neither an account nor a name says only whose account this is:
+  // 「缺失 → 建行信用卡」 would claim a transfer to nowhere.
+  const unknown = row({
+    id: 'row-4', row_no: 4, kind: 'transfer', category_l1: null, category_l2: null,
+    merchant: null, amount: '2000.0000', transfer_role: 'out',
+  });
+  seed([named, unknown]);
+  renderReview();
+
+  expect((await screen.findByTestId('review-3-merchant')).props.children).toBe('对方：工资卡');
+  expect(screen.getByTestId('review-4-merchant').props.children).toBe('招商 信用卡');
 });
 
 // ---------------------------------------------------------------------- case 3
@@ -618,7 +638,11 @@ test('the phone submit button is full width and the blocker is on its own line',
   expect(String(screen.getByTestId('review-commit-block').props.children)).toContain('1');
   expect(within(submit).getByText('提交入账')).toBeTruthy();
   expect(StyleSheet.flatten(submit.props.style).width).toBe('100%');
-  // The spoken name still counts the rows that would be committed, as it does when wide.
+  // The spoken name still counts the rows that would be committed, as it does when wide —
+  // and it starts with the visible label, which WCAG 2.5.3 requires so that saying
+  // 「点击 提交入账」 matches this control.
+  expect(submit.props.accessibilityLabel).toContain('提交入账');
+  expect(submit.props.accessibilityLabel.startsWith('提交入账')).toBe(true);
   expect(submit.props.accessibilityLabel).toContain('2');
 });
 

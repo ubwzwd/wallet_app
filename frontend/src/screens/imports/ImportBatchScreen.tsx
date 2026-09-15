@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import type { ImportBatch, ImportCommitResult, ImportRow, Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useTopBar } from '@/navigation';
 import {
   useCategories,
@@ -119,6 +120,8 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const rowsQuery = useImportRows(ledgerId, bid);
   const categories = useCategories();
   const currencies = useCurrencies();
+  // 屏幕稿 03's 币种 picker reads 「CNY 人民币」, not the server's ISO English name.
+  const currencyNames = useCurrencyNames(currencies.names);
   const sources = useSources(ledgerId);
 
   // The first page decides whether there is anything else to fetch: an upload seeds the
@@ -204,7 +207,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
 
   if (batchQuery.isPending || rowsQuery.isPending) {
     return (
-      <Page wide testID="import-batch-screen">
+      <Page testID="import-batch-screen">
         <Skeleton variant="table" rows={6} testID="import-batch-skeleton" />
       </Page>
     );
@@ -212,7 +215,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
 
   if (batchQuery.isError || !batch) {
     return (
-      <Page wide testID="import-batch-screen">
+      <Page testID="import-batch-screen">
         <EmptyState
           icon="alert-triangle"
           title={t('import:review.error_retry')}
@@ -256,7 +259,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
     index: categories.index,
     lang,
     currencyCodes: currencies.codes,
-    currencyNames: currencies.names,
+    currencyNames,
     sources: sources.data?.items ?? [],
   };
 

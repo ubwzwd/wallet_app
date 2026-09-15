@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 
 import { routes } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useCreateLedger, useCurrencies, useLedgers } from '@/queries';
 import {
   LEDGER_NAME_MAX_LENGTH,
@@ -41,6 +42,8 @@ export default function NewLedgerScreen(): React.JSX.Element {
   const router = useRouter();
   const { user } = useAuth();
   const currencies = useCurrencies();
+  // 屏幕稿 09 / 13 / 17 read 「CNY 人民币」, not the server's ISO English name.
+  const currencyNames = useCurrencyNames(currencies.names);
   const ledgers = useLedgers();
   const create = useCreateLedger({ silent: true });
 
@@ -124,7 +127,7 @@ export default function NewLedgerScreen(): React.JSX.Element {
                     testID="new-ledger-currency"
                     label={t('ledger:create.base_currency_label')}
                     codes={currencies.codes}
-                    names={currencies.names}
+                    names={currencyNames}
                     value={field.value === '' ? null : field.value}
                     onChange={field.onChange}
                     error={validationMessage(t, errors.base_currency?.message)}

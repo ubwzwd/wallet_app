@@ -28,7 +28,7 @@ import {
 } from '@/domain';
 import type { CategoryIndex } from '@/domain/categories';
 import { useLang } from '@/i18n';
-import { formatMoney, formatMonthShort } from '@/i18n/format';
+import { formatAmountPlain, formatMonthShort } from '@/i18n/format';
 import { chartSeries, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -134,7 +134,7 @@ export function CategorySection({
       <MonthTitle month={month} onChangeMonth={onChangeMonth} />
       {total === undefined ? null : (
         <Text variant="caption" tone="secondary" mono weight={500} testID="home-categories-total">
-          {t('stats:home.total_amount', { amount: formatMoney(total, baseCurrency, lang) })}
+          {t('stats:home.total_amount', { amount: formatAmountPlain(total, baseCurrency) })}
         </Text>
       )}
     </View>
@@ -205,7 +205,6 @@ export function CategorySection({
             item={item}
             color={series[i % series.length]}
             currency={baseCurrency}
-            lang={lang}
             open={expanded === item.code}
             onToggle={() => setExpanded((cur) => (cur === item.code ? null : item.code))}
           />
@@ -220,7 +219,7 @@ export function CategorySection({
               {t('stats:home.category_other_n', { count: rest.length })}
             </Text>
             <Text variant="body" tone="secondary" mono>
-              {formatMoney(sumMoney(rest, (item) => item.amount), baseCurrency, lang)}
+              {formatAmountPlain(sumMoney(rest, (item) => item.amount), baseCurrency)}
             </Text>
           </View>
         ) : null}
@@ -229,7 +228,7 @@ export function CategorySection({
       {isPositiveMoney(summary.refund_total) ? (
         <Text variant="caption" tone="muted" testID="home-refund-note">
           {t('stats:home.refund_deducted', {
-            amount: formatMoney(summary.refund_total, baseCurrency, lang),
+            amount: formatAmountPlain(summary.refund_total, baseCurrency),
           })}
         </Text>
       ) : null}

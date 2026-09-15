@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { absMoney } from '@/domain/money';
 import type { NetWorthSummary } from '@/domain/networth';
 import type { Lang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { Button, ListCard, Text } from '@/ui';
 
@@ -60,15 +60,16 @@ export function NetWorthCard({
 
         <View style={styles.sums}>
           <Text variant="caption" tone="muted" mono testID="sources-assets">
-            {`${t('source:list.assets')} ${formatMoney(summary.assets, baseCurrency, lang)}`}
+            {/* 屏幕稿 09 · 375: 「资产 37,842.10 · 负债 3,215.00」 — the caption above the
+                big number already names the currency (§14.59a). */}
+            {`${t('source:list.assets')} ${formatAmountPlain(summary.assets, baseCurrency)}`}
           </Text>
           {/* 屏幕稿 09 keeps both sums in the same muted grey: the labels carry the
               difference, not colour (04 §6.2 rule 7). */}
           <Text variant="caption" tone="muted" mono testID="sources-liabilities">
-            {`${t('source:list.liabilities')} ${formatMoney(
+            {`${t('source:list.liabilities')} ${formatAmountPlain(
               absMoney(summary.liabilities),
               baseCurrency,
-              lang,
             )}`}
           </Text>
         </View>

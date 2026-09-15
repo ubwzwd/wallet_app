@@ -19,7 +19,9 @@ import { useTranslation } from 'react-i18next';
 
 import type { ImportBatchListItem } from '@/api/types';
 import { type Lang } from '@/i18n';
-import { formatBytes, formatDateTime, formatMoney } from '@/i18n/format';
+import { formatBytes, formatDateTime } from '@/i18n/format';
+
+import { signedPlain } from './amountFormat';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Badge, Button, Icon, Text } from '@/ui';
@@ -106,7 +108,8 @@ export function useParts(batch: ImportBatchListItem, lang: Lang, totalFlags: num
     ready: batch.status === 'ready',
     // The mockup drops the year: a history row is read against "this month", not 2026.
     time: formatDateTime(batch.created_at, lang).slice(5),
-    net: formatMoney(batch.net_amount, batch.base_currency, lang, { signDisplay: 'always' }),
+    // 屏幕稿 11's 净额 column is bare and signed — 「+1,204.60」 (§14.59a).
+    net: signedPlain(batch.net_amount, batch.base_currency),
     negative: Number(batch.net_amount) < 0,
     count: t('import:history.count_value', { count: batch.row_count }),
     note:
