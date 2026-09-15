@@ -1,30 +1,20 @@
 /**
- * The four transaction kinds (decision §1) as a round icon chip and as a read-only badge.
- * Colour is never the only carrier (04 §6.2 rule 7): both forms always pair the semantic
- * colour with an icon, and the badge adds the translated label.
+ * The four transaction kinds (decision §1) as a read-only badge, plus the account type
+ * badge the account table shows (mockup 09: 储蓄卡 / 信用卡 / 现金).
+ *
+ * The round icon well lives in `KindIcon.tsx`; this module is only about the pills.
+ * Colour is never the only carrier (04 §6.2 rule 7), so the kind badge always pairs the
+ * semantic colour with an icon and the translated label.
  */
 import React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import type { TxKind } from '@/api/types';
-import { type ColorToken, radius, space } from '@/theme/tokens';
-import { useColors } from '@/theme/ThemeProvider';
+import type { SourceType, TxKind } from '@/api/types';
+import { space } from '@/theme/tokens';
 import { Badge, type BadgeTone } from './Badge';
-import { Icon, KIND_ICON } from './Icon';
+import { KIND_ICON } from './Icon';
+import { KindIcon, kindLabelKey, sourceTypeLabelKey } from './KindIcon';
 
-/** Foreground / subtle-background token pairs; the subtle tone is only ever the icon well. */
-const KIND_FG: Readonly<Record<TxKind, ColorToken>> = {
-  expense: 'kind.expense',
-  income: 'kind.income',
-  refund: 'kind.refund',
-  transfer: 'kind.transfer',
-};
-const KIND_SUBTLE: Readonly<Record<TxKind, ColorToken>> = {
-  expense: 'kind.expense.subtle',
-  income: 'kind.income.subtle',
-  refund: 'kind.refund.subtle',
-  transfer: 'kind.transfer.subtle',
-};
 const KIND_BADGE_TONE: Readonly<Record<TxKind, BadgeTone>> = {
   expense: 'kind-expense',
   income: 'kind-income',
@@ -32,43 +22,13 @@ const KIND_BADGE_TONE: Readonly<Record<TxKind, BadgeTone>> = {
   transfer: 'kind-transfer',
 };
 
-/** The i18n key of a kind's label — also useful to callers building their own chips. */
-export function kindLabelKey(kind: TxKind): string {
-  return `transaction:kind.${kind}`;
-}
-
-export interface KindIconProps {
-  kind: TxKind;
-  size?: number;
-  style?: StyleProp<ViewStyle>;
-  testID?: string;
-}
-
-/** A circular well tinted with `kind.*.subtle`, holding the kind's icon. */
-export function KindIcon({ kind, size = 32, style, testID }: KindIconProps): React.JSX.Element {
-  const colors = useColors();
-  const { t } = useTranslation();
-  return (
-    <View
-      testID={testID}
-      accessibilityRole="image"
-      accessibilityLabel={t(kindLabelKey(kind))}
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: radius.pill,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors[KIND_SUBTLE[kind]],
-        },
-        style,
-      ]}
-    >
-      <Icon name={KIND_ICON[kind]} size={Math.round(size * 0.56)} color={colors[KIND_FG[kind]]} />
-    </View>
-  );
-}
+/** Mockup 09 paints the type pill with the same tints as the account's icon well. */
+const SOURCE_TYPE_BADGE_TONE: Readonly<Record<SourceType, BadgeTone>> = {
+  checking: 'accent',
+  credit: 'danger',
+  cash: 'warning',
+  other: 'info',
+};
 
 export interface KindBadgeProps {
   kind: TxKind;
@@ -89,6 +49,29 @@ export function KindBadge({ kind, style, testID }: KindBadgeProps): React.JSX.El
   );
 }
 
+export interface SourceTypeBadgeProps {
+  type: SourceType;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}
+
+/** The account type as a plain pill — no icon, the row already carries the type's well. */
+export function SourceTypeBadge({
+  type,
+  style,
+  testID,
+}: SourceTypeBadgeProps): React.JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <Badge
+      testID={testID}
+      tone={SOURCE_TYPE_BADGE_TONE[type]}
+      label={t(sourceTypeLabelKey(type))}
+      style={style}
+    />
+  );
+}
+
 export interface KindRowProps {
   kind: TxKind;
   style?: StyleProp<ViewStyle>;
@@ -102,7 +85,7 @@ export function KindRow({ kind, style, testID }: KindRowProps): React.JSX.Elemen
       testID={testID}
       style={[{ flexDirection: 'row', alignItems: 'center', gap: space['2'] }, style]}
     >
-      <KindIcon kind={kind} />
+      <KindIcon kind={kind} size={32} />
       <KindBadge kind={kind} />
     </View>
   );

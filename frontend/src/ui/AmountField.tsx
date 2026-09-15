@@ -10,15 +10,24 @@
  * `Money` string end to end and never becomes a float.
  */
 import React from 'react';
-import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
+import {
+  type StyleProp,
+  StyleSheet,
+  TextInput,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Money, TxKind } from '@/api/types';
 import { evaluateExpression, isExpression } from '@/domain/calc';
 import { addMoney, normalizeAmountInput } from '@/domain/money';
 import { formatAmountPlain } from '@/i18n/format';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fontFamilyFor } from '@/theme/fonts';
 import { Chip } from './Chip';
 import { CurrencyPicker } from './CurrencyPicker';
+import { KIND_FG } from './KindIcon';
 import { Text } from './Text';
 import { TextField } from './TextField';
 
@@ -32,6 +41,11 @@ export const KIND_SIGN: Readonly<Record<TxKind, string | null>> = {
   refund: '+',
   transfer: null,
 };
+
+/** The large form (mockup 04): a 72-tall well with a 40px number in the kind's colour. */
+const LARGE_HEIGHT = 72;
+const LARGE_SIZE = 40;
+const LARGE_SIGN_SIZE = 30;
 
 /** Quick-add steps (decision §14.52 A19). */
 export const QUICK_ADD_STEPS = [10, 50, 100] as const;
@@ -53,6 +67,8 @@ export interface AmountFieldProps {
   currencyNames?: Readonly<Record<string, string>>;
   /** Decides the read-only sign shown in front of the number. */
   kind?: TxKind;
+  /** `lg` is mockup 04's headline field; `md` the ordinary one used in filters and cells. */
+  size?: 'md' | 'lg';
   quickAdd?: boolean;
   allowExpression?: boolean;
   error?: string | null;
@@ -72,6 +88,7 @@ export function AmountField({
   codes,
   currencyNames,
   kind,
+  size = 'md',
   quickAdd = false,
   allowExpression = false,
   error,
@@ -83,6 +100,7 @@ export function AmountField({
   testID,
 }: AmountFieldProps): React.JSX.Element {
   const { t } = useTranslation();
+  const colors = useColors();
   const [focused, setFocused] = React.useState(false);
   const [expression, setExpression] = React.useState<string | null>(null);
   const id = testID ?? 'amount';
@@ -132,11 +150,86 @@ export function AmountField({
     setExpression(null);
   }
 
-  return (
-    <View style={[styles.wrap, style]}>
-      <TextField
-        label={label ?? t('transaction:form.amount')}
-        hint={hint ?? (allowExpression ? t('transaction:form.calculator_hint') : undefined)}
+  const fieldLabel = label ?? t('transaction:form.amount');
+  const fieldHint = hint ?? (allowExpression ? t('transaction:form.calculator_hint') : undefined);
+  const hasError = typeof error === 'string' && error.length > 0;
+  const currencyPicker = (
+    <CurrencyPicker
+      codes={codes ?? [currency]}
+      value={currency}
+      onChange={(next) => onCurrencyChange?.(next)}
+      readOnly={onCurrencyChange === undefined}
+      names={currencyNames}
+      variant="inline"
+      disabled={disabled}
+      testID={`${id}-currency`}
+    />
+  );
+
+  // Mockup 04 paints the headline amount in the kind's own colour — the one number in the
+  // whole form allowed to carry a semantic colour. A transfer moves money without spending
+  // it, so it stays `fg.primary` (tokens `kindSemantics.transferAmount`, 04 §6.2 rule 2).
+  const large = size === 'lg';
+  const largeColor =
+    kind !== undefined && kind !== 'transfer' ? colors[KIND_FG[kind]] : colors['fg.primary'];
+
+  const field = large ? (
+    <View style={styles.largeWrap}>
+      <Text variant="caption" tone="secondary">
+        {fieldLabel}
+      </Text>
+      <View
+        testID={`${id}-field`}
+        style={[
+          styles.largeBox,
+          {
+            backgroundColor: hasError ? colors['status.danger.bg'] : colors['bg.subtle'],
+            // The web outline is off (it would trace the input, not the well), so the
+            // well's own border carries focus the way TextField's does.
+            borderColor: hasError
+              ? colors['status.danger.fg']
+              : focused
+                ? colors['border.focus']
+                : 'transparent',
+            opacity: disabled ? 0.6 : 1,
+          },
+        ]}
+      >
+        {sign !== null ? (
+          <Text mono style={[styles.largeSign, { color: largeColor }]} testID={`${id}-sign`}>
+            {sign}
+          </Text>
+        ) : null}
+        <TextInput
+          value={shown}
+          onChangeText={onChange}
+          onFocus={() => setFocused(true)}
+          onBlur={handleBlur}
+          editable={!disabled}
+          autoFocus={autoFocus}
+          keyboardType="decimal-pad"
+          inputMode="decimal"
+          accessibilityLabel={fieldLabel}
+          placeholderTextColor={colors['fg.muted']}
+          testID={id}
+          style={[styles.largeInput, { color: largeColor, fontFamily: fontFamilyFor(450, true) }]}
+        />
+        {currencyPicker}
+      </View>
+      {hasError ? (
+        <Text variant="caption" tone="danger">
+          {error}
+        </Text>
+      ) : fieldHint !== undefined ? (
+        <Text variant="caption" tone="muted">
+          {fieldHint}
+        </Text>
+      ) : null}
+    </View>
+  ) : (
+    <TextField
+        label={fieldLabel}
+        hint={fieldHint}
         error={error}
         mono
         disabled={disabled}
@@ -147,7 +240,7 @@ export function AmountField({
         onChangeText={onChange}
         onFocus={() => setFocused(true)}
         onBlur={handleBlur}
-        accessibilityLabel={label ?? t('transaction:form.amount')}
+        accessibilityLabel={fieldLabel}
         testID={id}
         prefix={
           sign !== null ? (
@@ -156,19 +249,13 @@ export function AmountField({
             </Text>
           ) : undefined
         }
-        suffix={
-          <CurrencyPicker
-            codes={codes ?? [currency]}
-            value={currency}
-            onChange={(next) => onCurrencyChange?.(next)}
-            readOnly={onCurrencyChange === undefined}
-            names={currencyNames}
-            variant="inline"
-            disabled={disabled}
-            testID={`${id}-currency`}
-          />
-        }
+        suffix={currencyPicker}
       />
+  );
+
+  return (
+    <View style={[styles.wrap, style]}>
+      {field}
 
       {expression !== null ? (
         <Chip
@@ -208,5 +295,26 @@ export function AmountField({
 
 const styles = StyleSheet.create({
   wrap: { gap: space['2'], alignSelf: 'stretch' },
+  largeWrap: { gap: space['1'], alignSelf: 'stretch' },
+  largeBox: {
+    height: LARGE_HEIGHT,
+    borderRadius: radius.md + 2,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['1'],
+    paddingLeft: space['4'] + 2,
+    paddingRight: space['3'],
+  },
+  largeSign: { fontSize: LARGE_SIGN_SIZE, lineHeight: LARGE_SIZE - 2 },
+  largeInput: {
+    flex: 1,
+    padding: 0,
+    fontSize: LARGE_SIZE,
+    lineHeight: LARGE_SIZE + 6,
+    fontVariant: ['tabular-nums'],
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+  },
   quickRow: { flexDirection: 'row', alignItems: 'center', gap: space['2'], flexWrap: 'wrap' },
 });

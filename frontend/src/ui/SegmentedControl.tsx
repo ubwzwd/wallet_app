@@ -1,13 +1,25 @@
 /**
- * SegmentedControl (04 §6.4): height 44, radius 14. Drives the kind tabs, the transfer
- * subtype and the review row slices — always controlled.
+ * SegmentedControl (04 §6.4, mockups 02 / 11 / 14): a pill track in `bg.subtle` holding
+ * one white, softly lifted segment.
+ *
+ * Two sizes, both a 4px track around the segment the mockups draw: `md` is a 52 track
+ * around a 44 segment (屏幕 04 的 kind tabs), `sm` a 44 track around a 36 segment (屏幕 11
+ * 的「全部 / 待提交 / 已提交」). Always controlled.
  */
 import React from 'react';
 import { Pressable, type StyleProp, View, type ViewStyle } from 'react-native';
 import { controls, radius, space } from '@/theme/tokens';
-import { useColors } from '@/theme/ThemeProvider';
+import { useTheme } from '@/theme/ThemeProvider';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
+
+export type SegmentedSize = 'sm' | 'md';
+
+/** Track height / radius and the padding that turns into the inner pill's inset. */
+const SIZES = {
+  sm: { height: controls.button.heights.sm + space['2'], radius: radius.md - 2, pad: space['1'] },
+  md: { height: controls.button.heights.md + space['2'], radius: radius.md, pad: space['1'] },
+};
 
 export interface SegmentOption<T extends string = string> {
   value: T;
@@ -22,6 +34,9 @@ export interface SegmentedControlProps<T extends string = string> {
   value: T;
   onChange(next: T): void;
   options: readonly SegmentOption<T>[];
+  size?: SegmentedSize;
+  /** `sm` headers size to their content; the default stretches every segment equally. */
+  stretch?: boolean;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -31,11 +46,16 @@ export function SegmentedControl<T extends string = string>({
   value,
   onChange,
   options,
+  size = 'md',
+  stretch,
   accessibilityLabel,
   style,
   testID,
 }: SegmentedControlProps<T>): React.JSX.Element {
-  const colors = useColors();
+  const { colors, scheme } = useTheme();
+  const step = SIZES[size];
+  const fill = stretch ?? size === 'md';
+
   return (
     <View
       accessibilityRole="tablist"
@@ -43,12 +63,13 @@ export function SegmentedControl<T extends string = string>({
       testID={testID}
       style={[
         {
-          height: controls.button.heights.md,
+          height: step.height,
           flexDirection: 'row',
           alignItems: 'stretch',
-          padding: space['1'],
-          gap: space['1'],
-          borderRadius: radius.md,
+          alignSelf: fill ? 'stretch' : 'flex-start',
+          padding: step.pad,
+          gap: step.pad,
+          borderRadius: step.radius,
           backgroundColor: colors['bg.subtle'],
         },
         style,
@@ -70,29 +91,47 @@ export function SegmentedControl<T extends string = string>({
             disabled={option.disabled}
             onPress={() => onChange(option.value)}
             testID={testID ? `${testID}-${option.value}` : undefined}
-            // The track is 44 high but has `padding: space['1']`, so the segment itself is
-            // only 36. The vertical slop takes the tap target back to 44 without changing
-            // the control's drawn height (04 §6.4: height 44). Vertical only — a
-            // horizontal slop would overlap the neighbouring segment across the gap.
-            hitSlop={{ top: space['1'], bottom: space['1'] }}
-            style={({ pressed }) => ({
-              flex: 1,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: space['1'],
-              // The inner pill sits inside the track's padding, so its radius is the
-              // track's minus that padding — still a token value, not a magic number.
-              borderRadius: radius.md - space['1'],
-              backgroundColor: selected
-                ? colors['bg.raised']
-                : pressed
-                  ? colors['bg.hover']
-                  : 'transparent',
-            })}
+            // The track's padding shrinks the segment by 4 top and bottom (a 44 track
+            // holds a 36 segment), so the slop takes the tap target back past 44 without
+            // changing the control's drawn height (04 §6.4). Vertical only — a horizontal
+            // slop would overlap the neighbouring segment across the gap.
+            hitSlop={{ top: space['2'], bottom: space['2'] }}
+            style={({ pressed }) => [
+              {
+                flex: fill ? 1 : undefined,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: space['1'] + 2,
+                paddingHorizontal: fill ? space['2'] : space['4'] - 2,
+                // The inner pill sits inside the track's padding, so its radius is the
+                // track's minus that padding — still a token value, not a magic number.
+                borderRadius: step.radius - step.pad,
+                backgroundColor: selected
+                  ? colors['bg.raised']
+                  : pressed
+                    ? colors['bg.hover']
+                    : 'transparent',
+              },
+              // The selected pill lifts off the track; dark mode layers by lightness only.
+              selected && scheme === 'light'
+                ? {
+                    shadowColor: colors['fg.primary'],
+                    shadowOpacity: 0.14,
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 1 },
+                    elevation: 1,
+                  }
+                : null,
+            ]}
           >
             {option.icon ? <Icon name={option.icon} size={16} color={fg} /> : null}
-            <Text variant="body" weight={selected ? 600 : 400} style={{ color: fg }} numberOfLines={1}>
+            <Text
+              variant="body"
+              weight={600}
+              style={{ color: fg }}
+              numberOfLines={1}
+            >
               {option.label}
             </Text>
             {option.badge !== undefined ? (

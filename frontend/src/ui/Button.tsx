@@ -17,7 +17,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 /** Every touchable must clear 44×44 on BOTH axes; `sm` (36) makes that up with hit slop —
@@ -35,6 +35,9 @@ interface VariantStyle {
 const VARIANTS: Readonly<Record<ButtonVariant, VariantStyle>> = {
   primary: { bg: 'accent.solid', bgPressed: 'accent.solid', fg: 'accent.fg' },
   secondary: { bg: 'bg.surface', bgPressed: 'bg.hover', fg: 'fg.primary', border: 'border.default' },
+  // The mockups' second-rank action (「编辑」/「复制一笔」 on screen 08): a tinted fill with
+  // no outline, so a row of them does not read as a row of boxes.
+  soft: { bg: 'bg.subtle', bgPressed: 'bg.hover', fg: 'fg.primary' },
   ghost: { bg: 'transparent', bgPressed: 'bg.hover', fg: 'fg.primary' },
   danger: {
     bg: 'transparent',
@@ -132,7 +135,13 @@ export function Button({
         <Icon name={icon} color={fg} />
       ) : null}
       {!iconOnly && label !== undefined ? (
-        <Text variant="subheading" style={{ color: fg }} numberOfLines={1}>
+        // 14/600 on the 36 and 44 steps, 15/600 on the 48 one — the mockups' button label.
+        <Text
+          variant={size === 'lg' ? 'subheading' : 'body'}
+          weight={600}
+          style={{ color: fg }}
+          numberOfLines={1}
+        >
           {label}
         </Text>
       ) : null}

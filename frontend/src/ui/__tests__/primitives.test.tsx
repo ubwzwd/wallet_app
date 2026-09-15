@@ -19,7 +19,7 @@ import { ProgressBar } from '@/ui/ProgressBar';
 import { SegmentedControl } from '@/ui/SegmentedControl';
 import { Select } from '@/ui/Select';
 import { Skeleton } from '@/ui/Skeleton';
-import { StatTile } from '@/ui/StatTile';
+import { StatTile, monoTextWidth, stepForWidth } from '@/ui/StatTile';
 import { Text } from '@/ui/Text';
 import { TextField } from '@/ui/TextField';
 
@@ -254,12 +254,32 @@ describe('Badge and Chip', () => {
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
-  test('a pressable chip reports its selected state', () => {
+  test('a pressable chip reports its selected state and only then wears the ring', () => {
     const onPress = jest.fn();
+    const { unmount } = renderThemed(<Chip label="本月" onPress={onPress} testID="chip" />);
+    // Mockup 02: an unchosen pill has no outline at all.
+    expect(styleOf(screen.getByTestId('chip')).borderColor).toBe('transparent');
+    unmount();
+
     renderThemed(<Chip label="本月" selected onPress={onPress} testID="chip" />);
     expect(screen.getByTestId('chip').props.accessibilityState).toMatchObject({ selected: true });
+    expect(styleOf(screen.getByTestId('chip')).borderColor).toBe(lightColors['accent.solid']);
     fireEvent.press(screen.getByTestId('chip'));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  test('an applied condition is a solid accent chip with inverse text', () => {
+    renderThemed(<Chip label="账户：招行储蓄卡 +2" variant="solid" testID="chip" />);
+    expect(styleOf(screen.getByTestId('chip')).backgroundColor).toBe(lightColors['accent.solid']);
+    expect(styleOf(screen.getByText('账户：招行储蓄卡 +2')).color).toBe(lightColors['accent.fg']);
+  });
+
+  test('the detail-page badge steps up to 28 without changing its tone', () => {
+    renderThemed(<Badge label="支出" tone="kind-expense" size="lg" testID="badge" />);
+    expect(styleOf(screen.getByTestId('badge')).height).toBe(28);
+    expect(styleOf(screen.getByTestId('badge')).backgroundColor).toBe(
+      lightColors['kind.expense.subtle'],
+    );
   });
 });
 
@@ -290,6 +310,44 @@ describe('SegmentedControl', () => {
     );
     fireEvent.press(screen.getByTestId('kind-transfer'));
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('the selected segment is the white pill on the tinted track', () => {
+    renderThemed(
+      <SegmentedControl value="expense" onChange={() => undefined} options={options} testID="k" />,
+    );
+    expect(styleOf(screen.getByTestId('k')).backgroundColor).toBe(lightColors['bg.subtle']);
+    expect(styleOf(screen.getByTestId('k-expense')).backgroundColor).toBe(
+      lightColors['bg.raised'],
+    );
+    expect(styleOf(screen.getByTestId('k-income')).backgroundColor).toBe('transparent');
+  });
+
+  test('both sizes are a 4px track around the segment the mockups draw', () => {
+    renderThemed(
+      <SegmentedControl value="expense" onChange={() => undefined} options={options} testID="k" />,
+    );
+    // 屏幕 04: a 52 track around the 44 kind tab.
+    expect(styleOf(screen.getByTestId('k')).height).toBe(controls.button.heights.md + 8);
+    expect(styleOf(screen.getByTestId('k')).padding).toBe(4);
+  });
+
+  test('the small size is the 36-high header filter and hugs its labels', () => {
+    renderThemed(
+      <SegmentedControl
+        size="sm"
+        value="all"
+        onChange={() => undefined}
+        options={[
+          { value: 'all', label: '全部' },
+          { value: 'ready', label: '待提交' },
+        ]}
+        testID="s"
+      />,
+    );
+    expect(styleOf(screen.getByTestId('s')).height).toBe(controls.button.heights.sm + 8);
+    expect(styleOf(screen.getByTestId('s')).alignSelf).toBe('flex-start');
+    expect(styleOf(screen.getByTestId('s-all')).flex).toBeUndefined();
   });
 });
 
@@ -441,9 +499,25 @@ describe('smaller pieces', () => {
     expect(styleOf(screen.getByTestId('p-fill')).width).toBe('100%');
   });
 
-  test('a stat tile renders its big number in mono', () => {
+  test('a stat tile renders its big number in mono and never clips it', () => {
     renderThemed(<StatTile label="净资产" value="34,627.10" sub="CNY" testID="tile" />);
-    expect(styleOf(screen.getByText('34,627.10')).fontFamily).toContain('IBMPlexMono');
+    const value = screen.getByText('34,627.10');
+    expect(styleOf(value).fontFamily).toContain('IBMPlexMono');
+    // `numberOfLines` + `adjustsFontSizeToFit` used to eat the tail of a long number on
+    // the web, where the second prop does nothing at all.
+    expect(value.props.numberOfLines).toBeUndefined();
+    expect(value.props.adjustsFontSizeToFit).toBeUndefined();
+  });
+
+  test('a stat tile steps the number down instead of overflowing its box', () => {
+    // A roomy tile keeps the 40 display step; a long number in a narrow one falls through
+    // 28 to 20 until it fits.
+    expect(stepForWidth('0.00', 300)).toBe('display');
+    expect(stepForWidth('¥223,649.49', 200)).toBe('title');
+    expect(stepForWidth('−¥1,234,567.89', 200)).toBe('heading');
+    expect(monoTextWidth('12345', 40)).toBeCloseTo(120);
+    // A full-width CJK glyph takes two cells, so '欠 …' is not measured as narrow ASCII.
+    expect(monoTextWidth('欠', 40)).toBeCloseTo(48);
   });
 
   test('an empty state wires both actions', () => {
@@ -466,26 +540,53 @@ describe('smaller pieces', () => {
     expect(secondary).toHaveBeenCalledTimes(1);
   });
 
-  test('a card rounds to the container radius and a page caps the reading width', () => {
+  test('screen 15 draws striped placeholders instead of an illustration', () => {
+    renderThemed(
+      <EmptyState
+        title="这本账还是空的"
+        placeholder={{ rows: 3, chart: true, caption: '记满一个月之后' }}
+        testID="empty"
+      />,
+    );
+    expect(screen.getByTestId('empty-ghost')).toBeTruthy();
+    expect(screen.getByTestId('empty-ghost-rows')).toBeTruthy();
+    expect(screen.getByTestId('empty-ghost-chart')).toBeTruthy();
+    expect(screen.getByText('记满一个月之后')).toBeTruthy();
+  });
+
+  test('a card rounds to the container radius; a page fills unless it asks to be capped', () => {
     renderThemed(
       <>
         <Card variant="outlined" testID="card" />
         <Page testID="page">
           <Text>页面</Text>
         </Page>
-        <Page wide testID="wide-page" />
+        <Page readingWidth testID="reading-page" />
       </>,
     );
     expect(styleOf(screen.getByTestId('card')).borderRadius).toBe(radius.lg);
+    // Phase 7: the mockups run the content area edge to edge, so there is no cap by
+    // default — only a page that asks for a reading column gets one.
     const content = StyleSheet.flatten(
       screen.getByTestId('page').props.contentContainerStyle as never,
     ) as unknown as Record<string, unknown>;
-    expect(content.maxWidth).toBe(PAGE_MAX_WIDTH);
-    const wideContent = StyleSheet.flatten(
-      screen.getByTestId('wide-page').props.contentContainerStyle as never,
+    expect(content.maxWidth).toBeUndefined();
+    const reading = StyleSheet.flatten(
+      screen.getByTestId('reading-page').props.contentContainerStyle as never,
     ) as unknown as Record<string, unknown>;
-    expect(wideContent.maxWidth).toBeUndefined();
+    expect(reading.maxWidth).toBe(PAGE_MAX_WIDTH);
     expect(screen.getByText('页面')).toBeTruthy();
+  });
+
+  test('a wide page takes the mockups 24 / 28 content padding', () => {
+    mockWideViewport = true;
+    renderThemed(<Page testID="page" />);
+    const content = StyleSheet.flatten(
+      screen.getByTestId('page').props.contentContainerStyle as never,
+    ) as unknown as Record<string, unknown>;
+    expect(content.paddingHorizontal).toBe(28);
+    expect(content.paddingTop).toBe(24);
+    mockWideViewport = false;
   });
 
   test('the three skeleton shapes render', () => {
