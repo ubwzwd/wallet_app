@@ -293,13 +293,14 @@ export default function TransactionsScreen(): React.JSX.Element {
       {total > 0 ? (
         <View style={[styles.statLine, styles.statRow]}>
           {/* 屏幕稿 02 · 375 keeps both halves on one line — the count left, the summary
-              right — so neither may wrap and both may shrink. */}
+              right. Neither may wrap; the count is the half that never gives way, because
+              「共 140 笔」 cut to 「共 14…」 would read as a different number. */}
           <Text
             variant="caption"
             tone="secondary"
             mono
             numberOfLines={1}
-            style={styles.statCell}
+            style={styles.statCount}
             testID="tx-count"
           >
             {countLabel}
@@ -410,5 +411,6 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
     paddingHorizontal: space['1'],
   },
+  statCount: { flexShrink: 0 },
   statCell: { flexShrink: 1, minWidth: 0 },
 });

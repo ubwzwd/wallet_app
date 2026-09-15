@@ -7,6 +7,11 @@
  * truth (决策 §14.45), and a signed number lines up in a mono column where a prefix does
  * not. Everything else about the reading is unchanged: the amount is in the account's own
  * currency, and the converted value is the server's `balance_base` (04 §4.8).
+ *
+ * `balanceText` writes the symbol; the wide table drops it for a base-currency row because
+ * its own 币种 column already names the currency (屏幕稿 09 · 1440: 「12,480.35」). The
+ * narrow list keeps it, as the home page's account card does — the mockups write those
+ * bare too, but that is one decision for every amount on both screens, not this file's.
  */
 import type { FinanceSource } from '@/api/types';
 import { parseMoney } from '@/domain/money';

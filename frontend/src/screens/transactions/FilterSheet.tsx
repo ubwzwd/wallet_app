@@ -4,8 +4,7 @@
  * lives here rather than with the other fields.
  *
  * The drawer stacks the same fields the wide 「筛选」 card lays out in a grid
- * (`FilterFields.tsx`): 「筛选」 and 重置 on one baseline (the mockup's drawer has no ×; the
- * 「应用」 button and the backdrop both close it), then keyword / 种类 / 账户 / 币种 / 日期区间 / 分类 /
+ * (`FilterFields.tsx`): 「筛选」 and 重置 on one baseline, then keyword / 种类 / 账户 / 币种 / 日期区间 / 分类 /
  * 金额区间 down the body, and one 「应用 · N 笔」 button that says how many entries the filters
  * match before it is pressed.
  *
@@ -159,11 +158,13 @@ export function FilterSheet(props: FilterSheetProps): React.JSX.Element {
     <Sheet
       open={props.open}
       onClose={props.onClose}
-      closeLabel={t('common:button.close')}
       testID={`${props.id}-sheet`}
     >
-      {/* 屏幕稿 02 · 交易筛选 375 sets 「筛选」 and 「重置」 on one baseline. `Sheet` takes a
-          plain string title and no action slot, so the row is drawn here instead. */}
+      {/* 屏幕稿 02 · 交易筛选 375 sets 「筛选」 and 「重置」 on one baseline, and draws no ×:
+          the drag handle, the backdrop and the pinned 「应用 · N 笔」 button are the three
+          ways out. `Sheet` takes a plain string title and no action slot, and would put its
+          own × on a row of its own, so neither `title` nor `closeLabel` is passed and the
+          title row is drawn here. */}
       <View
         style={{
           flexDirection: 'row',
