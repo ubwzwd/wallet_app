@@ -16,13 +16,15 @@ import { useTranslation } from 'react-i18next';
 
 import { maxAllowedDate } from '@/domain/dates';
 import { space } from '@/theme/tokens';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { AmountField, DateField, Skeleton, TextField } from '@/ui';
+import { AmountField, Skeleton, TextField } from '@/ui';
 
 import { CategoryCard } from './CategoryCard';
+import { DateRowField } from './DateRowField';
 import { MerchantField } from './MerchantField';
 import { SourceField } from './SourceField';
-import { FieldColumns, FieldLabel, FormCard } from './parts';
+import { FieldColumns, FieldLabel, FormCard, RowDivider } from './parts';
 import { NOTE_MAX_LENGTH, txValidationMessage } from './schemas';
 import type { TxFormController } from './useTransactionForm';
 
@@ -64,6 +66,7 @@ export function SingleFields({
     sources,
     allowArchivedId,
   } = ctrl;
+  const currencyNames = useCurrencyNames(currencies.names);
   const { errors } = formState;
 
   const amount = (
@@ -87,7 +90,7 @@ export function SingleFields({
                 currency={currencyField.value}
                 onCurrencyChange={currencyField.onChange}
                 codes={currencies.codes}
-                currencyNames={currencies.names}
+                currencyNames={currencyNames}
                 kind={kind}
                 quickAdd={amountChips === undefined}
                 allowExpression
@@ -112,7 +115,7 @@ export function SingleFields({
       control={control}
       name="occurred_at"
       render={({ field }) => (
-        <DateField
+        <DateRowField
           testID="tx-date"
           label={t('transaction:form.date')}
           todayLabel={t('transaction:form.today')}
@@ -134,11 +137,11 @@ export function SingleFields({
         <SourceField
           testID="tx-source"
           label={t('transaction:form.source')}
+          variant="row"
           sources={sources}
           value={field.value === '' ? null : field.value}
           onChange={selectSource}
           allowArchivedId={allowArchivedId}
-          lang={lang}
           error={txValidationMessage(t, errors.source_id?.message)}
           disabled={disabled}
         />
@@ -250,12 +253,15 @@ export function SingleFields({
       {header}
       <FormCard>{amount}</FormCard>
       {belowAmount}
-      <FormCard style={styles.rowCard}>
+      {/* 屏幕稿 04 · 375: 账户 and 日期 are two rows of one flat card, split by a hairline —
+          the label sits in the row, the value and its chevron on the right. */}
+      <FormCard padded={false} style={styles.rowCard}>
         {account}
+        <RowDivider />
         {date}
       </FormCard>
       {category}
-      <FormCard style={styles.rowCard}>
+      <FormCard style={styles.fieldCard}>
         {merchant}
         {note}
       </FormCard>
@@ -267,5 +273,6 @@ const styles = StyleSheet.create({
   wide: { gap: space['5'], alignSelf: 'stretch' },
   narrow: { gap: space['3'], alignSelf: 'stretch' },
   mainCard: { gap: space['5'] },
-  rowCard: { gap: space['3'] },
+  rowCard: { paddingVertical: space['1'] },
+  fieldCard: { gap: space['3'] },
 });

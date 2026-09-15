@@ -11,7 +11,6 @@ import React from 'react';
 
 import { screen } from '@testing-library/react-native';
 
-import { formatMoney } from '@/i18n/format';
 import {
   makeImportBatch,
   makeImportCommitResult,
@@ -65,9 +64,8 @@ test('a batch opened fresh still gets stat tiles — the ones the batch itself a
   expect(screen.queryByText('建立交易')).toBeNull();
   expect(screen.getByText('126 行')).toBeTruthy();
   expect(screen.getByText('2 行')).toBeTruthy();
-  expect(
-    screen.getByText(formatMoney('-4210.5500', 'CNY', 'zh', { signDisplay: 'always' })),
-  ).toBeTruthy();
+  // The 净额 tile is bare and signed, like 屏幕稿 11's column (§14.59a).
+  expect(screen.getByText('−4,210.55')).toBeTruthy();
   // The pairing and refund counters are NOT invented: the batch cannot answer for them.
   expect(screen.queryByText('两腿转账')).toBeNull();
   expect(screen.queryByText('配到已有转账')).toBeNull();

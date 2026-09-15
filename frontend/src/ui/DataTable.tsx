@@ -3,10 +3,9 @@
  * a sticky header, 52px rows (tighter than the C2 list density), a selection column with
  * select-all, an inline-edit slot per cell and a controlled keyboard focus ring.
  *
- * The frame is 屏幕稿 03's: one card with a tinted sticky header of small grey column
- * titles, hairline row separators, a full-width slot under a row for what belongs to the
- * row but not to any one cell (the server's `hint`, the link panel), and — at the bottom
- * of the same card, below both scroll boxes — the optional `footer` bar.
+ * The frame is 屏幕稿 03's: one card with a tinted sticky header of small grey column titles,
+ * hairline row separators, a full-width slot under a row for what belongs to the row but not to any
+ * one cell (`hint`, the link panel), and — below both scroll boxes — the optional `footer` bar.
  *
  * It is presentation-only: it knows nothing about imports, the API or i18n. Every label
  * arrives as a prop, every piece of state (selection, focus, the row to scroll to) is
@@ -124,8 +123,8 @@ export interface DataTableProps<Row> {
   rowLead?(row: Row): React.ReactNode;
   /** A full-width band below the row — the server's `hint`, the link panel (屏幕稿 03). */
   rowBelow?(row: Row): React.ReactNode;
-  /** The bar at the bottom of the card, outside both scroll boxes: 屏幕稿 03 draws the
-   *  grid and its action bar as one card, not as two with a gap between them. */
+  /** The bar at the bottom of the card, outside both scroll boxes (屏幕稿 03 draws the grid and its
+   *  action bar as one card). Siblings stack with the `gap` the narrow layout's footer card uses. */
   footer?: React.ReactNode;
   rowTone?(row: Row): DataTableRowTone;
   focus?: DataTableCellPos | null;
@@ -390,6 +389,7 @@ export function DataTable<Row>({
             borderColor: colors['border.default'],
             paddingHorizontal: EDGE_PADDING,
             paddingVertical: space['3'],
+            gap: space['2'],
           }}
         >
           {footer}

@@ -140,8 +140,13 @@ function Chrome({ children, narrowChrome = true }: AppShellProps): React.JSX.Ele
   // Mockup 15 「无账本引导」 at 1440 has no column at all: on `/ledgers` with nothing to
   // list, every destination in the column points at nothing and its card would name an
   // empty list. The onboarding page draws its own brand bar and account pill instead, so
-  // the shell steps out of the way and the page runs full-bleed. Personal settings keeps
-  // the column even then — it is the only way back out of that page.
+  // the shell steps out of the way and the page runs full-bleed. The `false` makes that the
+  // whole `/ledgers*` subtree, `/ledgers/new` and `/ledgers/join` included, and that is
+  // deliberate (§14.59): those two are exactly where 屏幕稿 15 sends a user with no ledger,
+  // the column would be just as empty there, and both pages carry their own way back to the
+  // list. 屏幕稿 13 draws them with a column, but only for a user who *has* ledgers — and
+  // that user still gets one here. Personal settings keeps the column even with no ledger —
+  // it is the only way back out of that page.
   const onLedgerList = isActivePath(pathname, routes.ledgers(), false);
   const showSidebar = wide && !(onLedgerList && user !== null && user.ledger_count === 0);
 

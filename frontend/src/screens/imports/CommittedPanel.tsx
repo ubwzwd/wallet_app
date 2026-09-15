@@ -26,11 +26,13 @@ import { useTranslation } from 'react-i18next';
 
 import type { ImportBatch, ImportCommitResult } from '@/api/types';
 import { useLang } from '@/i18n';
-import { formatDateTime, formatMoney } from '@/i18n/format';
+import { formatDateTime } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Badge, Button, ListCard, Text } from '@/ui';
+
+import { signedPlain } from './amountFormat';
 
 export interface CommittedPanelProps {
   batch: ImportBatch;
@@ -92,7 +94,7 @@ export function CommittedPanel({
         [t('import:committed.stat_skipped'), rows(skipped)],
         [
           t('import:history.stat_net'),
-          formatMoney(batch.net_amount, batch.base_currency, lang, { signDisplay: 'always' }),
+          signedPlain(batch.net_amount, batch.base_currency),
         ],
       ];
 
@@ -107,7 +109,7 @@ export function CommittedPanel({
               {filename}
             </Text>
             <Text variant="caption" tone="muted" mono numberOfLines={1}>
-              {`${batch.source_name} · ${formatDateTime(when, lang)}`}
+              {`${batch.source_name} · ${formatDateTime(when)}`}
             </Text>
           </View>
         </View>

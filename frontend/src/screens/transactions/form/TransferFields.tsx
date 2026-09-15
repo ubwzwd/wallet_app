@@ -19,8 +19,9 @@ import { maxAllowedDate } from '@/domain/dates';
 import { controls, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Button, Chip, DateField, Icon, SegmentedControl, Text, TextField } from '@/ui';
+import { Button, Chip, Icon, SegmentedControl, Text, TextField } from '@/ui';
 
+import { DateRowField } from './DateRowField';
 import { SourceField } from './SourceField';
 import { TransferAmount } from './TransferAmount';
 import { FieldColumns, FieldLabel, FormCard } from './parts';
@@ -68,7 +69,6 @@ export function TransferFields({
   const {
     form,
     form: { control, formState },
-    lang,
     selectSource,
     selectToSource,
     sources,
@@ -143,7 +143,6 @@ export function TransferFields({
           value={field.value === '' ? null : field.value}
           onChange={selectSource}
           allowArchivedId={allowArchivedId}
-          lang={lang}
           error={txValidationMessage(t, errors.source_id?.message)}
           disabled={disabled}
         />
@@ -167,7 +166,6 @@ export function TransferFields({
             values.subtype === 'repayment' ? (source) => source.type === 'credit' : undefined
           }
           allowArchivedId={allowArchivedId}
-          lang={lang}
           hint={repaymentHint ? t('transaction:transfer.repayment_target_hint') : undefined}
           error={txValidationMessage(t, errors.to_source_id?.message)}
           disabled={disabled}
@@ -311,10 +309,12 @@ export function TransferFields({
           control={control}
           name="occurred_at"
           render={({ field }) => (
-            <DateField
+            <DateRowField
               testID="transfer-date"
               label={t('transaction:form.date')}
               todayLabel={t('transaction:form.today')}
+              // 屏幕稿 05 · 转账 两腿 375 draws this row with the chevron alone.
+              showToday={false}
               value={field.value}
               onChange={field.onChange}
               max={maxAllowedDate()}

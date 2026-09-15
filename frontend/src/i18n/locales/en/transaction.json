@@ -19,6 +19,7 @@
       "apply_other": "Apply · {{count}} transactions",
       "reset": "Reset",
       "reset_all": "Reset all",
+      "collapse": "Collapse",
       "applied_label": "Active filters",
       "no_filters": "No filters · showing every transaction",
       "search_placeholder": "Search merchant or note",
@@ -91,8 +92,6 @@
     "day_total": "Expense {{expense}} · Income {{income}}",
     "day_total_expense": "Expense {{expense}}",
     "day_total_income": "Income {{income}}",
-    "summary": "Expense {{expense}} · Income {{income}} · Net {{net}}",
-    "summary_short": "Expense {{expense}} · Income {{income}}",
     "summary_label": {
       "expense": "Expense",
       "income": "Income",
@@ -103,8 +102,16 @@
     "summary_rate_missing_other": "{{count}} transactions have no exchange rate yet and aren't included",
     "count_one": "{{count}} transaction",
     "count_other": "{{count}} transactions",
-    "count_loaded_one": "{{loaded}} of {{count}} transaction loaded",
-    "count_loaded_other": "{{loaded}} of {{count}} transactions loaded",
+    "count_matched_one": "{{count}} of {{total}} transactions",
+    "count_matched_other": "{{count}} of {{total}} transactions",
+    "count_matched_pending_one": "{{count}} matched",
+    "count_matched_pending_other": "{{count}} matched",
+    "stat": {
+      "expense": "Expense {{amount}}",
+      "income": "Income {{amount}}",
+      "refund": "Refund {{amount}}"
+    },
+    "summary_refund_note": "Refunds {{refund}} count toward the net; transfers do not.",
     "rate_missing": "No rate yet",
     "badge": {
       "repayment": "Repayment",

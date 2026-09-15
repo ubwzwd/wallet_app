@@ -15,7 +15,6 @@ import i18next from 'i18next';
 import { setAuthToken } from '@/api';
 import type { ImportBatchListItem, LedgerMember } from '@/api/types';
 import { initI18n } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { AuthProvider, LedgerProvider } from '@/store';
 import * as breakpoint from '@/theme/useBreakpoint';
@@ -36,7 +35,7 @@ import {
   type MockApi,
 } from '@/test';
 
-import ImportsHistoryScreen from '../ImportsHistoryScreen';
+import ImportsHistoryScreen, { IMPORTS_PAGE_SIZE } from '../ImportsHistoryScreen';
 
 let queryClient: QueryClient;
 let api: MockApi;
@@ -142,14 +141,15 @@ function seed(items: ImportBatchListItem[] = [READY, COMMITTED]): void {
 
 /**
  * Every *list* GET the screen sent to the history endpoint, oldest first. The header's
- * 「N 批待提交」 rides on a separate one-row `status=ready` probe (`limit: 1`), which is a
- * counter rather than a page of the list, so it is left out here.
+ * ledger-wide 「N 批待提交」 rides on a one-row `status=ready` probe of its own — a counter
+ * rather than a page of the list, so it is left out here: a page is anything asked for at
+ * `IMPORTS_PAGE_SIZE`.
  */
 function listRequests(): Array<Record<string, unknown> | undefined> {
   return api.mock.history.get
     .filter((r) => (r.url ?? '').endsWith('/imports'))
     .map((r) => r.params as Record<string, unknown> | undefined)
-    .filter((p) => p?.limit !== 1);
+    .filter((p) => p?.limit === IMPORTS_PAGE_SIZE);
 }
 
 function renderHistory(): ReturnType<typeof renderRouter> {
@@ -186,12 +186,9 @@ test('each row carries the uploader, the net amount, the flag count and its stat
   // … and the email prefix when nobody set a display name (decision §14.40).
   expect(screen.getByTestId(`import-batch-${PASTED_ID}-uploader`).props.children).toBe('liang');
 
-  expect(screen.getByTestId(`import-batch-${BATCH_ID}-net`).props.children).toBe(
-    formatMoney('-4210.5500', 'CNY', 'zh', { signDisplay: 'always' }),
-  );
-  expect(screen.getByTestId(`import-batch-${PASTED_ID}-net`).props.children).toBe(
-    formatMoney('900.0000', 'CNY', 'zh', { signDisplay: 'always' }),
-  );
+  // 屏幕稿 11's 净额 column is bare and signed — 「+1,204.60」 (§14.59a).
+  expect(screen.getByTestId(`import-batch-${BATCH_ID}-net`).props.children).toBe('−4,210.55');
+  expect(screen.getByTestId(`import-batch-${PASTED_ID}-net`).props.children).toBe('+900.00');
   expect(screen.getByTestId(`import-batch-${BATCH_ID}-flags`).props.children).toBe('⚑ 13');
   expect(screen.getByTestId(`import-batch-${PASTED_ID}-flags`).props.children).toBe('⚑ 0');
 
@@ -211,11 +208,11 @@ test('a pasted batch shows the placeholder and its badge instead of an empty fil
     '粘贴的 CSV 文本',
   );
   expect(screen.getByTestId(`import-batch-${PASTED_ID}-paste-badge`)).toBeTruthy();
-  // A real file shows its name and a human-readable size instead.
+  // A real file shows its name and nothing else in that cell — 屏幕稿 11 draws no size.
   expect(screen.getByTestId(`import-batch-${BATCH_ID}-filename`).props.children).toBe(
     '2026-08-cmb.csv',
   );
-  expect(screen.getByTestId(`import-batch-${BATCH_ID}-size`).props.children).toBe('18 KB');
+  expect(screen.queryByTestId(`import-batch-${BATCH_ID}-size`)).toBeNull();
   expect(screen.queryByTestId(`import-batch-${BATCH_ID}-paste-badge`)).toBeNull();
 });
 
@@ -277,9 +274,7 @@ test('undo asks with dry_run first, words both counters separately, then deletes
 
   // 屏幕稿 11: the stat tiles, and a confirm button that names the count.
   expect(screen.getByTestId('undo-dialog-stat-deleted-value').props.children).toBe('128 笔');
-  expect(screen.getByTestId('undo-dialog-stat-rollback-value').props.children).toBe(
-    formatMoney('-900.0000', 'CNY', 'zh', { signDisplay: 'always' }),
-  );
+  expect(screen.getByTestId('undo-dialog-stat-rollback-value').props.children).toBe('−900.00');
   expect(screen.getByTestId('confirm-meta')).toBeTruthy();
   expect(screen.getByText('撤销 128 笔')).toBeTruthy();
 
@@ -400,13 +395,17 @@ test('the header counts the batches and the status filter narrows the list throu
   seed();
   const router = renderHistory();
 
-  // 「2 批 · 1 批待提交」: both numbers are server totals — the batch count for the filter in
-  // force and a `status=ready` probe — so the sentence never mixes 「all of them」 with
-  // 「the ones on this page」.
+  // 屏幕稿 11's numbers: the batch count for the filter in force and a `status=ready` probe.
+  // Both come off the server rather than off the page in hand, so the sentence never mixes
+  // 「all of them」 with 「the ones on this page」. (「已入账 N 笔」 waits for a server count,
+  // §14.59 f.)
   const meta = await screen.findByTestId('imports-header-meta');
   await waitFor(() =>
     expect(String(meta.props.children)).toBe(
-      i18next.t('import:history.stats', { batches: 2, ready: 1 }),
+      [
+        i18next.t('import:history.stat_batches', { batches: 2 }),
+        i18next.t('import:history.stat_ready', { ready: 1 }),
+      ].join(' · '),
     ),
   );
 
@@ -420,11 +419,11 @@ test('the header counts the batches and the status filter narrows the list throu
   await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
 
-  // 「N 批待提交」 is a ledger-wide count, so it drops out under a filter rather than
-  // counting a pending batch inside a list of 已提交 ones (「1 批 · 1 批待提交」).
+  // 「N 批待提交」 is a ledger-wide count, so it drops out under a filter
+  // rather than counting a pending batch inside a list of 已提交 ones (「1 批 · 1 批待提交」).
   await waitFor(() =>
     expect(String(screen.getByTestId('imports-header-meta').props.children)).toBe(
-      i18next.t('import:history.stats_batches', { batches: 1 }),
+      i18next.t('import:history.stat_batches', { batches: 1 }),
     ),
   );
 

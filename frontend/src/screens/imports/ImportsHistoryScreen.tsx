@@ -6,9 +6,10 @@
  * its right, the way in plus the small 全部 / 待提交 / 已提交 segmented control. Both numbers
  * are server totals — the batch count for the filter in force and a one-row
  * `status=ready` probe — so the sentence never mixes 「all 45」 with 「the 20 in hand」.
- * 屏幕稿 11 also prints 「已入账 52 笔」; no endpoint totals the committed rows of a history
- * (03 §5 answers with counts of batches only), so that third number is not drawn rather
- * than counted off one page. That choice
+ * 屏幕稿 11's third number, 「已入账 52 笔」, has no endpoint of its own — 03 §5 totals
+ * batches, never their rows — so it is not drawn until the server carries a ledger-level
+ * count (§14.59 f); summing the committed batches client-side would mean reading every one
+ * of them on each visit. The filter
  * lives in the URL (`?status=`), so a filtered history is shareable and the back button is
  * right, and it is sent to the *server* as `status=`: the pager pages 20 batches at a time,
  * so a filter applied to the page in hand would silently hide matching batches on every
@@ -28,7 +29,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatchListItem } from '@/api/types';
+import type { ImportBatchListItem, Paged } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
@@ -163,12 +164,21 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   // both halves.
   // The probe answers a moment after the list does, and 「0 批待提交」 is a claim, not a
   // placeholder — so until it has answered the sentence is simply the batch count.
+  // Each half is drawn only once its own server answer is in, so the sentence grows from
+  // 「4 批」 to 「4 批 · 1 批待提交」 instead of claiming a zero it has not read. 屏幕稿 11's
+  // third number, 「已入账 N 笔」, waits for a ledger-level count from the server (§14.59 f):
+  // adding it up client-side would mean sweeping every committed batch on each visit.
   const meta =
     items.length === 0
       ? undefined
-      : filter === 'all' && readyTotal !== undefined
-        ? t('import:history.stats', { batches: total, ready: readyTotal })
-        : t('import:history.stats_batches', { batches: total });
+      : [
+          t('import:history.stat_batches', { batches: total }),
+          filter === 'all' && readyTotal !== undefined
+            ? t('import:history.stat_ready', { ready: readyTotal })
+            : null,
+        ]
+          .filter((part): part is string => part !== null)
+          .join(' · ');
   const header = (
     <PageHeader
       title={t('import:history.title')}

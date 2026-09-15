@@ -182,6 +182,7 @@ test('accounts are grouped into the four types, each with its converted subtotal
     expect(screen.getByTestId(`source-group-${type}`)).toBeTruthy();
   }
   // The archived checking account is NOT part of its group's subtotal (decision §14.50).
+  // A group subtotal is a standalone figure, so it keeps its symbol like 屏幕稿 09 (§14.59 f).
   expect(textOf('source-subtotal-checking')).toContain(formatMoney('10000.0000', 'CNY', 'zh'));
   expect(textOf('source-subtotal-credit')).toContain(formatMoney('-3204.0000', 'CNY', 'zh'));
   expect(textOf('source-subtotal-cash')).toContain(formatMoney('500.0000', 'CNY', 'zh'));
@@ -196,7 +197,7 @@ test('a credit card shows its debt as a negative amount, and a foreign account i
   expect(await screen.findByTestId('source-row-src-credit-amount')).toBeTruthy();
   // 屏幕稿 09 paints the debt as a signed number in the expense colour.
   const debt = screen.getByTestId('source-row-src-credit-amount');
-  expect(String(debt.props.children)).toBe(formatMoney('-3204.0000', 'CNY', 'zh'));
+  expect(String(debt.props.children)).toBe(formatAmountPlain('-3204.0000', 'CNY'));
   expect(debt).toHaveStyle({ color: lightColors['kind.expense'] });
 
   expect(String(screen.getByTestId('source-row-src-other-amount-sub').props.children)).toContain(
@@ -220,7 +221,6 @@ test('the wide table gives every account a row, and the foot strip the total of 
 
   // 折算 column: the converted value plus the rate date, 「—」 in the base currency.
   expect(textOf('source-balance-base-src-other')).toContain('1,000.00');
-  expect(textOf('source-rate-date-src-other')).toContain(formatDate('2026-09-11', 'zh'));
   expect(textOf('source-converted-src-cash')).toBe('—');
 
   // 余额 · 原币: 屏幕稿 09 writes a base-currency balance bare — the 币种 column already
@@ -251,8 +251,9 @@ test('archived accounts stay out of the three numbers and are folded away by def
 
   expect(await screen.findByTestId('sources-assets')).toBeTruthy();
   // assets = 10000 + 500 + 1000 (SGD converted); the archived 700 is excluded.
-  expect(textOf('sources-assets')).toContain(formatMoney('11500.0000', 'CNY', 'zh'));
-  expect(textOf('sources-liabilities')).toContain(formatMoney('3204.0000', 'CNY', 'zh'));
+  // 屏幕稿 09 · 375: 「资产 37,842.10 · 负债 3,215.00」 — bare; only the net worth keeps 「¥」.
+  expect(textOf('sources-assets')).toContain(formatAmountPlain('11500.0000', 'CNY'));
+  expect(textOf('sources-liabilities')).toContain(formatAmountPlain('3204.0000', 'CNY'));
   expect(textOf('sources-net-worth')).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
   expect(textOf('sources-excluded-archived')).toContain('1');
 
@@ -269,7 +270,7 @@ test('?include_archived=1 expands the section, greying each row with its archive
   expect(await screen.findByTestId('source-row-src-archived')).toBeTruthy();
   expect(
     String(screen.getByTestId('source-row-src-archived-amount-sub').props.children),
-  ).toContain(formatDate('2026-08-20', 'zh'));
+  ).toContain(formatDate('2026-08-20'));
   // The block says out loud that these balances are out of net worth.
   expect(textOf('sources-archived-hint')).toContain('不计入净资产');
   // Still out of the three numbers while expanded.
@@ -287,7 +288,7 @@ test('the expanded archived block keeps the table columns and stamps each row', 
   expect(textOf('sources-archived-count')).toContain('1');
   // The wide rows reuse the table grid, with 折算 swapped for 「归档于 …」.
   expect(screen.getByTestId('source-row-src-archived')).toBeTruthy();
-  expect(textOf('source-archived-at-src-archived')).toContain(formatDate('2026-08-20', 'zh'));
+  expect(textOf('source-archived-at-src-archived')).toContain(formatDate('2026-08-20'));
   // Both cards sit in the same horizontal scroller, so their columns stay lined up.
   expect(screen.getByTestId('sources-archived-hscroll')).toBeTruthy();
 });

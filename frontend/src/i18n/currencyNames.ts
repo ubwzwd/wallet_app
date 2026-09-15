@@ -1,5 +1,5 @@
 /**
- * Localised currency names for the settings screens (屏幕稿 12 / 14).
+ * Localised currency names (屏幕稿 09 / 12 / 14).
  *
  * `GET /rates/currencies` answers with the ISO English name of every code it knows
  * (「Chinese Renminbi Yuan」), which is what 屏幕稿 12 does *not* print: it reads

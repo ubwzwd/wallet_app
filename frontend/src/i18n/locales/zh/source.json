@@ -26,7 +26,6 @@
     "mixed_currencies": "混合币种",
     "same_currency": "—",
     "no_rate_cell": "暂无汇率",
-    "rate_date": "汇率日期 {{date}}",
     "archived_title": "已归档账户",
     "archived_hint": "不计入净资产与首页，历史交易照旧保留、照旧能搜到",
     "archived_count": "{{count}} 个",

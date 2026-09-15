@@ -14,6 +14,7 @@ import { normalizeAmountInput } from '@/domain/money';
 import { formatDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { AmountField, Badge, Chip, Icon, Text } from '@/ui';
 
@@ -56,9 +57,9 @@ export function TransferAmount({
   const {
     form: { control, formState },
     currencies,
-    lang,
     values,
   } = ctrl;
+  const currencyNames = useCurrencyNames(currencies.names);
   const { errors } = formState;
   const rate = crossCurrency ? referenceRate(values.amount, values.amount_in) : null;
   const badge = crossCurrency
@@ -91,7 +92,7 @@ export function TransferAmount({
               // read-only (decision §14.52 A11).
               onCurrencyChange={external ? undefined : currencyField.onChange}
               codes={currencies.codes}
-              currencyNames={currencies.names}
+              currencyNames={currencyNames}
               quickAdd={!crossCurrency}
               allowExpression
               autoFocus={autoFocusAmount}
@@ -125,7 +126,7 @@ export function TransferAmount({
               currency={currencyField.value}
               onCurrencyChange={currencyField.onChange}
               codes={currencies.codes}
-              currencyNames={currencies.names}
+              currencyNames={currencyNames}
               disabled={disabled}
               error={
                 txValidationMessage(t, errors.amount_in?.message) ??
@@ -146,7 +147,7 @@ export function TransferAmount({
           from: values.currency,
           rate,
           to: values.currency_in,
-          date: formatDate(values.occurred_at, lang),
+          date: formatDate(values.occurred_at),
         })}
         style={styles.rateChip}
       />

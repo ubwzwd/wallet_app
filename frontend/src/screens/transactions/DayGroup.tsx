@@ -15,10 +15,11 @@ import type { CategoryIndex } from '@/domain/categories';
 import { parseMoney } from '@/domain/money';
 import type { DayGroup as DayGroupData, ListRow } from '@/domain/transfers';
 import { type Lang } from '@/i18n';
-import { formatDateShort, formatMoney, parseLocalDate } from '@/i18n/format';
+import { formatDateShort, parseLocalDate } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { ListCard, Text } from '@/ui';
 
+import { plainAmount } from './amount';
 import { TransactionRow, rowKey } from './TransactionRow';
 
 export interface DayGroupProps {
@@ -41,12 +42,12 @@ function daySubtotal(
   t: TFunction,
   group: DayGroupData,
   baseCurrency: string,
-  lang: Lang,
 ): string | null {
   const hasExpense = parseMoney(group.expense) !== 0n;
   const hasIncome = parseMoney(group.income) !== 0n;
-  const expense = formatMoney(group.expense, baseCurrency, lang);
-  const income = formatMoney(group.income, baseCurrency, lang);
+  // Bare, like every other base-currency figure in the list (§14.59a).
+  const expense = plainAmount(group.expense, baseCurrency);
+  const income = plainAmount(group.income, baseCurrency);
   if (hasExpense && hasIncome) return t('transaction:list.day_total', { expense, income });
   if (hasExpense) return t('transaction:list.day_total_expense', { expense });
   if (hasIncome) return t('transaction:list.day_total_income', { income });
@@ -58,7 +59,7 @@ export function DayGroup(props: DayGroupProps): React.JSX.Element {
   const { group, lang, baseCurrency } = props;
   const id = props.testID ?? `tx-day-${group.date}`;
   const weekday = t(`transaction:list.weekday.${parseLocalDate(group.date).getDay()}`);
-  const subtotal = daySubtotal(t, group, baseCurrency, lang);
+  const subtotal = daySubtotal(t, group, baseCurrency);
 
   return (
     <View testID={id} style={{ gap: space['2'] - 2, paddingBottom: space['3'] }}>

@@ -13,13 +13,12 @@ import { ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from 're
 import { useTranslation } from 'react-i18next';
 
 import type { FinanceSource, Uuid } from '@/api/types';
-import { type Lang, useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { ListRow, Popover, Sheet, SourceTypeIcon, Text, selectableSources } from '@/ui';
 
+import { useAmountText } from '../amount';
 import { FieldLabel, RowField } from './parts';
 
 export interface SourceFieldProps {
@@ -30,13 +29,19 @@ export interface SourceFieldProps {
   filter?(source: FinanceSource): boolean;
   /** Keeps this archived account selectable (edit mode only, 04 §4.7). */
   allowArchivedId?: Uuid | null;
-  lang?: Lang;
   label: string;
   /** Sits to the right of the label — the 「不在应用里」 toggle of mockup 05. */
   labelRight?: React.ReactNode;
   hint?: string | null;
   error?: string | null;
   disabled?: boolean;
+  /**
+   * `'row'` is 屏幕稿 04 · 375's shape: the label lives *inside* the row (over the account
+   * name) and the type / currency line moves under the balance, so the account and the date
+   * make one flat two-line card. `'field'` (the default) is the labelled box of 屏幕稿 05.
+   * Wide screens always get `'field'` — that is what 屏幕稿 04 · 1440 draws.
+   */
+  variant?: 'field' | 'row';
   style?: StyleProp<ViewStyle>;
   testID: string;
 }
@@ -52,20 +57,21 @@ export function SourceField({
   onChange,
   filter,
   allowArchivedId,
-  lang,
   label,
   labelRight,
   hint,
   error,
   disabled = false,
+  variant = 'field',
   style,
   testID,
 }: SourceFieldProps): React.JSX.Element {
   const { t } = useTranslation();
-  const activeLang = useLang();
-  const l = lang ?? activeLang;
   const wide = useIsWide();
   const colors = useColors();
+  // 屏幕稿 04 / 05 write the ledger-currency balance bare and a foreign one with its
+  // symbol — 「12,480.35」 next to 「S$4,120.80」 (§14.59a).
+  const money = useAmountText();
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef<View>(null);
 
@@ -96,7 +102,7 @@ export function SourceField({
               ? `${subtitleOf(source, t)} · ${t('common:status.archived')}`
               : subtitleOf(source, t)
           }
-          amount={formatMoney(source.balance, source.default_currency, l)}
+          amount={money(source.balance, source.default_currency)}
           amountTone="secondary"
           selected={source.id === value}
           onPress={() => pick(source.id)}
@@ -105,9 +111,11 @@ export function SourceField({
     </ScrollView>
   );
 
+  const inRow = variant === 'row' && !wide;
+
   return (
     <View style={[styles.wrap, style]}>
-      <FieldLabel label={label} right={labelRight} />
+      {inRow ? null : <FieldLabel label={label} right={labelRight} />}
       <View ref={anchorRef} style={styles.anchor}>
         <RowField
           testID={`${testID}-trigger`}
@@ -115,12 +123,13 @@ export function SourceField({
             current ? <SourceTypeIcon type={current.type} size={wide ? 36 : 34} /> : undefined
           }
           icon={current ? undefined : 'wallet'}
+          label={inRow ? label : undefined}
           value={current?.name ?? label}
           valueTone={current ? 'primary' : 'muted'}
-          hint={current ? subtitleOf(current, t) : undefined}
-          amount={
-            current ? formatMoney(current.balance, current.default_currency, l) : undefined
-          }
+          hint={inRow || !current ? undefined : subtitleOf(current, t)}
+          amount={current ? money(current.balance, current.default_currency) : undefined}
+          amountSub={inRow && current ? subtitleOf(current, t) : undefined}
+          filled={!inRow}
           onPress={() => setOpen((v) => !v)}
           disabled={disabled}
           accessibilityLabel={label}

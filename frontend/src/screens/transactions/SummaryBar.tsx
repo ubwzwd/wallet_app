@@ -13,39 +13,46 @@ import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { TransactionSummary } from '@/api/types';
-import { type Lang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
+import { parseMoney } from '@/domain/money';
 import { density, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Card, Text, type TextTone } from '@/ui';
 
+import { plainAmount } from './amount';
+import { refundTotalOf } from './headerStats';
+
 export interface SummaryBarProps {
   summary: TransactionSummary;
-  lang: Lang;
   testID?: string;
 }
 
-export function SummaryBar({ summary, lang, testID }: SummaryBarProps): React.JSX.Element {
+export function SummaryBar({ summary, testID }: SummaryBarProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   const id = testID ?? 'tx-summary';
   const currency = summary.base_currency;
 
+  // 屏幕稿 02 · 375 writes all three cells bare: the card is one currency wide and the
+  // labels above them are what the numbers mean (§14.59a).
   const cells: Array<{ key: 'expense' | 'income' | 'net'; value: string; tone: TextTone; flex: number }> = [
-    {
-      key: 'expense',
-      value: formatMoney(summary.expense, currency, lang),
-      tone: 'expense',
-      flex: 1,
-    },
-    { key: 'income', value: formatMoney(summary.income, currency, lang), tone: 'income', flex: 1 },
+    { key: 'expense', value: plainAmount(summary.expense, currency), tone: 'expense', flex: 1 },
+    { key: 'income', value: plainAmount(summary.income, currency), tone: 'income', flex: 1 },
     {
       key: 'net',
-      value: formatMoney(summary.net, currency, lang, { signDisplay: 'always' }),
+      value: plainAmount(summary.net, currency, 'always'),
       tone: 'primary',
       flex: 1.15,
     },
   ];
+
+  // 屏幕稿 02 · 375's footnote under the card: what the net *does* count that the two cells
+  // above it do not name. Only drawn when there were refunds; transfers are named by the
+  // 净额 cell's own 「不含转账」 caption.
+  const refund = refundTotalOf(summary);
+  const refundNote =
+    parseMoney(refund) === 0n
+      ? null
+      : t('transaction:list.summary_refund_note', { refund: plainAmount(refund, currency) });
 
   return (
     <View style={{ gap: space['2'] - 2 }}>
@@ -70,6 +77,16 @@ export function SummaryBar({ summary, lang, testID }: SummaryBarProps): React.JS
           </React.Fragment>
         ))}
       </Card>
+      {refundNote !== null ? (
+        <Text
+          variant="micro"
+          tone="muted"
+          style={{ paddingHorizontal: space['1'] }}
+          testID={`${id}-refund-note`}
+        >
+          {refundNote}
+        </Text>
+      ) : null}
       {summary.rate_missing_count > 0 ? (
         <Text
           variant="micro"

@@ -18,7 +18,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { FinanceSource, Paged } from '@/api/types';
 import { absMoney, parseMoney, sumSources } from '@/domain';
 import { useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { EmptyState, ListCard, Skeleton, Text } from '@/ui';
@@ -105,9 +105,11 @@ export function NetWorthHeader({
 
       {muted ? null : (
         <View style={styles.subLine}>
+          {/* 屏幕稿 09 writes the same pair bare under the big number — 「资产 37,842.10 ·
+              负债 3,215.00」 — the symbol belongs to the net-worth line alone (§14.59a). */}
           <Text variant="caption" tone="muted" mono testID="home-assets">
             {t('stats:home.assets_amount', {
-              amount: formatMoney(summary.assets, baseCurrency, lang),
+              amount: formatAmountPlain(summary.assets, baseCurrency),
             })}
           </Text>
           <Text variant="caption" tone="muted">
@@ -115,7 +117,7 @@ export function NetWorthHeader({
           </Text>
           <Text variant="caption" tone="muted" mono testID="home-liabilities">
             {t('stats:home.liabilities_amount', {
-              amount: formatMoney(absMoney(summary.liabilities), baseCurrency, lang),
+              amount: formatAmountPlain(absMoney(summary.liabilities), baseCurrency),
             })}
           </Text>
         </View>

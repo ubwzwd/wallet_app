@@ -88,7 +88,9 @@ describe('EventTimeline', () => {
     );
     // Mockups 07 / 08 write the action and the person on one line, the time underneath.
     expect(screen.getByTestId('ev-action-new')).toHaveTextContent('改动 · 我');
-    expect(screen.getByTestId('ev-at-new')).toHaveTextContent('2026-08-20 22:02');
+    // 屏幕稿 07 / 08 drop the year from the timeline stamp, the way the date columns do.
+    expect(screen.getByTestId('ev-at-new')).toHaveTextContent('08-20 22:02');
+    expect(screen.getByTestId('ev-at-new')).not.toHaveTextContent('2026');
     const dotStyle = (id: string): Record<string, unknown> =>
       StyleSheet.flatten(screen.getByTestId(id).props.style as never) as never;
     expect(dotStyle('ev-dot-new').backgroundColor).toBe(lightColors['accent.solid']);

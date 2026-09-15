@@ -390,7 +390,9 @@ test('「复制一笔」 on one leg of a two-leg transfer carries what it can an
     true,
   );
   // A copy is made today, never on the original's day (04 §4.7).
-  expect(screen.getByTestId('transfer-date').props.value).toBe(todayLocalIso());
+  // 屏幕稿 05 · 375 shows the date as a row, so this reads what the row prints rather than
+  // the box's `value` (the box lives in the sheet behind it).
+  expect(screen.getByTestId('transfer-date-row-value')).toHaveTextContent(todayLocalIso());
   await waitFor(() => expect(router.getSearchParams().kind).toBe('transfer'));
 
   // What only the other leg knows is left blank on purpose, and the warning says so
@@ -481,7 +483,7 @@ test('the stats preview reads the cached monthly summary and adds the new amount
   await pickFood();
 
   const preview = await screen.findByTestId('stats-preview');
-  expect(preview).toHaveTextContent('本月餐饮 ¥1,240.00 → ¥1,278.00');
+  expect(preview).toHaveTextContent('本月餐饮 1,240.00 → 1,278.00');
   // Nothing was fetched for it (decision §14.52 A9).
   expect(api.mock.history.get.filter((r) => (r.url ?? '').includes('/stats/'))).toHaveLength(0);
 });
@@ -552,8 +554,8 @@ test('「复制一笔」 copies account / merchant / category / amount and moves
   expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CREDIT.name);
   expect(screen.getByTestId('tx-category-path')).toHaveTextContent('生活购物');
   // A copy is a new entry made today, not a second copy of an old day (04 §4.7).
-  expect(screen.getByTestId('tx-date').props.value).toBe(todayLocalIso());
-  expect(screen.getByTestId('tx-date').props.value).not.toBe(ORIGINAL.occurred_at);
+  expect(screen.getByTestId('tx-date-row-value')).toHaveTextContent(todayLocalIso());
+  expect(screen.getByTestId('tx-date-row-value')).not.toHaveTextContent(ORIGINAL.occurred_at);
 });
 
 test('⌘S saves the *value* of an expression still sitting in the amount box', async () => {

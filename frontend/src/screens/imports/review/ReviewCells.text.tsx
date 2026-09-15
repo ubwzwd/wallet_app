@@ -16,10 +16,12 @@ import type { TFunction } from 'i18next';
 import type { ImportRow, ImportRowPatch, IsoDate } from '@/api/types';
 import { applySign } from '@/domain/kinds';
 import { normalizeAmountInput } from '@/domain/money';
-import { formatDateShort, formatMoney } from '@/i18n/format';
+import { formatDateShort } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Button, DateField, KIND_AMOUNT_TONE, Text, TextField, trimMoney } from '@/ui';
+
+import { importAmountText } from '../amountFormat';
 
 import {
   type CellProps,
@@ -196,9 +198,13 @@ export function AmountCell({
     >
       {row.amount === null
         ? t('import:review.missing_value')
-        : formatMoney(row.amount, row.currency ?? env.batch.base_currency, env.lang, {
-            signDisplay: 'always',
-          })}
+        : importAmountText(
+            row.amount,
+            row.currency ?? env.batch.base_currency,
+            env.batch.base_currency,
+            env.lang,
+            row.kind === 'transfer' ? 'auto' : 'always',
+          )}
     </Text>
   ) : (
     <TextField
@@ -222,20 +228,28 @@ export function AmountCell({
 // --------------------------------------------------------------------- merchant / note
 
 /**
- * A transfer row has no merchant (decision §14.52 B16), and 屏幕稿 03 puts the two ends of
- * the leg in the 商户 column instead of an em dash — 「招行储蓄卡 → 建行信用卡」 — in both
- * the 1440 grid and the 375 card flow. §14.45 makes the mockup the source of truth here;
- * 04 §4.11.2's 「—」 is the wording that has to change.
+ * A transfer row has no merchant (decision §14.52 B16), and 屏幕稿 03 puts the leg itself in
+ * the 商户 column instead of an em dash, in both the 1440 grid and the 375 card flow. The
+ * mockup writes it two ways, and which one it uses depends on what is actually known:
+ *
+ *  - both ends are accounts of this ledger → 「招行储蓄卡 → 建行信用卡」;
+ *  - a single leg whose other end is only a name → 「对方：工资卡」 (屏幕稿 03 row 8 / 16);
+ *  - neither → this batch's own account, alone. An arrow drawn to 「缺失」 claims a transfer
+ *    to nowhere, which is worse than saying nothing.
+ *
+ * §14.45 makes the mockup the source of truth here; 04 §4.11.2's 「—」 is the wording that
+ * has to change.
  */
 export function transferTitle(row: ImportRow, env: ReviewEnv, t: TFunction): string {
-  const other =
-    env.sources.find((s) => s.id === row.counterpart_source_id)?.name ??
-    row.counterparty ??
-    t('import:review.missing_value');
   const mine = env.batch.source_name;
+  const account = env.sources.find((s) => s.id === row.counterpart_source_id)?.name;
+  if (account === undefined) {
+    const named = row.counterparty?.trim() ?? '';
+    return named === '' ? mine : t('import:review.transfer_counterparty', { name: named });
+  }
   return row.transfer_role === 'in'
-    ? t('import:review.transfer_title', { from: other, to: mine })
-    : t('import:review.transfer_title', { from: mine, to: other });
+    ? t('import:review.transfer_title', { from: account, to: mine })
+    : t('import:review.transfer_title', { from: mine, to: account });
 }
 
 export interface TextCellProps extends CellProps {

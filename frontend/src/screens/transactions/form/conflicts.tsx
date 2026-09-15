@@ -133,7 +133,7 @@ export function ConflictBanner({
       const currency = field === 'amount' ? ctrl.values.currency : ctrl.values.currency_in;
       return formatMoney(value, currency, ctrl.lang);
     }
-    if (field === 'occurred_at') return formatDate(value, ctrl.lang);
+    if (field === 'occurred_at') return formatDate(value);
     if (field === 'source_id' || field === 'to_source_id') {
       return ctrl.sourceById(value)?.name ?? value;
     }

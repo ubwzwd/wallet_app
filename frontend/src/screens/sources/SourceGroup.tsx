@@ -40,7 +40,7 @@ function amountSubOf(
   if (source.archived) {
     return source.archived_at === null
       ? undefined
-      : t('source:list.archived_at', { date: formatDate(source.archived_at.slice(0, 10), lang) });
+      : t('source:list.archived_at', { date: formatDate(source.archived_at.slice(0, 10)) });
   }
   if (!isForeign(source, baseCurrency)) return undefined;
   if (source.balance_base === null) return t('source:list.no_rate_cell');
@@ -74,7 +74,7 @@ export function SourceListRow({
           icon={<SourceTypeIcon type={source.type} size={34} />}
           title={source.name}
           subtitle={`${t(sourceTypeLabelKey(source.type))} · ${source.default_currency}`}
-          amount={balanceText(source, lang)}
+          amount={balanceText(source, lang, baseCurrency)}
           amountTone={balanceTone(source, muted)}
           amountSub={amountSubOf(source, baseCurrency, lang, t)}
           onPress={() => onOpen(source)}
@@ -136,6 +136,8 @@ export function SourceGroup({
         >
           {t(sourceTypeLabelKey(type))}
         </Text>
+        {/* 屏幕稿 09 writes the group subtotal with its symbol (「¥12,480.35」): it is a
+            standalone figure, not a column (§14.59 f). */}
         <Text variant="micro" tone="muted" mono testID={`source-subtotal-${type}`}>
           {formatMoney(subtotal, baseCurrency, lang)}
         </Text>

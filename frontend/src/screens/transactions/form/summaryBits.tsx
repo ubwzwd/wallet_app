@@ -14,10 +14,12 @@ import { useTranslation } from 'react-i18next';
 import type { User } from '@/api/types';
 import { normalizeAmountInput, subMoney } from '@/domain/money';
 import { categoryName } from '@/i18n/category';
-import { formatAmountPlain, formatDate, formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatDate } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Badge, Icon, KIND_ICON, KIND_SIGN, SourceTypeIcon, Text, TintCard } from '@/ui';
+
+import { useAmountText } from '../amount';
 
 import type { SummaryRow } from './SummaryCard';
 import { showsSecondLeg } from './schemas';
@@ -129,7 +131,7 @@ export function summaryContent({
       { label: t('transaction:form.category_title'), value: categoryText },
       {
         label: t('transaction:form.date'),
-        value: values.occurred_at === '' ? '—' : formatDate(values.occurred_at, ctrl.lang),
+        value: values.occurred_at === '' ? '—' : formatDate(values.occurred_at),
         mono: true,
       },
       { label: t('transaction:form.summary_author'), value: userName },
@@ -168,7 +170,8 @@ function Leg({
 function TransferLegs({ ctrl }: { ctrl: TxFormController }): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
-  const { values, lang } = ctrl;
+  const amountText = useAmountText();
+  const { values } = ctrl;
   const external = values.external;
   const out = normalizeAmountInput(values.amount);
   const cross = showsSecondLeg(values);
@@ -190,10 +193,13 @@ function TransferLegs({ ctrl }: { ctrl: TxFormController }): React.JSX.Element {
       <SourceTypeIcon type={type} size={30} />
     );
 
+  // 屏幕稿 05 writes the two legs 「−5,000.00」 / 「+838.35」: the leg tiles name the account
+  // and its currency right beside the number, so the base currency is written bare
+  // (§14.59a); a foreign leg keeps its symbol.
   const money = (amount: string | null, currency: string, sign: '-' | '+'): string => {
     if (amount === null || currency === '') return '—';
     const signed = sign === '-' ? subMoney('0', amount) : amount;
-    return formatMoney(signed, currency, lang);
+    return amountText(signed, currency, 'always');
   };
 
   // A single leg has one account and one free-text side; the free-text side never moves

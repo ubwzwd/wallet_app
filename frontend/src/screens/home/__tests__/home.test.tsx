@@ -288,8 +288,9 @@ test('assets, liabilities and net worth follow the sumSources rules', async () =
 
   // Credit cards go to liabilities and are shown as a positive "owed" figure; the archived
   // account is in none of the three numbers; the unconvertible one is not read as 0.
-  expect(await router.findByTestId('home-assets')).toHaveTextContent(containing('¥1,000.00'));
-  expect(router.getByTestId('home-liabilities')).toHaveTextContent(containing('负债 ¥400.00'));
+  // §14.59a: the two sums are bare, only the net-worth figure keeps the 「¥」.
+  expect(await router.findByTestId('home-assets')).toHaveTextContent(containing('1,000.00'));
+  expect(router.getByTestId('home-liabilities')).toHaveTextContent(containing('负债 400.00'));
   expect(router.getByTestId('home-net-worth')).toHaveTextContent(containing('¥600.00'));
   expect(router.getByTestId('home-archived-hint')).toHaveTextContent('不含 1 个已归档账户');
   expect(router.getByTestId('home-unconvertible-hint')).toHaveTextContent(
@@ -301,12 +302,14 @@ test('the month totals sit in the header, expense first (screen 01)', async () =
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  // `expense_total` already has the month's refunds deducted (decision §7).
+  // `expense_total` already has the month's refunds deducted (decision §7). 屏幕稿 01 writes
+  // both tiles bare — 「6,842.50」 — so neither carries a 「¥」 (§14.59a).
   expect(await router.findByTestId('home-expense-total')).toHaveTextContent(
-    containing('¥8,421.66'),
+    containing('8,421.66'),
   );
-  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('9月支出'));
-  expect(router.getByTestId('home-income-total')).toHaveTextContent(containing('¥23,500.00'));
+  expect(router.getByTestId('home-expense-total')).not.toHaveTextContent(containing('¥'));
+  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('9 月支出'));
+  expect(router.getByTestId('home-income-total')).toHaveTextContent(containing('23,500.00'));
 });
 
 test('the narrow shell keeps its ledger pill and adds no page title (screen 01 at 375)', async () => {
@@ -343,7 +346,8 @@ test('an account row links to the transaction list filtered to that account', as
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   const row = await router.findByTestId('home-balance-src-checking');
-  expect(router.getByTestId('home-balance-src-checking-amount')).toHaveTextContent('¥1,000.00');
+  // A base-currency balance is bare in the accounts card too (屏幕稿 01: 「12,480.35」).
+  expect(router.getByTestId('home-balance-src-checking-amount')).toHaveTextContent('1,000.00');
   // The archived account never shows up as a row.
   expect(router.queryByTestId('home-balance-src-archived')).toBeNull();
 
@@ -442,9 +446,9 @@ test('the month total, the deducted refunds and the missing-rate count are all s
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   expect(await router.findByTestId('home-categories-total')).toHaveTextContent(
-    containing('¥8,421.66'),
+    containing('8,421.66'),
   );
-  expect(router.getByTestId('home-refund-note')).toHaveTextContent('其中已冲减退款 ¥82.98');
+  expect(router.getByTestId('home-refund-note')).toHaveTextContent('其中已冲减退款 82.98');
   expect(router.getByTestId('home-summary-rate-missing')).toHaveTextContent(
     '3 笔因暂无汇率未计入',
   );
@@ -535,8 +539,8 @@ test('the trend keeps the monthly average and the peak, and a column switches th
   mockHome({ trend: makeStatsTrend({ months }) });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
-  expect(await router.findByTestId('home-trend-average')).toHaveTextContent('月均 ¥1,400.00');
-  expect(router.getByTestId('home-trend-peak')).toHaveTextContent('峰值 ¥3,600.00（4月）');
+  expect(await router.findByTestId('home-trend-average')).toHaveTextContent('月均 1,400.00');
+  expect(router.getByTestId('home-trend-peak')).toHaveTextContent('峰值 3,600.00（4 月）');
 
   fireEvent.press(router.getByTestId('home-trend-chart-point-2026-04'));
   await waitFor(() => expect(router.getSearchParams().month).toBe('2026-04'));
@@ -558,6 +562,10 @@ test('the recent block asks for five transactions and merges a transfer into one
   mockHome({
     recent: [
       makeTransaction({ id: 'tx-coffee', merchant: '瑞幸咖啡', source_id: 'src-checking' }),
+      makeTransaction({
+        id: 'tx-salary', kind: 'income', merchant: '公司', amount: '3000.0000',
+        source_id: 'src-checking', category_l1: 'salary', category_l2: null,
+      }),
       pair.out,
       pair.in,
     ],
@@ -566,7 +574,9 @@ test('the recent block asks for five transactions and merges a transfer into one
 
   const row = await router.findByTestId('home-recent-tx-coffee');
   expect(row).toHaveTextContent(containing('瑞幸咖啡'));
-  expect(router.getByTestId('home-recent-tx-coffee-amount')).toHaveTextContent('−¥128.50');
+  expect(router.getByTestId('home-recent-tx-coffee-amount')).toHaveTextContent('−128.50');
+  // 屏幕稿 01 signs both directions in the 最近 list: 「+199.00」, not 「199.00」.
+  expect(router.getByTestId('home-recent-tx-salary-amount')).toHaveTextContent('+3,000.00');
   // One row for the pair, not two legs.
   expect(router.getByTestId(`home-recent-${pair.pair_id}`)).toBeTruthy();
   expect(router.queryByTestId(`home-recent-${pair.out.id}`)).toBeNull();
@@ -599,7 +609,7 @@ test('a failing stats request only breaks its own block', async () => {
   expect(router.getByTestId('home-summary-error-primary')).toBeTruthy();
   // The balances and the header numbers came from a different request and are unaffected.
   expect(router.getByTestId('home-balance-src-checking')).toBeTruthy();
-  expect(router.getByTestId('home-assets')).toHaveTextContent(containing('¥1,000.00'));
+  expect(router.getByTestId('home-assets')).toHaveTextContent(containing('1,000.00'));
   expect(router.getByTestId('home-trend')).toBeTruthy();
   // The month switcher survives a failed summary — it is the only way out of that month.
   expect(router.getByTestId('home-month-prev')).toBeTruthy();
@@ -611,7 +621,7 @@ test('a failing accounts request leaves the summary and the trend readable', asy
 
   expect(await router.findByTestId('home-networth-error')).toBeTruthy();
   expect(router.getByTestId('home-balances-error')).toBeTruthy();
-  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('¥8,421.66'));
+  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('8,421.66'));
   expect(router.getByTestId('home-trend')).toBeTruthy();
 });
 

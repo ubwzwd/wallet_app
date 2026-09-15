@@ -16,7 +16,7 @@ import { cmpMoney } from '@/domain';
 import type { CategoryIndex } from '@/domain/categories';
 import { type Lang } from '@/i18n';
 import { categoryDesc } from '@/i18n/category';
-import { formatMoney } from '@/i18n/format';
+import { formatAmountPlain } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -73,7 +73,6 @@ export interface CategoryRowProps {
   /** The row's `chart.series` colour, already resolved by the caller. */
   color: string;
   currency: string;
-  lang: Lang;
   open: boolean;
   onToggle(): void;
 }
@@ -82,7 +81,6 @@ export function CategoryRow({
   item,
   color,
   currency,
-  lang,
   open,
   onToggle,
 }: CategoryRowProps): React.JSX.Element {
@@ -135,7 +133,7 @@ export function CategoryRow({
           </Text>
         ) : null}
         <Text variant="body" mono weight={500} style={styles.amount}>
-          {formatMoney(item.amount, currency, lang)}
+          {formatAmountPlain(item.amount, currency)}
         </Text>
         <Icon
           name={open ? 'chevron-down' : 'chevron-right'}
@@ -177,7 +175,7 @@ export function CategoryRow({
                 </View>
               ) : null}
               <Text variant="body" tone="secondary" mono>
-                {formatMoney(child.amount, currency, lang)}
+                {formatAmountPlain(child.amount, currency)}
               </Text>
             </View>
           ))}

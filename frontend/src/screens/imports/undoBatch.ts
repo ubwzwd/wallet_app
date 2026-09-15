@@ -19,10 +19,11 @@ import type { TFunction } from 'i18next';
 import type { ImportBatch, ImportBatchListItem, ImportDeleteResult } from '@/api/types';
 import { negMoney } from '@/domain/money';
 import type { Lang } from '@/i18n';
-import { formatDateTime, formatMoney } from '@/i18n/format';
+import { formatDateTime } from '@/i18n/format';
 import type { ImportDeleteVars } from '@/queries';
 import { toast } from '@/ui';
 
+import { signedPlain } from './amountFormat';
 import { askUndo, type UndoStat, type UndoWarning } from './UndoDialog';
 
 export interface UndoImportBatchOptions {
@@ -44,7 +45,7 @@ export function undoMeta(
 ): string {
   const filename =
     batch.source === 'paste' ? t('import:history.pasted_filename') : (batch.filename ?? '');
-  return [filename, formatDateTime(batch.created_at, lang), batch.source_name]
+  return [filename, formatDateTime(batch.created_at), batch.source_name]
     .filter((part) => part.length > 0)
     .join(' · ');
 }
@@ -58,7 +59,6 @@ function undoStats(
   batch: ImportBatch | ImportBatchListItem,
   deleteCount: number,
   t: TFunction,
-  lang: Lang,
 ): UndoStat[] {
   const rollback = negMoney(batch.net_amount);
   return [
@@ -70,7 +70,8 @@ function undoStats(
     {
       key: 'rollback',
       label: t('import:committed.undo_stat_rollback'),
-      value: formatMoney(rollback, batch.base_currency, lang, { signDisplay: 'always' }),
+      // 屏幕稿 11 · 撤销确认 writes 「净额回滚 +1,204.60」 bare (§14.59a).
+      value: signedPlain(rollback, batch.base_currency),
       tone: Number.parseFloat(rollback) < 0 ? 'expense' : 'income',
     },
   ];
@@ -119,7 +120,7 @@ export async function undoImportBatch({
   const ok = await askUndo({
     title: t('import:committed.undo_confirm_title'),
     meta: undoMeta(batch, t, lang),
-    stats: undoStats(batch, count, t, lang),
+    stats: undoStats(batch, count, t),
     warnings: undoWarnings(dry, t),
     footNote: t('import:committed.undo_confirm_body', { count }),
     confirmLabel: t('import:committed.undo_confirm_action', { count }),

@@ -21,6 +21,7 @@ import type { User } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { applyLanguage, useLang, type Lang } from '@/i18n';
 import { pickLandingLedger, useLastLedgerId, useTopBar } from '@/navigation';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useCurrencies, useLedgers, useMe, useUpdateMe } from '@/queries';
 import { useAuth, useOptionalLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
@@ -29,13 +30,13 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import {
   Button,
   Card,
-  CurrencyPicker,
   Icon,
   ListCard,
   ListRow,
   Page,
   PageHeader,
   SegmentedControl,
+  Select,
   Text,
   toast,
 } from '@/ui';
@@ -44,7 +45,6 @@ import { IconWell } from './IconWell';
 import { LanguageCard, LanguageField, type LanguageChoice } from './LanguageCard';
 import { DISPLAY_NAME_MAX_LENGTH, ProfileCard } from './ProfileCard';
 import { SectionLabel } from './SectionLabel';
-import { useCurrencyNames } from './currencyNames';
 
 export { DISPLAY_NAME_MAX_LENGTH };
 
@@ -155,15 +155,33 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   const languageValue: LanguageChoice = user?.language ?? 'system';
   const dirty = user !== undefined && (name.trim() === '' ? null : name.trim()) !== user.display_name;
 
+  /**
+   * 屏幕稿 14 prints 「CNY 人民币」 in the closed 默认币种 field, not the bare code —
+   * `CurrencyPicker` hands the name to `Select` as the option's hint, and a hint only shows
+   * inside the open list, so this page builds the options itself with the name folded into
+   * the label. Everything else (the testIDs, the search, the sheet) is what `CurrencyPicker`
+   * would have rendered: it is the same `Select` underneath.
+   */
+  const currencyOptions = currencies.codes.map((code) => {
+    const name = currencyNames[code];
+    return { value: code, label: name === undefined ? code : `${code} ${name}` };
+  });
+
   const currencyField = (
     <View style={{ gap: space['1'] + 2 }}>
-      <CurrencyPicker
+      <Select
         testID="settings-base-currency"
         label={t('settings:base_currency_label')}
-        codes={currencies.codes}
-        names={currencyNames}
+        placeholder={t('settings:base_currency_label')}
+        closeLabel={t('common:button.close')}
+        searchable
+        searchPlaceholder={t('settings:base_currency_label')}
+        emptyLabel={t('common:status.none')}
+        options={currencyOptions}
         value={user?.base_currency ?? null}
-        onChange={changeCurrency}
+        onChange={(next) => {
+          if (next !== null) changeCurrency(next);
+        }}
         disabled={!user || update.isPending}
       />
       <Text variant="caption" tone="muted" testID="settings-base-currency-hint">

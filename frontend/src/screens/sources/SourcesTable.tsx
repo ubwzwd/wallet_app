@@ -90,11 +90,9 @@ export interface SourceTableRowProps {
 function ConvertedCell({
   source,
   baseCurrency,
-  lang,
 }: {
   source: FinanceSource;
   baseCurrency: string;
-  lang: Lang;
 }): React.JSX.Element {
   const { t } = useTranslation();
   if (!isForeign(source, baseCurrency)) {
@@ -121,11 +119,6 @@ function ConvertedCell({
       >
         {formatAmountPlain(source.balance_base, baseCurrency)}
       </Text>
-      {source.balance_rate_date !== null ? (
-        <Text variant="micro" tone="muted" testID={`source-rate-date-${source.id}`}>
-          {t('source:list.rate_date', { date: formatDate(source.balance_rate_date, lang) })}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -186,9 +179,7 @@ export function SourceTableRow({
         {/* 屏幕稿 09 writes a base-currency balance bare (「12,480.35」, 「−3,215.00」): the
             币种 column two cells to the left already says which currency it is. A foreign
             row keeps its symbol, because there the column and the number disagree. */}
-        {isForeign(source, baseCurrency)
-          ? balanceText(source, lang)
-          : formatAmountPlain(source.balance, source.default_currency)}
+        {balanceText(source, lang, baseCurrency)}
       </Text>
     ),
     converted: muted ? (
@@ -196,11 +187,11 @@ export function SourceTableRow({
         {source.archived_at === null
           ? ''
           : t('source:list.archived_at', {
-              date: formatDate(source.archived_at.slice(0, 10), lang),
+              date: formatDate(source.archived_at.slice(0, 10)),
             })}
       </Text>
     ) : (
-      <ConvertedCell source={source} baseCurrency={baseCurrency} lang={lang} />
+      <ConvertedCell source={source} baseCurrency={baseCurrency} />
     ),
   };
 

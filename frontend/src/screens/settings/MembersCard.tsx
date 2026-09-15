@@ -15,7 +15,6 @@ import { useTranslation } from 'react-i18next';
 
 import type { LedgerMember, Uuid } from '@/api/types';
 import { formatDate } from '@/i18n/format';
-import { useLang } from '@/i18n';
 import { memberLabel, useRemoveMember } from '@/queries';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -95,11 +94,10 @@ function MemberRow({
   onRemove(): void;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const lang = useLang();
   const wide = useIsWide();
   const name = memberLabel(member);
   const removable = isOwner && member.role !== 'owner';
-  const joined = t(joinedKey(member), { date: formatDate(member.joined_at.slice(0, 10), lang) });
+  const joined = t(joinedKey(member), { date: formatDate(member.joined_at.slice(0, 10)) });
   const badge = (
     <Badge
       label={

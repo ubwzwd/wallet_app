@@ -96,7 +96,7 @@ export function ProfileCard({
               {user.email}
             </Text>
             <Text variant="micro" tone="muted" mono testID="settings-created-at">
-              {`${t('settings:created_at_label')} ${formatDateTime(user.created_at, lang)}`}
+              {`${t('settings:created_at_label')} ${formatDateTime(user.created_at)}`}
             </Text>
           </View>
         </View>

@@ -22,7 +22,7 @@ import { monthOf } from '@/domain/dates';
 import { absMoney, addMoney, subMoney } from '@/domain/money';
 import { useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
-import { formatMonthShort, formatMoney } from '@/i18n/format';
+import { formatMonthShort } from '@/i18n/format';
 import { useStatsSummary } from '@/queries';
 import { space } from '@/theme/tokens';
 import { Text } from '@/ui';
@@ -69,8 +69,10 @@ export function ImpactCard({
   const id = testID ?? 'detail-impact';
   const shortMonth = formatMonthShort(month, lang);
   const magnitude = absMoney(amountBase);
-  const money = (raw: Money): string =>
-    formatMoney(raw, baseCurrency, lang, { signDisplay: 'never' });
+  // 屏幕稿 08 writes every figure on this card bare — 「6,842.50 · 含本笔 66.20」 — because
+  // the card's own title already says which ledger (and so which currency) it counts in
+  // (§14.59a). The guard above has already rejected a summary in any other currency.
+  const money = (raw: Money): string => plainAmount(raw, baseCurrency, 'never');
 
   // A refund offsets its own category's expense, so it lives in the expense side of the
   // summary and *raises* the month's expense when it is deleted.

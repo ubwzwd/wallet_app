@@ -17,7 +17,7 @@ import type { FinanceSource, Paged, Uuid } from '@/api/types';
 import { parseMoney } from '@/domain';
 import { SOURCE_TYPE_ORDER } from '@/domain/networth';
 import { useLang } from '@/i18n';
-import { formatConverted, formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatConverted, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
@@ -113,7 +113,14 @@ export function AccountsSection({
               icon={<SourceTypeIcon type={source.type} size={wide ? 36 : 34} />}
               title={source.name}
               subtitle={`${t(sourceTypeLabelKey(source.type))} · ${source.default_currency}`}
-              amount={formatMoney(source.balance, source.default_currency, lang)}
+              // 屏幕稿 01 writes a base-currency balance bare (「12,480.35」, 「−3,215.00」)
+              // — the card is headed 「折算 CNY」. A foreign row keeps its symbol, because
+              // there the number and the header disagree (§14.59a).
+              amount={
+                foreign
+                  ? formatMoney(source.balance, source.default_currency, lang)
+                  : formatAmountPlain(source.balance, baseCurrency)
+              }
               amountTone={parseMoney(source.balance) < 0n ? 'expense' : 'primary'}
               amountSub={converted}
               onPress={() => onPressSource(source.id)}

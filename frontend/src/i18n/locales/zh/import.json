@@ -91,6 +91,7 @@
     },
     "selected_other": "已选 {{count}} / {{total}} 行",
     "transfer_title": "{{from}} → {{to}}",
+    "transfer_counterparty": "对方：{{name}}",
     "bulk": {
       "set_category": "批量设分类",
       "set_kind": "批量设类型",
@@ -214,8 +215,8 @@
   },
   "history": {
     "title": "导入历史",
-    "stats": "{{batches}} 批 · {{ready}} 批待提交",
-    "stats_batches": "{{batches}} 批",
+    "stat_batches": "{{batches}} 批",
+    "stat_ready": "{{ready}} 批待提交",
     "filter": {
       "all": "全部",
       "ready": "待提交",

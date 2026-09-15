@@ -36,6 +36,7 @@ import {
 import { errorMessage } from '@/i18n/errorCodes';
 import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
+import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useTopBar } from '@/navigation';
 import { useCreateSource, useCurrencies, useSource, useSources, useUpdateSource } from '@/queries';
 import { useLedgerContext } from '@/store';
@@ -98,6 +99,8 @@ export default function SourceFormScreen(): React.JSX.Element {
   const isEdit = typeof sourceId === 'string' && sourceId !== '';
 
   const currencies = useCurrencies();
+  // 屏幕稿 09 / 13 / 17 read 「CNY 人民币」, not the server's ISO English name.
+  const currencyNames = useCurrencyNames(currencies.names);
   const list = useSources(ledgerId, { include_archived: true });
   const detail = useSource(ledgerId, isEdit ? sourceId : undefined);
   const create = useCreateSource(ledgerId, { silent: true });
@@ -302,7 +305,7 @@ export default function SourceFormScreen(): React.JSX.Element {
       onTypeChange={onTypeChange}
       duplicateName={duplicateName}
       currencyCodes={currencies.codes}
-      currencyNames={currencies.names}
+      currencyNames={currencyNames}
       currency={currency}
       quickCurrencies={quickCurrencies}
       archivedSwitch={

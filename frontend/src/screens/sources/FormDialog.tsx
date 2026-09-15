@@ -18,8 +18,10 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { SIDEBAR_WIDTH } from '@/navigation';
 import { radius, space, z } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
+import { useIsWide } from '@/theme/useBreakpoint';
 import { Card, Icon, Text } from '@/ui';
 
 /** 屏幕稿 09: the dialog is 620 across and its × a 36 square. */
@@ -50,6 +52,7 @@ export function FormDialog({
 }: FormDialogProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
+  const wide = useIsWide();
   const id = testID ?? 'source-form';
 
   const card = (
@@ -123,7 +126,8 @@ export function FormDialog({
       </View>
       <Modal visible transparent animationType="fade" onRequestClose={onClose}>
         <View style={[overlay.centre, { zIndex: z.overlay }]}>
-          {/* touch-target-exempt: the backdrop fills the screen behind the dialog. */}
+          {/* touch-target-exempt: the backdrop fills the screen behind the dialog — the
+              sidebar included, which is how 屏幕稿 09 dims it. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('common:button.close')}
@@ -131,9 +135,16 @@ export function FormDialog({
             testID={`${id}-backdrop`}
             style={[overlay.backdrop, { backgroundColor: colors['fg.primary'], opacity: 0.3 }]}
           />
+          {/* `Modal` portals to the whole viewport, but 屏幕稿 09 centres the card on the
+              *content column*, not on the window: its centre sits at x ≈ 846 of 1440, not at
+              720. Padding the scroll body by the sidebar moves the centre there and leaves
+              `alignItems: 'center'` to do the rest. */}
           <ScrollView
             style={overlay.scroll}
-            contentContainerStyle={overlay.scrollBody}
+            contentContainerStyle={[
+              overlay.scrollBody,
+              wide ? { paddingLeft: SIDEBAR_WIDTH + space['5'] } : null,
+            ]}
             accessibilityViewIsModal
           >
             {card}
