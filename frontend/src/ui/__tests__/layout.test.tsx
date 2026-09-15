@@ -195,7 +195,7 @@ describe('ListCard and ListRow', () => {
       </ListCard>,
     );
     expect(styleOf(screen.getByTestId('card')).borderRadius).toBe(radius.lg);
-    expect(styleOf(screen.getByTestId('card')).backgroundColor).toBe(lightColors['bg.surface']);
+    expect(styleOf(screen.getByTestId('card')).backgroundColor).toBe(lightColors['bg.raised']);
     expect(screen.getByTestId('card-header')).toBeTruthy();
     expect(screen.getByTestId('card-footer')).toBeTruthy();
     expect(screen.getByTestId('r2')).toBeTruthy();
@@ -218,7 +218,9 @@ describe('ListCard and ListRow', () => {
   test('dark mode drops the shadow and leans on the surface lightness instead', () => {
     renderThemed(<ListCard testID="card" />, 'dark');
     expect(styleOf(screen.getByTestId('card')).shadowOpacity).toBeUndefined();
-    expect(styleOf(screen.getByTestId('card')).backgroundColor).toBe(darkColors['bg.surface']);
+    // §14.58 / mockup 16: a content card is two steps above the canvas in the dark, which
+    // is the only thing carrying depth once the shadow is gone.
+    expect(styleOf(screen.getByTestId('card')).backgroundColor).toBe(darkColors['bg.raised']);
   });
 });
 
@@ -286,15 +288,25 @@ describe('Avatar', () => {
 
   test('the narrow top bar gets its own tone: the page white, not the tint', () => {
     renderThemed(<Avatar name="wang" shape="circle" size={40} tone="surface" testID="disc" />);
-    expect(styleOf(screen.getByTestId('disc')).backgroundColor).toBe(lightColors['bg.surface']);
+    // 屏幕 01:63 paints that disc #FFFFFF — the content white, not the chrome's #FAFCFA.
+    expect(styleOf(screen.getByTestId('disc')).backgroundColor).toBe(lightColors['bg.raised']);
   });
 
-  test('the glyph follows the mockups’ ladder and never drops below the caption step', () => {
-    // 32 → 13 and 64 → 24 are the mockups' own sizes (01 / 14); a 26px menu tile would
-    // land on 10 at a flat 0.4 ratio, which stops reading as a letter, so it floors at 12.
+  test('the glyph follows the ladder the mockups draw, step by step', () => {
+    // Every one of these is read off a `.dc.html`: 屏幕 01:63 (40 → 13), 屏幕 13:120
+    // (44 → 17), 屏幕 14:44 (56 → 21), 屏幕 14:131 (32 → 13), 屏幕 14:161 (64 → 24).
     expect(avatarGlyphSize(32)).toBe(13);
-    expect(avatarGlyphSize(64)).toBe(26);
+    expect(avatarGlyphSize(40)).toBe(13);
+    expect(avatarGlyphSize(44)).toBe(17);
+    expect(avatarGlyphSize(56)).toBe(21);
+    expect(avatarGlyphSize(64)).toBe(24);
+    // A 26px menu tile would land on 10 at a flat 0.4 ratio, which stops reading as a
+    // letter, so the small end floors at the 12px caption step.
     expect(avatarGlyphSize(26)).toBe(12);
+    expect(avatarGlyphSize(20)).toBe(12);
+    // A size no mockup draws sits between its neighbours rather than on a ratio.
+    expect(avatarGlyphSize(36)).toBe(13);
+    expect(avatarGlyphSize(48)).toBe(19);
   });
 
   test('only the first character is drawn, upper-cased', () => {

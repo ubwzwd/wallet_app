@@ -50,7 +50,7 @@ export function Sheet({
         <View
           style={[
             styles.panel,
-            { backgroundColor: colors['bg.surface'], borderColor: colors['border.default'] },
+            { backgroundColor: colors['bg.raised'], borderColor: colors['border.default'] },
             style,
           ]}
         >

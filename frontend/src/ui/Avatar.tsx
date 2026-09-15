@@ -20,13 +20,14 @@ export type AvatarShape = 'square' | 'circle';
 export type AvatarTone = 'accent' | 'muted' | 'surface';
 
 /** The sizes the mockups use: 26 in a menu row, 32 in the sidebar, 40 in the narrow top
- *  bar, 64 on a profile card. Any number is accepted; these are just the ones drawn. */
-export type AvatarSize = 26 | 32 | 36 | 40 | 64;
+ *  bar, 44 on a ledger card, 56 / 64 on a profile card. Any number is accepted; these are
+ *  just the ones drawn. */
+export type AvatarSize = 26 | 32 | 36 | 40 | 44 | 48 | 56 | 64;
 
 const TONE_BG: Readonly<Record<AvatarTone, ColorToken>> = {
   accent: 'accent.solid',
   muted: 'bg.subtle',
-  surface: 'bg.surface',
+  surface: 'bg.raised',
 };
 
 export interface AvatarProps {
@@ -48,12 +49,39 @@ export function avatarGlyph(name: string): string {
 }
 
 /**
- * The mockups' glyph ladder: 26 → 12, 32 → 13, 44 → 17, 48 → 19, 56 → 21, 64 → 24 — a
- * 0.4 ratio everywhere except at the small end, where the initial never drops below the
- * 12px caption step or it stops reading as a letter.
+ * The glyph ladder the mockups actually draw, read off the `.dc.html` sources: 26 → 12
+ * (switcher row), 32 → 13 (sidebar card, sidebar user, `屏幕 14:131`), 40 → 13 (narrow top
+ * bar, `屏幕 01:63`), 44 → 17 (`屏幕 13:120`), 48 → 19, 56 → 21 (`屏幕 14:44`), 64 → 24
+ * (`屏幕 14:161`).
+ *
+ * It is not one ratio: the small end flattens at 13 so the initial keeps reading as a
+ * letter, and the large end sits well under 0.4. A size the mockups never draw is placed
+ * between its neighbours on this ladder instead of being scaled.
  */
+const GLYPH_LADDER: readonly (readonly [size: number, glyph: number])[] = [
+  [26, 12],
+  [32, 13],
+  [40, 13],
+  [44, 17],
+  [48, 19],
+  [56, 21],
+  [64, 24],
+];
+
 export function avatarGlyphSize(size: number): number {
-  return Math.max(12, Math.round(size * 0.4));
+  const first = GLYPH_LADDER[0];
+  const last = GLYPH_LADDER[GLYPH_LADDER.length - 1];
+  if (size <= first[0]) return Math.max(12, Math.round((size * first[1]) / first[0]));
+  if (size >= last[0]) return Math.round((size * last[1]) / last[0]);
+  for (let i = 1; i < GLYPH_LADDER.length; i += 1) {
+    const [hi, hiGlyph] = GLYPH_LADDER[i];
+    if (size > hi) continue;
+    const [lo, loGlyph] = GLYPH_LADDER[i - 1];
+    if (size === hi) return hiGlyph;
+    // Between two drawn steps: walk the line between them rather than invent a ratio.
+    return Math.round(loGlyph + ((hiGlyph - loGlyph) * (size - lo)) / (hi - lo));
+  }
+  return last[1];
 }
 
 export function Avatar({

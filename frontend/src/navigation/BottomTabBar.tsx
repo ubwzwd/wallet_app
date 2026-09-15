@@ -22,7 +22,7 @@ import { useAuth } from '@/store/AuthContext';
 import { useLedgerContext } from '@/store/LedgerContext';
 import { Icon, type IconName, KIND_ICON, Sheet, Text } from '@/ui';
 
-import { isActivePath } from './Sidebar';
+import { isActivePath } from './isActivePath';
 
 /**
  * Screen 01 at 375: 8 above, a 49 tall slot, 14 below.
@@ -243,10 +243,19 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
           testID="tab-add"
           style={styles.addSlot}
         >
-          <View style={[styles.addButton, { backgroundColor: colors['accent.solid'] }]}>
+          {/* The disc and its label are what set the bar's height; they carry testIDs so a
+              test can add the bar up from its own style objects instead of restating 71. */}
+          <View
+            testID="tab-add-disc"
+            style={[styles.addButton, { backgroundColor: colors['accent.solid'] }]}
+          >
             <Icon name="plus" size={24} color={colors['accent.fg']} />
           </View>
-          <Text weight={600} style={[styles.tabLabel, { color: colors['fg.muted'] }]}>
+          <Text
+            weight={600}
+            testID="tab-add-label"
+            style={[styles.tabLabel, { color: colors['fg.muted'] }]}
+          >
             {t('common:nav.add')}
           </Text>
         </Pressable>

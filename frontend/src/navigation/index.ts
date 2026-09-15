@@ -18,15 +18,16 @@ export {
   useLedgerGone,
   type RequireLedgerProps,
 } from './RequireLedger';
+export { isActivePath } from './isActivePath';
 export {
   SIDEBAR_WIDTH,
   Sidebar,
-  isActivePath,
-  showsLedgerManageCard,
   useSidebarDestinations,
   userLabel,
   type NavDestination,
 } from './Sidebar';
+export { showsLedgerManageCard } from './SidebarCards';
+export { useLastLedgerId } from './useLastLedgerId';
 export {
   TopBar,
   TopBarProvider,

@@ -15,14 +15,13 @@ import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { routes } from '@/domain/routes';
-import { pickLandingLedger } from '@/navigation';
+import { pickLandingLedger, useLastLedgerId } from '@/navigation';
 import { useLedgers } from '@/queries';
 import { useAuth } from '@/store';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, EmptyState, Icon, Page, PageHeader, Skeleton, Text } from '@/ui';
-import { PREF_NAMES, getPref, getPrefSync } from '@/utils/prefs';
 
 import { LedgerCard } from './LedgerCard';
 import { MAX_LEDGERS } from './ledgerLimits';
@@ -36,21 +35,6 @@ const SKELETON_CARDS = 3;
 /** Screen 13's wide frame draws exactly three columns. */
 const COLUMNS = 3;
 const GRID_GAP = space['4'];
-
-/** The ledger `/` would open — the one the cards mark as 「当前」 (screen 13). */
-function useLastLedgerId(): string | null {
-  const [id, setId] = React.useState<string | null>(() => getPrefSync(PREF_NAMES.lastLedgerId));
-  React.useEffect(() => {
-    let alive = true;
-    void getPref(PREF_NAMES.lastLedgerId).then((value) => {
-      if (alive && value) setId(value);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return id;
-}
 
 /** The dashed last cell of the wide grid. */
 function NewLedgerTile({ onPress }: { onPress(): void }): React.JSX.Element {
@@ -89,6 +73,7 @@ export default function LedgersScreen(): React.JSX.Element {
   const wide = useIsWide();
   const query = useLedgers();
   const { user } = useAuth();
+  // The card marked 「当前」 is the one `/` would open (screen 13).
   const currentId = useLastLedgerId();
 
   const [gridWidth, setGridWidth] = React.useState(0);
@@ -181,7 +166,7 @@ export default function LedgersScreen(): React.JSX.Element {
     );
   }
 
-  const current = pickLandingLedger(items, currentId);
+  const current = pickLandingLedger(items, currentId ?? null);
   const cardWidth =
     wide && gridWidth > 0 ? Math.floor((gridWidth - GRID_GAP * (COLUMNS - 1)) / COLUMNS) : undefined;
 

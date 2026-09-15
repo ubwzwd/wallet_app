@@ -90,7 +90,7 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
           testID="top-bar-ledger"
           style={({ pressed }) => [
             styles.pill,
-            { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'] },
+            { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
           ]}
         >
           <Text weight={700} style={styles.pillLabel} numberOfLines={1}>
