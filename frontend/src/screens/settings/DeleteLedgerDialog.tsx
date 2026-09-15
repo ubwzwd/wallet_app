@@ -128,6 +128,7 @@ export function DeleteLedgerDialog({
           icon="x"
           iconOnly
           accessibilityLabel={t('common:button.close')}
+          disabled={busy}
           onPress={onCancel}
           testID="confirm-close"
         />
@@ -190,6 +191,7 @@ export function DeleteLedgerDialog({
           label={t('common:button.cancel')}
           variant="soft"
           fullWidth={!wide}
+          disabled={busy}
           onPress={onCancel}
           testID="confirm-cancel"
         />
@@ -208,13 +210,23 @@ export function DeleteLedgerDialog({
     </View>
   );
 
+  // Once the DELETE is in flight there is no way back: closing the dialog would leave the
+  // mutation running behind an empty screen and then navigate away from a ledger the user
+  // can no longer see they asked to delete. Every dismissal is therefore shut off until it
+  // settles, and the confirm button carries the spinner.
+  const dismiss = (): void => {
+    if (busy) return;
+    onCancel();
+  };
+
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal visible transparent animationType="fade" onRequestClose={dismiss}>
       <View style={[wide ? styles.rootWide : styles.rootNarrow, { zIndex: z.overlay }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common:button.close')}
-          onPress={onCancel}
+          disabled={busy}
+          onPress={dismiss}
           testID="confirm-backdrop"
           style={[styles.backdrop, { backgroundColor: colors['fg.primary'], opacity: 0.4 }]}
         />

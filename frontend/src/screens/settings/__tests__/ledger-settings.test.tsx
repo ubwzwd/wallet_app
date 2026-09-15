@@ -320,6 +320,40 @@ test('cancelling the delete dialog closes it and deletes nothing', async () => {
   expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
 });
 
+test('the delete dialog cannot be dismissed while the DELETE is in flight', async () => {
+  await renderSettings('owner', [makeMember(), BOB]);
+  let release: (() => void) | null = null;
+  api.mock
+    .onDelete(apiUrl(`/ledgers/${LEDGER_ID}`))
+    .reply(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([204, undefined]);
+        }),
+    );
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+  await waitFor(() => expect(api.mock.history.delete).toHaveLength(1));
+
+  // 取消, the ✕ and the backdrop are all shut off for as long as the request is out:
+  // closing here would leave the mutation running behind an empty screen and then
+  // navigate away from a ledger nobody can see they asked to delete. (The backdrop is a
+  // sibling of an `accessibilityViewIsModal` view, so it is not queryable from here; it
+  // shares the same `dismiss` guard, as does the wide frame's ✕.)
+  expect(screen.getByTestId('confirm-cancel').props.accessibilityState?.disabled).toBe(true);
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+  expect(screen.getByTestId('confirm-dialog')).toBeTruthy();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+
+  await act(async () => {
+    release?.();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
+});
+
 test('renaming the ledger sends the name and the version it was read at', async () => {
   await renderSettings('owner', [makeMember(), BOB]);
   mockPatch(`/ledgers/${LEDGER_ID}`, makeLedger({ name: '家用' }));

@@ -119,7 +119,12 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   });
   // 屏幕稿 11's 「1 批待提交」 is about the whole ledger, not the page in hand, so it is a
   // server total of its own: one row is fetched purely for the `total` that comes with it.
-  const readyQuery = useImports(ledgerId, { limit: 1, status: ['ready'] });
+  // Only the 全部 header draws that half, so the probe is only armed there — `useImports`
+  // gates on the ledger id, so withholding it is how the request is withheld.
+  const readyQuery = useImports(filter === 'all' ? ledgerId : undefined, {
+    limit: 1,
+    status: ['ready'],
+  });
   const memberNames = useMemberNames(ledgerId);
 
   const goNew = React.useCallback(
@@ -137,7 +142,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
 
   const items: readonly ImportBatchListItem[] = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const stats = { batches: total, ready: readyQuery.data?.total ?? 0 };
+  const readyTotal = readyQuery.data?.total;
 
   // Page 1 again when the list shrank under the pager (the tail batches were undone or
   // discarded), which would otherwise strand the user on an empty page with no pager to
@@ -156,11 +161,13 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   // count: under a filter the sentence would otherwise count a pending batch inside a list
   // it is not in (「1 批 · 1 批待提交」 on 已提交). 屏幕稿 11 draws the 全部 frame, which keeps
   // both halves.
+  // The probe answers a moment after the list does, and 「0 批待提交」 is a claim, not a
+  // placeholder — so until it has answered the sentence is simply the batch count.
   const meta =
     items.length === 0
       ? undefined
-      : filter === 'all'
-        ? t('import:history.stats', stats)
+      : filter === 'all' && readyTotal !== undefined
+        ? t('import:history.stats', { batches: total, ready: readyTotal })
         : t('import:history.stats_batches', { batches: total });
   const header = (
     <PageHeader

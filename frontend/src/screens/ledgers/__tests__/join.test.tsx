@@ -110,6 +110,17 @@ test('invite_expired shows its copy and keeps the refused digits in the red cell
   await waitFor(() => expect(screen.getByTestId('join-restart')).toBeTruthy());
   expect(screen.getByTestId('join-code-0').props.value).toBe('1');
   expect(screen.getByTestId('join-code-5').props.value).toBe('6');
+
+  // Correcting one digit of a refused code does *not* re-post it: `onComplete` belongs to
+  // the keystroke that fills the last empty cell, and the row was already full. The code
+  // goes back out only when the user presses 「加入」, which the cleared error reveals.
+  fireEvent.changeText(screen.getByTestId('join-code-2'), '9');
+  expect(joinRequests()).toEqual(['123456']);
+  expect(screen.getByTestId('join-code-2').props.value).toBe('9');
+  expect(screen.getByTestId('join-code-5').props.value).toBe('6');
+
+  fireEvent.press(screen.getByTestId('join-submit'));
+  await waitFor(() => expect(joinRequests()).toEqual(['123456', '129456']));
 });
 
 test('an incomplete code is never submitted', async () => {

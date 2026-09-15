@@ -14,6 +14,12 @@
  *
  * `useLedgers()` is already in the query cache by the time anyone reaches this route, so
  * the list behind costs no extra request.
+ *
+ * Integration seam: `/ledgers` has no side bar yet, because `app/(app)/_layout.tsx:18`
+ * gives the shell to `/l/:id/settings` alone and `app/` is outside this task. When that
+ * line grows `|| pathname === routes.ledgers()`, the `<LedgersScreen />` below has to be
+ * wrapped in `<AppShell>` (from `@/navigation`) in the same change — otherwise cancelling
+ * the dialog would jump from a shell-less backdrop to a shell'd list.
  */
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';

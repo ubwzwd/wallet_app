@@ -146,12 +146,20 @@ export function CodeInput({
     cells.current[Math.max(0, Math.min(CODE_LENGTH - 1, index))]?.focus();
   }, []);
 
+  /**
+   * `onComplete` belongs to the keystroke that *completes* the row, not to every keystroke
+   * over a row that happens to be full. 屏幕稿 13 · 失效 leaves six editable digits on screen
+   * after a rejection, so without this guard the first correcting keystroke would post a
+   * half-corrected code — and `/ledgers/join` is rate limited to 1 QPS (§14.35), so two
+   * corrections in a row would strand the user in a countdown mid-edit. An explicit paste
+   * passes `force`: filling all six at once is a complete entry however full the row was.
+   */
   const commit = React.useCallback(
-    (next: string): void => {
+    (next: string, force = false): void => {
       onChange(next);
-      if (next.length === CODE_LENGTH) onComplete(next);
+      if (next.length === CODE_LENGTH && (force || value.length < CODE_LENGTH)) onComplete(next);
     },
-    [onChange, onComplete],
+    [onChange, onComplete, value.length],
   );
 
   const handleChangeText = React.useCallback(
@@ -164,7 +172,7 @@ export function CodeInput({
       // code. A shorter jump is ambiguous (autocorrect, a fast typist, a selected cell
       // being typed over), so it is treated as ordinary typing below.
       if (text.length - previous.length >= 2 && digits.length === CODE_LENGTH) {
-        commit(digits);
+        commit(digits, true);
         focus(CODE_LENGTH - 1);
         return;
       }
