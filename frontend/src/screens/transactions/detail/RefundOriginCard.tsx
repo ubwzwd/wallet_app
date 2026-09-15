@@ -1,14 +1,16 @@
 /**
- * The original expense behind a refund (04 §4.7, decisions §14.46 04-D-6, §14.52 A25, §14.53f).
+ * 「原支出」 — the original expense behind a refund (04 §4.7, decisions §14.46 04-D-6,
+ * §14.52 A25, §14.53f, 屏幕稿 08).
  *
  * Three states, and all three have to be distinguishable:
- *  - linked: the summary card (date, merchant, amount, account, category, 已退 / 可退), with
- *    「解除关联」and「改选」— both relations stay editable after an import (decision §14.34);
+ *  - linked: a beige head carrying the summary row (icon, merchant, date · category, the
+ *    amount) with 已退 / 可退 under it and 「改选」 / 「解除关联」 as links — both relations
+ *    stay editable after an import (decision §14.34);
  *  - never linked (`refund_of === null`): 「未关联原支出」+「去关联」;
  *  - linked to something that has since been deleted (`refund_of` set, `refund_of_detail`
  *    null): 「原单已删除」, still offering to 「改选」 (re-point) or clear the dangling link.
  *
- * Under the card, `other_refunds[]` — the *other* refunds against the same original, oldest
+ * Under the head, `other_refunds[]` — the *other* refunds against the same original, oldest
  * first — so nobody registers the same refund twice. Those elements carry no `source_id`
  * (03 §5.27), so no account name is shown for them; the block disappears when empty.
  */
@@ -22,8 +24,11 @@ import { useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
 import { formatDate, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
-import { useColors } from '@/theme/ThemeProvider';
-import { Button, Card, Text } from '@/ui';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
+import { Icon, Text, raisedShadow } from '@/ui';
+
+import { ActionButton } from './ActionButton';
+import { TintSideCard } from './parts';
 
 export interface RefundOriginCardProps {
   refundOf: Uuid | null;
@@ -53,6 +58,36 @@ export function categoryPath(
   return child ? `${head} / ${categoryName(child, lang)}` : head;
 }
 
+/** A text link in the beige head: a caption line is 16 tall, so 14 each side makes 44. */
+function HeadLink({
+  label,
+  onPress,
+  disabled,
+  testID,
+}: {
+  label: string;
+  onPress(): void;
+  disabled: boolean;
+  testID: string;
+}): React.JSX.Element {
+  return (
+    // touch-target-exempt: a text link; `hitSlop` gives it the 44×44 target.
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={{ top: 14, bottom: 14, left: space['2'], right: space['2'] }}
+      testID={testID}
+    >
+      <Text variant="caption" weight={600} tone={disabled ? 'muted' : 'warning'}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export function RefundOriginCard({
   refundOf,
   origin,
@@ -66,33 +101,24 @@ export function RefundOriginCard({
 }: RefundOriginCardProps): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
-  const colors = useColors();
+  const { colors, scheme } = useTheme();
   const id = testID ?? 'detail-origin';
-
-  const title = (
-    <Text variant="subheading" accessibilityRole="header">
-      {t('transaction:detail.original_title')}
-    </Text>
-  );
 
   if (!origin) {
     // Never linked, or linked to a row that no longer exists — two different sentences.
     const deleted = refundOf !== null;
     return (
-      <Card testID={id} style={styles.card}>
-        {title}
-        <Text variant="body" tone={deleted ? 'warning' : 'muted'} testID={`${id}-none`}>
+      <TintSideCard title={t('transaction:detail.original_title')} testID={id}>
+        <Text variant="caption" tone="warning" testID={`${id}-none`}>
           {t(
-            deleted
-              ? 'transaction:detail.original_deleted'
-              : 'transaction:detail.original_none',
+            deleted ? 'transaction:detail.original_deleted' : 'transaction:detail.original_none',
           )}
         </Text>
         <View style={styles.actions}>
-          <Button
+          <ActionButton
             testID={`${id}-pick`}
-            variant="secondary"
-            size="sm"
+            tone="refund"
+            icon="link"
             // A dangling link is re-pointed, not linked for the first time: 「改选」.
             label={t(
               deleted
@@ -103,17 +129,17 @@ export function RefundOriginCard({
             disabled={busy}
           />
           {deleted ? (
-            <Button
+            <ActionButton
               testID={`${id}-unlink`}
-              variant="ghost"
-              size="sm"
+              tone="neutral"
+              icon="unlink"
               label={t('transaction:detail.original_unlink_action')}
               onPress={onUnlink}
               disabled={busy}
             />
           ) : null}
         </View>
-      </Card>
+      </TintSideCard>
     );
   }
 
@@ -124,103 +150,129 @@ export function RefundOriginCard({
   );
 
   return (
-    <Card testID={id} style={styles.card}>
-      {title}
-
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={origin.merchant ?? t('transaction:detail.original_title')}
-        testID={`${id}-open`}
-        onPress={() => onOpen(origin.id)}
-        style={({ pressed }) => [
-          styles.origin,
-          {
-            borderColor: colors['border.default'],
-            backgroundColor: pressed ? colors['bg.hover'] : 'transparent',
-          },
-        ]}
-      >
-        <View style={styles.originMain}>
-          <Text variant="body" testID={`${id}-merchant`}>
-            {origin.merchant ?? formatDate(origin.occurred_at, lang)}
+    <View
+      testID={id}
+      style={[
+        styles.card,
+        raisedShadow(colors, scheme),
+        { backgroundColor: colors['bg.surface'] },
+      ]}
+    >
+      <View style={[styles.head, { backgroundColor: colors['status.warning.bg'] }]}>
+        <View style={styles.headRow}>
+          <Text variant="subheading" weight={700} style={styles.headTitle} accessibilityRole="header">
+            {t('transaction:detail.original_title')}
           </Text>
-          <Text variant="caption" tone="muted" testID={`${id}-meta`}>
-            {[formatDate(origin.occurred_at, lang), category, account]
-              .filter((s): s is string => Boolean(s))
-              .join(' · ')}
-          </Text>
+          <HeadLink
+            testID={`${id}-pick`}
+            label={t('transaction:detail.original_relink_action')}
+            onPress={onPick}
+            disabled={busy}
+          />
+          <HeadLink
+            testID={`${id}-unlink`}
+            label={t('transaction:detail.original_unlink_action')}
+            onPress={onUnlink}
+            disabled={busy}
+          />
         </View>
-        <Text variant="body" tone="expense" mono testID={`${id}-amount`}>
-          {formatMoney(origin.amount, origin.currency, lang)}
+
+        {/* touch-target-exempt: `styles.origin` is 52 tall and stretches the head's width. */}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={origin.merchant ?? t('transaction:detail.original_title')}
+          testID={`${id}-open`}
+          onPress={() => onOpen(origin.id)}
+          style={({ pressed }) => [
+            styles.origin,
+            { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+          ]}
+        >
+          <View style={[styles.well, { backgroundColor: colors['kind.expense.subtle'] }]}>
+            <Icon name="arrow-down" size={16} color={colors['kind.expense']} />
+          </View>
+          <View style={styles.originMain}>
+            <Text variant="body" weight={500} numberOfLines={1} testID={`${id}-merchant`}>
+              {origin.merchant ?? formatDate(origin.occurred_at, lang)}
+            </Text>
+            <Text variant="caption" tone="warning" mono numberOfLines={1} testID={`${id}-meta`}>
+              {[formatDate(origin.occurred_at, lang), category, account]
+                .filter((s): s is string => Boolean(s))
+                .join(' · ')}
+            </Text>
+          </View>
+          <Text variant="body" tone="expense" mono weight={500} testID={`${id}-amount`}>
+            {formatMoney(origin.amount, origin.currency, lang)}
+          </Text>
+        </Pressable>
+
+        <Text
+          variant="caption"
+          tone="warning"
+          mono
+          weight={500}
+          style={styles.summary}
+          testID={`${id}-summary`}
+        >
+          {t('transaction:detail.refunds_summary', {
+            refunded: formatMoney(origin.refunded_total, origin.currency, lang, {
+              signDisplay: 'never',
+            }),
+            refundable: formatMoney(origin.refundable, origin.currency, lang),
+          })}
         </Text>
-      </Pressable>
-
-      <Text variant="caption" tone="secondary" testID={`${id}-summary`}>
-        {t('transaction:detail.refunds_summary', {
-          refunded: formatMoney(origin.refunded_total, origin.currency, lang, {
-            signDisplay: 'never',
-          }),
-          refundable: formatMoney(origin.refundable, origin.currency, lang),
-        })}
-      </Text>
-
-      <View style={styles.actions}>
-        <Button
-          testID={`${id}-pick`}
-          variant="secondary"
-          size="sm"
-          label={t('transaction:detail.original_relink_action')}
-          onPress={onPick}
-          disabled={busy}
-        />
-        <Button
-          testID={`${id}-unlink`}
-          variant="ghost"
-          size="sm"
-          label={t('transaction:detail.original_unlink_action')}
-          onPress={onUnlink}
-          disabled={busy}
-        />
       </View>
 
       {others.length > 0 ? (
         <View style={styles.others} testID={`${id}-others`}>
-          <Text variant="caption" tone="muted">
+          <Text variant="micro" tone="muted" mono weight={600}>
             {t('transaction:detail.other_refunds_title')}
           </Text>
           {others.map((r) => (
             <View key={r.id} style={styles.otherRow} testID={`${id}-other-${r.id}`}>
-              <Text variant="caption" mono>
+              <Text variant="caption" tone="secondary" mono>
                 {formatDate(r.occurred_at, lang)}
               </Text>
               <Text variant="caption" tone="muted" numberOfLines={1} style={styles.otherNote}>
                 {r.note ?? ''}
               </Text>
-              <Text variant="caption" tone="refund" mono>
+              <Text variant="caption" tone="refund" mono weight={500}>
                 {formatMoney(r.amount, r.currency, lang)}
               </Text>
             </View>
           ))}
         </View>
       ) : null}
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { gap: space['2'], alignSelf: 'stretch' },
+  card: { borderRadius: radius.lg, overflow: 'hidden', alignSelf: 'stretch' },
+  head: { padding: space['4'] + 2, gap: space['2'] + 2 },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
+  headTitle: { flex: 1, minWidth: 0 },
   origin: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space['3'],
-    minHeight: 44,
-    padding: space['2'],
-    borderWidth: 1,
-    borderRadius: radius.md,
+    minHeight: 52,
+    paddingVertical: space['1'],
+    paddingHorizontal: space['1'],
+    borderRadius: radius.sm,
   },
-  originMain: { flex: 1, gap: 2 },
+  well: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  originMain: { flex: 1, minWidth: 0, gap: 1 },
+  summary: { alignSelf: 'stretch', textAlign: 'right' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] },
-  others: { gap: space['1'], alignSelf: 'stretch' },
-  otherRow: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
-  otherNote: { flex: 1 },
+  others: { gap: space['1'], padding: space['4'] },
+  otherRow: { flexDirection: 'row', alignItems: 'center', gap: space['2'], minHeight: 24 },
+  otherNote: { flex: 1, minWidth: 0 },
 });
