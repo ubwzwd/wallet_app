@@ -162,18 +162,20 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     };
   }, []);
   const id = props.testID ?? 'tx-filter-bar';
-  // Typing in the wide panel's search box pins the panel open: the first keystroke becomes
-  // a 「关键词」 chip, and without this the collapse rule below would swap the whole card —
-  // caret and all — for the 「已选条件」 strip mid-word (§14.59b applies to conditions the
-  // user has finished setting, not to the box they are still typing in).
-  const onQChange = props.onQChange;
-  const onQType = React.useCallback(
-    (value: string): void => {
+  // Every control *inside* the wide panel pins it open (§14.59b): 屏幕稿 02 · 1440 draws the
+  // card expanded with four 「已选条件」 chips, so the collapse belongs to arriving at a URL
+  // that already carries conditions — not to the click that sets the first one. Collapsing
+  // there would pull the card out from under the user: the caret out of the keyword box,
+  // and the second half of 日期区间 / 金额区间 out of reach before it could be filled.
+  function pin<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => void {
+    return (...args: A): void => {
       setPanel(true);
-      onQChange(value);
-    },
-    [setPanel, onQChange],
-  );
+      fn(...args);
+    };
+  }
+  const onQType = pin(props.onQChange);
+  const onPatchInPanel = pin(props.onPatch);
+  const onRemoveInPanel = pin(props.onRemove);
 
   const sourceName = React.useCallback(
     (sid: Uuid): string => props.sources.find((s) => s.id === sid)?.name ?? sid.slice(0, 6),
@@ -196,7 +198,8 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
 
   const fields: FilterFieldProps = {
     filters: props.filters,
-    onPatch: props.onPatch,
+    // The narrow sheet stays on the raw patch — it has its own open flag and 「应用」 button.
+    onPatch: wide ? onPatchInPanel : props.onPatch,
     index: props.index,
     sources: props.sources,
     currencyCodes: currencyCodesOf(props),
@@ -205,29 +208,33 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
     id,
   };
 
-  const chipStrip = (
-    <View
-      testID={`${id}-applied`}
-      style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
-    >
-      <Text variant="caption" tone="secondary" weight={600}>
-        {t('transaction:list.filter.applied_label')}
-      </Text>
-      {chips.length === 0 ? (
-        <Text variant="body" tone="muted">
-          {t('transaction:list.filter.no_filters')}
+  /** The 「已选条件」 line. Inside the open card its chips pin the card open; on the collapsed
+   *  strip they must not, or dropping a condition there would spring the panel back. */
+  function chipStrip(onRemove: FilterBarProps['onRemove']): React.JSX.Element {
+    return (
+      <View
+        testID={`${id}-applied`}
+        style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['2'] }}
+      >
+        <Text variant="caption" tone="secondary" weight={600}>
+          {t('transaction:list.filter.applied_label')}
         </Text>
-      ) : (
-        <FilterChips
-          chips={chips}
-          clearFrom={1}
-          onRemove={(key, value) => props.onRemove(key as keyof TransactionListParams, value)}
-          onClear={props.onClear}
-          testID={`${id}-chips`}
-        />
-      )}
-    </View>
-  );
+        {chips.length === 0 ? (
+          <Text variant="body" tone="muted">
+            {t('transaction:list.filter.no_filters')}
+          </Text>
+        ) : (
+          <FilterChips
+            chips={chips}
+            clearFrom={1}
+            onRemove={(key, value) => onRemove(key as keyof TransactionListParams, value)}
+            onClear={props.onClear}
+            testID={`${id}-chips`}
+          />
+        )}
+      </View>
+    );
+  }
 
   if (wide) {
     // Collapsed: one line of what is on, and the way back to the panel (§14.59b).
@@ -244,7 +251,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
             flexWrap: 'wrap',
           }}
         >
-          <View style={{ flex: 1, minWidth: 240 }}>{chipStrip}</View>
+          <View style={{ flex: 1, minWidth: 240 }}>{chipStrip(props.onRemove)}</View>
           <Button
             variant="secondary"
             size="sm"
@@ -311,7 +318,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
         <Divider />
         <KindChips {...fields} />
         <Divider />
-        {chipStrip}
+        {chipStrip(onRemoveInPanel)}
       </Card>
     );
   }

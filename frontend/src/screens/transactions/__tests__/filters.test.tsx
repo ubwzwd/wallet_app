@@ -233,6 +233,26 @@ test('the wide panel stays open while the search box is being typed in', async (
   expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
 });
 
+test('setting the first condition from inside the wide panel does not collapse it', async () => {
+  // §14.59b collapses the panel for someone who *arrives* with conditions on; it must not
+  // yank the card away on the first pill pressed inside it — worst for 日期区间 / 金额区间,
+  // whose second box would unmount before it could be filled.
+  serveList(() => ({ items: [], total: 0 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('tx-filter-bar-kind-expense'));
+  await waitFor(() => expect(searchOf(router).kind).toBe('expense'));
+
+  expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
+  expect(screen.queryByTestId('tx-filter-bar-expand')).toBeNull();
+
+  // And a second condition still lands, with the card still under the user's hands.
+  fireEvent.press(screen.getByTestId('tx-filter-bar-kind-income'));
+  await waitFor(() => expect(searchOf(router).kind).toEqual(['expense', 'income']));
+  expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
+});
+
 test('a filter set from elsewhere still collapses the wide panel to the chip strip', async () => {
   serveList(() => ({ items: [], total: 0 }));
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions?kind=expense` });
