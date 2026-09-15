@@ -24,7 +24,6 @@ import { Icon } from './Icon';
 import { Popover } from './Popover';
 import { Sheet } from './Sheet';
 import { Text } from './Text';
-import { TextField } from './TextField';
 
 export { RECENT_CATEGORY_LIMIT, orderByRecent } from './CategoryPickerPanel';
 export type { CategoryValue } from './CategoryPickerPanel';
@@ -63,7 +62,6 @@ export function CategoryPicker({
   const id = testID ?? 'category';
 
   const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState('');
   const anchorRef = React.useRef<View>(null);
   const [activeL1, setActiveL1] = React.useState<string | null>(value.l1);
   const [stage, setStage] = React.useState<'l1' | 'l2'>('l1');
@@ -76,7 +74,6 @@ export function CategoryPicker({
   }, [value.l1, kind]);
   React.useEffect(() => {
     setStage('l1');
-    setQuery('');
   }, [kind]);
 
   // Transfers have no category at all (decision §1.3) — the control stays visible but dead.
@@ -86,7 +83,6 @@ export function CategoryPicker({
 
   function close(): void {
     setOpen(false);
-    setQuery('');
     setStage('l1');
   }
 
@@ -112,17 +108,6 @@ export function CategoryPicker({
     return value.l2 === null ? name(value.l1) : `${name(value.l1)} · ${name(value.l2)}`;
   };
 
-  const searchBox = (
-    <TextField
-      value={query}
-      onChangeText={setQuery}
-      placeholder={t('transaction:form.category_search_placeholder')}
-      accessibilityLabel={t('transaction:form.category_search_placeholder')}
-      prefix={<Icon name="search" size={16} color={colors['fg.muted']} />}
-      testID={`${id}-search`}
-    />
-  );
-
   const panel = (
     <CategoryPickerPanel
       index={index}
@@ -130,7 +115,6 @@ export function CategoryPicker({
       lang={lang}
       value={value}
       recent={recent}
-      query={query}
       wide={wide}
       activeL1={activeL1}
       stage={stage}
@@ -188,7 +172,6 @@ export function CategoryPicker({
           testID={id}
           style={styles.panelGap}
         >
-          {searchBox}
           {panel}
         </Popover>
       </View>
@@ -207,7 +190,6 @@ export function CategoryPicker({
           closeLabel={t('common:button.close')}
           testID={`${id}-sheet`}
         >
-          {searchBox}
           {panel}
         </Sheet>
       ) : null}

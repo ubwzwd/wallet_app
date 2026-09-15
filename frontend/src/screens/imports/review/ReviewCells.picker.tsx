@@ -19,10 +19,8 @@ import {
   CategoryPickerPanel,
   type CategoryValue,
   CurrencyPicker,
-  Icon,
   Select,
   Sheet,
-  TextField,
 } from '@/ui';
 
 import { type CellProps, CellFrame, Dash } from './ReviewRow';
@@ -123,7 +121,6 @@ export function CategoryCell({
 }: CategoryCellProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
-  const [query, setQuery] = React.useState('');
   const [stage, setStage] = React.useState<'l1' | 'l2'>(level);
 
   const index = env.index;
@@ -143,7 +140,6 @@ export function CategoryCell({
   }, [open, level, row.category_l1]);
 
   const close = (): void => {
-    setQuery('');
     onOpenChange(false);
   };
 
@@ -179,14 +175,6 @@ export function CategoryCell({
         closeLabel={t('common:button.close')}
         testID={`${testID}-sheet`}
       >
-        <TextField
-          testID={`${testID}-search`}
-          value={query}
-          onChangeText={setQuery}
-          accessibilityLabel={t('transaction:form.category_search_placeholder')}
-          placeholder={t('transaction:form.category_search_placeholder')}
-          prefix={<Icon name="search" size={16} color={colors['fg.muted']} />}
-        />
         {index !== null ? (
           <CategoryPickerPanel
             id={testID}
@@ -194,14 +182,12 @@ export function CategoryCell({
             kind={row.kind ?? 'expense'}
             lang={env.lang}
             value={value}
-            query={query}
             wide={false}
             activeL1={stage === 'l2' ? row.category_l1 : null}
             stage={stage}
             onPickL1={(next) => {
               env.ctrl.patch(row, { category_l1: next, category_l2: null });
               setStage('l2');
-              setQuery('');
             }}
             onPickL2={(next) => {
               env.ctrl.patch(row, { category_l2: next });

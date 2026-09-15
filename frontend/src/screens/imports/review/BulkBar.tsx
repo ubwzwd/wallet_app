@@ -29,11 +29,9 @@ import {
   Card,
   CategoryPickerPanel,
   CurrencyPicker,
-  Icon,
   Select,
   Sheet,
   Text,
-  TextField,
 } from '@/ui';
 
 import type { ReviewEnv } from './ReviewRow';
@@ -168,7 +166,6 @@ export function BulkBar({
   const colors = useColors();
   const id = testID ?? 'review-bulk';
   const [categoryOpen, setCategoryOpen] = React.useState(false);
-  const [query, setQuery] = React.useState('');
   const [stage, setStage] = React.useState<'l1' | 'l2'>('l1');
   const [pickedL1, setPickedL1] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -207,7 +204,6 @@ export function BulkBar({
 
   const closeCategory = (): void => {
     setCategoryOpen(false);
-    setQuery('');
     setStage('l1');
     setPickedL1(null);
   };
@@ -305,14 +301,6 @@ export function BulkBar({
         closeLabel={t('common:button.close')}
         testID={`${id}-category-sheet`}
       >
-        <TextField
-          testID={`${id}-category-search`}
-          value={query}
-          onChangeText={setQuery}
-          accessibilityLabel={t('transaction:form.category_search_placeholder')}
-          placeholder={t('transaction:form.category_search_placeholder')}
-          prefix={<Icon name="search" size={16} color={colors['fg.muted']} />}
-        />
         {env.index !== null && kind !== null ? (
           <CategoryPickerPanel
             id={`${id}-category`}
@@ -320,7 +308,6 @@ export function BulkBar({
             kind={kind}
             lang={env.lang}
             value={{ l1: pickedL1, l2: null }}
-            query={query}
             wide={false}
             activeL1={pickedL1}
             stage={stage}

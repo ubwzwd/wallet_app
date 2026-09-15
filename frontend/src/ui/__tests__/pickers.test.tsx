@@ -1,6 +1,6 @@
 /**
  * Category / account / currency pickers (04 §4.6.1, §6.4): the two-line level-1 options,
- * searching by the classification criterion, "level 1 alone is a complete choice", and the
+ * "level 1 alone is a complete choice", and the
  * archived-account rule.
  *
  * The jest runtime reports a 750pt-wide window, so every case here exercises the narrow
@@ -83,24 +83,6 @@ describe('CategoryPicker', () => {
     expect(screen.getByTestId('cat-l2-none')).toHaveTextContent(/不细分/);
     fireEvent.press(screen.getByTestId('cat-l2-lunch'));
     expect(onChange).toHaveBeenLastCalledWith({ l1: 'food', l2: 'lunch' });
-  });
-
-  test('the filter matches the criterion text, not just the names', () => {
-    const index = buildCategoryIndex(treeWithCriterion());
-    renderThemed(
-      <CategoryPicker
-        index={index}
-        kind="expense"
-        value={{ l1: null, l2: null }}
-        onChange={() => undefined}
-        lang="zh"
-        testID="cat"
-      />,
-    );
-    fireEvent.press(screen.getByTestId('cat-trigger'));
-    fireEvent.changeText(screen.getByTestId('cat-search'), '用完就没了');
-    expect(screen.getByTestId('cat-l1-groceries')).toBeTruthy();
-    expect(screen.queryByTestId('cat-l1-food')).toBeNull();
   });
 
   test('changing kind moves the panel too, instead of stranding the other tree', () => {

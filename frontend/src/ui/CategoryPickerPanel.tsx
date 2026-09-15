@@ -14,7 +14,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Category, TxKind } from '@/api/types';
-import { type CategoryIndex, searchCategories } from '@/domain/categories';
+import type { CategoryIndex } from '@/domain/categories';
 import { categoryDesc, categoryName } from '@/i18n/category';
 import type { Lang } from '@/i18n';
 import { density, radius, space } from '@/theme/tokens';
@@ -50,8 +50,6 @@ export interface CategoryPickerPanelProps {
   lang: Lang;
   value: CategoryValue;
   recent?: readonly string[];
-  /** The search box's current text; empty means "no filter". */
-  query: string;
   /** Wide shows both columns side by side; narrow drills down one column at a time. */
   wide: boolean;
   activeL1: string | null;
@@ -69,7 +67,6 @@ export function CategoryPickerPanel({
   lang,
   value,
   recent,
-  query,
   wide,
   activeL1,
   stage,
@@ -87,21 +84,8 @@ export function CategoryPickerPanel({
     [index, kind, recent],
   );
 
-  const search = React.useMemo(() => {
-    if (query.trim() === '') return null;
-    const hits = searchCategories(index, kind, query.trim(), lang);
-    const l2 = new Map<string, Set<string>>();
-    for (const hit of hits) {
-      if (hit.l2 === undefined) continue;
-      l2.set(hit.l1, (l2.get(hit.l1) ?? new Set<string>()).add(hit.l2));
-    }
-    return { l1: new Set(hits.map((h) => h.l1)), l2 };
-  }, [index, kind, lang, query]);
-
-  const visibleL1 = search ? l1List.filter((c) => search.l1.has(c.code)) : l1List;
-  const l2All = activeL1 === null ? [] : index.l2Of(activeL1);
-  const l2Matched = activeL1 === null ? undefined : search?.l2.get(activeL1);
-  const visibleL2 = l2Matched ? l2All.filter((c) => l2Matched.has(c.code)) : l2All;
+  const visibleL1 = l1List;
+  const visibleL2 = activeL1 === null ? [] : index.l2Of(activeL1);
 
   function rowBackground(selected: boolean, pressed: boolean): string {
     if (selected) return colors['bg.selected'];
