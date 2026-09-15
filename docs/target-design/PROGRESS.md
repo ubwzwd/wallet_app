@@ -10,7 +10,7 @@
 | 4 统计 | 并入第三阶段 | — | — |
 | 5 前端 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 详情 / 账户 / 设置各页、PWA 与构建 | `v3/phase-5-frontend` → 已合回 `main`（d0b4044） | **完成（2026-09-15）** |
 | 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | `v3/phase-6-import` → 已合回 `main`（60bf8cb） | **完成（2026-09-15）** |
-| 7 视觉 | `theme/tokens.ts`、组件按 04 §6 换色、浅色 / 深色 WCAG 验收 | | 未开始 |
+| 7 视觉 | 逐屏对稿重做表现层：组件库、宽屏侧栏壳、14 屏与深色、`verify-contrast.mjs` WCAG 门禁、日期 ISO 化 | `v3/phase-7-visual` → 已合回 `main`（272b4ec） | **完成（2026-09-16）**，收尾轮（第四轮，minor 清单）进行中 |
 | 8 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
 
 ## 环境备忘
@@ -53,4 +53,10 @@
   - **`npm run verify` 曾经是红的**：第六阶段新增的三个 `Pressable`（`DataTable` 的行选择与单元格、`ReviewCards` 的整卡）没到 44px 触控目标，被跳过的收口任务恰好是唯一会跑完整 verify 的那个，所以两轮都没撞上。已按真实尺寸补上（只有整卡那个用豁免注释）。教训：手工合入任务分支时要跑 `CI=1 npm run verify`，不能只跑 tsc + jest。
   - 留档未做（不阻塞）：`DataTable` 的行高按 44 估算，带 `hint` 的行实际更高，滚动时有十几像素抖动；正在编辑的单元格被快速滚出窗口会丢掉 500ms 去抖内未提交的草稿（干净的修法要动 `ReviewRow.tsx` 的 `useDraft`）；贯穿测试的导入那一段跑在窄屏，虚拟化后的宽屏表格只在 `review.test.tsx` 里被覆盖；`ImportRowsBulkPatch` 的批量语义已收窄但 03 §5.42 / 05 §4.1 两处文档尚未同步。
 - 留档未做（不阻塞，第六阶段或之后处理）：记一笔表单里 `CategoryPicker` / `SourcePicker` / `CurrencyPicker` 的浮层打开时 Esc 仍会落到表单（这三个组件的 open 状态私有在 `src/ui` 内部，要加 `onOpenChange` 才能上报）；`RefundOriginCard` 的「原单已删除」分支在生产不可达（后端 `ON DELETE SET NULL` 会让 `refund_of` 一起变 null）；退款行的 accessibilityLabel 逐行相同；`BarList` 的「其他 N 项」非交互行也被撑到 44 高。
-
+- 2026-09-16：第七阶段（视觉）完成并合回 `main`（272b4ec）。起因是用户在本地看到应用「和设计稿完全长两个样子」：第五、六阶段照 04 章文字写，而 04 章与 17 张屏幕稿不一致。三轮工作流（13 → 8 → 5 个任务，含两次连带跳过后的重排）加编排者手工合入（v7-imports 两轮审核后剩一条 major 手工合入、v7-import-review 的半成品分支交给第三轮接着做）。`CI=1 npm run verify` 端到端全绿：61 套件 896 个测试（776 → 896，04 §8 用例一条没删）、web 构建、PWA、触控目标、新增 WCAG 对比度门禁（light / dark 各 49 对全过）。产出：`src/ui/` 组件库（PageHeader / SectionHeader / ListCard / ListRow / KeyValueRows / Avatar / TintCard / KindIcon / BarChart / SegmentedControl / Badge / Chip / FilterChips / DateField / AmountField / Popover），宽屏侧栏壳（账本卡片 + 五项导航 + 记一笔 + 用户行，宽屏无通用顶栏，`/ledgers*` 上是「账本管理」卡 + 三项导航），首页 / 交易列表 / 记一笔 / 详情 / 账户 / 导入（指南与上传合并页、历史、撤销对话框、review 表格与合并底栏）/ 账本设置 / 我的 / 账本列表与加入 / 登录注册 全部按稿重做，深色三帧对齐。
+  - **新决策**：§14.56（六条布局裁定）、§14.57（分类选择器不要搜索框，用户决定）、§14.58（内容卡 `bg.raised` / chrome `bg.surface`；`/ledgers*` 宽屏开壳；review 表格三处按稿修订）、§14.59（第四轮的裁定：金额裸写与外币符号表、屏幕 02 / 04 / 08 的几处按稿、邀请码失效态保留数字、币种筛选本阶段仍单选、装饰性细线不进对比度门禁）。04 章已由 docs-sync 任务同步 §1.4 / §4.x / §6。
+  - **手工修正与基础设施**：`ui/Popover.tsx`（react-native-web 每个 View 都是独立 stacking context，内联下拉会被后面的字段盖住，改成 Modal 门户）；分类面板列宽（`flex:1` + `flexGrow:0` 在 web 上解析成零宽）；`domain/routes.ts` 返回 `RouteHref = Extract<Href,string>`，`tsconfig.json` 按 expo 重写后的样子入库（任何 `expo start` 都会重生成 `.expo/types/router.d.ts` 并改写 tsconfig，此前 tsc 每次都红）；`TextField` 去掉浏览器焦点描边；`jest.config.js` 把 worker 上限定为 4 + 空闲内存上限。
+  - **教训**：(a) WSL（23 GB）被撑死两次——并行 worktree 各自跑 jest（CPUs-1 个 worker）+ expo + chromium；对策是 jest 限 4 worker、每波最多三个前端任务、任务结束即杀 dev server；(b) worktree 里把 `frontend/node_modules` 软链到主仓会让 Metro 把入口算到仓库之外、整页白屏，改用 `cp -al` 硬链接副本；(c) 后端 `ALLOWED_ORIGINS` 要放行每个任务端口，否则截图全被 CORS 挡在登录页；(d) CI 模式的 Metro 没有文件监听，改完代码必须 `--clear` 重启否则一直发第一份 bundle；(e) 崩溃后的工作流要清掉 worktree / task 分支重新起（resume 会回放过期缓存），计划 JSON 要落盘（`.orchestrate/plans/`）并通过一个内嵌计划的包装脚本启动，避免每次把 90 KB 计划塞进工具调用；(f) 演示数据会被执行 agent 漂移（D 用户名下多了一本账），验收前要还原。
+  - 截图工具在 `.claude/shots/`（不入库）：`render-mockups.mjs`（66 帧）、`shoot-app.mjs`（10 个场景）、`reseed-ids.py`、两个守护脚本（后端 :8000 / 预览 :8081）。
+  - **留给第四轮（minor，不阻塞）**：金额裸写 + 外币符号表（稿的 D1）、屏幕 02 页头统计口径 / 筛选面板折叠 / 窄屏汇总卡、04 窄屏账户与日期合卡、08 账户行用账户类型图标、11 页头「已入账 N 笔」、时间线时间戳去年份、Sheet 背景无障碍名、币种中文名表接到全部选择器、`transferTitle` 的「对方：X」形态、`showsLedgerManageCard` 死代码、`/ledgers` 冷开导航 pop-in、几处注释与死状态、`verify-contrast.mjs` 两处小瑕疵、04 §5.4 `formatDate` 契约与 §0.2 / §0.3 总览、§4.3 邀请码失效态文字。**不做**（记录）：侧栏页面专属槽位（D5 / D10）、行尾 `…` 菜单换 `›`（D9）、撤销幽灵按钮（D11）、首页刷新按钮（D13）、注册字段集（D14，由 API 契约决定）、窄屏页面专属顶栏（§14.56）。
+  - 留档未做（不阻塞）：`api/types.ts`（405）与 `useTransactionForm.ts`（432）两个基线文件仍超 400 行；`border.default` / `border.strong` on `bg.raised` 对比度 1.2–1.7（装饰性细线，不进门禁，见 §14.59）；`Page` 的 `wide` prop 空转待删；`DataTable` 行高估值仍是常量。
