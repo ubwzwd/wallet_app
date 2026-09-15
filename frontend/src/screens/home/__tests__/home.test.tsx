@@ -562,6 +562,10 @@ test('the recent block asks for five transactions and merges a transfer into one
   mockHome({
     recent: [
       makeTransaction({ id: 'tx-coffee', merchant: '瑞幸咖啡', source_id: 'src-checking' }),
+      makeTransaction({
+        id: 'tx-salary', kind: 'income', merchant: '公司', amount: '3000.0000',
+        source_id: 'src-checking', category_l1: 'salary', category_l2: null,
+      }),
       pair.out,
       pair.in,
     ],
@@ -571,6 +575,8 @@ test('the recent block asks for five transactions and merges a transfer into one
   const row = await router.findByTestId('home-recent-tx-coffee');
   expect(row).toHaveTextContent(containing('瑞幸咖啡'));
   expect(router.getByTestId('home-recent-tx-coffee-amount')).toHaveTextContent('−128.50');
+  // 屏幕稿 01 signs both directions in the 最近 list: 「+199.00」, not 「199.00」.
+  expect(router.getByTestId('home-recent-tx-salary-amount')).toHaveTextContent('+3,000.00');
   // One row for the pair, not two legs.
   expect(router.getByTestId(`home-recent-${pair.pair_id}`)).toBeTruthy();
   expect(router.queryByTestId(`home-recent-${pair.out.id}`)).toBeNull();

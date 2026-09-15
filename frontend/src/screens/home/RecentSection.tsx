@@ -185,12 +185,21 @@ export function RecentSection({
           const subtitle = parts.filter((part): part is string => Boolean(part)).join(' · ');
 
           // ------------------------------------------------------------ amount
-          // 屏幕稿 01 writes 「−45.00」 / 「+18,000.00」 in the 最近 list: a base-currency
-          // amount is bare, a foreign one keeps its symbol (§14.59a).
-          const money = (value: Money, currency: string): string =>
-            currency === baseCurrency
-              ? formatAmountPlain(value, currency)
-              : formatMoney(value, currency, lang);
+          // 屏幕稿 01 writes 「−45.00」 / 「+18,000.00」 / 「+199.00」 in the 最近 list: a
+          // base-currency amount is bare, a foreign one keeps its symbol (§14.59a), and both
+          // carry their sign. A transfer is the one kind that carries none — it is neither
+          // income nor expense, and the mockup writes it 「3,000.00」 — so its direction is
+          // left to the 种类 badge and to the row's own 「A → B」 title.
+          const signed = tx.kind !== 'transfer';
+          const money = (value: Money, currency: string): string => {
+            if (currency !== baseCurrency) {
+              return formatMoney(value, currency, lang, {
+                signDisplay: signed ? 'always' : 'auto',
+              });
+            }
+            const text = formatAmountPlain(value, currency);
+            return signed && Number(value) > 0 ? `+${text}` : text;
+          };
           const amount =
             row.kind === 'pair'
               ? money(absMoney(row.out.amount), row.out.currency)
