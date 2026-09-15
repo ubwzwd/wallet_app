@@ -2,8 +2,13 @@
  * `/l/:ledgerId/imports` — the batch history of 屏幕稿 11 (04 §4.10, decisions §14.22,
  * §14.52 A17/B24, §14.56).
  *
- * The header carries the page's numbers inline (「4 批 · 1 批待提交 · 已入账 52 笔」) and, on
- * its right, the way in plus the small 全部 / 待提交 / 已提交 segmented control. That choice
+ * The header carries the history's numbers inline (「4 批 · 1 批待提交」) and, on
+ * its right, the way in plus the small 全部 / 待提交 / 已提交 segmented control. Both numbers
+ * are server totals — the batch count for the filter in force and a one-row
+ * `status=ready` probe — so the sentence never mixes 「all 45」 with 「the 20 in hand」.
+ * 屏幕稿 11 also prints 「已入账 52 笔」; no endpoint totals the committed rows of a history
+ * (03 §5 answers with counts of batches only), so that third number is not drawn rather
+ * than counted off one page. That choice
  * lives in the URL (`?status=`), so a filtered history is shareable and the back button is
  * right, and it is sent to the *server* as `status=`: the pager pages 20 batches at a time,
  * so a filter applied to the page in hand would silently hide matching batches on every
@@ -23,11 +28,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatchListItem, Uuid } from '@/api/types';
+import type { ImportBatchListItem } from '@/api/types';
 import { routes } from '@/domain/routes';
-import { useLang, type Lang } from '@/i18n';
+import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
-import { useDeleteImport, useImports, useMemberNames } from '@/queries';
+import { useImports, useMemberNames } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -41,21 +46,19 @@ import {
   SegmentedControl,
   Skeleton,
   Text,
-  confirm,
-  toast,
 } from '@/ui';
 
-import { HistoryCard } from './HistoryCard';
+import { HistoryEntry, totalFlags } from './HistoryEntry';
 import {
   HISTORY_COLUMNS,
   HISTORY_MIN_WIDTH,
-  HistoryTableRow,
   historyCellStyle,
   historyGridRow,
 } from './HistoryRows';
 import { ImportsEmpty } from './ImportsEmpty';
 import { UndoDialogHost } from './UndoDialog';
-import { undoImportBatch, undoMeta } from './undoBatch';
+
+export { totalFlags };
 
 /** 04 §4.10: the history pages 20 batches at a time. */
 export const IMPORTS_PAGE_SIZE = 20;
@@ -64,94 +67,10 @@ export const IMPORTS_PAGE_SIZE = 20;
 export const HISTORY_FILTERS = ['all', 'ready', 'committed'] as const;
 export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
 
-/** `flags_summary` is a map of the four flags; the row shows their total (04 §4.10). */
-export function totalFlags(batch: ImportBatchListItem): number {
-  return Object.values(batch.flags_summary).reduce((sum, n) => sum + (n || 0), 0);
-}
-
 /** `?status=` → a segment; anything else is 「全部」. */
 export function resolveFilter(raw: string | string[] | undefined): HistoryFilter {
   const value = Array.isArray(raw) ? raw[0] : raw;
   return HISTORY_FILTERS.includes(value as HistoryFilter) ? (value as HistoryFilter) : 'all';
-}
-
-/** 「4 批 · 1 批待提交 · 已入账 52 笔」 — the batch count is the server's `total` for the
- *  filter in force, the same list the pager walks, so the header never reads 「20 批」 next
- *  to 「第 1 / 3 页」. The other two are read off the batches the page is holding: no
- *  endpoint totals them, and guessing them from 20 of 45 would be worse than counting the
- *  page. `total` defaults to the page when the caller has no better number. */
-export function historyStats(
-  items: readonly ImportBatchListItem[],
-  total = items.length,
-): {
-  batches: number;
-  ready: number;
-  rows: number;
-} {
-  let ready = 0;
-  let rows = 0;
-  for (const batch of items) {
-    if (batch.status === 'ready') ready += 1;
-    else rows += batch.row_count;
-  }
-  return { batches: total, ready, rows };
-}
-
-interface RowProps {
-  ledgerId: Uuid;
-  batch: ImportBatchListItem;
-  uploader: string;
-  lang: Lang;
-  wide: boolean;
-}
-
-/** One batch, wired to the router and to the two destructive flows. */
-function HistoryEntry({ ledgerId, batch, uploader, lang, wide }: RowProps): React.JSX.Element {
-  const { t } = useTranslation();
-  const router = useRouter();
-  const remove = useDeleteImport(ledgerId, batch.id);
-
-  const onDiscard = React.useCallback((): void => {
-    void (async () => {
-      const ok = await confirm({
-        title: t('import:history.discard_confirm_title'),
-        body: t('import:history.discard_confirm_body', { count: batch.row_count }),
-        confirmLabel: t('import:history.discard'),
-        tone: 'danger',
-        icon: 'trash-2',
-        meta: undoMeta(batch, t, lang),
-      });
-      if (!ok) return;
-      try {
-        await remove.mutateAsync(undefined);
-      } catch {
-        return; // the global error toast already explained the failure (04 §3.9)
-      }
-      toast.success(t('import:history.discarded_toast'));
-    })();
-  }, [batch, lang, remove, t]);
-
-  // The whole dry-run → confirm → delete → toast flow lives in one place (`undoBatch.ts`),
-  // shared with the committed panel of the batch screen. The list has nowhere to go
-  // afterwards: the batch simply leaves it (decision §14.22).
-  const onUndo = React.useCallback((): void => {
-    void undoImportBatch({ remove: remove.mutateAsync, batch, t, lang });
-  }, [batch, lang, remove, t]);
-
-  const shared = {
-    batch,
-    uploader,
-    lang,
-    totalFlags: totalFlags(batch),
-    busy: remove.isPending,
-    onDiscard,
-    onUndo,
-    onContinue: () => router.push(routes.l(ledgerId).importBatch(batch.id) as Href),
-    onView: () =>
-      router.push(routes.l(ledgerId).transactions({ import_batch_id: batch.id }) as Href),
-  };
-
-  return wide ? <HistoryTableRow {...shared} /> : <HistoryCard {...shared} />;
 }
 
 /** The tinted head strip of the wide table. */
@@ -198,6 +117,14 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
     offset: pageOffset,
     status: filter === 'all' ? undefined : [filter],
   });
+  // 屏幕稿 11's 「1 批待提交」 is about the whole ledger, not the page in hand, so it is a
+  // server total of its own: one row is fetched purely for the `total` that comes with it.
+  // Only the 全部 header draws that half, so the probe is only armed there — `useImports`
+  // gates on the ledger id, so withholding it is how the request is withheld.
+  const readyQuery = useImports(filter === 'all' ? ledgerId : undefined, {
+    limit: 1,
+    status: ['ready'],
+  });
   const memberNames = useMemberNames(ledgerId);
 
   const goNew = React.useCallback(
@@ -213,9 +140,9 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
     [router],
   );
 
-  const items = query.data?.items ?? [];
+  const items: readonly ImportBatchListItem[] = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const stats = historyStats(items, total);
+  const readyTotal = readyQuery.data?.total;
 
   // Page 1 again when the list shrank under the pager (the tail batches were undone or
   // discarded), which would otherwise strand the user on an empty page with no pager to
@@ -230,7 +157,18 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const bare = filter === 'all' && items.length === 0;
   // 「0 批 · 0 批待提交」 under a filter that matches nothing says nothing, so the counts go
   // whenever the page is empty — but the segmented control only goes when the ledger is.
-  const meta = items.length === 0 ? undefined : t('import:history.stats', stats);
+  // 「N 批待提交」 is a ledger-wide total, so it is only true next to a ledger-wide batch
+  // count: under a filter the sentence would otherwise count a pending batch inside a list
+  // it is not in (「1 批 · 1 批待提交」 on 已提交). 屏幕稿 11 draws the 全部 frame, which keeps
+  // both halves.
+  // The probe answers a moment after the list does, and 「0 批待提交」 is a claim, not a
+  // placeholder — so until it has answered the sentence is simply the batch count.
+  const meta =
+    items.length === 0
+      ? undefined
+      : filter === 'all' && readyTotal !== undefined
+        ? t('import:history.stats', { batches: total, ready: readyTotal })
+        : t('import:history.stats_batches', { batches: total });
   const header = (
     <PageHeader
       title={t('import:history.title')}

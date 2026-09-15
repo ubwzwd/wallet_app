@@ -5,7 +5,8 @@
  * inline stats and 「＋ 记一笔」, the 「筛选」 card, and a real seven-column table whose foot
  * strip carries 「N / M 笔已显示」, the net of the whole result and the pager. **Narrow**
  * (屏幕稿 02 · 375) is the search box plus a filter button, a stat line, day-grouped cards
- * and a summary card at the end, scrolling infinitely.
+ * and a summary card at the end, scrolling infinitely — that half lives in
+ * `TransactionsNarrow.tsx`, wired from here.
  *
  * The URL owns the filters (04 §1.3), so this screen holds almost no state of its own. Two
  * numbers are deliberately *not* computed from the rows: the summary comes from the
@@ -14,7 +15,7 @@
  * one row) would make either drift as more pages arrive.
  */
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
@@ -25,7 +26,12 @@ import type {
   Uuid,
 } from '@/api/types';
 import { routes } from '@/domain/routes';
-import { groupByDay, mergeTransferRows, type DayGroup as DayGroupData, type ListRow } from '@/domain/transfers';
+import {
+  groupByDay,
+  mergeTransferRows,
+  type DayGroup as DayGroupData,
+  type ListRow,
+} from '@/domain/transfers';
 import { useLang } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
 import { useTopBar } from '@/navigation';
@@ -41,31 +47,16 @@ import {
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import {
-  Button,
-  Card,
-  Divider,
-  GhostBlock,
-  Page,
-  PageHeader,
-  Skeleton,
-  Text,
-  confirm,
-  toast,
-} from '@/ui';
+import { Button, Page, PageHeader, Text, confirm, toast } from '@/ui';
 
-import { DayGroup } from './DayGroup';
 import { type CandidateCtx } from './EmptyFiltered';
 import { FilterBar } from './FilterBar';
 import { Pagination } from './Pagination';
-import { SummaryBar } from './SummaryBar';
-import { RowMenu, leadTransaction } from './TransactionRow';
+import { leadTransaction } from './TransactionRow';
 import { EmptyFilteredState, EmptyNoData, ListError } from './TransactionsEmpty';
+import { TransactionsNarrow } from './TransactionsNarrow';
 import { TransactionsTable } from './TransactionsTable';
 import { useTxFilters } from './useTxFilters';
-
-/** 04 §4.5: eight skeleton rows while the first page is in flight. */
-const SKELETON_ROWS = 8;
 
 export default function TransactionsScreen(): React.JSX.Element {
   const { t } = useTranslation();
@@ -285,132 +276,33 @@ export default function TransactionsScreen(): React.JSX.Element {
   }
 
   // -------------------------------------------------------------- narrow page
-  const narrowHeader = (
-    <View style={{ gap: space['3'], paddingBottom: space['1'] }}>
-      {filterBar}
-      {/* 屏幕稿 15 draws no stat line when the result is empty — neither on a ledger that
-          holds nothing nor on a filter that matched nothing; the card says it instead. */}
-      {total > 0 ? (
-        <View style={[styles.statLine, styles.statRow]}>
-          {/* 屏幕稿 02 · 375 keeps both halves on one line — the count left, the summary
-              right. Neither may wrap; the count is the half that never gives way, because
-              「共 140 笔」 cut to 「共 14…」 would read as a different number. */}
-          <Text
-            variant="caption"
-            tone="secondary"
-            mono
-            numberOfLines={1}
-            style={styles.statCount}
-            testID="tx-count"
-          >
-            {countLabel}
-          </Text>
-          {summaryLabel !== null ? (
-            <Text
-              variant="caption"
-              tone="secondary"
-              mono
-              numberOfLines={1}
-              style={styles.statCell}
-              testID="tx-summary-line"
-            >
-              {summaryLabel}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-
-  const narrowEmpty = isPending ? (
-    <View style={{ gap: space['2'] }} testID="tx-skeletons">
-      {Array.from({ length: SKELETON_ROWS }, (_, i) => (
-        <Skeleton key={i} variant="row" testID={`tx-skeleton-${i}`} />
-      ))}
-    </View>
-  ) : isError ? (
-    errorBlock
-  ) : (
-    <Card style={{ padding: space['5'] - 2, gap: space['4'] }}>
-      {f.activeCount === 0 ? (
-        <>
-          <GhostBlock rows={3} />
-          <Divider />
-        </>
-      ) : null}
-      {emptyBlock}
-    </Card>
-  );
-
-  const narrowFooter = (
-    <View style={{ gap: space['3'], paddingTop: space['2'] }}>
-      {infiniteQuery.isFetchingNextPage ? (
-        <View style={{ alignItems: 'center' }} testID="tx-loading-more">
-          <ActivityIndicator accessibilityLabel={t('transaction:list.loading_more')} />
-        </View>
-      ) : infiniteQuery.hasNextPage ? (
-        <Button
-          variant="secondary"
-          label={t('transaction:list.load_more')}
-          onPress={() => void infiniteQuery.fetchNextPage()}
-          testID="tx-load-more"
-        />
-      ) : null}
-      {summary && total > 0 ? <SummaryBar summary={summary} lang={lang} /> : null}
-    </View>
-  );
-
   return (
-    <View style={{ flex: 1 }}>
-      <Page scroll={false} testID="transactions-screen">
-        <FlatList
-          data={groups}
-          keyExtractor={(group) => group.date}
-          renderItem={({ item }) => (
-            <DayGroup
-              group={item}
-              baseCurrency={baseCurrency}
-              lang={lang}
-              index={categories.index}
-              sourceName={sourceName}
-              onPressRow={openRow}
-              onOpenMenu={setMenuRow}
-            />
-          )}
-          ListHeaderComponent={narrowHeader}
-          ListEmptyComponent={narrowEmpty}
-          ListFooterComponent={narrowFooter}
-          onEndReachedThreshold={0.4}
-          onEndReached={() => {
-            if (infiniteQuery.hasNextPage && !infiniteQuery.isFetchingNextPage) {
-              void infiniteQuery.fetchNextPage();
-            }
-          }}
-          testID="tx-list"
-        />
-      </Page>
-      <RowMenu
-        row={menuRow}
-        onClose={() => setMenuRow(null)}
-        onEdit={editRow}
-        onDelete={(row) => void deleteRow(row)}
-      />
-    </View>
+    <TransactionsNarrow
+      groups={groups}
+      baseCurrency={baseCurrency}
+      lang={lang}
+      index={categories.index}
+      sourceName={sourceName}
+      filterBar={filterBar}
+      countLabel={countLabel}
+      summaryLabel={summaryLabel}
+      total={total}
+      summary={summary}
+      isPending={isPending}
+      isError={isError}
+      activeCount={f.activeCount}
+      errorBlock={errorBlock}
+      emptyBlock={emptyBlock}
+      hasNextPage={infiniteQuery.hasNextPage}
+      isFetchingNextPage={infiniteQuery.isFetchingNextPage}
+      onLoadMore={() => void infiniteQuery.fetchNextPage()}
+      onPressRow={openRow}
+      onEditRow={editRow}
+      onDeleteRow={(row) => void deleteRow(row)}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  statLine: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    flexWrap: 'wrap',
-    gap: space['2'],
-  },
-  statRow: {
-    justifyContent: 'space-between',
-    flexWrap: 'nowrap',
-    paddingHorizontal: space['1'],
-  },
-  statCount: { flexShrink: 0 },
-  statCell: { flexShrink: 1, minWidth: 0 },
+  statLine: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: space['2'] },
 });

@@ -254,7 +254,11 @@ test('宽屏 页头 explains what a transfer does, and says so differently for a
     expect(screen.getByTestId('tx-form-ledger-meta')).toHaveTextContent(
       '单腿转账 · 对方不在本账本内',
     );
-    // 屏幕稿 05 单腿 says this once: the wide frame carries it in 「这一笔」, not twice.
+    // 屏幕稿 05 单腿 says this once: the wide frame carries it in 「这一笔」, not twice — so
+    // the amber note in the summary card is there, and the form's own copy is not.
+    expect(
+      screen.getAllByText(i18next.t('transaction:transfer.single_leg_hint')),
+    ).toHaveLength(1);
     expect(screen.queryByTestId('transfer-single-leg-hint')).toBeNull();
   } finally {
     wideSpy.mockRestore();

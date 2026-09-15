@@ -43,11 +43,11 @@ export function LedgerCard({ ledger, current, wide, onPress }: LedgerCardProps):
   const lines = useLedgerLines(ledger);
 
   const surface = {
-    backgroundColor: current ? colors['bg.selected'] : colors['bg.surface'],
+    backgroundColor: current ? colors['bg.selected'] : colors['bg.raised'],
     borderWidth: current ? 1.5 : 0,
     borderColor: current ? colors['accent.solid'] : undefined,
   };
-  const statBg = current ? colors['bg.surface'] : colors['bg.canvas'];
+  const statBg = current ? colors['bg.raised'] : colors['bg.canvas'];
 
   const body = (
     <>

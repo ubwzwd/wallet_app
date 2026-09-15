@@ -73,7 +73,7 @@ export function SummaryCard({
         style={[
           styles.bar,
           raisedShadow(colors, scheme),
-          { backgroundColor: colors['bg.surface'], borderTopColor: colors['border.default'] },
+          { backgroundColor: colors['bg.raised'], borderTopColor: colors['border.default'] },
         ]}
       >
         {preview !== undefined && preview !== null ? (

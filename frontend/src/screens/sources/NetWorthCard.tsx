@@ -7,9 +7,9 @@
  * in the table's foot strip. The 「＋」 button rides in this card's corner, because the
  * narrow chrome's top bar has no action slot of its own.
  *
- * It is a `ListCard`, not a raised `Card`: the block sits directly above the account groups,
- * and 屏幕稿 09 · 375 paints one white (`bg.surface`) for both — `bg.raised` here is a
- * second, slightly different white, and the difference is glaring in dark mode.
+ * It is a `ListCard`, not a raised `Card`: the block sits directly above the account groups
+ * and 屏幕稿 09 · 375 paints one white for both. Since decision §14.58 both whites are
+ * `bg.raised`, so the choice is now about the shadow and the padding, not the colour.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -84,7 +84,9 @@ export function NetWorthCard({
 }
 
 const styles = StyleSheet.create({
-  card: { padding: space['4'] },
+  // `ListCard` adds `paddingVertical: space['1']` of its own when it carries no header or
+  // footer, so the vertical inset here is short by that much to keep an even 16 all round.
+  card: { paddingHorizontal: space['4'], paddingVertical: space['4'] - space['1'] },
   body: { gap: space['2'] },
   row: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
   text: { flex: 1, minWidth: 0, gap: 2 },

@@ -27,7 +27,7 @@ const ACTION_PAINT: Readonly<Record<ActionTone, ActionPaint>> = {
   refund: { bg: 'status.warning.bg', bgPressed: 'kind.refund.subtle', fg: 'status.warning.fg' },
   info: { bg: 'status.info.bg', bgPressed: 'kind.transfer.subtle', fg: 'status.info.fg' },
   danger: {
-    bg: 'bg.surface',
+    bg: 'bg.raised',
     bgPressed: 'status.danger.bg',
     fg: 'status.danger.fg',
     border: 'status.danger.fg',

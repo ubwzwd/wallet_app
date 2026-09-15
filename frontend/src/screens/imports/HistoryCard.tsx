@@ -52,7 +52,7 @@ export function HistoryCard(props: HistoryRowProps): React.JSX.Element {
   const p = useParts(props.batch, props.lang, props.totalFlags);
 
   return (
-    <View testID={p.id} style={[styles.card, { backgroundColor: colors['bg.surface'] }]}>
+    <View testID={p.id} style={[styles.card, { backgroundColor: colors['bg.raised'] }]}>
       <View style={styles.cardHead}>
         <FileWell ready={p.ready} />
         <View style={historyShared.grow}>

@@ -3,9 +3,9 @@
  *
  * Three rows in one white card — 转让 owner / 退出账本 / 删除账本 — each a round icon well,
  * a title, one line of consequence and a chevron. Transferring opens in place (the member
- * picker unfolds under its row); leaving and deleting go through `confirm`, and deleting
- * only unlocks once the ledger's name has been typed out by hand. No CSV export first
- * (decision §14.52 A1).
+ * picker unfolds under its row); leaving goes through `confirm`, and deleting opens
+ * 屏幕稿 12's own dialog, which only unlocks once the ledger's name has been typed out by
+ * hand. No CSV export first (decision §14.52 A1).
  *
  * A member sees the card with 退出账本 alone: decision §2 grants them nothing else here.
  */
@@ -28,6 +28,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Icon, type IconName, ListCard, Select, Text, confirm, toast } from '@/ui';
 import type { TintTone } from '@/ui';
 
+import { DeleteLedgerDialog } from './DeleteLedgerDialog';
 import { IconWell } from './IconWell';
 import { SectionLabel } from './SectionLabel';
 
@@ -112,6 +113,7 @@ export function DangerZone({
 
   const [transferOpen, setTransferOpen] = React.useState(false);
   const [transferTo, setTransferTo] = React.useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
 
   const others = members.filter((m) => !m.is_me);
   const name = detail?.name ?? ledgerName;
@@ -161,31 +163,22 @@ export function DangerZone({
     })();
   };
 
+  // 屏幕稿 12 · 删除账本 is its own dialog (count tiles, a danger-ringed name box, a grey
+  // foot band), not the generic `confirm()` — see `DeleteLedgerDialog.tsx`.
   const onDelete = (): void => {
     if (!detail) return;
-    void (async () => {
-      const ok = await confirm({
-        title: t('ledger:settings.danger.delete_confirm_title', { name: detail.name }),
-        body: t('ledger:settings.danger.delete_confirm_body'),
-        meta: t('ledger:settings.danger.delete_counts', {
-          transactions: detail.counts.transactions,
-          sources: detail.counts.sources,
-          imports: detail.counts.import_batches,
-        }),
-        tone: 'danger',
-        icon: 'trash-2',
-        requireText: detail.name,
-        requireTextLabel: t('ledger:settings.danger.delete_confirm_label'),
-        confirmLabel: t('ledger:settings.danger.delete_action'),
-      });
-      if (!ok) return;
-      remove.mutate(undefined, {
-        onSuccess: () => {
-          toast.success(t('ledger:settings.danger.deleted_toast', { name: detail.name }));
-          router.replace(routes.ledgers() as Href);
-        },
-      });
-    })();
+    setDeleteOpen(true);
+  };
+
+  const confirmDelete = (): void => {
+    if (!detail) return;
+    remove.mutate(undefined, {
+      onSuccess: () => {
+        setDeleteOpen(false);
+        toast.success(t('ledger:settings.danger.deleted_toast', { name: detail.name }));
+        router.replace(routes.ledgers() as Href);
+      },
+    });
   };
 
   // 屏幕稿 12 1440 heads the card from inside; the 375 frame sets a small mono label in the
@@ -280,11 +273,34 @@ export function DangerZone({
     </ListCard>
   );
 
-  if (wide) return card;
+  const dialog = detail ? (
+    <DeleteLedgerDialog
+      open={deleteOpen}
+      name={detail.name}
+      counts={{
+        transactions: detail.counts.transactions,
+        sources: detail.counts.sources,
+        imports: detail.counts.import_batches,
+      }}
+      busy={remove.isPending}
+      onCancel={() => setDeleteOpen(false)}
+      onConfirm={confirmDelete}
+    />
+  ) : null;
+
+  if (wide) {
+    return (
+      <>
+        {card}
+        {dialog}
+      </>
+    );
+  }
   return (
     <View>
       <SectionLabel title={t('ledger:settings.danger.title')} danger />
       {card}
+      {dialog}
     </View>
   );
 }

@@ -168,6 +168,9 @@ export function CategorySection({
   // to say: a month with a salary and no spending used to fall through to a bare white
   // sliver reading 「共 ¥0.00」 with no rows under it.
   const empty = summary.expense.length === 0 && isZeroMoney(summary.expense_total);
+  // A month that holds a salary and no spending is not 「这个月还没有记账」 — the header right
+  // above it already reads 「9月收入 ¥18,000.00」. Only a month with nothing at all is.
+  const hasIncome = summary.income.length > 0 || !isZeroMoney(summary.income_total);
 
   if (empty) {
     return (
@@ -176,7 +179,7 @@ export function CategorySection({
         <ListCard style={styles.card}>
           <EmptyState
             placeholder={{ rows: 4, note: t('stats:home.month_empty_hint') }}
-            title={t('stats:home.month_empty')}
+            title={t(hasIncome ? 'stats:home.month_expense_empty' : 'stats:home.month_empty')}
             primaryAction={{ label: t('stats:home.add_transaction'), onPress: onAddTransaction }}
             style={styles.emptyState}
             testID="home-summary-empty"

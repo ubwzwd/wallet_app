@@ -21,6 +21,7 @@ import { Button, Card, CurrencyPicker, Icon, Text, toast } from '@/ui';
 
 import { IconWell } from './IconWell';
 import { SectionLabel } from './SectionLabel';
+import { useCurrencyNames } from './currencyNames';
 
 export interface BaseCurrencyCardProps {
   ledgerId: Uuid;
@@ -38,6 +39,7 @@ export function BaseCurrencyCard({
   const colors = useColors();
   const wide = useIsWide();
   const currencies = useCurrencies();
+  const currencyNames = useCurrencyNames(currencies.names);
   // Not `{ silent: true }`: this card renders no server error of its own, so a failed
   // change has to reach the user through the global error Toast.
   const update = useUpdateLedger(ledgerId);
@@ -71,12 +73,18 @@ export function BaseCurrencyCard({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space['3'] + 2 }}>
         <IconWell name="banknote" tone="accent" size={38} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="subheading" weight={700} testID="ledger-base-currency">
+          <Text
+            variant="subheading"
+            weight={700}
+            numberOfLines={1}
+            testID="ledger-base-currency"
+          >
             {/* 屏幕稿 12 375 moves 「基准币种」 out to the section label, so the row there
-                reads 「CNY · 人民币」 alone. */}
+                reads 「CNY · 人民币」 alone. One line either way: a wrapped title pushes
+                「修改」 off the row. */}
             {t(wide ? 'ledger:settings.currency.title' : 'ledger:settings.currency.title_short', {
               code: current,
-              name: currencies.names?.[current] ?? '',
+              name: currencyNames[current] ?? '',
             })}
           </Text>
           <Text variant="body" tone="muted">
@@ -111,7 +119,7 @@ export function BaseCurrencyCard({
             testID="ledger-base-currency-picker"
             label={t('ledger:settings.currency.pick_label')}
             codes={currencies.codes}
-            names={currencies.names}
+            names={currencyNames}
             value={target}
             onChange={setNext}
             disabled={!detail || update.isPending}

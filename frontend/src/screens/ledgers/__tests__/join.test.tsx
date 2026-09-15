@@ -1,7 +1,8 @@
 /**
  * `/ledgers/join` (04 §4.3, decisions §14.29 / §14.35 / §14.52 B17): auto-submit on the
- * sixth digit, shake-and-clear on a rejected code, and a rate-limit countdown that retries
- * the very same code once without ever consuming it.
+ * sixth digit, shake-and-hold on a rejected code (屏幕稿 13 · 失效 keeps the digits and turns
+ * the cells red; 「重新输入」 clears), and a rate-limit countdown that retries the very same
+ * code once without ever consuming it.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -11,6 +12,7 @@ import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
@@ -36,6 +38,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
+  'ledgers/index': () => <RNText>ledger list page</RNText>,
   'ledgers/join': JoinLedgerScreen,
   'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
 };
@@ -50,9 +53,13 @@ beforeEach(async () => {
   await initI18n();
   await i18next.changeLanguage('zh');
   mockGet('/me', makeUser());
+  // The 1440 frame draws the ledger list behind the dialog, so the list query has to answer
+  // there too; the narrow frame never asks for it.
+  mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: '家庭账本' })], total: 1 });
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   api.restore();
   queryClient.clear();
   toast.clear();
@@ -88,7 +95,7 @@ test('a pasted six-digit code is submitted exactly once and lands in the ledger'
   expect(await screen.findByTestId('toast-success')).toHaveTextContent('已加入《家庭账本》');
 });
 
-test('invite_expired shows its copy and clears the cells', async () => {
+test('invite_expired shows its copy and keeps the refused digits in the red cells', async () => {
   mockPost('/ledgers/join', { detail: 'Invite expired', code: 'invite_expired' }, 400);
   renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
@@ -97,8 +104,23 @@ test('invite_expired shows its copy and clears the cells', async () => {
   expect(await screen.findByTestId('join-error')).toHaveTextContent(
     '邀请码已过期（有效期 10 分钟），请让对方重新生成',
   );
-  await waitFor(() => expect(screen.getByTestId('join-code-0').props.value).toBe(''));
-  expect(screen.getByTestId('join-code-5').props.value).toBe('');
+  // 屏幕稿 13 · 失效: the six cells turn red *around the code that was refused*, so the
+  // user can read back what they entered. Only 「重新输入」 empties them (see the test
+  // below), and one keystroke over a cell clears the red without clearing the rest.
+  await waitFor(() => expect(screen.getByTestId('join-restart')).toBeTruthy());
+  expect(screen.getByTestId('join-code-0').props.value).toBe('1');
+  expect(screen.getByTestId('join-code-5').props.value).toBe('6');
+
+  // Correcting one digit of a refused code does *not* re-post it: `onComplete` belongs to
+  // the keystroke that fills the last empty cell, and the row was already full. The code
+  // goes back out only when the user presses 「加入」, which the cleared error reveals.
+  fireEvent.changeText(screen.getByTestId('join-code-2'), '9');
+  expect(joinRequests()).toEqual(['123456']);
+  expect(screen.getByTestId('join-code-2').props.value).toBe('9');
+  expect(screen.getByTestId('join-code-5').props.value).toBe('6');
+
+  fireEvent.press(screen.getByTestId('join-submit'));
+  await waitFor(() => expect(joinRequests()).toEqual(['123456', '129456']));
 });
 
 test('an incomplete code is never submitted', async () => {
@@ -195,4 +217,40 @@ test('a rejected code swaps the join button for a fresh start', async () => {
   await waitFor(() => expect(screen.queryByTestId('join-error')).toBeNull());
   expect(screen.getByTestId('join-submit')).toBeTruthy();
   expect(screen.getByTestId('join-code-0').props.value).toBe('');
+});
+
+/**
+ * 屏幕稿 13 · 「1440 · Dialog」: on a wide screen 加入账本 is a modal laid over the ledger
+ * list, with 取消 / 加入 in its foot band. Everything below is unreachable at the jest
+ * default width, so the wide composition needs a frame of its own.
+ */
+test('宽屏 the join card is a dialog over the list, and 取消 goes back to it', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockPost('/ledgers/join', makeLedger());
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  expect(await screen.findByTestId('join-dialog')).toBeTruthy();
+  // The list is drawn behind the dim as the backdrop of the mockup, and only as a
+  // backdrop: `aria-hidden` keeps it out of the accessibility tree (RNTL's default query
+  // is the a11y tree, so it has to be asked for explicitly to be found at all), and the
+  // dialog itself lives in a `Modal`, which react-native-web portals and focus-traps.
+  expect(screen.queryByTestId('join-dialog-behind')).toBeNull();
+  expect(screen.getByTestId('join-dialog-behind', { includeHiddenElements: true })).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('join-cancel'));
+
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  expect(joinRequests()).toEqual([]);
+});
+
+test('宽屏 a pasted code still auto-submits exactly once from the dialog', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockPost('/ledgers/join', makeLedger({ id: 'joined-3', name: '合租账本' }));
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  await screen.findByTestId('join-dialog');
+  await pasteCode('123456');
+
+  await waitFor(() => expect(router.getPathname()).toBe('/l/joined-3'));
+  expect(joinRequests()).toEqual(['123456']);
 });

@@ -140,11 +140,16 @@ function seed(items: ImportBatchListItem[] = [READY, COMMITTED]): void {
   });
 }
 
-/** Every GET the screen sent to the history endpoint, oldest first. */
+/**
+ * Every *list* GET the screen sent to the history endpoint, oldest first. The header's
+ * 「N 批待提交」 rides on a separate one-row `status=ready` probe (`limit: 1`), which is a
+ * counter rather than a page of the list, so it is left out here.
+ */
 function listRequests(): Array<Record<string, unknown> | undefined> {
   return api.mock.history.get
     .filter((r) => (r.url ?? '').endsWith('/imports'))
-    .map((r) => r.params as Record<string, unknown> | undefined);
+    .map((r) => r.params as Record<string, unknown> | undefined)
+    .filter((p) => p?.limit !== 1);
 }
 
 function renderHistory(): ReturnType<typeof renderRouter> {
@@ -395,10 +400,14 @@ test('the header counts the batches and the status filter narrows the list throu
   seed();
   const router = renderHistory();
 
-  // 「2 批 · 1 批待提交 · 已入账 12 笔」: the committed batch's rows are the ones on the books.
+  // 「2 批 · 1 批待提交」: both numbers are server totals — the batch count for the filter in
+  // force and a `status=ready` probe — so the sentence never mixes 「all of them」 with
+  // 「the ones on this page」.
   const meta = await screen.findByTestId('imports-header-meta');
-  expect(String(meta.props.children)).toBe(
-    i18next.t('import:history.stats', { batches: 2, ready: 1, rows: 12 }),
+  await waitFor(() =>
+    expect(String(meta.props.children)).toBe(
+      i18next.t('import:history.stats', { batches: 2, ready: 1 }),
+    ),
   );
 
   fireEvent.press(screen.getByTestId('imports-filter-ready'));
@@ -410,6 +419,14 @@ test('the header counts the batches and the status filter narrows the list throu
   await waitFor(() => expect(router.getSearchParams().status).toBe('committed'));
   await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
+
+  // 「N 批待提交」 is a ledger-wide count, so it drops out under a filter rather than
+  // counting a pending batch inside a list of 已提交 ones (「1 批 · 1 批待提交」).
+  await waitFor(() =>
+    expect(String(screen.getByTestId('imports-header-meta').props.children)).toBe(
+      i18next.t('import:history.stats_batches', { batches: 1 }),
+    ),
+  );
 
   // The filter goes to the server, so it narrows the whole history and not just the 20
   // batches on this page — the pager and the rows then describe the same list.

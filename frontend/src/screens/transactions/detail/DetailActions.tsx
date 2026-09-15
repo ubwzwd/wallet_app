@@ -152,7 +152,7 @@ export function DetailActions({
       style={[
         styles.bar,
         raisedShadow(colors, scheme),
-        { backgroundColor: colors['bg.surface'] },
+        { backgroundColor: colors['bg.raised'] },
       ]}
     >
       {/* touch-target-exempt: `styles.barButton` is 48 tall and full width. */}

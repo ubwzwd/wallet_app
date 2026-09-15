@@ -1,7 +1,6 @@
 {
   "title": "Profile",
   "subtitle": "Only affects you, not the other people in the ledger",
-  "email_label": "Email",
   "created_at_label": "Joined",
   "display_name_label": "Display name",
   "display_name_placeholder": "e.g. \"Wang\"",

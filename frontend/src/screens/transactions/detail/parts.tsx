@@ -141,7 +141,7 @@ export function SideCard({ title, children, style, testID }: SideCardProps): Rea
       style={[
         styles.sideCard,
         raisedShadow(colors, scheme),
-        { backgroundColor: colors['bg.surface'] },
+        { backgroundColor: colors['bg.raised'] },
         style,
       ]}
     >

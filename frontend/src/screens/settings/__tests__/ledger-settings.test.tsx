@@ -283,21 +283,75 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
   fireEvent.press(await screen.findByTestId('delete-ledger'));
   const dialog = await screen.findByTestId('confirm-dialog');
   expect(dialog).toHaveTextContent(/删除「家庭账本」/);
-  expect(dialog).toHaveTextContent(/328 笔交易/);
-  expect(dialog).toHaveTextContent(/4 个账户/);
-  expect(dialog).toHaveTextContent(/12 批导入/);
+  // 屏幕稿 12 · 删除账本 draws the three counts as tiles, one number each.
+  expect(screen.getByTestId('delete-ledger-tile-transactions-value')).toHaveTextContent('328 笔');
+  expect(screen.getByTestId('delete-ledger-tile-sources-value')).toHaveTextContent('4 个');
+  expect(screen.getByTestId('delete-ledger-tile-imports-value')).toHaveTextContent('12 批');
 
   const accept = screen.getByTestId('confirm-accept');
   expect(accept.props.accessibilityState?.disabled).toBe(true);
 
   fireEvent.changeText(screen.getByTestId('confirm-require-text'), '家庭账');
   expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
+  // ...and says how far off it still is, the way the mockup's 「还差「本」字」 does.
+  expect(dialog).toHaveTextContent(/还差「本」字/);
 
   fireEvent.changeText(screen.getByTestId('confirm-require-text'), '家庭账本');
   fireEvent.press(screen.getByTestId('confirm-accept'));
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
   expect(api.mock.history.delete[0].url).toContain(`/ledgers/${LEDGER_ID}`);
+});
+
+test('cancelling the delete dialog closes it and deletes nothing', async () => {
+  await renderSettings('owner', [makeMember(), BOB]);
+  mockDelete(`/ledgers/${LEDGER_ID}`, undefined, 204);
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(api.mock.history.delete).toHaveLength(0);
+
+  // Reopening starts from an empty box: the typed name must not survive a cancel.
+  fireEvent.press(screen.getByTestId('delete-ledger'));
+  expect((await screen.findByTestId('confirm-require-text')).props.value).toBe('');
+  expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
+});
+
+test('the delete dialog cannot be dismissed while the DELETE is in flight', async () => {
+  await renderSettings('owner', [makeMember(), BOB]);
+  let release: (() => void) | null = null;
+  api.mock
+    .onDelete(apiUrl(`/ledgers/${LEDGER_ID}`))
+    .reply(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([204, undefined]);
+        }),
+    );
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+  await waitFor(() => expect(api.mock.history.delete).toHaveLength(1));
+
+  // 取消, the ✕ and the backdrop are all shut off for as long as the request is out:
+  // closing here would leave the mutation running behind an empty screen and then
+  // navigate away from a ledger nobody can see they asked to delete. (The backdrop is a
+  // sibling of an `accessibilityViewIsModal` view, so it is not queryable from here; it
+  // shares the same `dismiss` guard, as does the wide frame's ✕.)
+  expect(screen.getByTestId('confirm-cancel').props.accessibilityState?.disabled).toBe(true);
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+  expect(screen.getByTestId('confirm-dialog')).toBeTruthy();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+
+  await act(async () => {
+    release?.();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
 });
 
 test('renaming the ledger sends the name and the version it was read at', async () => {

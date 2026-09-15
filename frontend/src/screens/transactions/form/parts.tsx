@@ -12,7 +12,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, type IconName, Text, raisedShadow } from '@/ui';
 
-/** The mockups' white block: `bg.surface`, radius 18, the hairline lift, 20 / 16 padding. */
+/** The mockups' white block: `bg.raised`, radius 18, the hairline lift, 20 / 16 padding. */
 export function FormCard({
   children,
   padded = true,
@@ -32,7 +32,7 @@ export function FormCard({
       style={[
         styles.card,
         raisedShadow(colors, scheme),
-        { backgroundColor: colors['bg.surface'] },
+        { backgroundColor: colors['bg.raised'] },
         padded ? { padding: wide ? space['5'] : space['4'] } : null,
         style,
       ]}

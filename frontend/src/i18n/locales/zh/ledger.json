@@ -121,6 +121,18 @@
     "currency": {
       "title": "基准币种 · {{code}} {{name}}",
       "title_short": "{{code}} · {{name}}",
+      "names": {
+        "CNY": "人民币",
+        "SGD": "新加坡元",
+        "USD": "美元",
+        "HKD": "港元",
+        "EUR": "欧元",
+        "JPY": "日元",
+        "GBP": "英镑",
+        "AUD": "澳元",
+        "TWD": "新台币",
+        "KRW": "韩元"
+      },
       "section": "基准币种",
       "subtitle": "所有折算、净资产、分类统计都按它算",
       "change": "修改",
@@ -154,8 +166,20 @@
       "delete_sub": "连 {{count}} 笔交易一起删，不可恢复",
       "delete_confirm_title": "删除「{{name}}」？",
       "delete_confirm_body": "不可恢复。账本里的其他成员也会同时失去访问。",
-      "delete_counts": "{{transactions}} 笔交易 · {{sources}} 个账户 · {{imports}} 批导入",
-      "delete_confirm_label": "输入账本名字确认",
+      "delete_confirm_label": "输入账本名字确认 {{name}}",
+      "delete_tile": {
+        "transactions": "交易",
+        "sources": "账户",
+        "imports": "导入批次"
+      },
+      "delete_tile_value": {
+        "transactions": "{{count}} 笔",
+        "sources": "{{count}} 个",
+        "imports": "{{count}} 批"
+      },
+      "delete_hint": "把「{{name}}」一字不差地打出来才能删",
+      "delete_remaining": "还差「{{text}}」字",
+      "delete_mismatch": "名字对不上",
       "delete_action": "永久删除",
       "deleted_toast": "已删除《{{name}}》"
     }

@@ -10,6 +10,7 @@ import i18next from 'i18next';
 import type { Ledger } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
@@ -67,6 +68,7 @@ afterEach(() => {
   api.restore();
   queryClient.clear();
   toast.clear();
+  jest.restoreAllMocks();
 });
 
 test('with no ledgers the page is the onboarding guide, offering create and join', async () => {
@@ -154,4 +156,38 @@ test('an empty ledger name is refused before the request', async () => {
 
   expect(await screen.findByText('这是必填项')).toBeTruthy();
   expect(api.mock.history.post.length).toBe(0);
+});
+
+/**
+ * 屏幕稿 13 · 1440 is a different control set, not the same cards in three columns: the card
+ * stops being a button (a button inside a button is invalid on the web) and grows an
+ * explicit 「进入这本账」, and the empty third cell becomes the dashed 新建 tile. Everything
+ * here is unreachable at the jest default width, so it needs its own frame.
+ */
+test('宽屏 the card is opened by its own button and the dashed new-ledger tile is the third cell', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: 'led-1', name: 'A' }), makeLedger({ id: 'led-2', name: 'B' })],
+    total: 2,
+  });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  // The dashed third cell is an entry point of its own on wide (there is no 新建 button
+  // under the cards there).
+  const open = await screen.findByTestId('ledger-open-led-2');
+  expect(screen.getByTestId('ledgers-create-tile')).toBeTruthy();
+
+  // 04 §4.3: pressing a ledger still switches to it — on wide through this control, because
+  // the card itself is a plain View (a button inside a button is invalid on the web).
+  fireEvent.press(open);
+  await waitFor(() => expect(router.getPathname()).toBe('/l/led-2'));
+});
+
+test('宽屏 the new-ledger tile opens the create page', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: 'A' })], total: 1 });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('ledgers-create-tile'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers/new'));
 });

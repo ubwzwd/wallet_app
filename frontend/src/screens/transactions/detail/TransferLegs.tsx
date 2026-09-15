@@ -129,7 +129,7 @@ function ExternalTile({
       style={[
         styles.tile,
         styles.tileOutlined,
-        { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] },
+        { backgroundColor: colors['bg.raised'], borderColor: colors['border.strong'] },
       ]}
     >
       <Text variant="micro" tone="muted" mono weight={600} numberOfLines={1}>

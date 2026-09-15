@@ -46,7 +46,7 @@ function UserPill({
       style={({ pressed }) => [
         styles.pill,
         raisedShadow(colors, scheme),
-        { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'] },
+        { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
       ]}
     >
       <Avatar name={email} size={wide ? 28 : 32} shape="circle" tone="muted" />
