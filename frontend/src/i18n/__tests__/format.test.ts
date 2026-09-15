@@ -4,6 +4,7 @@
  */
 import type { IsoDate } from '@/api/types';
 import {
+  currencySymbol,
   formatMoney,
   formatConverted,
   formatAmountPlain,
@@ -15,6 +16,7 @@ import {
   formatMonth,
   formatMonthShort,
   formatDateTime,
+  formatDateTimeShort,
   formatCountdown,
   formatBytes,
 } from '../format';
@@ -53,6 +55,52 @@ describe('formatMoney', () => {
 
   test('accepts a plain number as well as a Money string', () => {
     expect(formatMoney(-1299, 'CNY', 'zh')).toContain('−');
+  });
+});
+
+describe('the currency symbol table (§14.59a)', () => {
+  test.each([
+    ['CNY', '¥'],
+    ['SGD', 'S$'],
+    ['USD', '$'],
+    ['HKD', 'HK$'],
+    ['EUR', '€'],
+    ['GBP', '£'],
+    ['JPY', 'JP¥'],
+    ['AUD', 'A$'],
+    ['TWD', 'NT$'],
+    ['KRW', '₩'],
+  ])('%s reads as %s', (code, symbol) => {
+    expect(currencySymbol(code)).toBe(symbol);
+    expect(currencySymbol(code.toLowerCase())).toBe(symbol);
+  });
+
+  test('a code with no symbol has none', () => {
+    expect(currencySymbol('MYR')).toBeNull();
+  });
+
+  test('屏幕稿 09 writes the Singapore account as S$4,120.80', () => {
+    expect(formatMoney('4120.8000', 'SGD', 'zh')).toBe('S$4,120.80');
+    // The symbol belongs to the money, not to the reader: `Intl` would swing this to
+    // 「SGD 4,120.80」 and CNY to 「CN¥」 with the interface language, the mockups do not.
+    expect(formatMoney('4120.8000', 'SGD', 'en')).toBe('S$4,120.80');
+    expect(formatMoney('24576.75', 'CNY', 'en')).toBe('¥24,576.75');
+    expect(formatMoney('24576.75', 'CNY', 'zh')).toBe('¥24,576.75');
+  });
+
+  test('a zero-decimal currency keeps its own symbol and no decimals', () => {
+    expect(formatMoney('4121', 'JPY', 'en')).toBe('JP¥4,121');
+    expect(formatMoney('4121', 'KRW', 'zh')).toBe('₩4,121');
+  });
+
+  test('an unknown code falls back to the ISO code and a space', () => {
+    expect(formatMoney('1234.56', 'MYR', 'zh')).toBe('MYR 1,234.56');
+    expect(formatMoney('-1234.56', 'myr', 'en')).toBe('−MYR 1,234.56');
+  });
+
+  test('the sign sits in front of the symbol, never between it and the digits', () => {
+    expect(formatMoney('-1234.56', 'SGD', 'zh')).toBe('−S$1,234.56');
+    expect(formatMoney('1234.56', 'SGD', 'zh', { signDisplay: 'always' })).toBe('+S$1,234.56');
   });
 });
 
@@ -96,15 +144,27 @@ describe('formatMonthShort', () => {
   });
 });
 
-describe('formatAmountPlain', () => {
+describe('formatAmountPlain (§14.59a — the bare number in a grid)', () => {
   test('has no currency symbol but keeps thousands separators', () => {
     const out = formatAmountPlain('1299.5', 'CNY');
     expect(out).not.toMatch(/[¥$€]/);
     expect(out).toContain(',');
   });
 
+  test('a negative amount keeps the U+2212 sign, a positive one gets no +', () => {
+    expect(formatAmountPlain('-1234.56', 'CNY')).toBe('−1,234.56');
+    expect(formatAmountPlain('1234.56', 'CNY')).toBe('1,234.56');
+    // A caller that wants 「+1,234.56」 (an income row) prepends the plus itself.
+    expect(formatAmountPlain('0', 'CNY')).toBe('0.00');
+  });
+
   test('respects zero-decimal currencies', () => {
-    expect(formatAmountPlain('1000', 'JPY')).not.toContain('.');
+    expect(formatAmountPlain('1000', 'JPY')).toBe('1,000');
+    expect(formatAmountPlain('-1000', 'KRW')).toBe('−1,000');
+  });
+
+  test('the grouping does not follow the interface language — it takes no language', () => {
+    expect(formatAmountPlain(1234567.5, 'CNY')).toBe('1,234,567.50');
   });
 });
 
@@ -154,6 +214,20 @@ describe('formatDateShort', () => {
 
   test('leaves anything that is not a calendar day alone', () => {
     expect(formatDateShort('whenever' as IsoDate)).toBe('whenever');
+  });
+});
+
+describe('formatDateTimeShort (屏幕稿 07 / 08 操作记录)', () => {
+  test("drops the year the way formatDateShort does: '09-08 07:12'", () => {
+    // No trailing Z: a bare datetime is parsed as local time, so this holds in any zone.
+    expect(formatDateTimeShort('2026-09-08T07:12')).toBe('09-08 07:12');
+    expect(formatDateTimeShort('2026-12-31T23:59')).toBe('12-31 23:59');
+  });
+
+  test('it is formatDateTime with the year and its dash cut off', () => {
+    const utc = '2026-08-14T09:12:00.000000Z';
+    expect(formatDateTimeShort(utc)).toBe(formatDateTime(utc, 'en').slice(5));
+    expect(formatDateTimeShort(utc)).not.toContain('2026');
   });
 });
 

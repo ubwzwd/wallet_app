@@ -4,12 +4,29 @@
  */
 import React from 'react';
 import { fireEvent, render, screen, act } from '@testing-library/react-native';
+import i18next from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import { namespaces, resources } from '@/i18n/resources';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { Sheet } from '@/ui/Sheet';
 import { TOAST_DURATION, ToastHost, toast } from '@/ui/Toast';
 import { ConfirmHost, confirm } from '@/ui/ConfirmDialog';
 
 const CONFIRM_LABELS = { confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' };
+
+// `Sheet` names its backdrop from the language pack, so the real one has to be loaded.
+beforeAll(async () => {
+  if (!i18next.isInitialized) {
+    await i18next.use(initReactI18next).init({
+      lng: 'zh',
+      fallbackLng: 'zh',
+      ns: [...namespaces],
+      defaultNS: 'common',
+      resources: resources as never,
+      interpolation: { escapeValue: false },
+    });
+  }
+});
 
 function renderThemed(node: React.ReactElement) {
   return render(<ThemeProvider initialPref="light">{node}</ThemeProvider>);
@@ -199,5 +216,36 @@ describe('Sheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     fireEvent.press(screen.getByTestId('filters-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  test('a header-less sheet still has a named backdrop (屏幕稿 02 · 交易筛选 375)', () => {
+    // The filter sheet draws its own header, so it passes neither `title` nor `closeLabel`
+    // and `Sheet` renders no header row — but the backdrop is still a `role="button"` and
+    // an unnamed button is unreachable by voice control / a screen reader.
+    renderThemed(
+      <Sheet open onClose={jest.fn()} testID="filters">
+        <></>
+      </Sheet>,
+    );
+    expect(screen.queryByTestId('filters-close')).toBeNull();
+    expect(screen.getByTestId('filters-backdrop').props.accessibilityLabel).toBe('关闭');
+    expect(screen.getByLabelText('关闭')).toBeTruthy();
+  });
+
+  test('an explicit title or closeLabel still wins over the fallback', () => {
+    const { unmount } = renderThemed(
+      <Sheet open onClose={jest.fn()} title="筛选" testID="a">
+        <></>
+      </Sheet>,
+    );
+    expect(screen.getByTestId('a-backdrop').props.accessibilityLabel).toBe('筛选');
+    unmount();
+
+    renderThemed(
+      <Sheet open onClose={jest.fn()} title="筛选" closeLabel="收起筛选" testID="b">
+        <></>
+      </Sheet>,
+    );
+    expect(screen.getByTestId('b-backdrop').props.accessibilityLabel).toBe('收起筛选');
   });
 });

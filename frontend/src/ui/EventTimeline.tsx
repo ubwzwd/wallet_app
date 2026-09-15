@@ -17,7 +17,7 @@ import type { TransactionEvent, Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { type Lang, useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
-import { formatDate, formatDateTime, formatMoney } from '@/i18n/format';
+import { formatDate, formatDateTimeShort, formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Text } from './Text';
@@ -106,7 +106,7 @@ export function EventTimeline({
       case 'amount':
         return currency === undefined ? text : formatMoney(text, currency, l);
       case 'occurred_at':
-        return formatDate(text, l);
+        return formatDate(text);
       case 'category_l1':
       case 'category_l2': {
         const category = index?.byCode[text];
@@ -176,7 +176,7 @@ export function EventTimeline({
                 {`${t(`transaction:detail.event.${event.event}`)} · ${actorName(event.actor_id)}`}
               </Text>
               <Text mono tone="muted" style={styles.meta} testID={`${id}-at-${event.id}`}>
-                {formatDateTime(event.at, l)}
+                {formatDateTimeShort(event.at)}
               </Text>
 
               {visible.map((line) => (

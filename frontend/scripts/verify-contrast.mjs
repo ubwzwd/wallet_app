@@ -23,7 +23,9 @@
  *
  * Usage:
  *   node scripts/verify-contrast.mjs            # every pair, exit 1 on any failure
- *   node scripts/verify-contrast.mjs --list     # print every pair and its ratio, exit 0
+ *   node scripts/verify-contrast.mjs --list     # also print every pair and its ratio
+ *                                               (--list only changes the printing: a failing
+ *                                                gated pair still exits 1)
  *
  * Emit-string contract:
  *   ==> verify-contrast[<scheme>]: <n> pairs        stdout
@@ -190,7 +192,7 @@ function main() {
   if (failures.length > 0) {
     for (const f of failures) console.error(`FAIL: ${f}`);
     console.error(
-      `FAIL: verify-contrast — ${failures.length}/${checked.length * schemes.length} pairs ` +
+      `FAIL: verify-contrast — ${failures.length}/${gatedTotal} pairs ` +
         'below the WCAG 2.1 minimum. tokens.json and src/theme/tokens.ts are generated and ' +
         'protected: report these, do not edit them.',
     );
