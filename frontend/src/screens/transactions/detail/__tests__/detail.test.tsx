@@ -57,6 +57,7 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
   '(app)/l/[ledgerId]/transactions/[txId]/edit': () => <RNText>edit-page</RNText>,
   '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
+  '(app)/l/[ledgerId]/imports/[batchId]/index': () => <RNText>batch-page</RNText>,
 };
 
 function members(): { items: LedgerMember[]; total: number } {
@@ -388,27 +389,52 @@ test('a refund that was never linked offers 「去关联」', async () => {
 
 // ---------------------------------------------------------------------- wide
 
-/** The month's summary as the home screen leaves it in the cache — never fetched here. */
-function seedSummary(): void {
-  queryClient.setQueryData(
-    qk.ledger(LEDGER).statsSum('2026-09'),
-    makeStatsSummary({
-      month: '2026-09',
-      expense_total: '8421.6600',
-      expense: [
-        {
-          code: 'shopping',
-          name_zh: '消费购物',
-          name_en: 'Shopping',
-          amount: '2310.5000',
-          share: 0.2743,
-          count: 4,
-          children: [],
-        },
-      ],
-    }),
-  );
+/** The month's summary the card works off. */
+function summaryBody(): ReturnType<typeof makeStatsSummary> {
+  return makeStatsSummary({
+    month: '2026-09',
+    expense_total: '8421.6600',
+    expense: [
+      {
+        code: 'shopping',
+        name_zh: '消费购物',
+        name_en: 'Shopping',
+        amount: '2310.5000',
+        share: 0.2743,
+        count: 4,
+        children: [],
+      },
+    ],
+  });
 }
+
+/** The same summary, put where the home screen would have left it. */
+function seedSummary(): void {
+  queryClient.setQueryData(qk.ledger(LEDGER).statsSum('2026-09'), summaryBody());
+}
+
+/**
+ * 04 §4.7's 「来源」 row: a row that came out of an import names its batch and links to it;
+ * one typed in by hand says 手动录入 and is not a link at all.
+ */
+test('来源 names the import batch a row came from and opens that batch', async () => {
+  const router = open(makeTransaction({ ...EXPENSE, id: 'e-imported', import_batch_id: 'batch-1' }));
+
+  // A batch turns the row into a link, so the value lives inside it rather than in the
+  // plain `-value-origin` text node.
+  const link = await router.findByTestId('tx-detail-facts-link-origin');
+  expect(link).toHaveTextContent(containing('batch-1'));
+  expect(router.queryByTestId('tx-detail-facts-value-origin')).toBeNull();
+  fireEvent.press(link);
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/batch-1`));
+});
+
+test('a hand-typed row says 手动录入 and offers no link', async () => {
+  const router = open(EXPENSE);
+
+  expect(await router.findByTestId('tx-detail-facts-value-origin')).toHaveTextContent('手动录入');
+  expect(router.queryByTestId('tx-detail-facts-link-origin')).toBeNull();
+});
 
 /**
  * 屏幕稿 08 at 1440: 「对 9 月的影响」 answers the question the 删除 button raises, and the
@@ -417,8 +443,9 @@ function seedSummary(): void {
  */
 test('宽屏 prices what deleting this row would change, and keeps the actions in the headline', async () => {
   wideSpy.mockReturnValue(true);
-  // The card reads the summary out of the cache and never asks for one (04 §4.7 / §14.52
-  // A9), so the test seeds the very key the home screen fills.
+  // The arithmetic is the card's own (§14.52 A9); the month's summary is the ledger's
+  // ordinary `GET /stats/summary`, so a cache the home screen has already filled costs
+  // nothing and a cold one is fetched — see the deep-link test below.
   seedSummary();
 
   const router = open(EXPENSE);
@@ -450,6 +477,40 @@ test('宽屏 prices what deleting this row would change, and keeps the actions i
   expect(second.getByTestId('tx-detail-impact-after-delete')).toHaveTextContent(
     containing('删除后支出¥8,620.66'),
   );
+});
+
+/**
+ * The card subscribes to the row's own month, so a link straight into a detail page — no
+ * home screen visited, nothing in the cache — still draws it (04 §4.7, 屏幕稿 08 · 1440
+ * leads the right column with it).
+ */
+test('宽屏 深链: 「对 N 月的影响」 fetches the row\'s own month instead of staying blank', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/stats/summary`, summaryBody());
+
+  const router = open(EXPENSE);
+
+  expect(await router.findByTestId('tx-detail-impact-total')).toHaveTextContent(
+    containing('¥8,421.66 · 含本笔 ¥598.00'),
+  );
+  expect(api.mock.history.get.some((r) => (r.url ?? '').includes('/stats/summary'))).toBe(true);
+});
+
+/**
+ * A category the summary does not report has no figure to print: 「¥0.00 · 含本笔 ¥299.00」
+ * would be a number invented by the card, so the row drops out instead.
+ */
+test('宽屏 drops the category line when the month\'s summary has no such node', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/stats/summary`, summaryBody());
+
+  // `dining` is nowhere in the seeded summary (only `shopping` is).
+  const router = open(
+    makeTransaction({ ...EXPENSE, id: 'e-dining', category_l1: 'dining', category_l2: null }),
+  );
+
+  expect(await router.findByTestId('tx-detail-impact-total')).toBeTruthy();
+  expect(router.queryByTestId('tx-detail-impact-category')).toBeNull();
 });
 
 // -------------------------------------------------------------------- events

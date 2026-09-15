@@ -73,8 +73,6 @@ export interface TransactionsTableProps {
   index: CategoryIndex | null;
   sourceName(id: Uuid): string;
   onPressRow(row: ListRow): void;
-  onOpenBatch(batchId: Uuid): void;
-  onOpenRefundOrigin(txId: Uuid): void;
   /** Entries the server matched, and how many of them this page shows. */
   total: number;
   shown: number;
@@ -115,7 +113,8 @@ export function TransactionsTable(props: TransactionsTableProps): React.JSX.Elem
         <Text variant="caption" tone="muted" mono testID={`${id}-shown`}>
           {t('transaction:list.table.shown', { count: props.shown, total: props.total })}
         </Text>
-        {props.summary ? (
+        {/* Same rule as the page header: 屏幕稿 15 shows no money on an empty result. */}
+        {props.summary && props.total > 0 ? (
           <Text variant="body" tone="secondary" mono testID={`${id}-net`}>
             {`${t('transaction:list.table.net')} `}
             <Text
@@ -189,8 +188,6 @@ function TableRow({
   index,
   sourceName,
   onPressRow,
-  onOpenBatch,
-  onOpenRefundOrigin,
   id,
 }: TransactionsTableProps & { row: ListRow; id: string }): React.JSX.Element {
   const { t } = useTranslation();
@@ -285,12 +282,7 @@ function TableRow({
         >
           {merchant}
         </Text>
-        <RowBadges
-          tx={tx}
-          id={rowId}
-          onOpenBatch={onOpenBatch}
-          onOpenRefundOrigin={onOpenRefundOrigin}
-        />
+        <RowBadges tx={tx} id={rowId} />
       </View>
     ),
     category: (

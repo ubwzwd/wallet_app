@@ -21,7 +21,7 @@ import { isApiClientError } from '@/api/errors';
 import type { FinanceSource } from '@/api/types';
 import { SOURCE_TYPE_ORDER, sumSources } from '@/domain/networth';
 import { routes } from '@/domain/routes';
-import { formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
 import { useDeleteSource, useSources } from '@/queries';
@@ -165,13 +165,17 @@ export default function SourcesScreen(): React.JSX.Element {
   }
 
   if (items.length === 0) {
+    // The wide header already carries a 「新建账户」 button; a second identical primary
+    // button inside the empty state would put the same call to action on screen twice.
     return (
       <Page testID="sources-screen">
         {header}
         <EmptyState
           icon="wallet"
           title={t('source:list.empty.title')}
-          primaryAction={{ label: t('source:list.empty.button'), onPress: goNew }}
+          primaryAction={
+            wide ? undefined : { label: t('source:list.empty.button'), onPress: goNew }
+          }
           testID="sources-empty"
         />
       </Page>
@@ -207,7 +211,9 @@ export default function SourcesScreen(): React.JSX.Element {
       {wide ? (
         <SourcesTable
           sources={active}
-          total={formatMoney(summary.net, baseCurrency, lang)}
+          // Bare digits, like every other number in the table's two money columns
+          // (屏幕稿 09: 「34,627.10」); the page header's meta keeps its ¥.
+          total={formatAmountPlain(summary.net, baseCurrency)}
           mixed={currencyCount(active) > 1}
           {...rowProps}
         />

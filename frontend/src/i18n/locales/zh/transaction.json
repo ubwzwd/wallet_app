@@ -138,8 +138,6 @@
       "empty": "—",
       "menu_title": "这条交易",
       "open_menu": "更多操作",
-      "imported_action": "查看这批导入",
-      "refund_origin_action": "看原支出",
       "uncategorized": "未归类"
     },
     "pagination": {
@@ -172,6 +170,9 @@
     "page_title": "记一笔",
     "page_title_edit": "编辑",
     "ledger_meta": "记入 {{ledger}} · 基准币种 {{currency}}",
+    "ledger_meta_transfer": "转账不计入收支，只在账户之间移动",
+    "ledger_meta_transfer_single": "单腿转账 · 对方不在本账本内",
+    "ledger_meta_refund": "退款会从对应支出里扣回，不算收入",
     "today": "今天",
     "optional": "选填",
     "amount_refund": "金额 · 退回",
@@ -333,15 +334,6 @@
     "from_import": "来自 {{filename}} 的导入",
     "kind_change_disabled_hint": "要把它改成转账，请删掉这条重新记",
     "archived_source_hint": "这个账户已归档，允许修改这条历史交易，但不能改选到别的归档账户",
-    "weekday": {
-      "0": "周日",
-      "1": "周一",
-      "2": "周二",
-      "3": "周三",
-      "4": "周四",
-      "5": "周五",
-      "6": "周六"
-    },
     "actions_open": "修改",
     "actions_sheet_title": "修改这笔{{kind}}",
     "duplicate_action_hint": "同商户同分类，日期改成今天",

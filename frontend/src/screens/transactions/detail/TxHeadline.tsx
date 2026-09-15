@@ -12,8 +12,6 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { Transaction } from '@/api/types';
-import { useLang } from '@/i18n';
-import { formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -22,7 +20,7 @@ import { Card, Text, sourceTypeLabelKey } from '@/ui';
 import { DetailHeader } from './DetailHeader';
 import { RateLine } from './RateLine';
 import { TransferLegs, type SourceMap } from './TransferLegs';
-import { AccountRow, InfoBadge } from './parts';
+import { AccountRow, InfoBadge, plainAmount } from './parts';
 
 export interface TxHeadlineProps {
   tx: Transaction;
@@ -42,7 +40,6 @@ export function TxHeadline({
   actions,
 }: TxHeadlineProps): React.JSX.Element {
   const { t } = useTranslation();
-  const lang = useLang();
   const colors = useColors();
   const wide = useIsWide();
 
@@ -105,7 +102,9 @@ export function TxHeadline({
             <Text variant="body" tone="secondary" testID="tx-detail-transfer-note">
               {t('transaction:detail.transfer_note_single', {
                 currency: tx.currency,
-                delta: formatMoney(tx.amount, tx.currency, lang, { signDisplay: 'always' }),
+                // 屏幕稿 07 writes every transfer figure bare — the sentence already names
+                // the currency right before the number.
+                delta: plainAmount(tx.amount, tx.currency, 'always'),
               })}
             </Text>
           ) : (

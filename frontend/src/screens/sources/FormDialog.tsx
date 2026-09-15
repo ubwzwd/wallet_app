@@ -14,7 +14,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { Card, Icon, Text } from '@/ui';
 
 /** 屏幕稿 09: the dialog is 620 across and its × a 36 square. */
-export const DIALOG_WIDTH = 620;
+const DIALOG_WIDTH = 620;
 const CLOSE_SIZE = 36;
 const PAD = space['5'] + 2;
 

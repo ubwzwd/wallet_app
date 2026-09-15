@@ -167,9 +167,6 @@ export default function TransactionsScreen(): React.JSX.Element {
     [deleteTransaction, deleteTransfer, t],
   );
 
-  const openBatch = (batchId: Uuid): void => router.push(l.importBatch(batchId) as Href);
-  const openRefundOrigin = (txId: Uuid): void => router.push(l.transaction(txId) as Href);
-
   // -------------------------------------------------------------------- parts
   const countLabel = wide
     ? t('transaction:list.count', { count: total })
@@ -239,7 +236,9 @@ export default function TransactionsScreen(): React.JSX.Element {
               <Text variant="body" tone="secondary" mono weight={500} testID="tx-count">
                 {countLabel}
               </Text>
-              {summaryLabel !== null ? (
+              {/* 屏幕稿 15 · 空交易列表 1440 prints counts and nothing else: 「支出 ¥0.00 ·
+                  收入 ¥0.00」 on a ledger with no rows is noise, not information. */}
+              {total > 0 && summaryLabel !== null ? (
                 <Text variant="body" tone="muted" mono testID="tx-summary-line">
                   {`· ${summaryLabel}`}
                 </Text>
@@ -267,8 +266,6 @@ export default function TransactionsScreen(): React.JSX.Element {
             index={categories.index}
             sourceName={sourceName}
             onPressRow={openRow}
-            onOpenBatch={openBatch}
-            onOpenRefundOrigin={openRefundOrigin}
             total={total}
             shown={rows.length}
             summary={summary}
@@ -295,11 +292,28 @@ export default function TransactionsScreen(): React.JSX.Element {
           holds nothing nor on a filter that matched nothing; the card says it instead. */}
       {total > 0 ? (
         <View style={[styles.statLine, styles.statRow]}>
-          <Text variant="caption" tone="secondary" mono testID="tx-count">
+          {/* 屏幕稿 02 · 375 keeps both halves on one line — the count left, the summary
+              right. Neither may wrap; the count is the half that never gives way, because
+              「共 140 笔」 cut to 「共 14…」 would read as a different number. */}
+          <Text
+            variant="caption"
+            tone="secondary"
+            mono
+            numberOfLines={1}
+            style={styles.statCount}
+            testID="tx-count"
+          >
             {countLabel}
           </Text>
           {summaryLabel !== null ? (
-            <Text variant="caption" tone="secondary" mono testID="tx-summary-line">
+            <Text
+              variant="caption"
+              tone="secondary"
+              mono
+              numberOfLines={1}
+              style={styles.statCell}
+              testID="tx-summary-line"
+            >
               {summaryLabel}
             </Text>
           ) : null}
@@ -361,8 +375,6 @@ export default function TransactionsScreen(): React.JSX.Element {
               sourceName={sourceName}
               onPressRow={openRow}
               onOpenMenu={setMenuRow}
-              onOpenBatch={openBatch}
-              onOpenRefundOrigin={openRefundOrigin}
             />
           )}
           ListHeaderComponent={narrowHeader}
@@ -394,5 +406,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: space['2'],
   },
-  statRow: { justifyContent: 'space-between', paddingHorizontal: space['1'] },
+  statRow: {
+    justifyContent: 'space-between',
+    flexWrap: 'nowrap',
+    paddingHorizontal: space['1'],
+  },
+  statCount: { flexShrink: 0 },
+  statCell: { flexShrink: 1, minWidth: 0 },
 });

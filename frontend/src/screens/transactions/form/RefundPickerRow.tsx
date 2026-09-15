@@ -22,7 +22,7 @@ import { Icon, KindIcon, ProgressBar, Text } from '@/ui';
 import { useColors } from '@/theme/ThemeProvider';
 
 /** `refundable` as the endpoints report it, or the full amount as a fallback. */
-function refundableOf(tx: Transaction): string {
+export function refundableOf(tx: Transaction): string {
   return tx.refundable ?? absMoney(tx.amount);
 }
 

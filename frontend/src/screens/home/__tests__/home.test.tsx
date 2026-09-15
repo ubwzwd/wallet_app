@@ -8,6 +8,7 @@
 import React from 'react';
 import { Text as RNText } from 'react-native';
 import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
+import { within } from '@testing-library/react-native';
 import i18next from 'i18next';
 
 // `expo-font` reaches for `expo-asset`; fonts never gate rendering, so the root layout's
@@ -351,6 +352,30 @@ test('an account row links to the transaction list filtered to that account', as
   expect(router.getSearchParams().source_id).toBe('src-checking');
 });
 
+/**
+ * The home card and 04 §4.8's account page list the same accounts, so they list them in the
+ * same order: the frozen §14.48 type order 储蓄卡 → 信用卡 → 现金 → 其他, whatever order the
+ * server happened to send.
+ */
+test('the accounts card reads in the frozen type order, not the order the server sent', async () => {
+  mockHome({
+    sources: [
+      makeSource({ id: 'src-cash', name: '钱包现金', type: 'cash', balance: '100.0000' }),
+      makeSource({ id: 'src-other', name: '其他账户', type: 'other', balance: '100.0000' }),
+      makeSource({ id: 'src-credit', name: '信用卡', type: 'credit', balance: '-100.0000' }),
+      makeSource({ id: 'src-checking', name: '储蓄卡', type: 'checking', balance: '100.0000' }),
+    ],
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  await router.findByTestId('home-balance-src-checking');
+  const order = ['src-checking', 'src-credit', 'src-cash', 'src-other'];
+  order.forEach((id, i) => {
+    const slot = router.getByTestId(`home-balances-card-slot-${i}`);
+    expect(within(slot).getByTestId(`home-balance-${id}`)).toBeTruthy();
+  });
+});
+
 test('a foreign-currency account without a rate says so instead of showing a converted 0', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
@@ -438,6 +463,41 @@ test('a month with no transactions offers "add a transaction" prefilled as an ex
 
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
   expect(router.getSearchParams().kind).toBe('expense');
+});
+
+/**
+ * 「N 月支出 · 按分类」 only ever draws expense rows, so a month that holds nothing but a
+ * salary has nothing to put in the card: it gets the same empty block as a month with no
+ * entries at all, not a bare white sliver headed 「共 ¥0.00」.
+ */
+test('a month with income but no expenses still shows the empty block, not an empty card', async () => {
+  mockHome({
+    summary: makeStatsSummary({
+      month: MONTH,
+      expense_total: '0.0000',
+      expense: [],
+      income_total: '18000.0000',
+      income: [
+        {
+          code: 'salary',
+          name_zh: '工资',
+          name_en: 'Salary',
+          amount: '18000.0000',
+          share: 1,
+          count: 1,
+          children: [],
+        },
+      ],
+      refund_total: '0.0000',
+    }),
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-summary-empty')).toHaveTextContent(
+    containing('这个月还没有记账'),
+  );
+  expect(router.queryByTestId('home-categories')).toBeNull();
+  expect(router.queryByTestId('home-categories-rest')).toBeNull();
 });
 
 test('switching the month rewrites ?month= and refetches the summary for it', async () => {
@@ -621,6 +681,26 @@ test('no accounts at all: the wide home shows the three-step card', async () => 
 
   fireEvent.press(router.getByTestId('home-empty-step-1'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
+});
+
+/**
+ * 04 §4.4 wants refresh on every frame. The wide empty header carries the two ways forward
+ * *and* the refresh icon: pull-to-refresh is not reachable with a mouse.
+ */
+test('no accounts at all: the wide home keeps its refresh button next to the two ways in', async () => {
+  useWideLayout();
+  mockHome({ sources: [] });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  await router.findByTestId('home-empty');
+  expect(router.getByTestId('home-empty-invite')).toBeTruthy();
+  expect(router.getByTestId('home-empty-source')).toBeTruthy();
+  expect(getsFor(SOURCES_PATH).length).toBe(1);
+
+  await act(async () => {
+    fireEvent.press(router.getByTestId('home-refresh'));
+  });
+  await waitFor(() => expect(getsFor(SOURCES_PATH).length).toBe(2));
 });
 
 test('the empty home sends step 2 to the transaction form', async () => {

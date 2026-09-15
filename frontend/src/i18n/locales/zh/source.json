@@ -9,7 +9,6 @@
     "title": "账户",
     "assets": "资产",
     "liabilities": "负债",
-    "net_worth": "净资产",
     "net_worth_caption": "净资产 · 折算 {{currency}}",
     "meta_active": "{{count}} 个在用",
     "meta_archived": "{{count}} 个已归档",

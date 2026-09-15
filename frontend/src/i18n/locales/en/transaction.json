@@ -147,8 +147,6 @@
       "empty": "—",
       "menu_title": "This transaction",
       "open_menu": "More actions",
-      "imported_action": "View this import batch",
-      "refund_origin_action": "View the original expense",
       "uncategorized": "Uncategorized"
     },
     "pagination": {
@@ -181,6 +179,9 @@
     "page_title": "New entry",
     "page_title_edit": "Edit",
     "ledger_meta": "Into {{ledger}} · base currency {{currency}}",
+    "ledger_meta_transfer": "A transfer moves money between accounts; it is neither income nor expense",
+    "ledger_meta_transfer_single": "Single-leg transfer · the other side is outside this ledger",
+    "ledger_meta_refund": "A refund is taken back off its original expense, not counted as income",
     "today": "Today",
     "optional": "optional",
     "amount_refund": "Amount · refunded",
@@ -342,15 +343,6 @@
     "from_import": "Imported from {{filename}}",
     "kind_change_disabled_hint": "To change this to a transfer, delete it and re-enter it",
     "archived_source_hint": "This account is archived — you can still edit this historical entry, but you can't switch it to another archived account",
-    "weekday": {
-      "0": "Sun",
-      "1": "Mon",
-      "2": "Tue",
-      "3": "Wed",
-      "4": "Thu",
-      "5": "Fri",
-      "6": "Sat"
-    },
     "actions_open": "Edit",
     "actions_sheet_title": "Change this {{kind}}",
     "duplicate_action_hint": "Same merchant and category, dated today",

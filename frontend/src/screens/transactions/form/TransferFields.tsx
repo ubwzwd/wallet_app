@@ -68,7 +68,6 @@ export function TransferFields({
   const {
     form,
     form: { control, formState },
-    currencies,
     lang,
     selectSource,
     selectToSource,
@@ -347,7 +346,10 @@ export function TransferFields({
         </View>
       </FieldColumns>
 
-      {external ? (
+      {/* 屏幕稿 05 单腿 says this once. On a wide screen the amber card in 「这一笔」
+          already carries the sentence, so only the narrow frame — which has no right
+          column — repeats it at the bottom of the main card. */}
+      {external && !wide ? (
         <Text variant="caption" tone="muted" testID="transfer-single-leg-hint">
           {t('transaction:transfer.single_leg_hint')}
         </Text>

@@ -15,7 +15,7 @@ import i18next from 'i18next';
 import type { FinanceSource } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
-import { formatDate, formatMoney } from '@/i18n/format';
+import { formatAmountPlain, formatDate, formatMoney } from '@/i18n/format';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { lightColors } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
@@ -223,8 +223,14 @@ test('the wide table gives every account a row, and the foot strip the total of 
   expect(textOf('source-rate-date-src-other')).toContain(formatDate('2026-09-11', 'zh'));
   expect(textOf('source-converted-src-cash')).toBe('—');
 
+  // 余额 · 原币: 屏幕稿 09 writes a base-currency balance bare — the 币种 column already
+  // names the currency — and keeps the symbol only where the two would disagree.
+  expect(textOf('source-balance-src-checking')).toBe(formatAmountPlain('10000.0000', 'CNY'));
+  expect(textOf('source-balance-src-checking')).not.toContain('¥');
+  expect(textOf('source-balance-src-other')).toBe(formatMoney('200.0000', 'SGD', 'zh'));
+
   // 合计 · 在用 = 10000 − 3204 + 500 + 1000, and the currencies are mixed.
-  expect(textOf('sources-net-worth')).toBe(formatMoney('8296.0000', 'CNY', 'zh'));
+  expect(textOf('sources-net-worth')).toBe(formatAmountPlain('8296.0000', 'CNY'));
   expect(screen.getByTestId('sources-table-mixed')).toBeTruthy();
 });
 
@@ -317,6 +323,22 @@ test('the empty state offers the create action', async () => {
 
   expect(await screen.findByText('还没有账户，添加一个开始记账')).toBeTruthy();
   fireEvent.press(screen.getByTestId('sources-empty-primary'));
+  await waitFor(() => expect(screen.getByText('new account form')).toBeTruthy());
+});
+
+/**
+ * The wide header already carries 「新建账户」, so the empty state must not put a second
+ * identical primary button under it (屏幕稿 09 shows one call to action, not two).
+ */
+test('the wide empty page offers exactly one 新建账户 button', async () => {
+  goWide();
+  seedList([]);
+  renderList();
+
+  expect(await screen.findByTestId('sources-empty')).toBeTruthy();
+  expect(screen.queryByTestId('sources-empty-primary')).toBeNull();
+
+  fireEvent.press(screen.getByTestId('sources-new'));
   await waitFor(() => expect(screen.getByText('new account form')).toBeTruthy());
 });
 

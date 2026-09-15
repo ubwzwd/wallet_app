@@ -182,7 +182,13 @@ const styles = StyleSheet.create({
   },
   wideActions: { flexDirection: 'row', alignItems: 'center', gap: space['3'], flexShrink: 0 },
   block: { flexShrink: 1, minWidth: 0, gap: space['1'] },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    gap: space['2'],
+  },
   label: { flexShrink: 1 },
   // 34/40 at 375 (屏幕 01:70); the wide step is the `display` token's own 40/44.
   narrowNumber: { fontSize: 34, lineHeight: 40 },

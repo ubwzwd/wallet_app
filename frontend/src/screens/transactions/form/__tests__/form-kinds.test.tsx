@@ -283,6 +283,18 @@ test('the quick chips fill the amount box and an over-refund only warns', async 
   expect(body.refund_of).toBe(ORIGIN.id);
 });
 
+/** 屏幕稿 06 titles the candidate dialog with the field's own label, 「关联原支出」. */
+test('the original-expense picker is titled the way the mockup titles it', async () => {
+  mockCandidates([ORIGIN]);
+  renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=refund`, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('refund-link'));
+  await screen.findByTestId(`refund-picker-row-${ORIGIN.id}`);
+  expect(screen.queryByText('选择原支出')).toBeNull();
+  // The field label and the dialog title now read the same.
+  expect(screen.getAllByText('关联原支出').length).toBeGreaterThan(1);
+});
+
 test('a fully refunded original is greyed out but still selectable (decision §14.52 B10)', async () => {
   mockCandidates([ORIGIN, USED_UP]);
   renderRouter(ROUTES, { initialUrl: `${NEW_URL}?kind=refund`, wrapper: Wrapper });

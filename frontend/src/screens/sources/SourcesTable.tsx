@@ -48,7 +48,7 @@ const BODY_COLUMNS = COLUMNS.slice(0, -1);
 const MENU_COLUMN = COLUMNS[COLUMNS.length - 1];
 
 /** Account types wear the same four tints as their icon wells (屏幕稿 09). */
-export const SOURCE_TYPE_BADGE: Readonly<Record<FinanceSource['type'], BadgeTone>> = {
+const SOURCE_TYPE_BADGE: Readonly<Record<FinanceSource['type'], BadgeTone>> = {
   checking: 'accent',
   credit: 'danger',
   cash: 'warning',
@@ -183,7 +183,12 @@ export function SourceTableRow({
         style={{ fontSize: 17, lineHeight: 23 }}
         testID={`source-balance-${source.id}`}
       >
-        {balanceText(source, lang)}
+        {/* 屏幕稿 09 writes a base-currency balance bare (「12,480.35」, 「−3,215.00」): the
+            币种 column two cells to the left already says which currency it is. A foreign
+            row keeps its symbol, because there the column and the number disagree. */}
+        {isForeign(source, baseCurrency)
+          ? balanceText(source, lang)
+          : formatAmountPlain(source.balance, source.default_currency)}
       </Text>
     ),
     converted: muted ? (
@@ -202,8 +207,18 @@ export function SourceTableRow({
   return (
     <View style={{ opacity: muted ? 0.7 : 1 }}>
       {/* The 「···」 menu is a sibling of the row's press target, never a child of it: a
-          button inside a button is invalid on the web and swallows the inner click. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: GRID_GAP, paddingRight: GRID_PADDING }}>
+          button inside a button is invalid on the web and swallows the inner click. The
+          hover tint is painted on this wrapper, not on the press target, so it spans the
+          menu column as well — 屏幕稿 09 hovers the whole 60-tall row. */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: GRID_GAP,
+          paddingRight: GRID_PADDING,
+          backgroundColor: hovered ? colors['bg.hover'] : 'transparent',
+        }}
+      >
         {/* touch-target-exempt: the row is ROW_HEIGHT (60) tall. */}
         <Pressable
           accessibilityRole="button"
@@ -221,7 +236,7 @@ export function SourceTableRow({
             paddingLeft: GRID_PADDING,
             minHeight: ROW_HEIGHT,
             paddingVertical: space['2'],
-            backgroundColor: pressed || hovered ? colors['bg.hover'] : 'transparent',
+            backgroundColor: pressed ? colors['bg.hover'] : 'transparent',
           })}
         >
           {BODY_COLUMNS.map((column) => (

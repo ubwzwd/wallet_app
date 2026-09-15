@@ -164,11 +164,10 @@ export function CategorySection({
   }
 
   const summary = query.data;
-  const empty =
-    summary.expense.length === 0 &&
-    summary.income.length === 0 &&
-    isZeroMoney(summary.expense_total) &&
-    isZeroMoney(summary.income_total);
+  // This card only ever draws expense rows, so only expense decides whether it has anything
+  // to say: a month with a salary and no spending used to fall through to a bare white
+  // sliver reading 「共 ¥0.00」 with no rows under it.
+  const empty = summary.expense.length === 0 && isZeroMoney(summary.expense_total);
 
   if (empty) {
     return (

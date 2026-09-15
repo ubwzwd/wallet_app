@@ -93,11 +93,11 @@ export function ArchivedPanel({
       <Text variant="body" tone="muted" mono testID="sources-archived-count">
         {t('source:list.archived_count', { count: sources.length })}
       </Text>
-      <Icon
-        name={expanded ? 'chevron-down' : 'chevron-right'}
-        size={16}
-        color={colors['border.strong']}
-      />
+      {/* 屏幕稿 09 draws one ˅ and rotates it to ˄ when the block opens (dc.html:184),
+          so the arrow always points the way the block is about to go. */}
+      <View style={expanded ? { transform: [{ rotate: '180deg' }] } : undefined}>
+        <Icon name="chevron-down" size={16} color={colors['border.strong']} />
+      </View>
     </Pressable>
   );
 

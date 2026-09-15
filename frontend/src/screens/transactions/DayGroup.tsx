@@ -29,8 +29,6 @@ export interface DayGroupProps {
   sourceName(id: Uuid): string;
   onPressRow(row: ListRow): void;
   onOpenMenu(row: ListRow): void;
-  onOpenBatch(batchId: Uuid): void;
-  onOpenRefundOrigin(txId: Uuid): void;
   testID?: string;
 }
 
@@ -95,8 +93,6 @@ export function DayGroup(props: DayGroupProps): React.JSX.Element {
             sourceName={props.sourceName}
             onPress={props.onPressRow}
             onOpenMenu={props.onOpenMenu}
-            onOpenBatch={props.onOpenBatch}
-            onOpenRefundOrigin={props.onOpenRefundOrigin}
           />
         ))}
       </ListCard>
