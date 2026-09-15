@@ -323,6 +323,15 @@ describe('SegmentedControl', () => {
     expect(styleOf(screen.getByTestId('k-income')).backgroundColor).toBe('transparent');
   });
 
+  test('both sizes are a 4px track around the segment the mockups draw', () => {
+    renderThemed(
+      <SegmentedControl value="expense" onChange={() => undefined} options={options} testID="k" />,
+    );
+    // 屏幕 04: a 52 track around the 44 kind tab.
+    expect(styleOf(screen.getByTestId('k')).height).toBe(controls.button.heights.md + 8);
+    expect(styleOf(screen.getByTestId('k')).padding).toBe(4);
+  });
+
   test('the small size is the 36-high header filter and hugs its labels', () => {
     renderThemed(
       <SegmentedControl

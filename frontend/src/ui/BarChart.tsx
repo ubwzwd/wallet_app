@@ -29,6 +29,13 @@ export interface BarChartPoint {
 
 export const BAR_HEIGHT_WIDE = 132;
 export const BAR_HEIGHT_NARROW = 72;
+/**
+ * The strip at the top of a wide column that belongs to the value label, not to the bar:
+ * the mockup's 132-tall box scales its columns to 104 (屏幕 01 · 首页.dc.html:436
+ * `buildMonths(104)`), leaving the 11/14 label plus its 6px gap room to sit inside the
+ * card. Narrow columns draw no label and keep the whole box.
+ */
+export const BAR_LABEL_BAND = BAR_HEIGHT_WIDE - 104;
 /** A bar with nothing in it is still drawn, so the month is not a hole in the row. */
 export const BAR_MIN = 6;
 const BAR_RADIUS = 6;
@@ -42,6 +49,8 @@ export interface BarChartProps {
   onPressMonth?(month: string): void;
   /** Overrides the responsive 132 / 72. */
   height?: number;
+  /** Overrides the compact bar label ('5.2k'); the a11y label keeps the full amount. */
+  formatValue?(point: BarChartPoint): string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -50,6 +59,16 @@ export interface BarChartProps {
  *  as anywhere else a short month is printed (04 §5.4). */
 export function monthAbbrev(month: string, lang: Lang): string {
   return formatMonthShort(month, lang);
+}
+
+/**
+ * The mockup's bar label: thousands as one decimal plus `k`, symbol-free, so twelve of
+ * them fit side by side on one line (屏幕 01 · 首页.dc.html:397). Below a thousand the
+ * rounded number is already short enough.
+ */
+export function compactBarLabel(value: number): string {
+  const n = Math.abs(value);
+  return n >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(Math.round(value));
 }
 
 /** Pixel height of every bar, scaled to the peak; the scale always starts at 0. */
@@ -79,6 +98,7 @@ export function BarChart({
   selected,
   onPressMonth,
   height,
+  formatValue,
   style,
   testID,
 }: BarChartProps): React.JSX.Element {
@@ -101,9 +121,11 @@ export function BarChart({
   }
 
   const box = height ?? (wide ? BAR_HEIGHT_WIDE : BAR_HEIGHT_NARROW);
+  // The column is the full box tall, but a wide one lends its top band to the value
+  // label, so the tallest bar stops below the label instead of pushing it out of the card.
   const heights = barHeights(
     months.map((m) => Number(m.expense)),
-    box,
+    wide ? Math.max(BAR_MIN, box - BAR_LABEL_BAND) : box,
   );
   const labelled = new Set(wide ? months.map((_, i) => i) : narrowLabelIndexes(months.length));
   const gap = wide ? space['2'] + 2 : space['1'] + 1;
@@ -113,16 +135,17 @@ export function BarChart({
       <View style={[styles.row, { gap, height: box }]}>
         {months.map((m, i) => {
           const current = m.month === selected;
-          // Twelve two-decimal labels would never fit side by side, so each one uses
-          // `formatMoney`'s own compact notation ('¥1.2万' / '¥12K').
-          const value = formatMoney(m.expense, currency, l, { compact: true });
+          // Screen readers hear the amount with its currency; the drawn label is the
+          // mockup's bare '5.2k', which a caller may override.
+          const spoken = formatMoney(m.expense, currency, l, { compact: true });
+          const value = formatValue?.(m) ?? compactBarLabel(Number(m.expense));
           return (
             // touch-target-exempt: a column is the full 72/132-tall chart box.
             <Pressable
               key={m.month}
               accessibilityRole="button"
               accessibilityState={{ selected: current }}
-              accessibilityLabel={`${monthAbbrev(m.month, l)} ${value}`}
+              accessibilityLabel={`${monthAbbrev(m.month, l)} ${spoken}`}
               disabled={onPressMonth === undefined}
               onPress={() => onPressMonth?.(m.month)}
               testID={`${id}-point-${m.month}`}
@@ -134,6 +157,7 @@ export function BarChart({
                   mono
                   weight={500}
                   tone={current ? 'accent' : 'secondary'}
+                  numberOfLines={1}
                   style={styles.valueLabel}
                   testID={`${id}-value-${m.month}`}
                 >

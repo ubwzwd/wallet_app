@@ -26,6 +26,8 @@ export interface KeyValueRow {
   value: React.ReactNode;
   /** Dates, amounts and rates. */
   mono?: boolean;
+  /** Lets a long value (a 500-character 备注) wrap instead of being clipped to one line. */
+  wrap?: boolean;
 }
 
 export interface KeyValueRowsProps {
@@ -68,7 +70,7 @@ export function KeyValueRows({
             <Text
               variant="body"
               mono={row.mono ?? false}
-              numberOfLines={1}
+              numberOfLines={row.wrap === true ? undefined : 1}
               testID={`${id}-value-${key}`}
             >
               {row.value}

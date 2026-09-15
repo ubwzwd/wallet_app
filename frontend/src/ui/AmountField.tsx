@@ -184,7 +184,13 @@ export function AmountField({
           styles.largeBox,
           {
             backgroundColor: hasError ? colors['status.danger.bg'] : colors['bg.subtle'],
-            borderColor: hasError ? colors['status.danger.fg'] : 'transparent',
+            // The web outline is off (it would trace the input, not the well), so the
+            // well's own border carries focus the way TextField's does.
+            borderColor: hasError
+              ? colors['status.danger.fg']
+              : focused
+                ? colors['border.focus']
+                : 'transparent',
             opacity: disabled ? 0.6 : 1,
           },
         ]}

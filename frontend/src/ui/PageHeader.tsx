@@ -17,7 +17,7 @@ import { raisedShadow } from './Card';
 import { Icon } from './Icon';
 import { Text } from './Text';
 
-/** The mockups' round back button: 40 square, radius 12, lifted off the canvas. */
+/** The mockups' back button: a true 40×40 circle (屏幕 08:42), lifted off the canvas. */
 const BACK_SIZE = 40;
 const BACK_SLOP = (44 - BACK_SIZE) / 2;
 
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   back: {
     width: BACK_SIZE,
     height: BACK_SIZE,
-    borderRadius: radius.md - 2,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

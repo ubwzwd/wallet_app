@@ -2,9 +2,9 @@
  * SegmentedControl (04 §6.4, mockups 02 / 11 / 14): a pill track in `bg.subtle` holding
  * one white, softly lifted segment.
  *
- * Two sizes: `md` (44 high, radius 14) drives the kind tabs, the transfer subtype and the
- * appearance switch; `sm` (36 high, radius 12) is the小 filter in a page header
- * (「全部 / 待提交 / 已提交」). Always controlled.
+ * Two sizes, both a 4px track around the segment the mockups draw: `md` is a 52 track
+ * around a 44 segment (屏幕 04 的 kind tabs), `sm` a 44 track around a 36 segment (屏幕 11
+ * 的「全部 / 待提交 / 已提交」). Always controlled.
  */
 import React from 'react';
 import { Pressable, type StyleProp, View, type ViewStyle } from 'react-native';
@@ -18,7 +18,7 @@ export type SegmentedSize = 'sm' | 'md';
 /** Track height / radius and the padding that turns into the inner pill's inset. */
 const SIZES = {
   sm: { height: controls.button.heights.sm + space['2'], radius: radius.md - 2, pad: space['1'] },
-  md: { height: controls.button.heights.md + space['1'], radius: radius.md, pad: space['1'] },
+  md: { height: controls.button.heights.md + space['2'], radius: radius.md, pad: space['1'] },
 };
 
 export interface SegmentOption<T extends string = string> {
@@ -63,7 +63,7 @@ export function SegmentedControl<T extends string = string>({
       testID={testID}
       style={[
         {
-          height: size === 'md' ? controls.button.heights.md : step.height,
+          height: step.height,
           flexDirection: 'row',
           alignItems: 'stretch',
           alignSelf: fill ? 'stretch' : 'flex-start',
@@ -91,10 +91,10 @@ export function SegmentedControl<T extends string = string>({
             disabled={option.disabled}
             onPress={() => onChange(option.value)}
             testID={testID ? `${testID}-${option.value}` : undefined}
-            // The track is 44 high but padded, so the segment itself is only 36. The
-            // vertical slop takes the tap target back to 44 without changing the control's
-            // drawn height (04 §6.4). Vertical only — a horizontal slop would overlap the
-            // neighbouring segment across the gap.
+            // The track's padding shrinks the segment by 4 top and bottom (a 44 track
+            // holds a 36 segment), so the slop takes the tap target back past 44 without
+            // changing the control's drawn height (04 §6.4). Vertical only — a horizontal
+            // slop would overlap the neighbouring segment across the gap.
             hitSlop={{ top: space['2'], bottom: space['2'] }}
             style={({ pressed }) => [
               {

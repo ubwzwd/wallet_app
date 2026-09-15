@@ -12,7 +12,15 @@ import type { Money } from '@/api/types';
 import { namespaces, resources } from '@/i18n/resources';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { chartSeries, lightColors } from '@/theme/tokens';
-import { BarChart, barHeights, monthAbbrev, narrowLabelIndexes } from '@/ui/BarChart';
+import {
+  BAR_HEIGHT_WIDE,
+  BAR_LABEL_BAND,
+  BarChart,
+  barHeights,
+  compactBarLabel,
+  monthAbbrev,
+  narrowLabelIndexes,
+} from '@/ui/BarChart';
 import { BarList, type BarListItem } from '@/ui/BarList';
 import { TrendChart } from '@/ui/TrendChart';
 import { makeStatsTrend } from '@/test/fixtures';
@@ -163,10 +171,46 @@ describe('BarChart', () => {
       expect(screen.getByTestId(`trend-value-${point.month}`)).toBeTruthy();
       expect(screen.getByTestId(`trend-month-${point.month}`)).toBeTruthy();
     }
-    // Compact, so twelve labels fit side by side (04 §4.4; exact, so a change in the
-    // formatting cannot slip past the test).
-    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent('¥1.2万');
-    expect(screen.getByTestId('trend-value-2026-01')).toHaveTextContent('¥1000');
+    // The mockup's bare '5.2k' form, on one line, so twelve labels fit side by side
+    // (屏幕 01 · 首页.dc.html:397; exact, so a change in the formatting cannot slip past).
+    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent('12.0k');
+    expect(screen.getByTestId('trend-value-2026-01')).toHaveTextContent('1.0k');
+    expect(screen.getByTestId('trend-value-2026-12').props.numberOfLines).toBe(1);
+    // The amount a screen reader hears keeps its currency.
+    expect(screen.getByTestId('trend-point-2026-12').props.accessibilityLabel).toBe('12月 ¥1.2万');
+  });
+
+  test('a wide bar stops below its label so the label stays inside the chart box', () => {
+    mockWideViewport = true;
+    renderThemed(
+      <BarChart months={twelve} currency="CNY" lang="zh" selected="2026-12" testID="trend" />,
+    );
+    // The peak bar is the box minus the band the label sits in — the mockup's 104 of 132.
+    expect(styleOf(screen.getByTestId('trend-bar-2026-12')).height).toBe(
+      BAR_HEIGHT_WIDE - BAR_LABEL_BAND,
+    );
+    expect(BAR_HEIGHT_WIDE - BAR_LABEL_BAND).toBe(104);
+    // The column itself still fills the box, so the row's baseline does not move.
+    expect(styleOf(screen.getByTestId('trend-point-2026-12')).height).toBe(BAR_HEIGHT_WIDE);
+  });
+
+  test('a narrow chart has no labels to make room for, so its peak fills the box', () => {
+    renderThemed(<BarChart months={twelve} currency="CNY" lang="zh" testID="trend" />);
+    expect(styleOf(screen.getByTestId('trend-bar-2026-12')).height).toBe(72);
+  });
+
+  test('a caller can format the bar labels itself', () => {
+    mockWideViewport = true;
+    renderThemed(
+      <BarChart
+        months={twelve}
+        currency="CNY"
+        lang="zh"
+        formatValue={(point) => point.month.slice(5)}
+        testID="trend"
+      />,
+    );
+    expect(screen.getByTestId('trend-value-2026-12')).toHaveTextContent('12');
   });
 
   test('a narrow chart drops the value labels and keeps five milestone months', () => {
@@ -216,18 +260,26 @@ describe('BarChart', () => {
   });
 
   test('bar heights scale to the peak and a flat year still draws twelve bars', () => {
-    const heights = barHeights([0, 50, 100], 132);
-    expect(heights[2]).toBe(132);
-    expect(heights[1]).toBe(66);
+    const heights = barHeights([0, 50, 100], 104);
+    expect(heights[2]).toBe(104);
+    expect(heights[1]).toBe(52);
     // A month with nothing in it keeps a stub, so the row has no hole in it.
     expect(heights[0]).toBeGreaterThan(0);
-    expect(barHeights([0, 0], 132)).toEqual([6, 6]);
+    expect(barHeights([0, 0], 104)).toEqual([6, 6]);
   });
 
   test('the narrow axis keeps the first, the last and every third month between', () => {
     expect(narrowLabelIndexes(12)).toEqual([0, 3, 6, 9, 11]);
     expect(narrowLabelIndexes(1)).toEqual([0]);
     expect(narrowLabelIndexes(0)).toEqual([]);
+  });
+
+  test('the bar label is the mockup\u2019s thousands-with-a-k, and stays short below 1000', () => {
+    expect(compactBarLabel(5200)).toBe('5.2k');
+    expect(compactBarLabel(8100)).toBe('8.1k');
+    expect(compactBarLabel(6842.5)).toBe('6.8k');
+    expect(compactBarLabel(420.4)).toBe('420');
+    expect(compactBarLabel(0)).toBe('0');
   });
 
   test('the axis uses short month names in both languages', () => {

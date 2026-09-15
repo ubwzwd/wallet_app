@@ -46,12 +46,14 @@ function AmountHarness({
   kind,
   quickAdd = false,
   allowExpression = false,
+  size,
 }: {
   initial: string;
   onChange: (next: string) => void;
   kind?: TxKind;
   quickAdd?: boolean;
   allowExpression?: boolean;
+  size?: 'md' | 'lg';
 }) {
   const [value, setValue] = React.useState(initial);
   return (
@@ -65,6 +67,7 @@ function AmountHarness({
       kind={kind}
       quickAdd={quickAdd}
       allowExpression={allowExpression}
+      size={size}
       testID="amt"
     />
   );
@@ -178,6 +181,22 @@ describe('AmountField', () => {
     // The mobile keyboard hints survive the new shape (04 §7.1).
     expect(input.props.inputMode).toBe('decimal');
     expect(input.props.keyboardType).toBe('decimal-pad');
+  });
+
+  test('the large box shows a focus ring, the way the ordinary field does', () => {
+    renderThemed(
+      <AmountHarness initial="45" onChange={() => undefined} kind="expense" size="lg" />,
+    );
+    const well = () =>
+      StyleSheet.flatten(screen.getByTestId('amt-field').props.style as never) as Record<
+        string,
+        unknown
+      >;
+    expect(well().borderColor).toBe('transparent');
+    fireEvent(screen.getByTestId('amt'), 'focus');
+    expect(well().borderColor).toBe(lightColors['border.focus']);
+    fireEvent(screen.getByTestId('amt'), 'blur');
+    expect(well().borderColor).toBe('transparent');
   });
 
   test('a transfer keeps the large number unpainted (§6.2 rule 2)', () => {

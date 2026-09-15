@@ -199,6 +199,20 @@ describe('ListCard and ListRow', () => {
     expect(screen.getByTestId('r2')).toBeTruthy();
   });
 
+  test('a divided card separates its rows with a single hairline, not a double one', () => {
+    renderThemed(
+      <ListCard divided testID="card">
+        <ListRow title="一" testID="r1" />
+        <ListRow title="二" testID="r2" />
+      </ListCard>,
+    );
+    const divider = styleOf(screen.getByTestId('card-slot-1'));
+    // The first row opens the card, so it gets no line above it at all.
+    expect(screen.getByTestId('card-slot-0').props.style).toBeUndefined();
+    expect(divider.borderTopWidth).toBe(1);
+    expect(divider.borderTopColor).toBe(lightColors['border.default']);
+  });
+
   test('dark mode drops the shadow and leans on the surface lightness instead', () => {
     renderThemed(<ListCard testID="card" />, 'dark');
     expect(styleOf(screen.getByTestId('card')).shadowOpacity).toBeUndefined();
@@ -225,6 +239,20 @@ describe('KeyValueRows', () => {
     mockWideViewport = true;
     renderThemed(<KeyValueRows rows={rows} testID="kv" />);
     expect(styleOf(screen.getByText('日期')).width).toBe(KEY_COLUMN_WIDTH);
+  });
+
+  test('a long value wraps only when the row asks to, and is clipped otherwise', () => {
+    renderThemed(
+      <KeyValueRows
+        rows={[
+          { label: '备注', value: '去机场'.repeat(60), wrap: true },
+          { label: '分类', value: '交通 / 打车' },
+        ]}
+        testID="kv"
+      />,
+    );
+    expect(screen.getByTestId('kv-value-备注').props.numberOfLines).toBeUndefined();
+    expect(screen.getByTestId('kv-value-分类').props.numberOfLines).toBe(1);
   });
 
   test('a value may be a node, for a row that holds a badge or a link', () => {

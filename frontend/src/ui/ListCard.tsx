@@ -59,9 +59,10 @@ export function ListCard({
             // Rows are positional and have no stable identity of their own; the child
             // itself carries a key when the caller maps over data.
             key={i}
+            testID={testID ? `${testID}-slot-${i}` : undefined}
             style={
               divided && i > 0
-                ? { borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: colors['border.default'] }
+                ? { borderTopWidth: 1, borderTopColor: colors['border.default'] }
                 : undefined
             }
           >
