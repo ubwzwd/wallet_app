@@ -1,7 +1,7 @@
 /**
  * The responsive shell of 04 §1.4. One breakpoint (1024, decision §0.6):
  *
- *   wide   → a 240px sidebar beside the content area
+ *   wide   → a 252px sidebar beside the content area
  *   narrow → a top bar above the content and a five-slot tab bar below it
  *
  * The shell also runs outside a ledger — `/settings` is reachable from the sidebar and
@@ -20,7 +20,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { useOptionalLedgerContext } from '@/store/LedgerContext';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Icon, Text } from '@/ui';
@@ -88,11 +88,7 @@ function PlainTopBar(): React.JSX.Element {
       testID="top-bar"
       style={[
         styles.plainBar,
-        {
-          paddingTop: top + space['2'],
-          backgroundColor: colors['bg.surface'],
-          borderBottomColor: colors['border.default'],
-        },
+        { paddingTop: top + space['2'], backgroundColor: colors['bg.canvas'] },
       ]}
     >
       <Pressable
@@ -101,11 +97,14 @@ function PlainTopBar(): React.JSX.Element {
         onPress={() => router.back()}
         hitSlop={space['2']}
         testID="top-bar-back"
-        style={styles.backButton}
+        style={({ pressed }) => [
+          styles.backButton,
+          { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'] },
+        ]}
       >
         <Icon name="chevron-left" size={20} color={colors['fg.secondary']} />
       </Pressable>
-      <Text variant="title" numberOfLines={1} testID="top-bar-title">
+      <Text variant="heading" weight={700} numberOfLines={1} testID="top-bar-title">
         {title ?? ''}
       </Text>
     </View>
@@ -157,13 +156,18 @@ export function AppShell({ children }: AppShellProps): React.JSX.Element {
 
 const styles = StyleSheet.create({
   // 04 §6.6: a touch target is never smaller than 44×44.
-  backButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   plainBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space['2'],
+    gap: space['3'],
     paddingHorizontal: space['4'],
     paddingBottom: space['2'],
-    borderBottomWidth: 1,
   },
 });

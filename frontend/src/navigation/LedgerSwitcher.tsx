@@ -2,6 +2,9 @@
  * The ledger switcher (04 §1.4, screens 01 and 13): every ledger the user belongs to, plus
  * the two ways to get another one. Picking a ledger keeps the page you are on — that is
  * `LedgerContext.switchTo` (04 §2.2), not a jump home.
+ *
+ * Screen 01 draws it as a small overlay: a square letter tile, the ledger's name, its base
+ * currency and member count beneath, a tick on the current one, then "create a ledger".
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -13,7 +16,9 @@ import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useLedgerContext } from '@/store/LedgerContext';
-import { Badge, Button, Icon, Sheet, Text } from '@/ui';
+import { Divider, Icon, type IconName, Sheet, Text } from '@/ui';
+
+import { LetterAvatar } from './LetterAvatar';
 
 export interface LedgerSwitcherProps {
   open: boolean;
@@ -31,9 +36,6 @@ function LedgerRow({
 }): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
-  const roleLabel = t(
-    ledger.role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member',
-  );
 
   return (
     <Pressable
@@ -52,16 +54,46 @@ function LedgerRow({
         },
       ]}
     >
+      <LetterAvatar name={ledger.name} size={26} shape="square" tone={current ? 'accent' : 'subtle'} />
       <View style={styles.rowText}>
-        <Text variant="subheading" numberOfLines={1}>
+        <Text weight={current ? 600 : 500} style={styles.rowName} numberOfLines={1}>
           {ledger.name}
         </Text>
-        <Text variant="caption" tone="muted" mono numberOfLines={1}>
-          {ledger.base_currency}
+        <Text mono tone="muted" style={styles.rowMeta} numberOfLines={1}>
+          {`${ledger.base_currency} · ${t('common:nav.member_count', { count: ledger.member_count })}`}
         </Text>
       </View>
-      <Badge label={roleLabel} tone={ledger.role === 'owner' ? 'info' : 'neutral'} />
       {current ? <Icon name="check" size={18} color={colors['accent.solid']} /> : null}
+    </Pressable>
+  );
+}
+
+function ActionRow({
+  label,
+  icon,
+  onPress,
+  testID,
+}: {
+  label: string;
+  icon: IconName;
+  onPress(): void;
+  testID: string;
+}): React.JSX.Element {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? colors['bg.hover'] : 'transparent' },
+      ]}
+    >
+      <Icon name={icon} size={18} color={colors['accent.solid']} />
+      <Text weight={600} tone="accent" style={styles.rowName} numberOfLines={1}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -97,24 +129,19 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
           />
         ))}
       </ScrollView>
-      <View style={styles.actions}>
-        <Button
-          label={t('ledger:list.empty.create_button')}
-          icon="plus"
-          variant="secondary"
-          fullWidth
-          onPress={() => go(routes.ledgersNew())}
-          testID="ledger-switcher-new"
-        />
-        <Button
-          label={t('ledger:list.empty.join_button')}
-          icon="key-round"
-          variant="ghost"
-          fullWidth
-          onPress={() => go(routes.ledgersJoin())}
-          testID="ledger-switcher-join"
-        />
-      </View>
+      <Divider style={styles.divider} />
+      <ActionRow
+        label={t('ledger:list.empty.create_button')}
+        icon="plus"
+        onPress={() => go(routes.ledgersNew())}
+        testID="ledger-switcher-new"
+      />
+      <ActionRow
+        label={t('ledger:list.empty.join_button')}
+        icon="key-round"
+        onPress={() => go(routes.ledgersJoin())}
+        testID="ledger-switcher-join"
+      />
     </Sheet>
   );
 }
@@ -122,13 +149,16 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
 const styles = StyleSheet.create({
   list: { maxHeight: 320 },
   row: {
-    height: density.listRowHeight,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space['3'],
+    gap: 10,
+    paddingVertical: space['2'],
     paddingHorizontal: space['3'],
-    borderRadius: radius.md,
+    borderRadius: 11,
   },
-  rowText: { flex: 1, gap: space['1'] },
-  actions: { gap: space['2'], paddingTop: space['3'] },
+  rowText: { flex: 1, minWidth: 0 },
+  rowName: { fontSize: 15, lineHeight: 20 },
+  rowMeta: { fontSize: 12, lineHeight: 16 },
+  divider: { marginVertical: space['1'], marginHorizontal: density.rowInnerPadding },
 });
