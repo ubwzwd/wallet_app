@@ -213,6 +213,7 @@
       "committed": "Committed"
     },
     "filter_label": "Filter by status",
+    "filter_empty": "No batches match this filter",
     "column": {
       "filename": "File / time",
       "source": "Target account / note",
@@ -220,8 +221,7 @@
       "status": "Status",
       "row_count": "Entries",
       "net_amount": "Net amount",
-      "flags": "Flags",
-      "actions": "Actions"
+      "flags": "Flags"
     },
     "status": {
       "ready": "Ready",
@@ -261,7 +261,7 @@
       "title": "No imports yet",
       "body": "Importing isn't uploading a raw statement: your own ChatGPT / Claude uses our skill to turn it into a standard file first. The statement never reaches this app, and you stay in charge of the quality.",
       "action": "Import a statement",
-      "secondary": "Read the full guide",
+      "secondary": "See the standard format",
       "fallback": "You can skip importing altogether and just record entries by hand.",
       "preview_caption": "What grows here once you import",
       "preview_note": "Every batch keeps its filename, time, entry count and status; a committed one can be undone as a whole."

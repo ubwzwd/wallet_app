@@ -200,6 +200,7 @@
       "committed": "已提交"
     },
     "filter_label": "按状态筛选",
+    "filter_empty": "这个筛选下没有批次",
     "column": {
       "filename": "文件 / 时间",
       "source": "目标账户 / 备注",
@@ -207,8 +208,7 @@
       "status": "状态",
       "row_count": "交易数量统计",
       "net_amount": "净额",
-      "flags": "标记",
-      "actions": "操作"
+      "flags": "标记"
     },
     "status": {
       "ready": "待提交",
@@ -245,7 +245,7 @@
       "title": "还没导入过账单",
       "body": "导入不是上传原始账单，而是先让你自己的 ChatGPT / Claude 用我们的 skill 把它整理成标准文件。这样账单不经过这个应用，整理质量也由你把关。",
       "action": "导入账单",
-      "secondary": "看完整教程",
+      "secondary": "看格式说明",
       "fallback": "也可以先不导入，手动记一样用。",
       "preview_caption": "导入之后这里会长成",
       "preview_note": "每批记着文件名、时间、笔数和状态，提交过的可以整批撤销。"

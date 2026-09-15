@@ -370,6 +370,20 @@ test('the header counts the batches and the status filter narrows the list throu
   expect(listed).toHaveLength(1);
 });
 
+test('an empty filter slice says so, instead of claiming the ledger has no imports', async () => {
+  seed([COMMITTED]);
+  renderHistory();
+
+  // The ledger has one committed batch and nothing ready; 待提交 must not read as 屏幕稿 15.
+  fireEvent.press(await screen.findByTestId('imports-filter-ready'));
+
+  const slice = await screen.findByTestId('imports-filter-empty');
+  expect(slice).toBeTruthy();
+  expect(screen.getByText('这个筛选下没有批次')).toBeTruthy();
+  expect(screen.queryByText('还没导入过账单')).toBeNull();
+  expect(screen.queryByTestId('imports-empty')).toBeNull();
+});
+
 test('a draft row says how many rows still need a category, on both layouts', async () => {
   seed([{ ...READY, uncategorized_count: 3 }]);
   renderHistory();

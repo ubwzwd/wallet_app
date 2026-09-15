@@ -72,18 +72,22 @@ export function resolveFilter(raw: string | string[] | undefined): HistoryFilter
   return HISTORY_FILTERS.includes(value as HistoryFilter) ? (value as HistoryFilter) : 'all';
 }
 
-/** 「4 批 · 1 批待提交 · 已入账 52 笔」 — read off the batches the page is holding. */
-export function historyStats(
-  items: readonly ImportBatchListItem[],
-  total: number,
-): { batches: number; ready: number; rows: number } {
+/** 「4 批 · 1 批待提交 · 已入账 52 笔」 — read off the batches the page is holding.
+ *  All three numbers describe the same set, the page in hand: mixing in the server's
+ *  `total` would make the last two silently describe 20 of the 45. The pager keeps
+ *  `total` to itself. */
+export function historyStats(items: readonly ImportBatchListItem[]): {
+  batches: number;
+  ready: number;
+  rows: number;
+} {
   let ready = 0;
   let rows = 0;
   for (const batch of items) {
     if (batch.status === 'ready') ready += 1;
     else rows += batch.row_count;
   }
-  return { batches: total, ready, rows };
+  return { batches: items.length, ready, rows };
 }
 
 interface RowProps {
@@ -192,7 +196,7 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
 
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const stats = historyStats(items, total);
+  const stats = historyStats(items);
   const shown = filter === 'all' ? items : items.filter((batch) => batch.status === filter);
 
   // An empty history has nothing to count and nothing to filter, so 屏幕稿 15's header is
@@ -303,11 +307,13 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
       </View>
     ) : null;
 
+  // The ledger does have batches — this filter just matches none of them. Saying 「还没导入过
+  // 账单」 here would contradict the counts in the header right above.
   const emptySlice =
     shown.length === 0 ? (
       <View style={styles.emptySlice} testID="imports-filter-empty">
         <Text variant="body" tone="muted">
-          {t('import:history.empty.title')}
+          {t('import:history.filter_empty')}
         </Text>
       </View>
     ) : null;
