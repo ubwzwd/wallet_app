@@ -12,6 +12,7 @@ import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
+import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
@@ -37,6 +38,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
+  'ledgers/index': () => <RNText>ledger list page</RNText>,
   'ledgers/join': JoinLedgerScreen,
   'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
 };
@@ -51,9 +53,13 @@ beforeEach(async () => {
   await initI18n();
   await i18next.changeLanguage('zh');
   mockGet('/me', makeUser());
+  // The 1440 frame draws the ledger list behind the dialog, so the list query has to answer
+  // there too; the narrow frame never asks for it.
+  mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: '家庭账本' })], total: 1 });
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   api.restore();
   queryClient.clear();
   toast.clear();
@@ -200,4 +206,40 @@ test('a rejected code swaps the join button for a fresh start', async () => {
   await waitFor(() => expect(screen.queryByTestId('join-error')).toBeNull());
   expect(screen.getByTestId('join-submit')).toBeTruthy();
   expect(screen.getByTestId('join-code-0').props.value).toBe('');
+});
+
+/**
+ * 屏幕稿 13 · 「1440 · Dialog」: on a wide screen 加入账本 is a modal laid over the ledger
+ * list, with 取消 / 加入 in its foot band. Everything below is unreachable at the jest
+ * default width, so the wide composition needs a frame of its own.
+ */
+test('宽屏 the join card is a dialog over the list, and 取消 goes back to it', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockPost('/ledgers/join', makeLedger());
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  expect(await screen.findByTestId('join-dialog')).toBeTruthy();
+  // The list is drawn behind the dim as the backdrop of the mockup, and only as a
+  // backdrop: `aria-hidden` keeps it out of the accessibility tree (RNTL's default query
+  // is the a11y tree, so it has to be asked for explicitly to be found at all), and the
+  // dialog itself lives in a `Modal`, which react-native-web portals and focus-traps.
+  expect(screen.queryByTestId('join-dialog-behind')).toBeNull();
+  expect(screen.getByTestId('join-dialog-behind', { includeHiddenElements: true })).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('join-cancel'));
+
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  expect(joinRequests()).toEqual([]);
+});
+
+test('宽屏 a pasted code still auto-submits exactly once from the dialog', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockPost('/ledgers/join', makeLedger({ id: 'joined-3', name: '合租账本' }));
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  await screen.findByTestId('join-dialog');
+  await pasteCode('123456');
+
+  await waitFor(() => expect(router.getPathname()).toBe('/l/joined-3'));
+  expect(joinRequests()).toEqual(['123456']);
 });

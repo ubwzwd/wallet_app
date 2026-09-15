@@ -202,6 +202,7 @@
   "history": {
     "title": "导入历史",
     "stats": "{{batches}} 批 · {{ready}} 批待提交",
+    "stats_batches": "{{batches}} 批",
     "filter": {
       "all": "全部",
       "ready": "待提交",

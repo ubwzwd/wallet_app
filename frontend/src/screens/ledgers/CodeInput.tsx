@@ -196,9 +196,10 @@ export function CodeInput({
   );
 
   /**
-   * A cell is "lit" when it holds a digit — or, once the server has spoken, always: the
-   * failed code is cleared from the fields (04 §4.3) but the row stays red until the next
-   * keystroke, so the page still points at where the problem is.
+   * A cell is "lit" when it holds a digit — or, once the server has spoken, always.
+   * 屏幕稿 13 · 失效 keeps the refused digits in place and paints the six cells red *around*
+   * them, so the user can read back what was rejected; 「重新输入」 (or the next keystroke)
+   * is what clears both the digits and the red.
    */
   const paint = (filled: boolean): TextStyle => {
     const lit = filled || state !== 'default';

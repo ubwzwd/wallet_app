@@ -177,8 +177,12 @@ export function DeleteLedgerDialog({
     <View
       style={[
         wide ? styles.foot : styles.footNarrow,
-        // 屏幕稿 12 greys the foot band off against the dialog's own white.
-        { backgroundColor: colors['bg.surface'], borderTopColor: colors['border.default'] },
+        // 屏幕稿 12 · 1440 greys the foot band off (bg.surface) against the dialog's own white;
+        // the 375 frame keeps the white and separates the band with the hairline alone.
+        {
+          backgroundColor: wide ? colors['bg.surface'] : colors['bg.raised'],
+          borderTopColor: colors['border.default'],
+        },
       ]}
     >
       <View style={wide ? styles.footActions : styles.footCell}>
@@ -190,7 +194,7 @@ export function DeleteLedgerDialog({
           testID="confirm-cancel"
         />
       </View>
-      <View style={wide ? styles.footActions : styles.footCell}>
+      <View style={wide ? styles.footActions : styles.footCellWide}>
         <Button
           label={t('ledger:settings.danger.delete_action')}
           variant="danger"
@@ -322,7 +326,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   footActions: { flexShrink: 0 },
+  // 屏幕稿 12 · 375 gives the destructive button the wider half of the foot (1 : 1.4).
   footCell: { flex: 1, minWidth: 0 },
+  footCellWide: { flex: 1.4, minWidth: 0 },
 });
 
 export default DeleteLedgerDialog;

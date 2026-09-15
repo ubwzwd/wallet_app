@@ -213,7 +213,12 @@ export function UndoDialogHost(): React.JSX.Element | null {
           <View
             style={[
               wide ? styles.foot : styles.footNarrow,
-              { backgroundColor: colors['bg.raised'], borderTopColor: colors['border.default'] },
+              // 屏幕稿 11 · 1440 greys the foot band off (bg.surface) against the dialog's own
+              // white; the 375 sheet keeps the white and rules it off with the hairline only.
+              {
+                backgroundColor: wide ? colors['bg.surface'] : colors['bg.raised'],
+                borderTopColor: colors['border.default'],
+              },
             ]}
           >
             {wide ? (

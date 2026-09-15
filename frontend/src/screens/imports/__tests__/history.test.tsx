@@ -420,6 +420,14 @@ test('the header counts the batches and the status filter narrows the list throu
   await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
 
+  // 「N 批待提交」 is a ledger-wide count, so it drops out under a filter rather than
+  // counting a pending batch inside a list of 已提交 ones (「1 批 · 1 批待提交」).
+  await waitFor(() =>
+    expect(String(screen.getByTestId('imports-header-meta').props.children)).toBe(
+      i18next.t('import:history.stats_batches', { batches: 1 }),
+    ),
+  );
+
   // The filter goes to the server, so it narrows the whole history and not just the 20
   // batches on this page — the pager and the rows then describe the same list.
   expect(listRequests()).toEqual([

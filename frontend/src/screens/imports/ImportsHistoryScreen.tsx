@@ -152,7 +152,16 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const bare = filter === 'all' && items.length === 0;
   // 「0 批 · 0 批待提交」 under a filter that matches nothing says nothing, so the counts go
   // whenever the page is empty — but the segmented control only goes when the ledger is.
-  const meta = items.length === 0 ? undefined : t('import:history.stats', stats);
+  // 「N 批待提交」 is a ledger-wide total, so it is only true next to a ledger-wide batch
+  // count: under a filter the sentence would otherwise count a pending batch inside a list
+  // it is not in (「1 批 · 1 批待提交」 on 已提交). 屏幕稿 11 draws the 全部 frame, which keeps
+  // both halves.
+  const meta =
+    items.length === 0
+      ? undefined
+      : filter === 'all'
+        ? t('import:history.stats', stats)
+        : t('import:history.stats_batches', { batches: total });
   const header = (
     <PageHeader
       title={t('import:history.title')}
