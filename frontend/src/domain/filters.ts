@@ -55,8 +55,8 @@ export function parseTxFilters(
   const to = firstOf(search.to);
   if (to && isValidIsoDate(to)) params.to = to;
 
-  const currency = firstOf(search.currency);
-  if (currency && /^[A-Z]{3}$/.test(currency)) params.currency = currency;
+  const currencies = toArray(search.currency).filter((c) => /^[A-Z]{3}$/.test(c));
+  if (currencies.length > 0) params.currency = currencies;
 
   const minAmount = decimalOrUndefined(firstOf(search.min_amount));
   if (minAmount !== undefined) params.min_amount = minAmount;
@@ -86,7 +86,7 @@ export function serializeTxFilters(p: TransactionListParams): Record<string, str
   if (p.category_l2) out.category_l2 = p.category_l2;
   if (p.from) out.from = p.from;
   if (p.to) out.to = p.to;
-  if (p.currency) out.currency = p.currency;
+  if (p.currency && p.currency.length > 0) out.currency = p.currency;
   if (p.min_amount !== undefined) out.min_amount = String(p.min_amount);
   if (p.max_amount !== undefined) out.max_amount = String(p.max_amount);
   if (p.import_batch_id) out.import_batch_id = p.import_batch_id;
@@ -131,8 +131,8 @@ export interface FilterChip {
   value: string;
 }
 
-/** One chip per active condition — array fields (`kind`, `source_id`) produce one chip per
- *  value so each can be removed independently. */
+/** One chip per active condition — array fields (`kind`, `source_id`, `currency`) produce one
+ *  chip per value so each can be removed independently. */
 export function filterChips(p: TransactionListParams): FilterChip[] {
   const chips: FilterChip[] = [];
   if (p.q) chips.push({ key: 'q', value: p.q });
@@ -142,7 +142,7 @@ export function filterChips(p: TransactionListParams): FilterChip[] {
   if (p.category_l2) chips.push({ key: 'category_l2', value: p.category_l2 });
   if (p.from) chips.push({ key: 'from', value: p.from });
   if (p.to) chips.push({ key: 'to', value: p.to });
-  if (p.currency) chips.push({ key: 'currency', value: p.currency });
+  for (const c of p.currency ?? []) chips.push({ key: 'currency', value: c });
   if (p.min_amount !== undefined) chips.push({ key: 'min_amount', value: String(p.min_amount) });
   if (p.max_amount !== undefined) chips.push({ key: 'max_amount', value: String(p.max_amount) });
   if (p.import_batch_id) chips.push({ key: 'import_batch_id', value: p.import_batch_id });
@@ -165,6 +165,10 @@ export function removeFilter(
     const remaining = (p.source_id ?? []).filter((s) => s !== value);
     if (remaining.length > 0) next.source_id = remaining;
     else delete next.source_id;
+  } else if (key === 'currency' && value !== undefined) {
+    const remaining = (p.currency ?? []).filter((c) => c !== value);
+    if (remaining.length > 0) next.currency = remaining;
+    else delete next.currency;
   } else {
     delete next[key];
   }

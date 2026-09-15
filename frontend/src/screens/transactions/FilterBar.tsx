@@ -110,7 +110,7 @@ export interface FilterBarProps {
 function currencyCodesOf(props: FilterBarProps): string[] {
   const codes = new Set<string>([props.baseCurrency]);
   for (const source of props.sources) codes.add(source.default_currency);
-  if (props.filters.currency) codes.add(props.filters.currency);
+  for (const code of props.filters.currency ?? []) codes.add(code);
   return [...codes].sort();
 }
 

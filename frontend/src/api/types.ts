@@ -227,7 +227,7 @@ export interface UnpairResult { pair_id: Uuid; unpaired: UnpairedLeg[]; }
 
 export interface TransactionListParams {
   q?: string; kind?: TxKind[]; category_l1?: string; category_l2?: string;
-  source_id?: Uuid[]; from?: IsoDate; to?: IsoDate; currency?: string;
+  source_id?: Uuid[]; from?: IsoDate; to?: IsoDate; currency?: string[]; // 可重复，IN（决策 §14.60）
   min_amount?: number; max_amount?: number;   // 按基准币种折算后的绝对值比较（决策 §14.49）
   import_batch_id?: Uuid;                     // 决策 §14.46 的 04-D-7
   limit?: number; offset?: number;            // limit 上限 200（决策 §14.44 的 03-14）

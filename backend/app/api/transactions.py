@@ -14,6 +14,7 @@ filters, paging, the summary block and the four extra groups of the detail
 body — plus committing the transaction the services only flush into.
 """
 import datetime as dt
+import re
 import uuid
 from collections.abc import Sequence
 from decimal import Decimal
@@ -237,6 +238,24 @@ def _check_filter_category(l1: str | None, l2: str | None) -> None:
         )
 
 
+def _check_currencies(raw: list[str]) -> list[str]:
+    """``?currency=cny&currency=SGD`` → ``["CNY", "SGD"]`` (§5.25; decision §14.60).
+
+    Each value must be a three-letter code; the match is an ``IN`` over the
+    original currency, so the list is upper-cased and de-duplicated here.
+    """
+    seen: list[str] = []
+    for value in raw:
+        if not re.fullmatch(CURRENCY_PATTERN, value):
+            raise ApiError(
+                422, ErrorCode.VALIDATION_ERROR, f"query.currency: {value!r} is not a currency code"
+            )
+        code = value.upper()
+        if code not in seen:
+            seen.append(code)
+    return seen
+
+
 def _check_sources(db: Session, ctx: LedgerContext, source_ids: list[uuid.UUID]) -> None:
     """Every ``source_id`` filter value has to be an account of this ledger (§5.25)."""
     if not source_ids:
@@ -275,7 +294,7 @@ def _filtered_query(
     source_ids: list[uuid.UUID],
     date_from: dt.date | None,
     date_to: dt.date | None,
-    currency: str | None,
+    currencies: list[str],
     import_batch_id: uuid.UUID | None,
 ) -> Select:
     """Step 1 of §5.25: everything except the base-currency amount range."""
@@ -304,8 +323,8 @@ def _filtered_query(
         stmt = stmt.where(Transaction.occurred_at >= date_from)
     if date_to is not None:
         stmt = stmt.where(Transaction.occurred_at <= date_to)
-    if currency is not None:
-        stmt = stmt.where(Transaction.currency == currency.upper())
+    if currencies:
+        stmt = stmt.where(Transaction.currency.in_(currencies))
     if import_batch_id is not None:
         stmt = stmt.where(Transaction.import_batch_id == import_batch_id)
 
@@ -661,7 +680,9 @@ def list_transactions(
     source_id: Optional[list[uuid.UUID]] = Query(None, description="Repeatable"),
     date_from: Optional[dt.date] = Query(None, alias="from"),
     date_to: Optional[dt.date] = Query(None, alias="to"),
-    currency: Optional[str] = Query(None, pattern=CURRENCY_PATTERN),
+    currency: Optional[list[str]] = Query(
+        None, description="Repeatable; matched as IN over the original currency"
+    ),
     min_amount: Optional[Decimal] = Query(None, ge=0),
     max_amount: Optional[Decimal] = Query(None, ge=0),
     import_batch_id: Optional[uuid.UUID] = Query(None),
@@ -708,7 +729,7 @@ def list_transactions(
         source_ids=list(source_id or []),
         date_from=date_from,
         date_to=date_to,
-        currency=currency,
+        currencies=_check_currencies(currency or []),
         import_batch_id=import_batch_id,
     )
     if min_amount is None and max_amount is None:

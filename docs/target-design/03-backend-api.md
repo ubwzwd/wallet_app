@@ -1616,7 +1616,7 @@ DELETE /api/v1/ledgers/8f0f7b2e-.../sources/5b6c7d8e-...
 | `source_id` | UUID | **是** | — | 多值为 `IN`；每个都必须属于本账本，否则 404 `not_found` |
 | `from` | date | 否 | — | `occurred_at >= from`。`from` 是 Python 关键字，处理函数签名里写 `date_from: date = Query(None, alias="from")` |
 | `to` | date | 否 | — | `occurred_at <= to`（含当天） |
-| `currency` | str | 否 | — | `^[A-Za-z]{3}$`，`.upper()` 后精确匹配**原币种**（决策 §14.49：筛选栏保留币种项） |
+| `currency` | str | 否 | — | `^[A-Za-z]{3}$`，可重复，`.upper()` 后作 `IN` 匹配**原币种**，如 `?currency=CNY&currency=SGD`（决策 §14.49、§14.60；2026-09-16 用户决定改多选） |
 | `min_amount` | Decimal | 否 | — | 折算到账本基准币种后取绝对值 `>= min_amount`（决策 §14.49）；必须 ≥ 0 |
 | `max_amount` | Decimal | 否 | — | 同上 `<= max_amount`；给了两个且 `min > max` → 422 |
 | `import_batch_id` | UUID | 否 | — | 只看这一批导入建出来的交易（决策 §14.46 的 04-D-7）；批次必须属于本账本，否则 404 |

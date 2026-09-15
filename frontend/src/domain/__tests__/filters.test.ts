@@ -18,7 +18,7 @@ describe('parseTxFilters / serializeTxFilters round-trip', () => {
       category_l2: 'lunch',
       from: '2026-08-01',
       to: '2026-08-31',
-      currency: 'CNY',
+      currency: ['CNY', 'SGD'],
       min_amount: 20,
       max_amount: 500,
       import_batch_id: 'b1',
@@ -110,7 +110,7 @@ describe('activeFilterCount', () => {
 
 describe('filterChips', () => {
   test('one chip per active condition, one per array item', () => {
-    const chips = filterChips({ kind: ['expense', 'refund'], currency: 'CNY' });
+    const chips = filterChips({ kind: ['expense', 'refund'], currency: ['CNY'] });
     expect(chips).toEqual([
       { key: 'kind', value: 'expense' },
       { key: 'kind', value: 'refund' },
@@ -121,7 +121,7 @@ describe('filterChips', () => {
 
 describe('removeFilter', () => {
   test('removes a scalar filter entirely', () => {
-    expect(removeFilter({ currency: 'CNY', q: 'x' }, 'currency')).toEqual({ q: 'x' });
+    expect(removeFilter({ from: '2026-08-01', q: 'x' }, 'from')).toEqual({ q: 'x' });
   });
 
   test('removes one value out of an array filter, keeping the rest', () => {

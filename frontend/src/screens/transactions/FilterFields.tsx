@@ -133,11 +133,18 @@ export function KeywordField({
 
 /**
  * The currencies worth offering are the ones the ledger's accounts actually hold (屏幕稿
- * 02 draws CNY / SGD / USD). `currency` is a single parameter (04 §4.5), so the pills are
- * a one-of-N choice: pressing the selected one clears it.
+ * 02 draws CNY / SGD / USD). `currency` is repeatable (decision §14.60), so the pills are a
+ * multi-select like the kind pills: none selected means every currency.
  */
 export function CurrencyChips(props: FilterFieldProps): React.JSX.Element {
   const { t } = useTranslation();
+  const selected = props.filters.currency ?? [];
+  function toggle(code: string): void {
+    const next = selected.includes(code)
+      ? selected.filter((c) => c !== code)
+      : [...selected, code];
+    props.onPatch({ currency: next.length > 0 ? next : undefined });
+  }
   return (
     <FilterField
       label={t('transaction:list.filter.currency_label')}
@@ -148,10 +155,8 @@ export function CurrencyChips(props: FilterFieldProps): React.JSX.Element {
           <Chip
             key={code}
             label={code}
-            selected={props.filters.currency === code}
-            onPress={() =>
-              props.onPatch({ currency: props.filters.currency === code ? undefined : code })
-            }
+            selected={selected.includes(code)}
+            onPress={() => toggle(code)}
             testID={`${props.id}-currency-${code}`}
           />
         ))}

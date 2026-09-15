@@ -134,7 +134,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 | `source_id` | 可重复 | 账户 UUID |
 | `category_l1` / `category_l2` | string | 分类 code |
 | `from` / `to` | `YYYY-MM-DD` | 发生日范围（闭区间） |
-| `currency` | 3 位大写 | |
+| `currency` | 3 位大写，可重复 | |
 | `min_amount` / `max_amount` | number | **按账本基准币种折算后的绝对值**（决策 §14.49） |
 | `import_batch_id` | UUID | 只看某一批导入建的交易（决策 §14.46 的 04-D-7）；由「查看这批交易」带进来 |
 | `offset` | int | 分页游标；`limit` 不进 URL，固定 50 |
@@ -1131,7 +1131,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | 日期范围 | `from` / `to` | 快捷项：本月 / 上月 / 近 3 个月 / 今年 / 自定义 |
 | 分类 | `category_l1` / `category_l2` | 两级级联，随 kind 过滤可选项（决策 §1.3） |
 | 金额范围 | `min_amount` / `max_amount` | 两个数字框，**按账本基准币种折算后的绝对值比较**（决策 §14.49）；框旁一行小字「按 <基准币种> 比较，跨币种交易按发生日汇率折算」 |
-| 币种 | `currency` | **单选**；筛的是交易的**原币**（决策 §14.49 明确保留这一项）。屏幕稿 02 把它画成一排可多选的 chip，但 `GET /ledgers/{id}/transactions` 只收一个 `currency`，**本阶段按单选实现**（选中一枚即替换上一枚）；多选要等后端把 `currency` 改成可重复参数，两边一起做，§14.49 不因此改动（2026-09-16 按屏幕稿同步，决策 §14.59） |
+| 币种 | `currency` | **多选**（决策 §14.60）；筛的是交易的**原币**（决策 §14.49 明确保留这一项）；一排可多选 chip，不选 = 全部，选几个就 `?currency=CNY&currency=SGD` 作 `IN`，每个选中值一枚「已选条件」chip（2026-09-16 用户决定，同步） |
 | 来自导入 | `import_batch_id` | 不在筛选栏里手选，由「查看这批交易」带进来（决策 §14.46 的 04-D-7） |
 
   已生效的条件渲染成一排可点掉的 Chip（圆 pill，§6.2 规则 4；宽屏在筛选卡的最后一行，窄屏在筛选按钮下方），其中 `import_batch_id` 显示成 **「来自导入 #12」**（`#` 后是批次的短号，点 × 去掉即回到全部）。「清空筛选」按钮把 URL 恢复成裸路径。所有变更走 `router.replace`（不污染后退栈），只有进出列表页用 `push`。

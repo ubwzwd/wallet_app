@@ -41,7 +41,7 @@ export const ledgerDataCases: Case[] = [
         kind: ['refund', 'expense'],
         from: '2026-08-01',
         to: undefined,
-        currency: '',
+        currency: [],
         source_id: [],
         offset: 100,
       }),

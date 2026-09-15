@@ -505,6 +505,21 @@ def test_list_filters_by_original_currency(env, rows):
     assert ids(env.get(currency="JPY")) == {str(rows["jpy_snack"].id)}
 
 
+def test_list_filters_by_repeated_currency(env, rows):
+    """Decision §14.60: ``currency`` repeats and matches as IN, case-insensitively."""
+    assert ids(env.get(currency=["eur", "JPY"])) == {
+        str(rows["eur_dinner"].id),
+        str(rows["jpy_snack"].id),
+    }
+    assert env.get(currency=["EUR", "eur"]).status_code == 200
+
+
+def test_list_rejects_a_malformed_currency(env):
+    res = env.get(currency=["EUR", "euro"])
+    assert res.status_code == 422
+    assert res.json()["code"] == "validation_error"
+
+
 def test_list_amount_range_compares_base_currency(env, rows):
     """1000 JPY is 48 CNY, 20 EUR is 156.52 CNY (decision §14.49)."""
     above_100 = env.get(min_amount="100", kind="expense")
