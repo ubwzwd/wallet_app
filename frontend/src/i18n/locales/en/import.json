@@ -54,6 +54,7 @@
     "submit": "Upload and validate",
     "uploading": "Uploading and validating…",
     "non_csv_hint": "Upload the CSV your skill generated — for PDFs, images or spreadsheets, have your ChatGPT/Claude convert them first",
+    "file_wins_hint": "A file and pasted text are both filled in; this upload sends the file “{{name}}”.",
     "recent_title": "Recent imports",
     "recent_count_one": "{{count}} entry",
     "recent_count_other": "{{count}} entries",
@@ -215,7 +216,6 @@
     "column": {
       "filename": "File / time",
       "source": "Target account / note",
-      "created_at": "Uploaded",
       "created_by": "Uploaded by",
       "status": "Status",
       "row_count": "Entries",
@@ -246,7 +246,6 @@
     "undo": "Undo",
     "undo_batch": "Undo this batch",
     "new_import": "Upload a statement",
-    "guide_link": "Standard format",
     "flags_value": "⚑ {{n}}",
     "footer_note": "Undo works on a whole batch only, and removes just the transactions the batch brought in — rows you edited by hand go with it. A batch is either ready or committed, nothing else.",
     "discard_confirm_title": "Discard this draft?",

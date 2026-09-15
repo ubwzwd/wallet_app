@@ -5,8 +5,8 @@
  * 净额 · 目标账户 / 备注 · 动作. A `ready` row is tinted warm the whole way across, because
  * it is the row that still has work on it.
  *
- * Narrow is a card per batch: the file name (mono) with its status badge, one grey meta
- * line, three stat pills, and — for a draft — the blocking reason right above the buttons.
+ * Narrow is a card per batch, which lives in `HistoryCard.tsx`; everything both shapes
+ * share — the column table, `useParts`, the file well, the badges — is exported from here.
  *
  * Both shapes name the same things with the same test ids (04 §8.5 case 8: uploader, net
  * amount, flag count, the pasted placeholder and the two status badges), so the behaviour
@@ -80,7 +80,7 @@ export interface HistoryRowProps {
   onView(): void;
 }
 
-interface Parts {
+export interface Parts {
   id: string;
   filename: string;
   size: string;
@@ -95,7 +95,7 @@ interface Parts {
 }
 
 /** Everything both shapes need out of one batch — computed once, in one place. */
-function useParts(batch: ImportBatchListItem, lang: Lang, totalFlags: number): Parts {
+export function useParts(batch: ImportBatchListItem, lang: Lang, totalFlags: number): Parts {
   const { t } = useTranslation();
   const pasted = batch.source === 'paste';
   return {
@@ -117,14 +117,24 @@ function useParts(batch: ImportBatchListItem, lang: Lang, totalFlags: number): P
   };
 }
 
-/** The tinted well the mockup puts the file glyph in — warm for a draft, green once in. */
-function FileWell({ ready }: { ready: boolean }): React.JSX.Element {
+/**
+ * The tinted well the mockup puts the file glyph in — warm for a draft, green once in.
+ *
+ * A `ready` row is tinted `status.warning.bg` the whole way across, so a warm well on it
+ * would be invisible on exactly the rows it marks: the draft well takes a hairline ring in
+ * its own foreground, which reads on the warm band and on the white narrow card alike.
+ */
+export function FileWell({ ready }: { ready: boolean }): React.JSX.Element {
   const colors = useColors();
   return (
     <View
       style={[
         styles.well,
-        { backgroundColor: colors[ready ? 'status.warning.bg' : 'status.success.bg'] },
+        {
+          backgroundColor: colors[ready ? 'status.warning.bg' : 'status.success.bg'],
+          borderWidth: ready ? 1 : 0,
+          borderColor: ready ? colors['status.warning.fg'] : 'transparent',
+        },
       ]}
     >
       <Icon
@@ -146,7 +156,7 @@ function Uploader({ name, testID }: { name: string; testID: string }): React.JSX
           {name.slice(0, 1)}
         </Text>
       </View>
-      <Text variant="body" numberOfLines={1} style={styles.grow} testID={testID}>
+      <Text variant="body" numberOfLines={1} style={historyShared.grow} testID={testID}>
         {name}
       </Text>
     </View>
@@ -154,7 +164,7 @@ function Uploader({ name, testID }: { name: string; testID: string }): React.JSX
 }
 
 /** 「粘贴」 badge or the file size — the mockup's second half of the file cell. */
-function FileTag({ parts }: { parts: Parts }): React.JSX.Element {
+export function FileTag({ parts }: { parts: Parts }): React.JSX.Element {
   const { t } = useTranslation();
   return parts.pasted ? (
     <Badge label={t('import:history.pasted_badge')} tone="info" testID={`${parts.id}-paste-badge`} />
@@ -165,7 +175,7 @@ function FileTag({ parts }: { parts: Parts }): React.JSX.Element {
   );
 }
 
-function StatusBadge({ parts, status }: { parts: Parts; status: string }): React.JSX.Element {
+export function StatusBadge({ parts, status }: { parts: Parts; status: string }): React.JSX.Element {
   const { t } = useTranslation();
   return (
     <Badge
@@ -186,7 +196,7 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
     filename: (
       <View style={styles.fileCell}>
         <FileWell ready={p.ready} />
-        <View style={styles.grow}>
+        <View style={historyShared.grow}>
           <Text
             variant="body"
             mono
@@ -196,7 +206,7 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
           >
             {p.filename}
           </Text>
-          <View style={styles.fileLine}>
+          <View style={historyShared.fileLine}>
             <Text variant="caption" tone="muted" mono testID={`${p.id}-created-at`}>
               {p.time}
             </Text>
@@ -224,7 +234,7 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
       </Text>
     ),
     source: (
-      <View style={styles.grow}>
+      <View style={historyShared.grow}>
         <Text variant="body" numberOfLines={1} testID={`${p.id}-source`}>
           {props.batch.source_name}
         </Text>
@@ -233,7 +243,7 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
             variant="caption"
             tone={props.batch.uncategorized_count > 0 ? 'warning' : 'muted'}
             numberOfLines={1}
-            style={styles.shrink}
+            style={historyShared.shrink}
           >
             {p.note}
           </Text>
@@ -308,161 +318,16 @@ export function HistoryTableRow(props: HistoryRowProps): React.JSX.Element {
   );
 }
 
-interface PillProps {
-  label: string;
-  value: string;
-  tone: 'primary' | 'expense' | 'income';
-  testID: string;
-}
-
-function Pill({ label, value, tone, testID }: PillProps): React.JSX.Element {
-  const colors = useColors();
-  return (
-    <View style={[styles.pill, { backgroundColor: colors['bg.canvas'] }]}>
-      <Text variant="micro" tone="muted">
-        {label}
-      </Text>
-      <Text variant="caption" mono weight={500} tone={tone} testID={testID}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-/** The narrow card. */
-export function HistoryCard(props: HistoryRowProps): React.JSX.Element {
-  const { t } = useTranslation();
-  const colors = useColors();
-  const p = useParts(props.batch, props.lang, props.totalFlags);
-
-  return (
-    <View testID={p.id} style={[styles.card, { backgroundColor: colors['bg.surface'] }]}>
-      <View style={styles.cardHead}>
-        <FileWell ready={p.ready} />
-        <View style={styles.grow}>
-          <View style={styles.fileLine}>
-            <Text
-              variant="subheading"
-              mono
-              weight={500}
-              numberOfLines={1}
-              style={styles.shrink}
-              testID={`${p.id}-filename`}
-            >
-              {p.filename}
-            </Text>
-            <FileTag parts={p} />
-          </View>
-          <View style={styles.metaLine}>
-            <Text variant="caption" tone="muted" mono testID={`${p.id}-created-at`}>
-              {p.time}
-            </Text>
-            <Text variant="caption" tone="muted">
-              ·
-            </Text>
-            <Text
-              variant="caption"
-              tone="muted"
-              numberOfLines={1}
-              style={styles.shrink}
-              testID={`${p.id}-source`}
-            >
-              {props.batch.source_name}
-            </Text>
-            <Text variant="caption" tone="muted">
-              ·
-            </Text>
-            <Text variant="caption" tone="muted" numberOfLines={1} testID={`${p.id}-uploader`}>
-              {props.uploader}
-            </Text>
-          </View>
-        </View>
-        <StatusBadge parts={p} status={props.batch.status} />
-      </View>
-
-      <View style={styles.pills}>
-        <Pill
-          label={t('import:history.stat_count')}
-          value={p.count}
-          tone="primary"
-          testID={`${p.id}-rows`}
-        />
-        <Pill
-          label={t('import:history.stat_net')}
-          value={p.net}
-          tone={p.negative ? 'expense' : 'income'}
-          testID={`${p.id}-net`}
-        />
-        <Pill
-          label={t('import:history.column.flags')}
-          value={p.flags}
-          tone="primary"
-          testID={`${p.id}-flags`}
-        />
-      </View>
-
-      <View style={[styles.rule, { borderTopColor: colors['border.default'] }]} />
-
-      {p.ready && props.batch.uncategorized_count > 0 ? (
-        <View style={styles.blocker}>
-          <Icon name="alert-triangle" size={16} color={colors['status.warning.fg']} />
-          <Text variant="caption" tone="warning" style={styles.grow}>
-            {t('import:history.ready_hint', { count: props.batch.uncategorized_count })}
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.cardActions}>
-        {p.ready ? (
-          <>
-            <Button
-              testID={`${p.id}-discard`}
-              label={t('import:history.discard_batch')}
-              variant="ghost"
-              loading={props.busy}
-              onPress={props.onDiscard}
-              style={styles.grow}
-            />
-            <Button
-              testID={`${p.id}-continue`}
-              label={t('import:history.continue_review')}
-              onPress={props.onContinue}
-              style={styles.growMore}
-            />
-          </>
-        ) : (
-          <>
-            <Button
-              testID={`${p.id}-undo`}
-              label={t('import:history.undo_batch')}
-              icon="undo-2"
-              variant="danger"
-              loading={props.busy}
-              onPress={props.onUndo}
-              style={styles.grow}
-            />
-            <Button
-              testID={`${p.id}-view`}
-              label={t('import:history.view_transactions')}
-              variant="soft"
-              onPress={props.onView}
-              style={styles.grow}
-            />
-          </>
-        )}
-      </View>
-    </View>
-  );
-}
+/** The three layout rules both shapes share; the narrow card reads them from here. */
+export const historyShared = StyleSheet.create({
+  grow: { flex: 1, minWidth: 0 },
+  shrink: { flexShrink: 1, minWidth: 0 },
+  fileLine: { flexDirection: 'row', alignItems: 'center', gap: space['2'], minWidth: 0 },
+});
 
 const styles = StyleSheet.create({
   tableRow: { minHeight: 60, paddingVertical: space['2'] + 2 },
   fileCell: { flexDirection: 'row', alignItems: 'center', gap: space['3'], minWidth: 0 },
-  fileLine: { flexDirection: 'row', alignItems: 'center', gap: space['2'], minWidth: 0 },
-  metaLine: { flexDirection: 'row', alignItems: 'center', gap: space['2'] - 2, minWidth: 0 },
-  grow: { flex: 1, minWidth: 0 },
-  growMore: { flex: 1.6, minWidth: 0 },
-  shrink: { flexShrink: 1, minWidth: 0 },
   well: {
     width: 34,
     height: 34,
@@ -482,18 +347,4 @@ const styles = StyleSheet.create({
   },
   noteLine: { flexDirection: 'row', alignItems: 'baseline', gap: space['2'], minWidth: 0 },
   rowActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: space['2'] },
-  card: { alignSelf: 'stretch', borderRadius: radius.lg, padding: space['4'], gap: space['3'] },
-  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: space['3'] },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'] },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space['2'] - 3,
-    minHeight: 28,
-    paddingHorizontal: space['3'] - 2,
-    borderRadius: radius.sm,
-  },
-  rule: { borderTopWidth: 1 },
-  blocker: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
-  cardActions: { flexDirection: 'row', gap: space['2'] + 2 },
 });

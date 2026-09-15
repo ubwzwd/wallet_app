@@ -222,6 +222,9 @@ export default function NewImportScreen(): React.JSX.Element {
         onChangeText={(next) => {
           setText(next);
           setFailure(null);
+          // Switching to pasting clears a refused file's rejection too, so the drop zone
+          // stops shouting about a file the user has already moved on from.
+          setLocalProblem(null);
         }}
         multiline
         mono
@@ -239,6 +242,13 @@ export default function NewImportScreen(): React.JSX.Element {
           loading={pending}
           fullWidth={!wide}
         />
+        {/* Both inputs are live at once, and `submit` sends the file. Say so rather than
+            dropping the other one silently. */}
+        {file !== null && text.trim().length > 0 ? (
+          <Text variant="caption" tone="muted" testID="upload-file-wins-hint">
+            {t('import:upload.file_wins_hint', { name: file.name })}
+          </Text>
+        ) : null}
       </View>
       {progress !== null && upload.isPending ? (
         <ProgressBar
@@ -296,6 +306,6 @@ const styles = StyleSheet.create({
   left: { flex: 1.15, minWidth: 0 },
   columnWide: { flex: 1, minWidth: 0, gap: space['4'] },
   stack: { alignSelf: 'stretch', gap: space['3'] },
-  submitRow: { alignItems: 'flex-start' },
+  submitRow: { alignItems: 'flex-start', gap: space['2'] },
   subtitle: { maxWidth: 560 },
 });

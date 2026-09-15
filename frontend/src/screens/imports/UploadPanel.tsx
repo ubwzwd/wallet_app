@@ -348,7 +348,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: space['2'],
   },
-  dropButton: { marginTop: space['3'] },
+  // `Button` defaults to `alignSelf: 'flex-start'`; 屏幕稿 10 centres it under the two lines.
+  dropButton: { marginTop: space['3'], alignSelf: 'center' },
   centered: { textAlign: 'center' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
   line: { flex: 1, height: 1 },

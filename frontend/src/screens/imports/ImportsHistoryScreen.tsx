@@ -43,10 +43,10 @@ import {
   toast,
 } from '@/ui';
 
+import { HistoryCard } from './HistoryCard';
 import {
   HISTORY_COLUMNS,
   HISTORY_MIN_WIDTH,
-  HistoryCard,
   HistoryTableRow,
   historyCellStyle,
   historyGridRow,

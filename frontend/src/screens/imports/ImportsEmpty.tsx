@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headline: { fontSize: 22, lineHeight: 30, marginTop: space['3'] },
+  headline: { marginTop: space['3'] },
   body: { maxWidth: 480, lineHeight: 23 },
   centered: { textAlign: 'center' },
   actionsWide: { flexDirection: 'row', flexWrap: 'wrap', gap: space['2'], marginTop: space['3'] },

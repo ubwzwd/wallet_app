@@ -336,6 +336,40 @@ test('a file over 2 MB is refused before any request', async () => {
   expect(api.mock.history.post).toEqual([]);
 });
 
+test('typing into the paste box clears a refused file\u2019s rejection', async () => {
+  renderUpload();
+
+  await chooseSource();
+  await chooseFile(csvFile('statement.pdf'));
+  expect(await screen.findByTestId('upload-local-error')).toBeTruthy();
+
+  fireEvent.changeText(screen.getByTestId('upload-paste-input'), 'date,amount\n2026-08-03,-1\n');
+
+  await waitFor(() => expect(screen.queryByTestId('upload-local-error')).toBeNull());
+  expect(screen.getByTestId('upload-dropzone-hint')).toBeTruthy();
+});
+
+test('a file and pasted text together say the file is what gets sent, and send it', async () => {
+  const result = makeImportUploadResult();
+  mockPost(IMPORTS_PATH, result, 201);
+  renderUpload();
+
+  await chooseSource();
+  await chooseFile(csvFile());
+  fireEvent.changeText(screen.getByTestId('upload-paste-input'), 'date,amount\n2026-08-03,-1\n');
+
+  expect(await screen.findByTestId('upload-file-wins-hint')).toBeTruthy();
+  expect(String(screen.getByTestId('upload-file-wins-hint').props.children)).toContain(
+    'statement.csv',
+  );
+
+  fireEvent.press(screen.getByTestId('upload-submit'));
+
+  // The multipart body carries the file; nothing was posted as JSON text.
+  await waitFor(() => expect(api.mock.history.post).toHaveLength(1));
+  expect(typeof api.mock.history.post[0].data).not.toBe('string');
+});
+
 test.each([
   ['file_too_large', 413, '2 MB'],
   ['import_rate_limited', 429, '10 批'],

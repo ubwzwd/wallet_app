@@ -54,6 +54,7 @@
     "submit": "上传并校验",
     "uploading": "正在上传并校验…",
     "non_csv_hint": "请上传 skill 生成的 CSV 文件；PDF、图片、Excel 请先交给你的 ChatGPT / Claude 整理",
+    "file_wins_hint": "文件和粘贴的文本都填了，这次上传的是文件「{{name}}」。",
     "recent_title": "最近导入",
     "recent_count_other": "{{count}} 笔",
     "recent_empty": "还没有",
@@ -202,7 +203,6 @@
     "column": {
       "filename": "文件 / 时间",
       "source": "目标账户 / 备注",
-      "created_at": "上传时间",
       "created_by": "上传人",
       "status": "状态",
       "row_count": "交易数量统计",
@@ -230,7 +230,6 @@
     "undo": "撤销",
     "undo_batch": "撤销这批",
     "new_import": "上传新账单",
-    "guide_link": "标准格式说明",
     "flags_value": "⚑ {{n}}",
     "footer_note": "撤销只对整批生效，且只撤这批带进来的交易；批次里被你手动改过的行也会一起撤掉。批次只有待提交、已提交两种状态。",
     "discard_confirm_title": "丢弃这批草稿？",
