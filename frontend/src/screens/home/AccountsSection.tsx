@@ -15,6 +15,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 
 import type { FinanceSource, Paged, Uuid } from '@/api/types';
 import { parseMoney } from '@/domain';
+import { SOURCE_TYPE_ORDER } from '@/domain/networth';
 import { useLang } from '@/i18n';
 import { formatConverted, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
@@ -84,7 +85,10 @@ export function AccountsSection({
     );
   }
 
-  const active = query.data.items.filter((source) => !source.archived);
+  // The frozen §14.48 type order — 储蓄卡 → 信用卡 → 现金 → 其他 — the same one the accounts
+  // page sorts by, so the two screens never disagree about which account leads the list.
+  const all = query.data.items.filter((source) => !source.archived);
+  const active = SOURCE_TYPE_ORDER.flatMap((type) => all.filter((s) => s.type === type));
 
   return (
     <View style={styles.section} testID="home-balances">

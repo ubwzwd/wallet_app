@@ -3,31 +3,31 @@
  * right column (屏幕稿 07 / 08).
  *
  * It answers the question the delete button raises: what does this row actually move? The
- * arithmetic is the same local arithmetic the form's `StatsPreview` does — the monthly
- * summary *already in the cache* minus (or plus) this row's own converted magnitude — so no
- * request is ever issued from here and the card simply does not render when the month has no
- * cached summary or the row has no rate to convert with.
+ * arithmetic is the same local arithmetic the form's `StatsPreview` does — the month's
+ * summary minus (or plus) this row's own converted magnitude — so nothing new is computed on
+ * the server (decision §14.52 A9 asks for local arithmetic, not for skipping the existing
+ * `GET /stats/summary`), and the card simply does not render while the summary is in flight
+ * or when the row has no rate to convert with.
  *
  * A transfer needs no summary at all: both legs sit inside the ledger, so every line is
  * 「不变」, and only a single leg (money from outside the ledger) moves the net worth.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
-import type { Money, StatsSummary, TransferSubtype, TxKind, Uuid } from '@/api/types';
+import type { Money, TransferSubtype, TxKind, Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { monthOf } from '@/domain/dates';
 import { absMoney, addMoney, subMoney } from '@/domain/money';
 import { useLang } from '@/i18n';
 import { categoryName } from '@/i18n/category';
 import { formatMonthShort, formatMoney } from '@/i18n/format';
-import { qk } from '@/queries';
+import { useStatsSummary } from '@/queries';
 import { space } from '@/theme/tokens';
 import { Text } from '@/ui';
 
-import { FactRow, SideCard, TintSideCard } from './parts';
+import { FactRow, SideCard, TintSideCard, plainAmount } from './parts';
 
 export interface ImpactCardProps {
   ledgerId: Uuid;
@@ -54,11 +54,12 @@ export function ImpactCard({
   const { t } = useTranslation();
   const lang = useLang();
   const month = monthOf(occurredAt);
-  // Read-only: the card lives off the monthly summary the ledger already fetched (the home
-  // screen's own query key), exactly as the form's `StatsPreview` does — 04 §4.7 / decision
-  // §14.52 A9 ask for local arithmetic and no extra request, so a cold cache hides the card.
-  const qc = useQueryClient();
-  const data = qc.getQueryData<StatsSummary>(qk.ledger(ledgerId).statsSum(month));
+  // The card subscribes to the row's own month, not to whatever month the home page happens
+  // to be looking at: 04 §4.7 lists it as part of the detail page, so a deep link straight
+  // into `/transactions/:id` has to draw it too. The key is the one the home page fills, so
+  // an already-loaded month costs nothing.
+  const summary = useStatsSummary(ledgerId, month);
+  const data = summary.data;
 
   // The same guard `StatsPreview` puts before the same arithmetic: a summary in another
   // base currency cannot be added to or subtracted from this row's converted magnitude.
@@ -105,11 +106,14 @@ export function ImpactCard({
           )}
           value={`${money(total)} · ${contribution}`}
         />
-        {shareLabel !== null ? (
+        {/* A category the summary does not report at all has no figure to print: 「¥0.00 ·
+            含本笔 ¥299.00」 would be a number invented here, so the row drops out the way the
+            whole card does while the summary is missing. */}
+        {shareLabel !== null && node !== undefined ? (
           <FactRow
             testID={`${id}-category`}
             label={shareLabel}
-            value={`${money(node?.amount ?? '0')} · ${contribution}`}
+            value={`${money(node.amount)} · ${contribution}`}
           />
         ) : null}
         <FactRow
@@ -175,7 +179,7 @@ export function TransferImpactCard({
           <FactRow
             testID={`${id}-repaid`}
             label={t('transaction:detail.impact.repaid')}
-            value={formatMoney(absMoney(amountIn), currency, lang, { signDisplay: 'always' })}
+            value={plainAmount(absMoney(amountIn), currency, 'always')}
             tone="income"
             last
           />
@@ -229,7 +233,7 @@ export function SingleLegImpactCard({
             onTint
             last
             label={t('transaction:detail.impact.net_worth')}
-            value={formatMoney(amount, currency, lang, { signDisplay: 'always' })}
+            value={plainAmount(amount, currency, 'always')}
           />
         )}
       </View>

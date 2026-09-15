@@ -9,7 +9,6 @@
     "title": "Accounts",
     "assets": "Assets",
     "liabilities": "Liabilities",
-    "net_worth": "Net worth",
     "net_worth_caption": "Net worth · in {{currency}}",
     "meta_active": "{{count}} in use",
     "meta_archived": "{{count}} archived",

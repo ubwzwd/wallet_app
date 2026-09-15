@@ -273,6 +273,19 @@ export function TransactionForm({
     </View>
   );
 
+  // 屏幕稿 04 / 05 / 06 give the header's grey line a different sentence per kind: 转账 and
+  // 退款 explain what the entry does to the books, everything else names the ledger.
+  const ledgerMeta =
+    kind === 'transfer'
+      ? t(
+          values.external
+            ? 'transaction:form.ledger_meta_transfer_single'
+            : 'transaction:form.ledger_meta_transfer',
+        )
+      : kind === 'refund'
+        ? t('transaction:form.ledger_meta_refund')
+        : t('transaction:form.ledger_meta', { ledger: ledger.name, currency: baseCurrency });
+
   const help = (
     <KeyboardHint
       open={helpOpen}
@@ -291,10 +304,7 @@ export function TransactionForm({
           title={pageTitle ?? t('transaction:form.page_title')}
           actions={
             <Text variant="caption" tone="muted" testID="tx-form-ledger-meta">
-              {t('transaction:form.ledger_meta', {
-                ledger: ledger.name,
-                currency: baseCurrency,
-              })}
+              {ledgerMeta}
             </Text>
           }
         />

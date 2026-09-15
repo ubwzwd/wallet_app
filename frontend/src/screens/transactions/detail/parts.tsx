@@ -266,7 +266,8 @@ export function DetailColumns({ main, side, testID }: DetailColumnsProps): React
  * because this is the page people copy a date off.
  */
 export function longDate(iso: IsoDate, t: (key: string) => string): string {
-  const weekday = t(`transaction:detail.weekday.${parseLocalDate(iso).getDay()}`);
+  // One set of weekday names for the whole feature: the list's `list.weekday` (DayGroup).
+  const weekday = t(`transaction:list.weekday.${parseLocalDate(iso).getDay()}`);
   return `${iso} ${weekday}`;
 }
 

@@ -210,6 +210,9 @@ export default function HomeScreen(): React.JSX.Element {
       muted={noAccounts}
       onPressArchived={goSources}
       actions={
+        // 04 §4.4 wants refresh reachable on every frame: an empty wide ledger gets the two
+        // ways forward *and* the refresh icon, not one instead of the other (pull-to-refresh
+        // does nothing with a mouse).
         noAccounts && wide ? (
           <>
             <Button
@@ -225,6 +228,7 @@ export default function HomeScreen(): React.JSX.Element {
               onPress={goNewSource}
               testID="home-empty-source"
             />
+            {refresh}
           </>
         ) : (
           refresh

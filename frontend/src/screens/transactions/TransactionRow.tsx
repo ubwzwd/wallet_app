@@ -35,8 +35,6 @@ export interface TransactionRowProps {
   onPress(row: ListRow): void;
   /** Opens the action menu (long press). */
   onOpenMenu(row: ListRow): void;
-  onOpenBatch(batchId: Uuid): void;
-  onOpenRefundOrigin(txId: Uuid): void;
   testID?: string;
 }
 
@@ -117,20 +115,20 @@ export function categoryPath(
 }
 
 /**
- * The marks 04 §4.5 requires on a row: 还款 on a repayment leg, 退款 on a refund (pressable
- * when it names its original expense), 导入 on a row that came from a batch (pressable into
- * that batch). Shared by the narrow row and the wide table.
+ * The marks 04 §4.5 requires on a row: 还款 on a repayment leg, 退款 on a refund, 导入 on a
+ * row that came from a batch. Shared by the narrow row and the wide table.
+ *
+ * Every badge is plain text, never a button: the whole row is already a press target, and a
+ * `<button>` inside a `<button>` is invalid HTML — the browser logs a hydration error and
+ * swallows one of the two clicks. 屏幕稿 02 draws no control in the 商户 column either;
+ * 「看原单」 / 「看批次」 live on the detail page, where the fact list links them.
  */
 export function RowBadges({
   tx,
   id,
-  onOpenBatch,
-  onOpenRefundOrigin,
 }: {
   tx: Transaction;
   id: string;
-  onOpenBatch(batchId: Uuid): void;
-  onOpenRefundOrigin(txId: Uuid): void;
 }): React.JSX.Element | null {
   const { t } = useTranslation();
   const badges: React.ReactNode[] = [];
@@ -146,46 +144,23 @@ export function RowBadges({
     );
   }
   if (tx.kind === 'refund') {
-    const refundOf = tx.refund_of;
     badges.push(
-      refundOf ? (
-        // An inline badge inside a full-height row; `hitSlop` gives it the whole target
-        // without inflating the row.
-        // touch-target-exempt: hitSlop inside a 56-tall row
-        <Pressable
-          key="refund"
-          accessibilityRole="button"
-          accessibilityLabel={t('transaction:list.row.refund_origin_action')}
-          onPress={() => onOpenRefundOrigin(refundOf)}
-          hitSlop={space['2']}
-          testID={`${id}-badge-refund`}
-        >
-          <Badge label={t('transaction:list.badge.refund')} tone="warning" />
-        </Pressable>
-      ) : (
-        <Badge
-          key="refund"
-          label={t('transaction:list.badge.refund')}
-          tone="warning"
-          testID={`${id}-badge-refund`}
-        />
-      ),
+      <Badge
+        key="refund"
+        label={t('transaction:list.badge.refund')}
+        tone="warning"
+        testID={`${id}-badge-refund`}
+      />,
     );
   }
   if (tx.import_batch_id) {
-    const batchId = tx.import_batch_id;
     badges.push(
-      // touch-target-exempt: hitSlop inside a 56-tall row
-      <Pressable
+      <Badge
         key="imported"
-        accessibilityRole="button"
-        accessibilityLabel={t('transaction:list.row.imported_action')}
-        onPress={() => onOpenBatch(batchId)}
-        hitSlop={space['2']}
+        label={t('transaction:list.badge.imported')}
+        tone="neutral"
         testID={`${id}-badge-imported`}
-      >
-        <Badge label={t('transaction:list.badge.imported')} tone="neutral" />
-      </Pressable>,
+      />,
     );
   }
 
@@ -205,8 +180,6 @@ export function TransactionRow({
   sourceName,
   onPress,
   onOpenMenu,
-  onOpenBatch,
-  onOpenRefundOrigin,
   testID,
 }: TransactionRowProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -328,12 +301,7 @@ export function TransactionRow({
           >
             {title}
           </Text>
-          <RowBadges
-            tx={tx}
-            id={id}
-            onOpenBatch={onOpenBatch}
-            onOpenRefundOrigin={onOpenRefundOrigin}
-          />
+          <RowBadges tx={tx} id={id} />
         </View>
         <Text variant="caption" tone="secondary" numberOfLines={1} testID={`${id}-meta`}>
           {meta}

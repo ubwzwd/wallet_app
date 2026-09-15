@@ -397,9 +397,48 @@ test('an empty ledger and an empty filter result say different things', async ()
   expect(screen.queryByTestId('tx-empty-filtered')).toBeNull();
 });
 
-test('an imported row carries a badge that leads to its import batch', async () => {
+/**
+ * 04 §4.5's marks are marks, not controls: 屏幕稿 02 draws nothing pressable in the 商户
+ * column, and a button nested inside the row's own button is invalid HTML. 「看原单」 /
+ * 「看批次」 live on the detail page's fact list instead.
+ */
+test('an imported row carries a badge, and the badge is not a button', async () => {
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  const badge = await screen.findByTestId('tx-row-im1-badge-imported');
+  expect(badge).toHaveTextContent('导入');
+  expect(badge.props.accessibilityRole).not.toBe('button');
+  // Pressing it does nothing of its own; the row underneath is what opens.
+  fireEvent.press(badge);
+  await waitFor(() =>
+    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/im1`),
+  );
+});
+
+test('the wide table repeats the same non-interactive badge', async () => {
+  setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
 
-  expect(await screen.findByTestId('tx-row-im1-badge-imported')).toHaveTextContent('导入');
+  const badge = await screen.findByTestId('tx-row-im1-badge-imported');
+  expect(badge).toHaveTextContent('导入');
+  expect(badge.props.accessibilityRole).not.toBe('button');
+});
+
+/**
+ * 屏幕稿 15 · 空交易列表 1440 prints counts and nothing else — 「支出 ¥0.00 · 收入 ¥0.00 ·
+ * 净额 ¥0.00」 on a ledger with no rows is noise. The server's total keeps its place
+ * (04 §4.5).
+ */
+test('an empty wide result keeps the count but prints no money', async () => {
+  setWide(true);
+  mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ items: [], total: 0 }));
+  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 0 笔');
+  expect(screen.queryByTestId('tx-summary-line')).toBeNull();
+  expect(screen.queryByTestId('tx-table-net')).toBeNull();
+  // The 「N / M 笔已显示」 line is a count, so it stays.
+  expect(screen.getByTestId('tx-table-shown')).toBeTruthy();
 });

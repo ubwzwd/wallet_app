@@ -25,7 +25,7 @@ import { Badge, Button, Chip, Icon, ProgressBar, Text, trimMoney } from '@/ui';
 
 import { TransactionPicker } from '../TransactionPicker';
 import { FieldLabel, FormCard } from './parts';
-import { RefundCandidateRow, RefundPickerHeader } from './RefundPickerRow';
+import { RefundCandidateRow, RefundPickerHeader, refundableOf } from './RefundPickerRow';
 import type { TxFormController } from './useTransactionForm';
 
 /** How far back the candidate list reaches by default (decision §1.1). */
@@ -40,11 +40,6 @@ export interface RefundOriginState {
   setOnlyRefundable(next: boolean): void;
   link(tx: Transaction): void;
   unlink(): void;
-}
-
-/** `refundable` as the list/detail endpoints report it, or the full amount as a fallback. */
-export function refundableOf(tx: Transaction): string {
-  return tx.refundable ?? absMoney(tx.amount);
 }
 
 export function useRefundOrigin(ctrl: TxFormController): RefundOriginState {
@@ -293,7 +288,8 @@ function RefundPicker({ ctrl, state }: RefundFieldsProps): React.JSX.Element {
       confirmLabel={t('transaction:form.picker_use')}
       selectedId={values.refund_of}
       footerNote={t('transaction:form.picker_refund_note')}
-      title={t('transaction:picker.title_refund_origin')}
+      // 屏幕稿 06 titles the dialog with the field's own label, 「关联原支出」.
+      title={t('transaction:form.refund_of')}
       // `refund_of` may only ever point at an expense (decision §1.1), so "expenses only"
       // is a static label here rather than a chip that can be clicked away (§14.52 B11).
       fixed={{ kind: ['expense'] }}

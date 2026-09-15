@@ -88,7 +88,9 @@ export function summaryContent({
   return {
     headline: (
       <View style={styles.headline}>
-        {KIND_SIGN[kind] !== null ? (
+        {/* No amount yet means one 「—」, not 「− —」: a sign in front of a placeholder
+            reads as two placeholders stacked up. */}
+        {magnitude !== null && KIND_SIGN[kind] !== null ? (
           <Text mono weight={450} tone={tone} style={styles.headlineSign}>
             {KIND_SIGN[kind]}
           </Text>
