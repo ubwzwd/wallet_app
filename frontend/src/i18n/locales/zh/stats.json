@@ -16,6 +16,7 @@
     "month_prev": "上个月",
     "month_next": "下个月",
     "month_empty": "这个月还没有记账",
+    "month_expense_empty": "这个月还没有支出",
     "month_empty_hint": "记满一个月，这里会按分类排出来 —— 谁花得多一眼看到。",
     "add_transaction": "记一笔",
     "refund_deducted": "其中已冲减退款 {{amount}}",

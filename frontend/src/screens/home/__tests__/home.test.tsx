@@ -493,8 +493,10 @@ test('a month with income but no expenses still shows the empty block, not an em
   });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
+  // ...and it says 「这个月还没有支出」, not 「这个月还没有记账」, which the 「9月收入 ¥18,000.00」
+  // in the header right above it would contradict.
   expect(await router.findByTestId('home-summary-empty')).toHaveTextContent(
-    containing('这个月还没有记账'),
+    containing('这个月还没有支出'),
   );
   expect(router.queryByTestId('home-categories')).toBeNull();
   expect(router.queryByTestId('home-categories-rest')).toBeNull();

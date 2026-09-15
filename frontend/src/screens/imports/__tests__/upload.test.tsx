@@ -242,6 +242,10 @@ test('a structural failure lists file line numbers, copies the same list, and ma
   fireEvent.press(screen.getByTestId('upload-submit'));
 
   expect(await screen.findByTestId('upload-error-lines')).toBeTruthy();
+  // 屏幕稿 10's refused branch also turns the drop zone red and swaps its grey how-to line
+  // for the server's headline, so the zone and the card below never disagree.
+  expect(screen.getByTestId('upload-server-error-hint')).toBeTruthy();
+  expect(screen.queryByTestId('upload-dropzone-hint')).toBeNull();
   expect(screen.getByTestId('upload-error-line-0').props.children).toBe(
     '文件第 1 行：缺少 # version: 首行',
   );
@@ -303,6 +307,8 @@ test('an outdated skill shows both versions and navigates to the guide_url from 
   fireEvent.press(screen.getByTestId('upload-submit'));
 
   const versions = await screen.findByTestId('upload-error-versions');
+  expect(screen.getByTestId('upload-server-error-hint')).toBeTruthy();
+  expect(screen.queryByTestId('upload-dropzone-hint')).toBeNull();
   expect(versions.props.children).toContain('2026-08-20');
   expect(versions.props.children).toContain('2026-09-10');
   // Hard refusal: there is no "ignore and continue" (decision §14.30).

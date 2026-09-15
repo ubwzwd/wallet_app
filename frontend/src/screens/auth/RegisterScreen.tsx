@@ -131,11 +131,9 @@ export default function RegisterScreen(): React.JSX.Element {
 
   if (registrationClosed) {
     return (
-      <AuthLayout
-        title={t('auth:register.title')}
-        subtitle={t('auth:register.subtitle')}
-        testID="register-screen"
-      >
+      // Screen 17 · 注册已关闭 drops the grey subtitle: 「注册后会自动为你建一本…」 describes
+      // something that cannot happen here, so the frame is the title and the card alone.
+      <AuthLayout title={t('auth:register.title')} testID="register-screen">
         {/* Screen 17: the same card in the same place as the form, holding one paragraph
             instead. The tile is neutral grey — this is not something the user did wrong. */}
         <View style={[styles.tile, { backgroundColor: colors['bg.subtle'] }]}>

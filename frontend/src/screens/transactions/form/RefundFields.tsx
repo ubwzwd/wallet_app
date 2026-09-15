@@ -163,7 +163,7 @@ export function RefundFields({
           style={[styles.origin, { backgroundColor: colors['kind.refund.subtle'] }]}
         >
           <View style={styles.originRow}>
-            <View style={[styles.well, { backgroundColor: colors['bg.surface'] }]}>
+            <View style={[styles.well, { backgroundColor: colors['bg.raised'] }]}>
               <Icon name="link" size={18} color={colors['kind.refund']} />
             </View>
             <View style={styles.grow}>

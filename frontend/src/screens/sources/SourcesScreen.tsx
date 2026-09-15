@@ -116,9 +116,13 @@ export default function SourcesScreen(): React.JSX.Element {
   const meta = [
     t('source:list.meta_active', { count: active.length }),
     archived.length > 0 ? t('source:list.meta_archived', { count: archived.length }) : null,
-    t('source:list.meta_net_worth', {
-      amount: formatMoney(summary.net, baseCurrency, lang),
-    }),
+    // 「净资产 SGD 0.00」 on a ledger with no accounts is noise, not information — the same
+    // rule 屏幕稿 15 applies to the empty transaction list's stat line.
+    items.length === 0
+      ? null
+      : t('source:list.meta_net_worth', {
+          amount: formatMoney(summary.net, baseCurrency, lang),
+        }),
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');

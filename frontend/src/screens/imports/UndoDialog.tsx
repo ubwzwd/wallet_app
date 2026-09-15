@@ -8,10 +8,8 @@
  * shared by every other destructive flow, so this screen brings its own dialog rather
  * than bending the library one out of shape.
  *
- * It is imperative for the same reason `confirm()` is: two callers — the history list and
- * the batch screen's committed panel — run the exact same flow (`undoBatch.ts`), and
- * neither wants to own dialog state. `askUndo(...)` resolves `true` only when the user
- * confirms; the screen that can undo renders `<UndoDialogHost />` once.
+ * The imperative store behind it — `askUndo()` and the pending-dialog bookkeeping — lives
+ * in `undoDialogStore.ts`; this file is the view.
  *
  * It answers to the same test ids as `ConfirmHost` (`confirm-dialog` / `confirm-accept` /
  * `confirm-cancel` / `confirm-meta`) because to everything outside it *is* the
@@ -31,82 +29,21 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Icon, Text } from '@/ui';
 
+import {
+  askUndo,
+  getPendingUndo,
+  settleUndo,
+  subscribeUndo,
+  type UndoDialogData,
+  type UndoStat,
+  type UndoWarning,
+} from './undoDialogStore';
+
+export { askUndo };
+export type { UndoDialogData, UndoStat, UndoWarning };
+
 /** The mockup's dialog is 660 wide on 1440; narrow gets a bottom sheet instead. */
 const DIALOG_MAX_WIDTH = 660;
-
-/** One 「会删掉的交易 / 11 笔」 tile. */
-export interface UndoStat {
-  key: string;
-  label: string;
-  value: string;
-  tone?: 'primary' | 'income' | 'expense';
-}
-
-/** One amber card — a refund counter the user has to see before pressing (§14.52 B24). */
-export interface UndoWarning {
-  key: string;
-  title: string;
-  body: string;
-}
-
-export interface UndoDialogData {
-  title: string;
-  /** The mono line under the title: which file, uploaded when, into which account. */
-  meta?: string;
-  stats: readonly UndoStat[];
-  warnings: readonly UndoWarning[];
-  /** The sentence on the left of the foot strip. */
-  footNote: string;
-  confirmLabel: string;
-  /** Label once the first press has armed the button (the double tap of §14.52 B24). */
-  confirmAgainLabel: string;
-  cancelLabel: string;
-  closeLabel: string;
-}
-
-interface Pending {
-  id: number;
-  data: UndoDialogData;
-  resolve(result: boolean): void;
-}
-
-type Listener = () => void;
-
-let pending: Pending | null = null;
-const listeners = new Set<Listener>();
-let seq = 0;
-
-function emit(): void {
-  for (const l of listeners) l();
-}
-
-function subscribe(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): Pending | null {
-  return pending;
-}
-
-function settle(result: boolean): void {
-  const current = pending;
-  pending = null;
-  emit();
-  current?.resolve(result);
-}
-
-/** Resolves `true` only if the user confirms twice; a second call supersedes the first. */
-export function askUndo(data: UndoDialogData): Promise<boolean> {
-  if (pending !== null) settle(false);
-  seq += 1;
-  return new Promise<boolean>((resolve) => {
-    pending = { id: seq, data, resolve };
-    emit();
-  });
-}
 
 function StatTile({ stat, wide }: { stat: UndoStat; wide: boolean }): React.JSX.Element {
   const colors = useColors();
@@ -155,7 +92,7 @@ function WarningCard({ warning }: { warning: UndoWarning }): React.JSX.Element {
 }
 
 export function UndoDialogHost(): React.JSX.Element | null {
-  const current = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const current = React.useSyncExternalStore(subscribeUndo, getPendingUndo, getPendingUndo);
   const colors = useColors();
   const wide = useIsWide();
   const [armed, setArmed] = React.useState(false);
@@ -172,7 +109,7 @@ export function UndoDialogHost(): React.JSX.Element | null {
   // that still deletes the batch the user already left. Leaving cancels whatever is pending.
   React.useEffect(
     () => () => {
-      if (pending !== null) settle(false);
+      if (getPendingUndo() !== null) settleUndo(false);
     },
     [],
   );
@@ -186,16 +123,16 @@ export function UndoDialogHost(): React.JSX.Element | null {
       setArmed(true);
       return;
     }
-    settle(true);
+    settleUndo(true);
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => settle(false)}>
+    <Modal visible transparent animationType="fade" onRequestClose={() => settleUndo(false)}>
       <View style={[wide ? styles.rootWide : styles.rootNarrow, { zIndex: z.overlay }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={d.closeLabel}
-          onPress={() => settle(false)}
+          onPress={() => settleUndo(false)}
           testID="confirm-backdrop"
           style={[styles.backdrop, { backgroundColor: colors['fg.primary'], opacity: 0.3 }]}
         />
@@ -247,7 +184,7 @@ export function UndoDialogHost(): React.JSX.Element | null {
                 icon="x"
                 iconOnly
                 accessibilityLabel={d.closeLabel}
-                onPress={() => settle(false)}
+                onPress={() => settleUndo(false)}
                 testID="confirm-close"
               />
             ) : null}
@@ -276,7 +213,7 @@ export function UndoDialogHost(): React.JSX.Element | null {
           <View
             style={[
               wide ? styles.foot : styles.footNarrow,
-              { backgroundColor: colors['bg.surface'], borderTopColor: colors['border.default'] },
+              { backgroundColor: colors['bg.raised'], borderTopColor: colors['border.default'] },
             ]}
           >
             {wide ? (
@@ -294,7 +231,7 @@ export function UndoDialogHost(): React.JSX.Element | null {
                 label={d.cancelLabel}
                 variant="soft"
                 fullWidth={!wide}
-                onPress={() => settle(false)}
+                onPress={() => settleUndo(false)}
                 testID="confirm-cancel"
               />
               {wide ? (

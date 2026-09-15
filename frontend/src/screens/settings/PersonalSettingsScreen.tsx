@@ -43,6 +43,8 @@ import {
 import { IconWell } from './IconWell';
 import { LanguageCard, LanguageField, type LanguageChoice } from './LanguageCard';
 import { DISPLAY_NAME_MAX_LENGTH, ProfileCard } from './ProfileCard';
+import { SectionLabel } from './SectionLabel';
+import { useCurrencyNames } from './currencyNames';
 
 export { DISPLAY_NAME_MAX_LENGTH };
 
@@ -63,6 +65,8 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   const { logout, setUser } = useAuth();
   const theme = useTheme();
   const currencies = useCurrencies();
+  // 屏幕稿 14 reads 「CNY 人民币」, not the server's English ISO name (see `currencyNames`).
+  const currencyNames = useCurrencyNames(currencies.names);
   const ledgerContext = useOptionalLedgerContext();
   const me = useMe();
   const update = useUpdateMe();
@@ -147,7 +151,7 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
         testID="settings-base-currency"
         label={t('settings:base_currency_label')}
         codes={currencies.codes}
-        names={currencies.names}
+        names={currencyNames}
         value={user?.base_currency ?? null}
         onChange={changeCurrency}
         disabled={!user || update.isPending}
@@ -263,23 +267,27 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
           }}
           disabled={!user || update.isPending}
         />
-        <Card
-          variant="raised"
-          testID="device-card"
-          style={{ padding: space['4'], gap: space['5'] }}
-        >
-          {currencyField}
-          <View style={{ gap: space['2'] }}>
-            <Text variant="caption" tone="secondary" weight={600}>
-              {t('settings:appearance_label')}
-            </Text>
-            {appearanceControl}
-            <Text variant="caption" tone="muted" testID="settings-appearance-hint">
-              {t('settings:appearance_hint')}
-            </Text>
-          </View>
-          <LanguageField value={languageValue} resolved={lang} onChange={changeLanguage} />
-        </Card>
+        {/* 屏幕稿 14 · 375 sets a small 「偏好」 label above the card the way 屏幕稿 12 does. */}
+        <View>
+          <SectionLabel title={t('settings:section.prefs')} testID="settings-prefs-label" />
+          <Card
+            variant="raised"
+            testID="device-card"
+            style={{ padding: space['4'], gap: space['5'] }}
+          >
+            {currencyField}
+            <View style={{ gap: space['2'] }}>
+              <Text variant="caption" tone="secondary" weight={600}>
+                {t('settings:appearance_label')}
+              </Text>
+              {appearanceControl}
+              <Text variant="caption" tone="muted" testID="settings-appearance-hint">
+                {t('settings:appearance_hint')}
+              </Text>
+            </View>
+            <LanguageField value={languageValue} resolved={lang} onChange={changeLanguage} />
+          </Card>
+        </View>
         {entriesCard}
         {aboutCard}
         {sessionCard}

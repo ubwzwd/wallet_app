@@ -1,7 +1,8 @@
 /**
  * `/ledgers/join` (04 §4.3, decisions §14.29 / §14.35 / §14.52 B17): auto-submit on the
- * sixth digit, shake-and-clear on a rejected code, and a rate-limit countdown that retries
- * the very same code once without ever consuming it.
+ * sixth digit, shake-and-hold on a rejected code (屏幕稿 13 · 失效 keeps the digits and turns
+ * the cells red; 「重新输入」 clears), and a rate-limit countdown that retries the very same
+ * code once without ever consuming it.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -88,7 +89,7 @@ test('a pasted six-digit code is submitted exactly once and lands in the ledger'
   expect(await screen.findByTestId('toast-success')).toHaveTextContent('已加入《家庭账本》');
 });
 
-test('invite_expired shows its copy and clears the cells', async () => {
+test('invite_expired shows its copy and keeps the refused digits in the red cells', async () => {
   mockPost('/ledgers/join', { detail: 'Invite expired', code: 'invite_expired' }, 400);
   renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
@@ -97,8 +98,12 @@ test('invite_expired shows its copy and clears the cells', async () => {
   expect(await screen.findByTestId('join-error')).toHaveTextContent(
     '邀请码已过期（有效期 10 分钟），请让对方重新生成',
   );
-  await waitFor(() => expect(screen.getByTestId('join-code-0').props.value).toBe(''));
-  expect(screen.getByTestId('join-code-5').props.value).toBe('');
+  // 屏幕稿 13 · 失效: the six cells turn red *around the code that was refused*, so the
+  // user can read back what they entered. Only 「重新输入」 empties them (see the test
+  // below), and one keystroke over a cell clears the red without clearing the rest.
+  await waitFor(() => expect(screen.getByTestId('join-restart')).toBeTruthy());
+  expect(screen.getByTestId('join-code-0').props.value).toBe('1');
+  expect(screen.getByTestId('join-code-5').props.value).toBe('6');
 });
 
 test('an incomplete code is never submitted', async () => {

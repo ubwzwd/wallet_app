@@ -90,7 +90,7 @@ test('registration_open=true renders the four fields of §14.54 and no display n
   expect(screen.queryByText('显示名')).toBeNull();
 });
 
-test('the subtitle explains what registering creates, open or closed', async () => {
+test('the subtitle explains what registering creates, and goes when it cannot happen', async () => {
   const subtitle = '注册后会自动为你建一本『我的账本』，也可以用邀请码加入别人的';
   mockGet('/config', { registration_open: true });
   mockCurrencies();
@@ -101,8 +101,10 @@ test('the subtitle explains what registering creates, open or closed', async () 
   queryClient.clear();
   mockGet('/config', { registration_open: false });
   renderRouter(ROUTES, { initialUrl: '/register', wrapper: Wrapper });
+  // 屏幕稿 17 · 注册已关闭 is the title and the card alone: a line promising a new ledger
+  // would describe something this frame cannot do.
   expect(await screen.findByTestId('register-closed-body')).toBeTruthy();
-  expect(screen.getByText(subtitle)).toBeTruthy();
+  expect(screen.queryByText(subtitle)).toBeNull();
 });
 
 test('"go to sign in" carries the ?next= the user arrived with', async () => {

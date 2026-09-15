@@ -283,21 +283,41 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
   fireEvent.press(await screen.findByTestId('delete-ledger'));
   const dialog = await screen.findByTestId('confirm-dialog');
   expect(dialog).toHaveTextContent(/删除「家庭账本」/);
-  expect(dialog).toHaveTextContent(/328 笔交易/);
-  expect(dialog).toHaveTextContent(/4 个账户/);
-  expect(dialog).toHaveTextContent(/12 批导入/);
+  // 屏幕稿 12 · 删除账本 draws the three counts as tiles, one number each.
+  expect(screen.getByTestId('delete-ledger-tile-transactions-value')).toHaveTextContent('328 笔');
+  expect(screen.getByTestId('delete-ledger-tile-sources-value')).toHaveTextContent('4 个');
+  expect(screen.getByTestId('delete-ledger-tile-imports-value')).toHaveTextContent('12 批');
 
   const accept = screen.getByTestId('confirm-accept');
   expect(accept.props.accessibilityState?.disabled).toBe(true);
 
   fireEvent.changeText(screen.getByTestId('confirm-require-text'), '家庭账');
   expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
+  // ...and says how far off it still is, the way the mockup's 「还差「本」字」 does.
+  expect(dialog).toHaveTextContent(/还差「本」字/);
 
   fireEvent.changeText(screen.getByTestId('confirm-require-text'), '家庭账本');
   fireEvent.press(screen.getByTestId('confirm-accept'));
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
   expect(api.mock.history.delete[0].url).toContain(`/ledgers/${LEDGER_ID}`);
+});
+
+test('cancelling the delete dialog closes it and deletes nothing', async () => {
+  await renderSettings('owner', [makeMember(), BOB]);
+  mockDelete(`/ledgers/${LEDGER_ID}`, undefined, 204);
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(api.mock.history.delete).toHaveLength(0);
+
+  // Reopening starts from an empty box: the typed name must not survive a cancel.
+  fireEvent.press(screen.getByTestId('delete-ledger'));
+  expect((await screen.findByTestId('confirm-require-text')).props.value).toBe('');
+  expect(screen.getByTestId('confirm-accept').props.accessibilityState?.disabled).toBe(true);
 });
 
 test('renaming the ledger sends the name and the version it was read at', async () => {

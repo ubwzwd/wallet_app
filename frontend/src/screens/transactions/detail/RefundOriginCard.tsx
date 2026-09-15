@@ -155,7 +155,7 @@ export function RefundOriginCard({
       style={[
         styles.card,
         raisedShadow(colors, scheme),
-        { backgroundColor: colors['bg.surface'] },
+        { backgroundColor: colors['bg.raised'] },
       ]}
     >
       <View style={[styles.head, { backgroundColor: colors['status.warning.bg'] }]}>

@@ -65,7 +65,7 @@ function NewLedgerTile({ onPress }: { onPress(): void }): React.JSX.Element {
       style={({ pressed }) => [
         styles.tile,
         {
-          backgroundColor: pressed ? colors['bg.hover'] : colors['bg.surface'],
+          backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'],
           borderColor: colors['border.strong'],
         },
       ]}
