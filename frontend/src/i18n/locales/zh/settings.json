@@ -42,6 +42,7 @@
     "entries": "入口"
   },
   "save": "保存",
+  "saving": "保存中…",
   "display_name_saved_toast": "显示名已更新",
   "base_currency_saved_toast": "默认币种已更新"
 }

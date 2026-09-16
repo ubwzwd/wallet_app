@@ -42,6 +42,7 @@
     "entries": "Go to"
   },
   "save": "Save",
+  "saving": "Saving…",
   "display_name_saved_toast": "Display name updated",
   "base_currency_saved_toast": "Default currency updated"
 }

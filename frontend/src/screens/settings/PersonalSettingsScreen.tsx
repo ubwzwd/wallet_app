@@ -29,6 +29,7 @@ import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
   Button,
+  Chip,
   Card,
   Icon,
   ListCard,
@@ -261,15 +262,18 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
 
   // Inside the field's trailing slot, and only once there is something to save: a greyed
   // button parked in the box all day reads as clutter (§14.61).
+  // The same in-field pill the date field uses for 「今天」: a full Button is taller than
+  // the box it sits in. The pill's hit slop keeps the 44px touch target.
   const save =
     dirty || update.isPending ? (
-      <Button
+      <Chip
         testID="settings-display-name-save"
-        label={t('settings:save')}
-        size="sm"
+        variant="solid"
+        label={update.isPending ? t('settings:saving') : t('settings:save')}
         onPress={saveName}
-        loading={update.isPending}
-        disabled={!user}
+        disabled={!user || update.isPending}
+        // Chip pins itself to flex-start; inside the field row it has to sit on the centre line.
+        style={{ alignSelf: 'center' }}
       />
     ) : undefined;
 
