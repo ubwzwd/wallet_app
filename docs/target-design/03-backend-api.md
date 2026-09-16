@@ -501,7 +501,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 
 两个小修正：
 
-- 注册时口令长度上限设为 72 字节并在 schema 层拦截，避免 bcrypt 5.0.0 对超长口令抛 `ValueError` 导致 500（`../current-design/03-backend-api.md` §3.1）。
+- 注册时密码长度上限设为 72 字节并在 schema 层拦截，避免 bcrypt 5.0.0 对超长密码抛 `ValueError` 导致 500（`../current-design/03-backend-api.md` §3.1）。
 - `HTTPBearer(auto_error=True)` 在 FastAPI 0.109.2 上缺头时返回 403 `"Not authenticated"`；目标统一为 401 + `code=unauthorized`，做法是 `HTTPBearer(auto_error=False)` 自己判空后抛 `ApiError(401, "unauthorized", …)`。
 
 ### 3.2 授权：账本成员
@@ -562,7 +562,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 |---|---|---|
 | `validation_error` | 422 / 400 | **422**：请求体 / 查询参数 / 路径参数不满足 pydantic schema（由 §4.1 的 `RequestValidationError` 处理器统一产出）。**400**：schema 过了、但业务层校验没过且没有更专属的 code（币种不在支持列表、金额为 0、符号与 `kind` 冲突、非转账行却带了 `transfer_role` 等）。两种情形共用这一个 code，用状态码区分：422 = 形状不对，400 = 形状对但值不合法 |
 | `unauthorized` | 401 | 缺令牌、令牌无效或过期 |
-| `invalid_credentials` | 401 | 登录邮箱或口令错 |
+| `invalid_credentials` | 401 | 登录邮箱或密码错 |
 | `not_found` | 404 | 资源不存在，或对当前用户不可见（§3.3） |
 | `forbidden` | 403 | 通用权限拒绝（保留给未来） |
 | `not_owner` | 403 | 需要 owner 角色的操作由 member 发起 |
@@ -751,7 +751,7 @@ POST /api/v1/auth/login
 
 | 状态码 | code | 条件 |
 |---|---|---|
-| 401 | `invalid_credentials` | 邮箱不存在或口令错（两者响应完全一致） |
+| 401 | `invalid_credentials` | 邮箱不存在或密码错（两者响应完全一致） |
 | 429 | `login_rate_limited` | 同 IP 每分钟超过 `RATE_LIMIT_LOGIN_PER_MINUTE` 次（§8） |
 
 限流键是客户端 IP（取 `X-Forwarded-For` 的第一跳，需要 uvicorn 加 `--proxy-headers`，决策 §14.44 的 03-15；否则退回 `request.client.host`）。成功登录后 `ratelimit.reset("login", ip)`。不写库。
@@ -3376,7 +3376,7 @@ def convert_many(items, to_currency):
 1. **同一个事务**。`services/events.record()` 只往当前 Session 里 `add()`，由调用方的事务统一提交。交易写成功而事件写失败（或反过来）是不允许出现的状态。
 2. **不阻塞主流程**。事件是一条 `INSERT`，不查外部服务、不做汇率折算；`changes` 里存的是已经序列化好的字符串，不存 Decimal / date 对象。
 3. **值用 API 的形状**。`amount` 存 `"-45.5000"` 而不是 `-45.5`，`occurred_at` 存 `"2026-09-01"`——前端拿到 `changes` 直接就能显示，不用再猜类型（§4.5）。
-4. **不存敏感内容**。`changes` 里只会出现交易自己的字段，不会出现令牌、口令、请求头（`client` 是唯一的例外，且它在写库前已经被 §4.7 的规则清洗过）。
+4. **不存敏感内容**。`changes` 里只会出现交易自己的字段，不会出现令牌、密码、请求头（`client` 是唯一的例外，且它在写库前已经被 §4.7 的规则清洗过）。
 5. **数量有界**。正常一条交易只有几条事件；`GET /transactions/{tid}` 直接全量返回，不分页（§5.27）。
 
 ### 7.4 时序（一次导入提交）
@@ -3459,7 +3459,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 
 ### 9.2 日志脱敏
 
-- 任何日志、任何异常信息里都不得出现 Bearer 令牌、口令。统一用一个 `logging.Filter`，对消息做正则替换：`Bearer\s+[A-Za-z0-9._\-]+` → `Bearer ***`。
+- 任何日志、任何异常信息里都不得出现 Bearer 令牌、密码。统一用一个 `logging.Filter`，对消息做正则替换：`Bearer\s+[A-Za-z0-9._\-]+` → `Bearer ***`。
 - **账单内容是用户隐私**：上传或粘贴进来的 CSV 文本、以及从中解析出的商户名与备注，不写日志、不进错误信息。`import_format_invalid` 的 `errors[]` 里只放行号与"该行有 10 列，应为 11 列"这种结构描述，**不回显原始行的内容**（§5.37）——否则一份错误响应就把账单摘要抄了一遍，还可能被截图分享。
 - `DEBUG` 在生产必须是 `False`（`infra/.env.example:32` 已经是），否则 Starlette 的调试页会把堆栈和局部变量吐给客户端。
 
@@ -3508,8 +3508,8 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 
 | 端点 | 必须覆盖的用例 |
 |---|---|
-| `POST /auth/register` | 成功建用户 + 默认账本 + owner 成员（查库确认三张表）；重复邮箱 409 `email_exists`；`REGISTRATION_OPEN=false` → 403；口令 7 字节 → 422；口令 73 字节 → 422（不是 500）；第 6 次 → 429 `register_rate_limited` |
-| `POST /auth/login` | 成功签发；错口令 401 `invalid_credentials`；未知邮箱同样 401 且响应完全一致；第 11 次 → 429 |
+| `POST /auth/register` | 成功建用户 + 默认账本 + owner 成员（查库确认三张表）；重复邮箱 409 `email_exists`；`REGISTRATION_OPEN=false` → 403；密码 7 字节 → 422；密码 73 字节 → 422（不是 500）；第 6 次 → 429 `register_rate_limited` |
+| `POST /auth/login` | 成功签发；错密码 401 `invalid_credentials`；未知邮箱同样 401 且响应完全一致；第 11 次 → 429 |
 | `GET/PATCH /me` | **auth 路由下的 `me` 两条别名都不存在（404）**（决策 §14.42）；改 `language`；`{"language": null}` 恢复跟随系统；改 `display_name`、传 `null` 清空；请求体带 `default_source_id` 这类未知字段 → 422 `validation_error`（请求模型拒绝未知字段，决策 §14.42 不做兼容）；改不支持的币种 → 400 |
 | `GET /categories` | 22 个一级；每个二级的 parent 正确；**每个一级的 `desc_zh` / `desc_en` 都非空、每个二级的都是 `null`**（决策 §14.21）；`version` 与 `CATEGORY_VERSION` 一致；`If-None-Match` 命中 → 304 |
 | `GET /config` | 匿名可读；`REGISTRATION_OPEN` 两种取值各一次，返回值跟着变 |

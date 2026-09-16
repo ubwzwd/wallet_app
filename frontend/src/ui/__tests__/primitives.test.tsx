@@ -173,27 +173,27 @@ describe('TextField', () => {
   test('the secure toggle flips secureTextEntry and keeps an accessible name', () => {
     renderThemed(
       <TextField
-        label="口令"
+        label="密码"
         secureToggle
-        secureShowLabel="显示口令"
-        secureHideLabel="隐藏口令"
+        secureShowLabel="显示密码"
+        secureHideLabel="隐藏密码"
         value="hunter2"
         onChangeText={() => undefined}
         testID="pw"
       />,
     );
     expect(screen.getByTestId('pw').props.secureTextEntry).toBe(true);
-    fireEvent.press(screen.getByLabelText('显示口令'));
+    fireEvent.press(screen.getByLabelText('显示密码'));
     expect(screen.getByTestId('pw').props.secureTextEntry).toBe(false);
-    expect(screen.getByLabelText('隐藏口令')).toBeTruthy();
+    expect(screen.getByLabelText('隐藏密码')).toBeTruthy();
   });
 
   test('the in-field icon button clears 44×44 through hit slop', () => {
     renderThemed(
       <TextField
-        label="口令"
+        label="密码"
         secureToggle
-        secureShowLabel="显示口令"
+        secureShowLabel="显示密码"
         value="hunter2"
         onChangeText={() => undefined}
       />,
