@@ -259,18 +259,22 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
     </Card>
   );
 
-  const save = (
-    <Button
-      testID="settings-display-name-save"
-      label={t('settings:save')}
-      onPress={saveName}
-      loading={update.isPending}
-      disabled={!user || !dirty}
-    />
-  );
+  // Inside the field's trailing slot, and only once there is something to save: a greyed
+  // button parked in the box all day reads as clutter (§14.61).
+  const save =
+    dirty || update.isPending ? (
+      <Button
+        testID="settings-display-name-save"
+        label={t('settings:save')}
+        size="sm"
+        onPress={saveName}
+        loading={update.isPending}
+        disabled={!user}
+      />
+    ) : undefined;
 
   // No subtitle and no header action (user's call 2026-09-16, §14.61): 「保存」 belongs to
-  // the one field that needs it, so it sits under 显示名 inside the profile card.
+  // the one field that needs it, so it sits inside the 显示名 box.
   const header = <PageHeader testID="personal-settings" title={t('settings:title')} />;
 
   if (!wide) {

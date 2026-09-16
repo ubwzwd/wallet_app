@@ -36,7 +36,7 @@ export interface ProfileCardProps {
   /** The 默认币种 field; the wide layout puts it in this card's second column. */
   currencyField?: React.ReactNode;
   /** The 「保存」 button for the display name — the only field here that is not saved on
-   *  change, so the button sits right under it (§14.61). */
+   *  change, so it rides inside the field's trailing slot (§14.61). */
   nameAction?: React.ReactNode;
 }
 
@@ -75,12 +75,8 @@ export function ProfileCard({
         hint={t('settings:display_name_hint', {
           fallback: user ? emailPrefix(user.email) : '',
         })}
+        suffix={nameAction}
       />
-      {nameAction === undefined ? null : (
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: space['2'] }}>
-          {nameAction}
-        </View>
-      )}
     </View>
   );
 

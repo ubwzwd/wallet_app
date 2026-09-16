@@ -127,7 +127,7 @@ test('clearing the display name sends an explicit null', async () => {
   mockPatch('/me', { ...user, display_name: null });
 
   fireEvent.changeText(await screen.findByTestId('settings-display-name'), '   ');
-  fireEvent.press(screen.getByTestId('settings-display-name-save'));
+  fireEvent.press(await screen.findByTestId('settings-display-name-save'));
 
   await waitFor(() => expect(patchBodies()).toEqual([{ display_name: null }]));
 });
@@ -137,12 +137,11 @@ test('a new display name is saved on its own, trimmed', async () => {
   await renderSettings(user);
   mockPatch('/me', { ...user, display_name: '小王' });
 
-  // 屏幕稿 14: one 保存 in the page head, dark only once something actually differs.
-  const save = await screen.findByTestId('settings-display-name-save');
-  expect(save.props.accessibilityState?.disabled).toBe(true);
+  // §14.61: 保存 lives inside the 显示名 box and only appears once something differs.
+  expect(screen.queryByTestId('settings-display-name-save')).toBeNull();
 
   fireEvent.changeText(await screen.findByTestId('settings-display-name'), ' 小王 ');
-  fireEvent.press(screen.getByTestId('settings-display-name-save'));
+  fireEvent.press(await screen.findByTestId('settings-display-name-save'));
 
   await waitFor(() => expect(patchBodies()).toEqual([{ display_name: '小王' }]));
   expect(await screen.findByTestId('toast-success')).toHaveTextContent(/显示名已更新/);
