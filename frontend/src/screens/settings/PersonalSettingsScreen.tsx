@@ -24,7 +24,7 @@ import { pickLandingLedger, useLastLedgerId, useTopBar } from '@/navigation';
 import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useCurrencies, useLedgers, useMe, useUpdateMe } from '@/queries';
 import { useAuth, useOptionalLedgerContext } from '@/store';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
@@ -273,7 +273,8 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
         onPress={saveName}
         disabled={!user || update.isPending}
         // Chip pins itself to flex-start; inside the field row it has to sit on the centre line.
-        style={{ alignSelf: 'center' }}
+        // Squarer than the pill default so it sits concentric with the box's own corners.
+        style={{ alignSelf: 'center', borderRadius: radius.sm }}
       />
     ) : undefined;
 
