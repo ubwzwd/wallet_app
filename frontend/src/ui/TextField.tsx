@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   },
   // A zero-width solid outline is the typed way to say `outline: none` on the web; native
   // ignores both keys.
-  input: { flex: 1, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  input: { flex: 1, minWidth: 0, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
   tabular: { fontVariant: ['tabular-nums'] },
   footer: { flexDirection: 'row', alignItems: 'center', gap: space['2'] },
   footerText: { flex: 1 },
