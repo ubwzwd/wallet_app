@@ -215,5 +215,4 @@ test('the wide layout has no top bar, so the page carries the title itself', asy
   });
 
   expect(await screen.findByTestId('personal-settings-title')).toHaveTextContent('我的');
-  expect(screen.getByTestId('personal-settings-subtitle')).toHaveTextContent(/只影响你自己/);
 });

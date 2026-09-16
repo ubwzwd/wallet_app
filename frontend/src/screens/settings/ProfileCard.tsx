@@ -35,6 +35,9 @@ export interface ProfileCardProps {
   disabled: boolean;
   /** The 默认币种 field; the wide layout puts it in this card's second column. */
   currencyField?: React.ReactNode;
+  /** The 「保存」 button for the display name — the only field here that is not saved on
+   *  change, so the button sits right under it (§14.61). */
+  nameAction?: React.ReactNode;
 }
 
 export function ProfileCard({
@@ -43,6 +46,7 @@ export function ProfileCard({
   onNameChange,
   disabled,
   currencyField,
+  nameAction,
 }: ProfileCardProps): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
@@ -72,6 +76,11 @@ export function ProfileCard({
           fallback: user ? emailPrefix(user.email) : '',
         })}
       />
+      {nameAction === undefined ? null : (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: space['2'] }}>
+          {nameAction}
+        </View>
+      )}
     </View>
   );
 

@@ -269,18 +269,9 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
     />
   );
 
-  const header = (
-    <PageHeader
-      testID="personal-settings"
-      title={t('settings:title')}
-      meta={
-        <Text variant="body" tone="muted" testID="personal-settings-subtitle">
-          {t('settings:subtitle')}
-        </Text>
-      }
-      actions={save}
-    />
-  );
+  // No subtitle and no header action (user's call 2026-09-16, §14.61): 「保存」 belongs to
+  // the one field that needs it, so it sits under 显示名 inside the profile card.
+  const header = <PageHeader testID="personal-settings" title={t('settings:title')} />;
 
   if (!wide) {
     return (
@@ -294,6 +285,7 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
             setName(next);
           }}
           disabled={!user || update.isPending}
+          nameAction={save}
         />
         {/* 屏幕稿 14 · 375 sets a small 「偏好」 label above the card the way 屏幕稿 12 does. */}
         <View>
@@ -336,6 +328,7 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
               setName(next);
             }}
             disabled={!user || update.isPending}
+          nameAction={save}
             currencyField={currencyField}
           />
           <LanguageCard value={languageValue} resolved={lang} onChange={changeLanguage} />
