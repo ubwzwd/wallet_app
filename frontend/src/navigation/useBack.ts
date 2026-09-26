@@ -4,8 +4,8 @@
  *
  * With in-app history it steps back one page; without it (a deep link in a new tab, a
  * reload) it goes to the page's fixed parent from `backTargetFor`. Pages with a return
- * address of their own (the new-transaction form's `?next=`) keep using it and only fall
- * back to this table.
+ * address of their own (the forms' `?next=`) register it with `useBackOverride`; the shell's
+ * narrow ‹ then runs that instead (§14.65 h), and it too falls back to this table.
  *
  * `goBack` is one of the shell's exits, so it asks a registered leave guard first
  * (`useGuardedNavigate`, §14.65 g).

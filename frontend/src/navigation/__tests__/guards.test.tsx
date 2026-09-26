@@ -158,7 +158,7 @@ describe('rule 2 — the landing redirect', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
   });
 
-  test('/ goes to the ledger list when there is not a single ledger', async () => {
+  test('/ goes to the onboarding page when there is not a single ledger', async () => {
     await signIn();
     mockLedgers([]);
 
