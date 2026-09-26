@@ -17,7 +17,6 @@ import type { FinanceSource } from '@/api/types';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { useLedgerContext } from '@/store';
 import { Icon, type IconName, Popover, Sheet, Text } from '@/ui';
 
 import { useArchiveSource } from './useArchiveSource';
@@ -29,6 +28,8 @@ const MENU_WIDTH = 216;
 
 export interface SourceRowMenuProps {
   source: FinanceSource;
+  /** My base currency — the archive confirmation names the balance leaving net worth in it. */
+  baseCurrency: string;
   /** Opens the edit form. */
   onOpen(source: FinanceSource): void;
   /** Runs the §4.8 delete confirmation; the screen owns it (it also owns the 409 hint). */
@@ -48,6 +49,7 @@ interface MenuItem {
 
 export function SourceRowMenu({
   source,
+  baseCurrency,
   onOpen,
   onDelete,
   testID,
@@ -55,8 +57,7 @@ export function SourceRowMenu({
   const { t } = useTranslation();
   const colors = useColors();
   const wide = useIsWide();
-  const { ledgerId } = useLedgerContext();
-  const archive = useArchiveSource(ledgerId, source.id);
+  const archive = useArchiveSource(source.id, baseCurrency);
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef<View>(null);
   const id = testID ?? `source-menu-${source.id}`;

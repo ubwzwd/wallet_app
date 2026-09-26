@@ -1,13 +1,16 @@
 /**
  * The wide layout's account table (屏幕稿 09 · 账户列表 1440).
  *
- * Six columns — 账户 / 类型 / 币种 / 余额 · 原币 / 折算 <base> / ··· — in one white card with
- * a head strip and a foot strip carrying 「合计 · 在用」, the 「混合币种」 caveat and the
- * net worth of the accounts above it. The mockup drops the per-type group cards the text
+ * Seven columns — 账户 / 类型 / 币种 / 余额 · 原币 / 折算 <base> / 共享到 / ··· — in one white
+ * card with a head strip and a foot strip carrying 「合计 · 在用」, the 「混合币种」 caveat and
+ * my net worth (the server's `net_worth`, decision §14.62). 共享到 is the one column the
+ * mockup predates: a chip per ledger I belong to, pressed to share or stop sharing. It sits
+ * beside the 「···」 menu, outside the row's press target, because the chips are buttons. The mockup drops the per-type group cards the text
  * spec drew: the type badge in every row and the foot total carry §14.50's reading instead
  * (decision §14.45 — the mockups are the visual source of truth).
  *
- * The same grid is reused by the archived block, which swaps the 折算 column for 「归档于 …」.
+ * The same grid is reused by the archived block, which swaps the 折算 column for 「归档于 …」
+ * and leaves 共享到 empty — sharing an account nobody can record with means nothing.
  */
 import React from 'react';
 import { Pressable, ScrollView, type StyleProp, View, type ViewStyle } from 'react-native';
@@ -20,31 +23,37 @@ import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Badge, type BadgeTone, ListCard, SourceTypeIcon, Text, sourceTypeLabelKey } from '@/ui';
 
+import { ShareChips } from './ShareChips';
 import { SourceRowMenu } from './SourceRowMenu';
 import { balanceText, balanceTone, isForeign } from './sourceFormat';
+import type { ShareController } from './useShareToggle';
 
 /** 屏幕稿 09: 12px above and below a 34 icon well — a 60 row. */
 const ROW_HEIGHT = 60;
 const GRID_GAP = space['3'] + 2;
 const GRID_PADDING = space['5'];
-/** Narrower than this and six columns stop being readable; the card scrolls instead.
+/** Narrower than this and seven columns stop being readable; the card scrolls instead.
  *  Exported so the archived block can pin the same column track (屏幕稿 09). */
-export const MIN_TABLE_WIDTH = 820;
+export const MIN_TABLE_WIDTH = 980;
 
-/** The mockup's grid: one elastic name column, three fixed, two elastic numbers, 44 for ···. */
+/** The mockup's grid: one elastic name column, two fixed, two elastic numbers, then the
+ *  共享到 chips and 44 for ···. The last two sit outside the row's press target, so they
+ *  are fixed-width: a flex column there would not line up with the head strip. */
 const COLUMNS = [
   { key: 'name', flex: 1.3, minWidth: 150 },
   { key: 'type', width: 120 },
   { key: 'currency', width: 88 },
   { key: 'balance', flex: 1, minWidth: 120, align: 'right' as const },
   { key: 'converted', flex: 1, minWidth: 110, align: 'right' as const },
+  { key: 'shared', width: 210 },
   { key: 'menu', width: 44, align: 'right' as const },
 ] as const;
 
 type Column = (typeof COLUMNS)[number];
 
-/** Everything but the trailing 「···」 column, which is drawn outside the row's press target. */
-const BODY_COLUMNS = COLUMNS.slice(0, -1);
+/** Everything but 共享到 and 「···」, which are drawn outside the row's press target. */
+const BODY_COLUMNS = COLUMNS.slice(0, -2);
+const SHARED_COLUMN = COLUMNS[COLUMNS.length - 2];
 const MENU_COLUMN = COLUMNS[COLUMNS.length - 1];
 
 /** Account types wear the same four tints as their icon wells (屏幕稿 09). */
@@ -84,6 +93,8 @@ export interface SourceTableRowProps {
   onDelete(source: FinanceSource): void;
   /** `true` after the server refused a delete with `source_has_transactions`. */
   deleteBlocked?: boolean;
+  /** The 共享到 chips; absent on archived rows. */
+  share?: ShareController;
 }
 
 /** The 折算 cell of an active row: the converted value, or 「—」 in the base currency. */
@@ -132,6 +143,7 @@ export function SourceTableRow({
   onOpen,
   onDelete,
   deleteBlocked = false,
+  share,
 }: SourceTableRowProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
@@ -236,8 +248,24 @@ export function SourceTableRow({
             </View>
           ))}
         </Pressable>
+        <View style={[cellStyle(SHARED_COLUMN), { paddingVertical: space['2'] }]}>
+          {share && !muted ? (
+            <ShareChips
+              ledgers={share.ledgers}
+              isShared={(lid) => share.isShared(source, lid)}
+              isPending={(lid) => share.isPending(source, lid)}
+              onToggle={(ledger) => share.toggle(source, ledger)}
+              testID={`source-share-${source.id}`}
+            />
+          ) : null}
+        </View>
         <View style={cellStyle(MENU_COLUMN)}>
-          <SourceRowMenu source={source} onOpen={onOpen} onDelete={onDelete} />
+          <SourceRowMenu
+            source={source}
+            baseCurrency={baseCurrency}
+            onOpen={onOpen}
+            onDelete={onDelete}
+          />
         </View>
       </View>
       {deleteBlocked ? (
@@ -258,13 +286,14 @@ export interface SourcesTableProps {
   sources: readonly FinanceSource[];
   baseCurrency: string;
   lang: Lang;
-  /** Net worth of the rows above the foot strip, already converted. */
+  /** Net worth of the rows above the foot strip, already converted and formatted. */
   total: string;
   /** Says 「混合币种」 under the total when the rows are not all in one currency. */
   mixed: boolean;
   onOpen(source: FinanceSource): void;
   onDelete(source: FinanceSource): void;
   deleteBlockedId: string | null;
+  share?: ShareController;
   testID?: string;
 }
 
@@ -281,7 +310,9 @@ export function SourcesTable(props: SourcesTableProps): React.JSX.Element {
               ? ''
               : column.key === 'converted'
                 ? t('source:list.table.converted', { currency: props.baseCurrency })
-                : t(`source:list.table.${column.key}`)}
+                : column.key === 'shared'
+                  ? t('source:share.column')
+                  : t(`source:list.table.${column.key}`)}
           </Text>
         </View>
       ))}
@@ -316,6 +347,7 @@ export function SourcesTable(props: SourcesTableProps): React.JSX.Element {
         </Text>
       </View>
       <View style={cellStyle(COLUMNS[5])} />
+      <View style={cellStyle(COLUMNS[6])} />
     </View>
   );
 
@@ -342,6 +374,7 @@ export function SourcesTable(props: SourcesTableProps): React.JSX.Element {
             onOpen={props.onOpen}
             onDelete={props.onDelete}
             deleteBlocked={props.deleteBlockedId === source.id}
+            share={props.share}
           />
         ))}
       </ListCard>

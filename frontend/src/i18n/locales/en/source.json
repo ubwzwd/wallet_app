@@ -34,7 +34,7 @@
     "archived_collapse": "Hide archived accounts",
     "archived_at": "Archived {{date}}",
     "empty": {
-      "title": "No accounts yet — add one to start recording",
+      "title": "You don't have any accounts yet",
       "button": "New account"
     },
     "menu_label": "More actions for “{{name}}”",
@@ -52,7 +52,8 @@
     "delete_confirm": "This can't be undone. Only an account with no transactions can be deleted.",
     "deleted_toast": "Deleted “{{name}}”",
     "delete_disabled_hint": "This account has transactions — archive it instead",
-    "no_rate_hint": "{{count}} accounts can't be converted right now"
+    "no_rate_hint": "{{count}} accounts can't be converted right now",
+    "total_unavailable": "—"
   },
   "form": {
     "new_title": "New account",
@@ -61,7 +62,7 @@
     "load_error": "Couldn't load. Try again.",
     "name_label": "Name",
     "name_placeholder": "e.g. “CMB debit card”",
-    "name_hint": "Everyone in the ledger sees this — make it specific",
+    "name_hint": "Members of the ledgers you share it into see this name too — make it specific",
     "name_duplicate_hint": "There's already an account with this name — they're still tracked separately",
     "type_label": "Type",
     "currency_label": "Currency",
@@ -80,5 +81,14 @@
     "submit_save": "Save",
     "created_toast": "Created “{{name}}”",
     "saved_toast": "Saved “{{name}}”"
+  },
+  "share": {
+    "column": "Shared to",
+    "hint": "Once shared, the other members of that ledger can record with this account too; you can use it in any of your ledgers",
+    "no_ledgers": "You're not in any ledger yet — come back and share it once you create or join one",
+    "shared_toast": "Shared “{{account}}” to “{{ledger}}”",
+    "unshared_toast": "Stopped sharing “{{account}}” to “{{ledger}}” — other members can no longer record with it; existing entries stay",
+    "failed_toast": "Couldn’t change sharing of “{{account}}” in “{{ledger}}”",
+    "save_failed_toast": "The account was saved, but not every sharing change went through — try again"
   }
 }

@@ -1,20 +1,24 @@
 /**
- * `/l/:ledgerId/sources/new` and `/l/:ledgerId/sources/:sourceId/edit` (04 §4.9), drawn as
- * 屏幕稿 09 draws it: on wide screens a centred 620-wide dialog card (title + × back to the
- * list, the fields, an action bar) laid over the dimmed account list; on narrow ones the
- * same blocks full-width under the app's top bar.
+ * `/accounts/new[?ledger=<id>]` and `/accounts/:sourceId/edit` (04 §4.9, decision §14.62),
+ * drawn as 屏幕稿 09 draws it: on wide screens a centred 620-wide dialog card (title + × back
+ * to the list, the fields, an action bar) laid over the dimmed account list; on narrow ones
+ * the same blocks full-width under the app's top bar.
  *
  * One component for both routes: the presence of the `sourceId` route parameter decides
- * whether it creates or edits. Three rules make this form different from the others:
+ * whether it creates or edits. The rules that make this form different from the others:
  *
  *  - `default_currency` is chosen once and then **locked** (decision §14.50): on the edit
- *    screen it is a read-only row and never appears in the PATCH body.
+ *    screen it is a read-only row and never appears in the PATCH body. A new account starts
+ *    in *my* base currency — an account belongs to a person, not a ledger (§14.62).
  *  - a `credit` account's opening balance is typed as a positive "how much I owe" number
  *    and stored negative (decision §14.52 A13) — `openingBalanceForSubmit` /
  *    `openingBalanceForDisplay` own that conversion, and switching the type runs the
  *    stored value through `convertOpeningBalanceOnTypeChange`.
  *  - changing an existing opening balance rewrites every historical balance, so it takes a
  *    confirmation that previews net worth before and after (04 §4.9, §4.7).
+ *  - 「共享到」 is one chip per ledger I belong to. `?ledger=<id>` (the home page's 「建第一个
+ *    账户」) ticks that ledger up front; on edit the chips start at `shared_to` and their
+ *    diff is sent after the PATCH. `useSourceSubmit` owns the requests.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -23,31 +27,25 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 
-import { isApiClientError } from '@/api/errors';
-import type { FinanceSource, FinanceSourceUpdate, Money, SourceType } from '@/api/types';
-import { addMoney, formatMoney4, normalizeAmountInput, parseMoney, subMoney } from '@/domain/money';
-import { sumSources } from '@/domain/networth';
+import type { FinanceSource, Ledger, SourceType } from '@/api/types';
+import { normalizeAmountInput } from '@/domain/money';
 import { routes } from '@/domain/routes';
-import {
-  convertOpeningBalanceOnTypeChange,
-  openingBalanceForDisplay,
-  openingBalanceForSubmit,
-} from '@/domain/sources';
-import { errorMessage } from '@/i18n/errorCodes';
+import { convertOpeningBalanceOnTypeChange, openingBalanceForDisplay } from '@/domain/sources';
 import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useTopBar } from '@/navigation';
-import { useCreateSource, useCurrencies, useMySource, useMySources, useUpdateSource } from '@/queries';
-import { useLedgerContext } from '@/store';
+import { useCurrencies, useLedgers, useMySource, useMySources } from '@/queries';
+import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Button, Card, EmptyState, Page, Skeleton, Switch, confirm, toast } from '@/ui';
+import { Button, Card, EmptyState, Page, Skeleton, Switch, toast } from '@/ui';
 import { useLeaveGuard } from '@/screens/transactions/form/useLeaveGuard';
 
 import { FormDialog } from './FormDialog';
 import SourcesScreen from './SourcesScreen';
 import { SourceFormFields } from './SourceFormFields';
+import { storedValue, valuesOf } from './formValues';
 import {
   openingBalanceInput,
   sourceFormSchema,
@@ -55,38 +53,17 @@ import {
   type SourceFormValues,
 } from './schemas';
 import { useArchiveSource } from './useArchiveSource';
-
-/** `'0.0000'` — what an empty opening-balance field submits (decision §3). */
-const ZERO: Money = '0.0000';
+import { useSourceSubmit } from './useSourceSubmit';
 
 /** How many currency shortcut chips the mockup puts under the picker. */
 const QUICK_CURRENCIES = 3;
 
-function valuesOf(source: FinanceSource): SourceFormValues {
-  return {
-    name: source.name,
-    type: source.type,
-    default_currency: source.default_currency,
-    opening_balance: trimTrailingZeros(
-      openingBalanceForDisplay(source.opening_balance ?? ZERO, source.type),
-    ),
-  };
-}
+const NO_LEDGERS: readonly Ledger[] = [];
 
-/** The stored (signed) money a raw field value plus a type submit as. */
-function storedValue(raw: string, type: SourceType): Money {
-  return openingBalanceForSubmit(openingBalanceInput(raw), type) ?? ZERO;
-}
-
-/**
- * A delta in the account's own currency, expressed in the ledger's base currency, using
- * the same rate the balance was converted with. Without a rate there is nothing to show,
- * so the preview falls back to "no change" rather than inventing a number.
- */
-function toBase(delta: Money, source: FinanceSource, baseCurrency: string): Money {
-  if (source.default_currency === baseCurrency) return delta;
-  if (source.balance_rate === null) return ZERO;
-  return formatMoney4(BigInt(Math.round(Number(parseMoney(delta)) * Number(source.balance_rate))));
+/** A route parameter, whichever shape expo-router hands it over in. */
+function single(value: string | string[] | undefined): string | undefined {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === 'string' && v !== '' ? v : undefined;
 }
 
 export default function SourceFormScreen(): React.JSX.Element {
@@ -94,19 +71,26 @@ export default function SourceFormScreen(): React.JSX.Element {
   const lang = useLang();
   const router = useRouter();
   const wide = useIsWide();
-  const { ledgerId, baseCurrency } = useLedgerContext();
-  const params = useLocalSearchParams<{ sourceId?: string | string[] }>();
-  const sourceId = Array.isArray(params.sourceId) ? params.sourceId[0] : params.sourceId;
-  const isEdit = typeof sourceId === 'string' && sourceId !== '';
+  const { user } = useAuth();
+  const params = useLocalSearchParams<{
+    sourceId?: string | string[];
+    ledger?: string | string[];
+  }>();
+  const sourceId = single(params.sourceId);
+  const presetLedger = single(params.ledger);
+  const isEdit = sourceId !== undefined;
 
   const currencies = useCurrencies();
   // 屏幕稿 09 / 13 / 17 read 「CNY 人民币」, not the server's ISO English name.
   const currencyNames = useCurrencyNames(currencies.names);
   const list = useMySources({ include_archived: true });
-  const detail = useMySource(isEdit ? sourceId : undefined);
-  const create = useCreateSource({ silent: true });
-  const update = useUpdateSource(isEdit ? sourceId : '', { silent: true });
-  const archive = useArchiveSource(ledgerId, isEdit ? sourceId : '');
+  const detail = useMySource(sourceId);
+  const ledgers = useLedgers().data?.items ?? NO_LEDGERS;
+  const ledgerIds = React.useMemo(() => new Set(ledgers.map((l) => l.id)), [ledgers]);
+  // An account is mine, so it starts in — and is previewed in — my base currency.
+  const userBase = user?.base_currency ?? '';
+  const baseCurrency = list.data?.base_currency ?? userBase;
+  const archive = useArchiveSource(sourceId ?? '', baseCurrency);
 
   const {
     control,
@@ -114,6 +98,7 @@ export default function SourceFormScreen(): React.JSX.Element {
     getValues,
     setValue,
     reset,
+    resetField,
     watch,
     formState: { errors, isDirty },
   } = useForm<SourceFormValues>({
@@ -121,10 +106,18 @@ export default function SourceFormScreen(): React.JSX.Element {
     defaultValues: {
       name: '',
       type: 'checking',
-      default_currency: isEdit ? '' : baseCurrency,
+      default_currency: isEdit ? '' : userBase,
       opening_balance: '',
+      share_to: !isEdit && presetLedger !== undefined ? [presetLedger] : [],
     },
   });
+
+  // `/me` may land after the first frame: fill the default in then, as a *default*, so the
+  // untouched form stays clean for the leave guard.
+  React.useEffect(() => {
+    if (isEdit || userBase === '' || getValues('default_currency') !== '') return;
+    resetField('default_currency', { defaultValue: userBase });
+  }, [getValues, isEdit, resetField, userBase]);
 
   // The server row the form was last synchronised with: the source of `updated_at` for the
   // PATCH, and the baseline "what changed?" is measured against.
@@ -173,7 +166,7 @@ export default function SourceFormScreen(): React.JSX.Element {
     [baseCurrency, getValues, lang, setValue, t],
   );
 
-  /** Another account already carries this name — allowed, so it's only a hint (01-6). */
+  /** Another of my accounts already carries this name — allowed, so only a hint (01-6). */
   const duplicateName = React.useMemo(() => {
     const trimmed = name.trim().toLowerCase();
     if (trimmed === '') return false;
@@ -182,34 +175,34 @@ export default function SourceFormScreen(): React.JSX.Element {
     );
   }, [list.data, name, sourceId]);
 
-  /** The chips over the picker: the ledger's own currency first, then the ones its other
-   *  accounts already use (屏幕稿 09 draws three). */
+  /** The chips over the picker: my own currency first, then the ones my other accounts
+   *  already use (屏幕稿 09 draws three). */
   const quickCurrencies = React.useMemo(() => {
     const seen = [baseCurrency, ...(list.data?.items ?? []).map((s) => s.default_currency)];
-    return Array.from(new Set(seen)).slice(0, QUICK_CURRENCIES);
+    return Array.from(new Set(seen.filter((c) => c !== ''))).slice(0, QUICK_CURRENCIES);
   }, [baseCurrency, list.data]);
-
-  /** "Net worth ¥52,300 → ¥49,096" for the opening-balance confirmation (04 §4.9). */
-  const netWorthPreview = React.useCallback(
-    (source: FinanceSource, nextStored: Money): { from: string; to: string } => {
-      const before = sumSources(list.data?.items ?? []).net;
-      const delta = toBase(subMoney(nextStored, source.opening_balance ?? ZERO), source, baseCurrency);
-      return {
-        from: formatMoney(before, baseCurrency, lang),
-        to: formatMoney(addMoney(before, delta), baseCurrency, lang),
-      };
-    },
-    [baseCurrency, lang, list.data],
-  );
 
   const goBack = React.useCallback(
     () => router.replace(routes.accounts() as Href),
     [router],
   );
 
+  // The guard is created after the submit hook (it needs `busy`), so "saved — leave" reaches
+  // it through a ref.
+  const savedRef = React.useRef<() => void>(() => undefined);
+  const onSaved = React.useCallback(() => savedRef.current(), []);
+  const saver = useSourceSubmit({
+    sourceId,
+    baseline,
+    ledgerIds,
+    baseCurrency,
+    netWorth: list.data?.net_worth ?? null,
+    onSaved,
+  });
+
   // Half-typed changes are asked about on every way out (04 §4.6.5, decision §14.65 g):
   // 取消 and × here, the shell's ‹ and chrome through the guard's registration.
-  const busy = create.isPending || update.isPending;
+  const busy = saver.busy;
   const leave = useLeaveGuard(isDirty && !busy);
   const onCancel = React.useCallback((): void => {
     void leave.confirmLeave().then((ok) => {
@@ -218,73 +211,12 @@ export default function SourceFormScreen(): React.JSX.Element {
       goBack();
     });
   }, [goBack, leave]);
-  const leaveSaved = React.useCallback((): void => {
+  savedRef.current = () => {
     leave.allowLeave();
     goBack();
-  }, [goBack, leave]);
+  };
 
-  const onSubmit = React.useCallback(
-    async (values: SourceFormValues): Promise<void> => {
-      const stored = storedValue(values.opening_balance, values.type);
-
-      if (!isEdit) {
-        create.mutate(
-          {
-            name: values.name.trim(),
-            type: values.type,
-            default_currency: values.default_currency,
-            opening_balance: stored,
-          },
-          {
-            onSuccess: (source) => {
-              toast.success(t('source:form.created_toast', { name: source.name }));
-              leaveSaved();
-            },
-            onError: (e) => toast.error(errorMessage(t, e)),
-          },
-        );
-        return;
-      }
-
-      const current = baseline;
-      if (!current) return;
-
-      const body: FinanceSourceUpdate = { updated_at: current.updated_at };
-      if (values.name.trim() !== current.name) body.name = values.name.trim();
-      if (values.type !== current.type) body.type = values.type;
-      const openingChanged = parseMoney(stored) !== parseMoney(current.opening_balance ?? ZERO);
-      if (openingChanged) body.opening_balance = stored;
-
-      if (openingChanged) {
-        const preview = netWorthPreview(current, stored);
-        const ok = await confirm({
-          title: t('source:form.opening_balance_change_title'),
-          body: `${t('source:form.net_worth_preview', preview)}\n${t(
-            'source:form.opening_balance_change_confirm',
-          )}`,
-          confirmLabel: t('common:button.save'),
-          tone: 'danger',
-        });
-        if (!ok) return;
-      }
-
-      update.mutate(body, {
-        onSuccess: (source) => {
-          toast.success(t('source:form.saved_toast', { name: source.name }));
-          leaveSaved();
-        },
-        onError: (e) => {
-          // A 409 `stale_update` is the global handler's business (04 §3.8): it has already
-          // refetched the row and warned; the effect above merges it into the form.
-          if (isApiClientError(e) && e.code === 'stale_update') return;
-          toast.error(errorMessage(t, e));
-        },
-      });
-    },
-    [baseline, create, isEdit, leaveSaved, netWorthPreview, t, update],
-  );
-
-  const submit = handleSubmit((values) => void onSubmit(values));
+  const submit = handleSubmit((values) => void saver.submit(values));
   const title = isEdit ? t('source:form.edit_title') : t('source:form.new_title');
   // 04 §1.4: the narrow layout's top bar carries the title, so the page does not repeat it.
   useTopBar(title);
@@ -324,6 +256,7 @@ export default function SourceFormScreen(): React.JSX.Element {
       currencyNames={currencyNames}
       currency={currency}
       quickCurrencies={quickCurrencies}
+      ledgers={ledgers}
       archivedSwitch={
         isEdit && baseline ? (
           <Switch

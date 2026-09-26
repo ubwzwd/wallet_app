@@ -13,8 +13,8 @@
  * column and the narrow list's 「储蓄卡 · CNY」 subtitle already name the currency (屏幕稿 09:
  * 「12,480.35」, 「−3,215.00」, and 「S$4,120.80」 on the one row where they disagree).
  */
-import type { FinanceSource } from '@/api/types';
-import { parseMoney } from '@/domain/money';
+import type { FinanceSource, Money } from '@/api/types';
+import { formatMoney4, parseMoney } from '@/domain/money';
 import type { Lang } from '@/i18n';
 import { formatLedgerAmount } from '@/i18n/format';
 import type { TextTone } from '@/ui';
@@ -25,7 +25,7 @@ export function balanceTone(source: FinanceSource, muted: boolean): TextTone {
   return parseMoney(source.balance ?? '0') < 0n ? 'expense' : 'primary';
 }
 
-/** The balance in the account's own currency; bare when that is the ledger's base. */
+/** The balance in the account's own currency; bare when it is the owner's base currency. */
 export function balanceText(source: FinanceSource, lang: Lang, baseCurrency: string): string {
   return formatLedgerAmount(source.balance ?? '0', source.default_currency, baseCurrency, lang);
 }
@@ -38,4 +38,19 @@ export function isForeign(source: FinanceSource, baseCurrency: string): boolean 
 /** How many distinct currencies the active accounts are held in (屏幕稿 09: 「混合币种」). */
 export function currencyCount(sources: readonly FinanceSource[]): number {
   return new Set(sources.map((s) => s.default_currency.toUpperCase())).size;
+}
+
+/**
+ * A type group's subtotal in the owner's base currency (决策 §14.50). The page's three
+ * headline numbers come from `GET /sources`; the per-type subtotals of the narrow layout
+ * have no server field, so they are the sum of the rows' own `balance_base`. An account the
+ * server could not convert is left out, never counted as zero — the page says how many.
+ */
+export function groupSubtotal(sources: readonly FinanceSource[]): Money {
+  let total = 0n;
+  for (const source of sources) {
+    if (source.archived || source.balance_base === null) continue;
+    total += parseMoney(source.balance_base);
+  }
+  return formatMoney4(total);
 }
