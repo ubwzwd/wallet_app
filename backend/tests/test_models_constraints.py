@@ -15,6 +15,7 @@ from app.models import (
     Ledger,
     LedgerInvite,
     LedgerMember,
+    LedgerSource,
     Transaction,
     TransactionEvent,
     User,
@@ -74,7 +75,7 @@ class World:
 
     def build_source(self, name: str, type_: str = "checking", **overrides) -> FinanceSource:
         values = {
-            "ledger_id": self.ledger.id,
+            "owner_id": self.user.id,
             "name": name,
             "type": type_,
             "default_currency": "SGD",
@@ -587,6 +588,17 @@ def _invite(world, **overrides) -> LedgerInvite:
     return LedgerInvite(**values)
 
 
+def _share(world, source, **overrides) -> LedgerSource:
+    values = {
+        "ledger_id": world.ledger.id,
+        "source_id": source.id,
+        "shared_by": world.user.id,
+        "shared_at": NOW,
+    }
+    values.update(overrides)
+    return LedgerSource(**values)
+
+
 def test_invite_code_must_be_six_digits(db, world):
     _accept(db, _invite(world))
     _reject(db, _invite(world, code="12a456"), "ck_ledger_invites_code_digits")
@@ -681,6 +693,7 @@ def test_deleting_a_ledger_cascades_to_everything_it_owns(db, world):
     _accept(db, world.event(transaction))
     batch = _accept(db, world.batch())
     _accept(db, world.row(batch_id=batch.id))
+    _accept(db, _share(world, world.source))
 
     db.execute(delete(Ledger).where(Ledger.id == world.ledger.id))
     db.commit()
@@ -688,7 +701,7 @@ def test_deleting_a_ledger_cascades_to_everything_it_owns(db, world):
     for model in (
         LedgerMember,
         LedgerInvite,
-        FinanceSource,
+        LedgerSource,
         Transaction,
         TransactionEvent,
         ImportBatch,
@@ -697,6 +710,29 @@ def test_deleting_a_ledger_cascades_to_everything_it_owns(db, world):
         assert db.scalar(select(func.count()).select_from(model)) == 0, model.__name__
     # users survive: nothing cascades into them
     assert db.scalar(select(func.count()).select_from(User)) == 1
+    # accounts belong to people, not ledgers: only their shares went (§14.62)
+    assert db.scalar(select(func.count()).select_from(FinanceSource)) == 2
+
+
+def test_deleting_an_account_removes_its_shares(db, world):
+    _accept(db, _share(world, world.other_source))
+
+    db.execute(delete(FinanceSource).where(FinanceSource.id == world.other_source.id))
+    db.commit()
+
+    assert db.scalar(select(func.count()).select_from(LedgerSource)) == 0
+    assert db.get(Ledger, world.ledger.id) is not None
+
+
+def test_an_account_is_shared_into_a_ledger_at_most_once(db, world):
+    _accept(db, _share(world, world.source))
+    _reject(db, _share(world, world.source))
+
+
+def test_a_share_needs_an_existing_ledger_and_account(db, world):
+    _reject(db, _share(world, world.source, ledger_id=uuid.uuid4()))
+    _reject(db, _share(world, world.source, source_id=uuid.uuid4()))
+    _reject(db, _share(world, world.source, shared_by=uuid.uuid4()))
 
 
 def test_deleting_a_batch_removes_its_rows_and_unlinks_transactions(db, world):

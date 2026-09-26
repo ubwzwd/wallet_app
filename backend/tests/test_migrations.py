@@ -22,7 +22,9 @@ from app.models import Base
 from tests.conftest import alembic_config
 
 # Last revision of the chain (§5.7) and the head this project migrated from.
-HEAD_REVISION = "b1f3c2a10d46"
+HEAD_REVISION = "b1f3c2a10d47"
+# The step before accounts moved from ledgers to their owners (§14.62).
+PRE_OWNER_REVISION = "b1f3c2a10d46"
 LEGACY_HEAD = "8a4f4d66d893"
 
 TARGET_TABLES = {
@@ -31,6 +33,7 @@ TARGET_TABLES = {
     "ledger_members",
     "ledger_invites",
     "finance_sources",
+    "ledger_sources",
     "transactions",
     "transaction_events",
     "import_batches",
@@ -249,15 +252,14 @@ def _seed_at_head(engine) -> dict:
         )
         conn.execute(
             text(
-                "INSERT INTO finance_sources (id, ledger_id, name, type, default_currency, "
+                "INSERT INTO finance_sources (id, owner_id, name, type, default_currency, "
                 "opening_balance, archived, archived_at, created_by, updated_by, created_at, "
-                "updated_at) VALUES (:id, :lid, :name, :type, 'SGD', 0, FALSE, NULL, :uid, "
+                "updated_at) VALUES (:id, :uid, :name, :type, 'SGD', 0, FALSE, NULL, :uid, "
                 ":uid, :now, :now)"
             ),
             [
                 {
                     "id": seed["source"],
-                    "lid": seed["ledger"],
                     "name": "Cash",
                     "type": "cash",
                     "uid": seed["user"],
@@ -265,7 +267,6 @@ def _seed_at_head(engine) -> dict:
                 },
                 {
                     "id": seed["source2"],
-                    "lid": seed["ledger"],
                     "name": "Card",
                     "type": "credit",
                     "uid": seed["user"],
@@ -555,10 +556,20 @@ def test_downgrade_base_after_upgrade_head(migrated_db):
 
 @pytest.mark.postgres
 def test_upgrade_with_existing_data(migrated_db):
-    """The backfills of steps 2-6 on a populated database (§8.2, §5.2-§5.6)."""
+    """The backfills of steps 2-7 on a populated database (§8.2, §5.2-§5.7)."""
     _upgrade(migrated_db, LEGACY_HEAD)
     with _engine(migrated_db) as engine:
         ids = _seed_legacy_data(engine)
+    # Stop one step short to remember which ledger each account lived in
+    # before b1f3c2a10d47 moved it to its owner.
+    _upgrade(migrated_db, PRE_OWNER_REVISION)
+    with _engine(migrated_db) as engine, engine.connect() as conn:
+        before = {
+            row.id: row
+            for row in conn.execute(
+                text("SELECT id, ledger_id, created_by FROM finance_sources")
+            ).all()
+        }
     _upgrade(migrated_db)
 
     with _engine(migrated_db) as engine, engine.connect() as conn:
@@ -578,19 +589,13 @@ def test_upgrade_with_existing_data(migrated_db):
         assert by_user[ids["u2"]].base_currency == "SGD"
         assert conn.execute(text("SELECT count(*) FROM ledgers")).scalar_one() == 2
 
-        # every account and transaction now hangs off a ledger, consistently
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM finance_sources WHERE ledger_id IS NULL")
-            ).scalar_one()
-            == 0
-        )
+        # every transaction hangs off the ledger its account is shared into
         assert (
             conn.execute(
                 text(
-                    "SELECT count(*) FROM transactions t JOIN finance_sources s "
-                    "ON s.id = t.source_id WHERE t.ledger_id IS NULL "
-                    "OR t.ledger_id <> s.ledger_id"
+                    "SELECT count(*) FROM transactions t LEFT JOIN ledger_sources ls "
+                    "ON ls.source_id = t.source_id AND ls.ledger_id = t.ledger_id "
+                    "WHERE t.ledger_id IS NULL OR ls.ledger_id IS NULL"
                 )
             ).scalar_one()
             == 0
@@ -599,9 +604,15 @@ def test_upgrade_with_existing_data(migrated_db):
         sources = {
             row.id: row
             for row in conn.execute(
-                text("SELECT id, type, archived, archived_at, ledger_id FROM finance_sources")
+                text(
+                    "SELECT id, type, archived, archived_at, owner_id, created_by "
+                    "FROM finance_sources"
+                )
             ).all()
         }
+        shares = conn.execute(
+            text("SELECT ledger_id, source_id, shared_by, shared_at FROM ledger_sources")
+        ).all()
         assert len(sources) == 4
         # §14.48: four values only, legacy ones rewritten to checking
         assert {s.type for s in sources.values()} <= {"checking", "credit", "cash", "other"}
@@ -616,9 +627,22 @@ def test_upgrade_with_existing_data(migrated_db):
         for key in ("s1", "s3"):
             assert sources[ids[key]].archived is False
             assert sources[ids[key]].archived_at is None
-        # the two users' accounts landed in different ledgers
-        assert sources[ids["s1"]].ledger_id == sources[ids["s2"]].ledger_id
-        assert sources[ids["s1"]].ledger_id != sources[ids["s3"]].ledger_id
+        # §14.62: each account belongs to whoever created it ...
+        assert set(before) == set(sources)
+        for sid, source in sources.items():
+            assert source.owner_id == before[sid].created_by
+        assert sources[ids["s1"]].owner_id == ids["u1"]
+        assert sources[ids["s3"]].owner_id == ids["u2"]
+        # ... and is shared exactly once, into the ledger it used to live in
+        assert sorted(share.source_id for share in shares) == sorted(sources)
+        for share in shares:
+            assert share.ledger_id == before[share.source_id].ledger_id
+            assert share.shared_by == before[share.source_id].created_by
+            assert share.shared_at is not None
+        # the two users' accounts are still shared into different ledgers
+        share_of = {share.source_id: share.ledger_id for share in shares}
+        assert share_of[ids["s1"]] == share_of[ids["s2"]]
+        assert share_of[ids["s1"]] != share_of[ids["s3"]]
 
         # §14.40: nothing to backfill display_name from
         assert (
@@ -828,9 +852,9 @@ def test_transaction_constraints_are_enforced(head_engine):
 
 
 _SOURCE_INSERT = (
-    "INSERT INTO finance_sources (id, ledger_id, name, type, default_currency, "
+    "INSERT INTO finance_sources (id, owner_id, name, type, default_currency, "
     "opening_balance, archived, archived_at, created_by, updated_by, created_at, updated_at) "
-    "VALUES (:id, :lid, 'X', :type, 'SGD', 0, :archived, :archived_at, :uid, :uid, :now, :now)"
+    "VALUES (:id, :uid, 'X', :type, 'SGD', 0, :archived, :archived_at, :uid, :uid, :now, :now)"
 )
 
 
@@ -840,7 +864,6 @@ def test_account_type_and_archived_at_are_enforced(head_engine):
     seed = _seed_at_head(head_engine)
     base = {
         "id": uuid.uuid4(),
-        "lid": seed["ledger"],
         "type": "checking",
         "archived": False,
         "archived_at": None,
@@ -1074,8 +1097,10 @@ def test_legacy_indexes_are_dropped(migrated_db):
         "ix_transactions_ledger_occurred",
         "ix_transactions_ledger_source",
         "ix_transactions_ledger_kind_cat",
-        "ix_finance_sources_ledger_id",
+        "ix_finance_sources_owner_id",
     } <= indexes
+    # §14.62: accounts belong to people, so the ledger index went with the column
+    assert "ix_finance_sources_ledger_id" not in indexes
 
 
 @pytest.mark.postgres
@@ -1140,3 +1165,246 @@ def test_upgrade_head_on_sqlite_drops_legacy_indexes(sqlite_migrated_db):
         assert name not in all_indexes
     assert TARGET_TABLES <= tables
     assert "transaction_tags" not in tables
+
+
+# ---------------------------------------------------------------------------
+# step 7 (b1f3c2a10d47, decision §14.62): accounts belong to their owners.
+# Written once and run on both databases; raw SQL, so ids are bound as the
+# column stores them (native UUID on Postgres, 32 hex characters on SQLite).
+# ---------------------------------------------------------------------------
+
+
+def _bind_id(engine, value: uuid.UUID):
+    return value if engine.dialect.name == "postgresql" else value.hex
+
+
+def _as_uuid(value) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+
+
+def _seed_people_and_ledgers(engine) -> dict:
+    """Two users and three ledgers.
+
+    L1 (u1, oldest) and L2 (u1, one hour later) belong to u1; u2 is a member of
+    L2 and owns L3 (two hours later).
+    """
+    ids = {key: uuid.uuid4() for key in ("u1", "u2", "L1", "L2", "L3")}
+    b = {key: _bind_id(engine, value) for key, value in ids.items()}
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users (id, email, password_hash, base_currency, "
+                "created_at, updated_at) VALUES (:id, :email, 'x', 'SGD', :now, :now)"
+            ),
+            [
+                {"id": b["u1"], "email": "one@example.com", "now": NOW},
+                {"id": b["u2"], "email": "two@example.com", "now": NOW},
+            ],
+        )
+        conn.execute(
+            text(
+                "INSERT INTO ledgers (id, name, base_currency, created_by, created_at, "
+                "updated_at) VALUES (:id, :name, 'SGD', :uid, :at, :at)"
+            ),
+            [
+                {"id": b["L1"], "name": "L1", "uid": b["u1"], "at": NOW},
+                {"id": b["L2"], "name": "L2", "uid": b["u1"], "at": NOW + timedelta(hours=1)},
+                {"id": b["L3"], "name": "L3", "uid": b["u2"], "at": NOW + timedelta(hours=2)},
+            ],
+        )
+        conn.execute(
+            text(
+                "INSERT INTO ledger_members (ledger_id, user_id, role, joined_at) "
+                "VALUES (:lid, :uid, :role, :now)"
+            ),
+            [
+                {"lid": b["L1"], "uid": b["u1"], "role": "owner", "now": NOW},
+                {"lid": b["L2"], "uid": b["u1"], "role": "owner", "now": NOW},
+                {"lid": b["L2"], "uid": b["u2"], "role": "member", "now": NOW},
+                {"lid": b["L3"], "uid": b["u2"], "role": "owner", "now": NOW},
+            ],
+        )
+    return ids
+
+
+def _check_upgrade_moves_sources_to_owners(url: str) -> None:
+    """Upgrade from b1f3c2a10d46 with data: owner = creator, one share each."""
+    _upgrade(url, PRE_OWNER_REVISION)
+    # a: u1's in L1; b: u2 created it in u1's L2; c: archived, u1's in L2
+    placed = {"a": ("L1", "u1", False), "b": ("L2", "u2", False), "c": ("L2", "u1", True)}
+    with _engine(url) as engine:
+        ids = _seed_people_and_ledgers(engine)
+        for key in placed:
+            ids[key] = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO finance_sources (id, ledger_id, name, type, default_currency, "
+                    "opening_balance, archived, archived_at, created_by, updated_by, "
+                    "created_at, updated_at) VALUES (:id, :lid, :name, 'cash', 'SGD', 0, "
+                    ":archived, :archived_at, :uid, :uid, :now, :now)"
+                ),
+                [
+                    {
+                        "id": _bind_id(engine, ids[key]),
+                        "lid": _bind_id(engine, ids[lid]),
+                        "name": key,
+                        "archived": archived,
+                        "archived_at": NOW if archived else None,
+                        "uid": _bind_id(engine, ids[uid]),
+                        "now": NOW,
+                    }
+                    for key, (lid, uid, archived) in placed.items()
+                ],
+            )
+
+    _upgrade(url)
+
+    with _engine(url) as engine, engine.connect() as conn:
+        owners = {
+            _as_uuid(row.id): _as_uuid(row.owner_id)
+            for row in conn.execute(text("SELECT id, owner_id FROM finance_sources")).all()
+        }
+        shares = conn.execute(
+            text("SELECT ledger_id, source_id, shared_by, shared_at FROM ledger_sources")
+        ).all()
+        insp = inspect(engine)
+        columns = {col["name"] for col in insp.get_columns("finance_sources")}
+        indexes = {ix["name"] for ix in insp.get_indexes("finance_sources")}
+        fks = {fk["name"] for fk in insp.get_foreign_keys("finance_sources")}
+
+    assert "ledger_id" not in columns
+    assert "ix_finance_sources_ledger_id" not in indexes
+    assert "ix_finance_sources_owner_id" in indexes
+    assert "fk_finance_sources_ledger_id_ledgers" not in fks
+    assert "fk_finance_sources_owner_id_users" in fks
+    for key, (_lid, uid, _archived) in placed.items():
+        assert owners[ids[key]] == ids[uid]
+    # archived or not, every account is shared exactly once, where it lived
+    assert len(shares) == len(placed)
+    by_source = {_as_uuid(share.source_id): share for share in shares}
+    for key, (lid, uid, _archived) in placed.items():
+        assert _as_uuid(by_source[ids[key]].ledger_id) == ids[lid]
+        assert _as_uuid(by_source[ids[key]].shared_by) == ids[uid]
+        assert by_source[ids[key]].shared_at is not None
+
+
+def _check_downgrade_restores_ledger_id(url: str) -> None:
+    """Downgrading step 7 puts each account back into one ledger (§5.7).
+
+    The earliest share wins; an account shared nowhere goes to the oldest
+    ledger its owner belongs to. Upgrading again re-shares each account into
+    that one ledger.
+    """
+    owner_of = {"a": "u1", "b": "u1", "c": "u2", "d": "u2"}
+    shared = (
+        # a: shared into L2 first, then into L1 -> goes back to L2
+        ("L2", "a", NOW + timedelta(minutes=1)),
+        ("L1", "a", NOW + timedelta(minutes=2)),
+        # d: shared into L3 only, although u2 also belongs to the older L2
+        ("L3", "d", NOW),
+    )
+    # b: u1's, shared nowhere -> u1's oldest ledger, L1
+    # c: u2's, shared nowhere -> u2's oldest ledger, L2 (a member, not the owner)
+    expected = {"a": "L2", "b": "L1", "c": "L2", "d": "L3"}
+
+    _upgrade(url)
+    with _engine(url) as engine:
+        ids = _seed_people_and_ledgers(engine)
+        for key in owner_of:
+            ids[key] = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                text(_SOURCE_INSERT),
+                [
+                    {
+                        "id": _bind_id(engine, ids[key]),
+                        "type": "checking",
+                        "archived": False,
+                        "archived_at": None,
+                        "uid": _bind_id(engine, ids[owner]),
+                        "now": NOW,
+                    }
+                    for key, owner in owner_of.items()
+                ],
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO ledger_sources (ledger_id, source_id, shared_by, shared_at) "
+                    "VALUES (:lid, :sid, :uid, :at)"
+                ),
+                [
+                    {
+                        "lid": _bind_id(engine, ids[lid]),
+                        "sid": _bind_id(engine, ids[sid]),
+                        "uid": _bind_id(engine, ids[owner_of[sid]]),
+                        "at": at,
+                    }
+                    for lid, sid, at in shared
+                ],
+            )
+
+    _downgrade(url, PRE_OWNER_REVISION)
+
+    with _engine(url) as engine, engine.connect() as conn:
+        insp = inspect(engine)
+        tables = set(insp.get_table_names())
+        columns = {col["name"] for col in insp.get_columns("finance_sources")}
+        indexes = {ix["name"] for ix in insp.get_indexes("finance_sources")}
+        fks = {fk["name"]: fk for fk in insp.get_foreign_keys("finance_sources")}
+        restored = {
+            _as_uuid(row.id): (_as_uuid(row.ledger_id), _as_uuid(row.created_by))
+            for row in conn.execute(
+                text("SELECT id, ledger_id, created_by FROM finance_sources")
+            ).all()
+        }
+
+    assert "ledger_sources" not in tables
+    assert "owner_id" not in columns and "ledger_id" in columns
+    assert "ix_finance_sources_ledger_id" in indexes
+    assert "ix_finance_sources_owner_id" not in indexes
+    assert "fk_finance_sources_owner_id_users" not in fks
+    ledger_fk = fks["fk_finance_sources_ledger_id_ledgers"]
+    assert ledger_fk["referred_table"] == "ledgers"
+    assert (ledger_fk.get("options") or {}).get("ondelete") == "CASCADE"
+    assert len(restored) == len(expected)
+    for key, ledger in expected.items():
+        assert restored[ids[key]] == (ids[ledger], ids[owner_of[key]])
+
+    # and back up: each account is shared into exactly the ledger it got
+    _upgrade(url)
+    with _engine(url) as engine, engine.connect() as conn:
+        shares = [
+            (_as_uuid(row.source_id), _as_uuid(row.ledger_id))
+            for row in conn.execute(text("SELECT source_id, ledger_id FROM ledger_sources"))
+        ]
+    assert sorted(shares) == sorted((ids[key], ids[ledger]) for key, ledger in expected.items())
+
+
+@pytest.mark.postgres
+def test_upgrade_moves_sources_to_their_owners(migrated_db):
+    _check_upgrade_moves_sources_to_owners(migrated_db)
+
+
+def test_upgrade_moves_sources_to_their_owners_on_sqlite(sqlite_migrated_db):
+    _check_upgrade_moves_sources_to_owners(sqlite_migrated_db)
+
+
+@pytest.mark.postgres
+def test_downgrade_restores_ledger_id_from_shares(migrated_db):
+    _check_downgrade_restores_ledger_id(migrated_db)
+
+
+def test_downgrade_restores_ledger_id_from_shares_on_sqlite(sqlite_migrated_db):
+    _check_downgrade_restores_ledger_id(sqlite_migrated_db)
+
+
+def test_downgrade_base_after_upgrade_head_on_sqlite(sqlite_migrated_db):
+    """The whole chain goes down again on SQLite too, through step 7's batch."""
+    _upgrade(sqlite_migrated_db)
+    _downgrade(sqlite_migrated_db, "base")
+
+    with _engine(sqlite_migrated_db) as engine:
+        tables = set(inspect(engine).get_table_names())
+
+    assert tables <= {"alembic_version"}

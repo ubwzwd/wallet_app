@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     # Soft limits (decision §2)
     MAX_LEDGERS_PER_USER: int = 10
     MAX_MEMBERS_PER_LEDGER: int = 10
+    # Accounts one person may own, archived ones included (decision §14.62)
+    MAX_SOURCES_PER_USER: int = 50
 
     model_config = SettingsConfigDict(
         env_file=".env",

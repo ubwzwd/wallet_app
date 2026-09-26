@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from app.core.clock import utcnow
+from app.models.ledger_source import LedgerSource
 
 
 def test_source_factory_defaults(db, user_factory, ledger_factory, source_factory):
@@ -10,7 +11,11 @@ def test_source_factory_defaults(db, user_factory, ledger_factory, source_factor
 
     source = source_factory(ledger)
 
-    assert source.ledger_id == ledger.id
+    # owned by the ledger's creator and shared into the ledger (§14.62)
+    assert source.owner_id == owner.id
+    share = db.get(LedgerSource, (ledger.id, source.id))
+    assert share is not None
+    assert share.shared_by == owner.id
     assert source.type == "checking"
     assert source.default_currency == "CNY"
     assert source.opening_balance == Decimal("0")
@@ -39,6 +44,8 @@ def test_source_factory_custom_created_by(db, user_factory, ledger_factory, sour
 
     assert source.created_by == member.id
     assert source.updated_by == member.id
+    assert source.owner_id == member.id
+    assert db.get(LedgerSource, (ledger.id, source.id)).shared_by == member.id
 
 
 def test_transaction_factory_expense_defaults(
