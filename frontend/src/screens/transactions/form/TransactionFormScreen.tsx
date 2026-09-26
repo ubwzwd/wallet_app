@@ -15,7 +15,7 @@ import { KINDS } from '@/domain/kinds';
 import { safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
 import { todayLocalIso } from '@/i18n/format';
-import { useBack } from '@/navigation';
+import { useBack, useBackOverride } from '@/navigation';
 import { useCreateTransaction, useCreateTransfer, useTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { toast } from '@/ui';
@@ -213,6 +213,9 @@ export default function TransactionFormScreen(): React.JSX.Element {
       goBack();
     });
   }, [goBack, leave]);
+  // The narrow top bar's ‹ leaves the way 取消 and the wide breadcrumb do: asked once,
+  // `?next=` first (§14.65 h).
+  useBackOverride(onCancel);
 
   const switchToIncome = React.useCallback((): void => {
     onChangeKind('income');

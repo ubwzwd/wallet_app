@@ -5,6 +5,9 @@
  * sub-page top bar (`top-bar-back`), mounted here exactly as the shell mounts it. Either
  * way a cold open goes to the parent of the table in §14.64 f, and a form with unsaved
  * changes asks first — and staying keeps what was typed.
+ *
+ * Decision §14.65 h: the ‹ and the breadcrumb are one exit — the form's own `?next=` wins at
+ * both widths — and the edit screens keep that exit while their record is loading or gone.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -16,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
-import { SubPageTopBar, TopBarProvider } from '@/navigation';
+import { LeaveGuardProvider, SubPageTopBar, TopBarProvider } from '@/navigation';
 import { AuthProvider, LedgerProvider } from '@/store';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -29,6 +32,7 @@ import {
   makeTransaction,
   makeTransferPair,
   makeUser,
+  apiUrl,
   mockApi,
   mockGet,
   type MockApi,
@@ -64,10 +68,13 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
       <ThemeProvider initialPref="light">
         <AuthProvider queryClient={queryClient}>
           <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
-            <TopBarProvider>
-              <ShellBar />
-              {children}
-            </TopBarProvider>
+            {/* As `AppShell` mounts them: the bar reads the page's back override. */}
+            <LeaveGuardProvider>
+              <TopBarProvider>
+                <ShellBar />
+                {children}
+              </TopBarProvider>
+            </LeaveGuardProvider>
           </LedgerProvider>
           <ToastHost />
           <ConfirmHost
@@ -208,6 +215,63 @@ describe('wide', () => {
   });
 });
 
+describe('wide, ?next= and the states before the form', () => {
+  beforeEach(() => setWide(true));
+
+  test('编辑: the breadcrumb honours ?next= before the detail', async () => {
+    const router = renderRouter(ROUTES, {
+      initialUrl: `${L}/transactions/${TX_ID}/edit?next=${encodeURIComponent(L)}`,
+      wrapper: Wrapper,
+    });
+
+    await waitFor(() => expect(screen.getByTestId('tx-merchant').props.value).toBe('全家便利店'));
+    fireEvent.press(screen.getByTestId('tx-form-header-back'));
+    await waitFor(() => expect(router.getPathname()).toBe(L));
+  });
+
+  test('an entry that cannot be read still has its breadcrumb, leading to the detail', async () => {
+    api.mock.onGet(apiUrl(`/ledgers/${LEDGER_ID}/transactions/${TX_ID}`)).reply(404, {
+      detail: 'gone',
+    });
+    const router = renderRouter(ROUTES, {
+      initialUrl: `${L}/transactions/${TX_ID}/edit`,
+      wrapper: Wrapper,
+    });
+
+    expect(await screen.findByTestId('tx-edit-error')).toBeTruthy();
+    expect(screen.getByText('交易 · 编辑')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('tx-form-header-back'));
+    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+  });
+
+  test('a pair that cannot be read still has its breadcrumb, honouring ?next=', async () => {
+    api.mock
+      .onGet(apiUrl(`/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`))
+      .reply(404, { detail: 'gone' });
+    const router = renderRouter(ROUTES, {
+      initialUrl: `${L}/transfers/${PAIR_ID}/edit?next=${encodeURIComponent(`${L}/transactions`)}`,
+      wrapper: Wrapper,
+    });
+
+    expect(await screen.findByTestId('transfer-edit-error')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('tx-form-header-back'));
+    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions`));
+  });
+
+  test('while the entry is still loading, the breadcrumb is already there', async () => {
+    // A reply that never comes: the screen stays on its skeleton.
+    api.mock
+      .onGet(apiUrl(`/ledgers/${LEDGER_ID}/transactions/${TX_ID}`))
+      .reply(() => new Promise(() => undefined));
+    renderRouter(ROUTES, { initialUrl: `${L}/transactions/${TX_ID}/edit`, wrapper: Wrapper });
+
+    expect(await screen.findByTestId('tx-edit-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('tx-form-header-back')).toBeTruthy();
+    expect(screen.getByText('交易 · 编辑')).toBeTruthy();
+  });
+});
+
 describe('narrow', () => {
   beforeEach(() => setWide(false));
 
@@ -263,6 +327,47 @@ describe('narrow', () => {
     await act(async () => {
       fireEvent.press(await screen.findByTestId('confirm-accept'));
     });
+    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
+  });
+
+  test('a cold 记一笔 with ?next=: the ‹ goes to next, as the breadcrumb does', async () => {
+    const router = renderRouter(ROUTES, {
+      initialUrl: `${NEW_URL}?next=${encodeURIComponent(L)}`,
+      wrapper: Wrapper,
+    });
+
+    fireEvent.press(await screen.findByTestId('top-bar-back'));
+    await waitFor(() => expect(router.getPathname()).toBe(L));
+  });
+
+  test('a dirty 编辑 with ?next=: the ‹ asks once, then goes to next', async () => {
+    const router = renderRouter(ROUTES, {
+      initialUrl: `${L}/transfers/${PAIR_ID}/edit?next=${encodeURIComponent(L)}`,
+      wrapper: Wrapper,
+    });
+
+    await waitFor(() => expect(screen.getByTestId('transfer-note').props.value).toBe('还 8 月账单'));
+    fireEvent.changeText(screen.getByTestId('transfer-note'), '改了');
+    fireEvent.press(screen.getByTestId('top-bar-back'));
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId('confirm-accept'));
+    });
+    await waitFor(() => expect(router.getPathname()).toBe(L));
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+  });
+
+  test('an entry that cannot be read: the ‹ is titled and leads to the detail', async () => {
+    api.mock.onGet(apiUrl(`/ledgers/${LEDGER_ID}/transactions/${TX_ID}`)).reply(404, {
+      detail: 'gone',
+    });
+    const router = renderRouter(ROUTES, {
+      initialUrl: `${L}/transactions/${TX_ID}/edit`,
+      wrapper: Wrapper,
+    });
+
+    expect(await screen.findByTestId('tx-edit-error')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('编辑'));
+    fireEvent.press(screen.getByTestId('top-bar-back'));
     await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
   });
 });

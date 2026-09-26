@@ -15,6 +15,8 @@
  * personal-settings page are the two ways in. Neither is "reports" or "members" (§14.52
  * A21): statistics live on the home page, members inside the ledger's settings. Logging out
  * lives on the personal-settings page, not in this chrome.
+ *
+ * Every row here that changes page asks a form's leave guard first (§14.65 g).
  */
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -30,6 +32,7 @@ import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { Avatar, Button, Icon, type IconName, Text } from '@/ui';
 
 import { isActivePath } from './isActivePath';
+import { useGuardedNavigate } from './leaveGuard';
 import { LedgerSwitcherPopover } from './LedgerSwitcher';
 import { LedgerCard, LedgerCardPlaceholder } from './SidebarCards';
 import { useChromeLedger } from './useChromeLedger';
@@ -138,6 +141,7 @@ export function Sidebar(): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
+  const guarded = useGuardedNavigate();
   const pathname = usePathname();
   const { user } = useAuth();
   const ledgerContext = useOptionalLedgerContext();
@@ -156,10 +160,14 @@ export function Sidebar(): React.JSX.Element {
 
   const pickLedger = (id: Uuid): void => {
     setSwitcherOpen(false);
+    // The ledger already open is no page change, so nothing to ask about.
+    if (ledgerContext?.ledgerId === id) return;
     // Inside a ledger, switching keeps the page you are on (04 §2.2). Outside one there is
     // no page to keep, so picking a ledger opens it.
-    if (ledgerContext) ledgerContext.switchTo(id);
-    else router.navigate(routes.l(id).home());
+    guarded(() => {
+      if (ledgerContext) ledgerContext.switchTo(id);
+      else router.navigate(routes.l(id).home());
+    });
   };
 
   const me = userLabel(user);
@@ -178,7 +186,7 @@ export function Sidebar(): React.JSX.Element {
         <LedgerCard
           ledger={ledger}
           onOpenSwitcher={() => setSwitcherOpen(true)}
-          onOpenSettings={() => router.navigate(routes.l(ledger.id).settings())}
+          onOpenSettings={() => guarded(() => router.navigate(routes.l(ledger.id).settings()))}
         />
         <LedgerSwitcherPopover
           open={switcherOpen}
@@ -203,7 +211,7 @@ export function Sidebar(): React.JSX.Element {
             key={item.key}
             item={item}
             active={!onLedgerPages && isActivePath(pathname, item.href, item.href === homeHref)}
-            onPress={() => router.navigate(item.href)}
+            onPress={() => guarded(() => router.navigate(item.href))}
           />
         ))}
       </View>
@@ -215,7 +223,7 @@ export function Sidebar(): React.JSX.Element {
           icon="plus"
           size="lg"
           fullWidth
-          onPress={() => router.navigate(routes.l(ledgerId).transactionNew())}
+          onPress={() => guarded(() => router.navigate(routes.l(ledgerId).transactionNew()))}
           testID="sidebar-add"
         />
       )}
@@ -223,7 +231,7 @@ export function Sidebar(): React.JSX.Element {
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={me}
-        onPress={() => router.navigate(routes.settings())}
+        onPress={() => guarded(() => router.navigate(routes.settings()))}
         testID="sidebar-user"
         style={({ pressed }) => [
           styles.userRow,

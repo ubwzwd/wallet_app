@@ -28,6 +28,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { Avatar, BACK_BUTTON_SIZE, BackButton, Icon, Text } from '@/ui';
 import { useAuth } from '@/store/AuthContext';
 
+import { useGuardedNavigate, useRunBackOverride } from './leaveGuard';
 import { userLabel } from './Sidebar';
 import { useBack } from './useBack';
 import { useChromeLedger } from './useChromeLedger';
@@ -138,6 +139,7 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
+  const guarded = useGuardedNavigate();
   const title = useTopBarTitle();
   const { ledger } = useChromeLedger();
   const { user } = useAuth();
@@ -170,7 +172,7 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={t('common:nav.me')}
-          onPress={() => router.navigate(routes.settings())}
+          onPress={() => guarded(() => router.navigate(routes.settings()))}
           testID="top-bar-me"
           style={({ pressed }) => [styles.me, pressed ? { opacity: 0.7 } : null]}
         >
@@ -189,16 +191,22 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
 
 /**
  * The sub-page form: round ‹, centred title, and a spacer as wide as the button so the
- * title lands dead centre. The button goes where `useBack` says; on `/ledgers/new` or
- * `/ledgers/join` while the ledger it would return to is still loading, the slot is held
- * empty rather than letting the bar change shape a frame later.
+ * title lands dead centre. The button goes where `useBack` says — unless the page has a
+ * way out of its own (`useBackOverride`: a form's `?next=`, §14.65 h), in which case it
+ * leaves exactly as the page's wide breadcrumb does. On `/ledgers/new` or `/ledgers/join`
+ * while the ledger it would return to is still loading, the slot is held empty rather than
+ * letting the bar change shape a frame later.
  */
 export function SubPageTopBar(): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
   const title = useTopBarTitle();
   const back = useBack();
+  const runBackOverride = useRunBackOverride();
   const top = useTopInset();
+  const onBack = (): void => {
+    if (!runBackOverride()) back.goBack();
+  };
 
   return (
     <View
@@ -206,7 +214,7 @@ export function SubPageTopBar(): React.JSX.Element {
       style={[styles.subBar, { paddingTop: top + space['2'], backgroundColor: colors['bg.canvas'] }]}
     >
       {back.show ? (
-        <BackButton label={t('common:button.back')} onPress={back.goBack} testID="top-bar-back" />
+        <BackButton label={t('common:button.back')} onPress={onBack} testID="top-bar-back" />
       ) : (
         <View style={styles.spacer} />
       )}

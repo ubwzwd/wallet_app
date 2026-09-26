@@ -17,7 +17,7 @@ import type { IsoDateTime, TransferPair } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useBack } from '@/navigation';
+import { useBack, useBackOverride } from '@/navigation';
 import { qk, useTransfer, useUpdateTransfer } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { EmptyState, Page, Skeleton, toast } from '@/ui';
@@ -29,6 +29,7 @@ import {
   findConflicts,
   type FormConflict,
 } from './TransactionFormScreen';
+import { EditStateHeader } from './EditStateHeader';
 import type { TxFormValues } from './schemas';
 import { useLeaveGuard } from './useLeaveGuard';
 import { toTransferUpdate, useTransactionForm } from './useTransactionForm';
@@ -155,12 +156,17 @@ export default function EditTransferScreen(): React.JSX.Element {
       leaveForm();
     });
   }, [leave, leaveForm]);
+  // The narrow top bar's ‹ leaves the way 取消 and the wide breadcrumb do: asked once,
+  // `?next=` first (§14.65 h) — in every state of the screen, the error one included.
+  useBackOverride(onCancel);
+  const title = t('transaction:form.page_title_edit');
 
   if (query.isError) {
     // The pair may be gone (someone deleted it, this session cannot read the ledger) —
     // a skeleton that never resolves would leave nothing to press.
     return (
       <Page testID="transfer-edit">
+        <EditStateHeader title={title} onBack={onCancel} />
         <EmptyState
           testID="transfer-edit-error"
           icon="alert-triangle"
@@ -181,6 +187,7 @@ export default function EditTransferScreen(): React.JSX.Element {
   if (query.isPending || !pair) {
     return (
       <Page testID="transfer-edit">
+        <EditStateHeader title={title} onBack={onCancel} />
         <Skeleton variant="table" rows={5} testID="transfer-edit-skeleton" />
       </Page>
     );
@@ -201,7 +208,7 @@ export default function EditTransferScreen(): React.JSX.Element {
       onSubmit={onSubmit}
       onCancel={onCancel}
       submitLabel={t('common:button.save')}
-      pageTitle={t('transaction:form.page_title_edit')}
+      pageTitle={title}
       lockShape
       testID="transfer-edit"
     />

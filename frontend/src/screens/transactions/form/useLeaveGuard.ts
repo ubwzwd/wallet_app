@@ -1,15 +1,24 @@
 /**
  * "别把填了一半的表单弄丢" (04 §4.6.5 离开确认).
  *
- * Two exits are covered: a route change inside the app (the navigator's `beforeRemove`
- * event, which is preventable and re-dispatchable once the user has answered), and the
- * browser closing/reloading the tab (`beforeunload`, guarded by `typeof window` rather
- * than by a platform check). Buttons that leave on purpose call `confirmLeave()` themselves.
+ * Three exits are covered:
+ *  - a route change that removes the form (the navigator's `beforeRemove` event, which is
+ *    preventable and re-dispatchable once the user has answered);
+ *  - every page change the shell makes — sidebar, tab bar, switcher, sheets, the top bar's
+ *    ‹ (decision §14.65 g). Those mostly *unmount* the form without removing its route (the
+ *    signed-in groups are `Slot`s), so `beforeRemove` never hears of them; instead, while
+ *    dirty, the guard registers with the shell (`useRegisterLeaveGuard`), which asks it
+ *    before navigating and then lets the navigation through without a second question;
+ *  - the browser closing/reloading the tab (`beforeunload`, guarded by `typeof window`
+ *    rather than by a platform check).
+ *
+ * Buttons that leave on purpose call `confirmLeave()` themselves.
  */
 import React from 'react';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useNavigationContainerRef } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
+import { type LeaveGuardHandle, useRegisterLeaveGuard } from '@/navigation';
 import { confirm } from '@/ui';
 
 /** The slice of the navigation object this hook needs; expo-router's type is wider. */
@@ -52,7 +61,31 @@ export function useLeaveGuard(dirty: boolean): LeaveGuard {
     });
   }, [dirty, t]);
 
-  // In-app navigation.
+  // The shell's exits: asked first, then let through once (the answer was "leave").
+  //
+  // expo-router queues a navigation and dispatches it on its next render, so the bypass has
+  // to outlive `go()`. It is stood back down on the container's next state report: that
+  // comes after the dispatch, and so after `beforeRemove` if the form's route is removed at
+  // all — and a navigation that leaves the form mounted (the same route with new params)
+  // does not leave a free pass behind for the next exit.
+  const container = useNavigationContainerRef();
+  const handle = React.useMemo<LeaveGuardHandle>(
+    () => ({
+      confirm: confirmLeave,
+      pass: (go) => {
+        bypass.current = true;
+        const off = container.addListener('state', () => {
+          off();
+          bypass.current = false;
+        });
+        go();
+      },
+    }),
+    [confirmLeave, container],
+  );
+  useRegisterLeaveGuard(dirty ? handle : null);
+
+  // In-app navigation that removes the form's route.
   React.useEffect(() => {
     if (!dirty) return;
     let unsubscribe: (() => void) | undefined;

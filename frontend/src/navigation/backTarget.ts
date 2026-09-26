@@ -42,10 +42,10 @@ export interface BackTargetOptions {
  * `/l/`, derived from the route builder rather than spelled out. Slicing on it only picks
  * the candidate ledger id; every match below still goes through `routes.l(id)`.
  */
-const LEDGER_PREFIX: string = routes.l('').home();
+export const LEDGER_PREFIX: string = routes.l('').home();
 
 /** The path alone: no query string, no trailing slash. */
-function bare(pathname: string): string {
+export function barePath(pathname: string): string {
   const path = pathname.split('?')[0].split('#')[0];
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
 }
@@ -91,7 +91,7 @@ function inLedger(path: string, wide: boolean): BackTarget | null {
 }
 
 export function backTargetFor(pathname: string, opts: BackTargetOptions): BackTarget | null {
-  const path = bare(pathname);
+  const path = barePath(pathname);
 
   if (path === routes.settings()) {
     return opts.hasLedgers ? null : { href: routes.ledgers(), parentKey: 'ledgers' };

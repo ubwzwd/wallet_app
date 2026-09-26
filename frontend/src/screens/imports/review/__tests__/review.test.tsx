@@ -441,8 +441,10 @@ test('the wide header names the step, counts the batch and leads back to the upl
   );
   const router = renderReview();
 
-  // 屏幕稿 03: 「逐行确认」 + 「N 行 · N 行待归类 · N 行已跳过」 on the same baseline.
-  expect(await screen.findByTestId('import-batch-header-title')).toHaveTextContent('逐行确认');
+  // 屏幕稿 03: 「逐行确认」 + 「N 行 · N 行待归类 · N 行已跳过」 on the same baseline. (The
+  // loading state wears a header of the same id, so wait for the batch's own numbers.)
+  expect(await screen.findByTestId('import-batch-summary')).toBeTruthy();
+  expect(screen.getByTestId('import-batch-header-title')).toHaveTextContent('逐行确认');
   const stats = String(screen.getByTestId('import-batch-summary').props.children);
   expect(stats).toContain('3 行');
   expect(stats).toContain('1 行待归类');
@@ -451,6 +453,36 @@ test('the wide header names the step, counts the batch and leads back to the upl
   // 「换个文件」 is step one of the flow again (04 §4.10).
   fireEvent.press(screen.getByTestId('import-batch-change-file'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
+});
+
+test('a batch that cannot be read still has the wide way back, to the history', async () => {
+  // Undone since the link was shared: the batch is gone (decision §14.22).
+  mockGet('/me', makeUser({ base_currency: 'CNY' }));
+  mockGet('/categories', makeCategoryTree());
+  mockGet('/rates/currencies', makeCurrencyList());
+  mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE], total: 1 });
+  api.mock.onGet(apiUrl(BATCH_PATH)).reply(404, { detail: 'gone' });
+  mockGet(ROWS_PATH, { items: [], total: 0 });
+  const router = renderReview();
+
+  expect(await screen.findByTestId('import-batch-error')).toBeTruthy();
+  expect(screen.getByText('导入 · 逐行确认')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('import-batch-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+});
+
+test('while the batch is loading, the wide way back is already there', async () => {
+  mockGet('/me', makeUser({ base_currency: 'CNY' }));
+  mockGet('/categories', makeCategoryTree());
+  mockGet('/rates/currencies', makeCurrencyList());
+  mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE], total: 1 });
+  // A reply that never comes: the screen stays on its skeleton.
+  api.mock.onGet(apiUrl(BATCH_PATH)).reply(() => new Promise(() => undefined));
+  mockGet(ROWS_PATH, { items: [], total: 0 });
+  renderReview();
+
+  expect(await screen.findByTestId('import-batch-skeleton')).toBeTruthy();
+  expect(screen.getByTestId('import-batch-header-back')).toBeTruthy();
 });
 
 test('「放弃本次导入」 confirms once, deletes the draft and leaves for the history', async () => {
