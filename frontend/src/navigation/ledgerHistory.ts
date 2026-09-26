@@ -1,10 +1,10 @@
 /**
  * Keeps a ledger's inner history across a trip out of it, so a back step from `/ledgers*`
- * or `/settings` lands on the very page the user left (decision §14.64 f: "有应用内的上一页
+ * lands on the very page the user left (decision §14.64 f: "有应用内的上一页
  * 就退一步").
  *
  * Why this is needed: the `(app)` group is a `Slot`, which renders only its focused route.
- * Leaving `/l/:id/imports` for `/ledgers` unmounts the `/l/:id` route's own navigator, and
+ * Leaving `/l/:id/imports` for `/ledgers/new` unmounts the `/l/:id` route's own navigator, and
  * React Navigation drops an unmounted navigator's state. A plain `router.back()` then
  * re-creates the ledger at its first page — `/l/:id` instead of `/l/:id/imports` — while the
  * browser's own back button (which restores the whole state it recorded) gets it right.
@@ -24,13 +24,14 @@ import {
   type PartialState,
 } from '@react-navigation/native';
 
-type InnerState = NavigationState | PartialState<NavigationState>;
+/** A navigator's state as the container reports it: complete, or partial (not yet mounted). */
+type AnyState = NavigationState | PartialState<NavigationState>;
 
 /** Route key → the inner state it last had; capped, oldest first out. */
-const saved = new Map<string, InnerState>();
+const saved = new Map<string, AnyState>();
 const MAX_SAVED = 20;
 
-function remember(key: string, state: InnerState): void {
+function remember(key: string, state: AnyState): void {
   saved.delete(key);
   saved.set(key, state);
   if (saved.size > MAX_SAVED) {
@@ -49,12 +50,10 @@ export function resetLedgerHistory(): void {
   saved.clear();
 }
 
-type AnyState = NavigationState | PartialState<NavigationState>;
-
 /** Every route on the tree that carries a nested navigator's state, remembered by key. */
 function rememberAll(state: AnyState | undefined): void {
   for (const route of state?.routes ?? []) {
-    const inner = route.state as InnerState | undefined;
+    const inner = route.state as AnyState | undefined;
     if (inner === undefined || route.key === undefined) continue;
     remember(route.key, inner);
     rememberAll(inner);
