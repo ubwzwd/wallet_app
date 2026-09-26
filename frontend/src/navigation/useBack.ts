@@ -6,6 +6,9 @@
  * reload) it goes to the page's fixed parent from `backTargetFor`. Pages with a return
  * address of their own (the new-transaction form's `?next=`) keep using it and only fall
  * back to this table.
+ *
+ * `goBack` is one of the shell's exits, so it asks a registered leave guard first
+ * (`useGuardedNavigate`, §14.65 g).
  */
 import React from 'react';
 import { usePathname, useRouter } from 'expo-router';
@@ -16,6 +19,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { type BackParentKey, backTargetFor } from './backTarget';
 import { useChromeLedger, useHasNoLedgers } from './useChromeLedger';
 import { stepBackRestoringLedger } from './ledgerHistory';
+import { useGuardedNavigate } from './leaveGuard';
 
 export interface BackControl {
   /** Whether this page is a sub-page, i.e. whether a back button belongs on it. */
@@ -49,14 +53,17 @@ export function useBack(): BackControl {
     hasLedgers: !noLedgers,
   });
   const href = target?.href ?? null;
+  const guarded = useGuardedNavigate();
 
   const goBack = React.useCallback((): void => {
-    if (router.canGoBack()) {
-      // Crossing back into a ledger from `/ledgers*` has to restore the ledger's own
-      // history, which its unmounted navigator lost (see ledgerHistory.ts).
-      if (!stepBackRestoringLedger()) router.back();
-    } else if (href !== null) router.replace(href);
-  }, [href, router]);
+    guarded(() => {
+      if (router.canGoBack()) {
+        // Crossing back into a ledger from `/ledgers*` has to restore the ledger's own
+        // history, which its unmounted navigator lost (see ledgerHistory.ts).
+        if (!stepBackRestoringLedger()) router.back();
+      } else if (href !== null) router.replace(href);
+    });
+  }, [guarded, href, router]);
 
   return {
     show: target !== null,

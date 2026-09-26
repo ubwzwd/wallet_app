@@ -43,6 +43,7 @@ import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, EmptyState, Page, Skeleton, Switch, confirm, toast } from '@/ui';
+import { useLeaveGuard } from '@/screens/transactions/form/useLeaveGuard';
 
 import { FormDialog } from './FormDialog';
 import SourcesScreen from './SourcesScreen';
@@ -114,7 +115,7 @@ export default function SourceFormScreen(): React.JSX.Element {
     setValue,
     reset,
     watch,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<SourceFormValues>({
     resolver: zodResolver(sourceFormSchema),
     defaultValues: {
@@ -206,6 +207,22 @@ export default function SourceFormScreen(): React.JSX.Element {
     [ledgerId, router],
   );
 
+  // Half-typed changes are asked about on every way out (04 §4.6.5, decision §14.65 g):
+  // 取消 and × here, the shell's ‹ and chrome through the guard's registration.
+  const busy = create.isPending || update.isPending;
+  const leave = useLeaveGuard(isDirty && !busy);
+  const onCancel = React.useCallback((): void => {
+    void leave.confirmLeave().then((ok) => {
+      if (!ok) return;
+      leave.allowLeave();
+      goBack();
+    });
+  }, [goBack, leave]);
+  const leaveSaved = React.useCallback((): void => {
+    leave.allowLeave();
+    goBack();
+  }, [goBack, leave]);
+
   const onSubmit = React.useCallback(
     async (values: SourceFormValues): Promise<void> => {
       const stored = storedValue(values.opening_balance, values.type);
@@ -221,7 +238,7 @@ export default function SourceFormScreen(): React.JSX.Element {
           {
             onSuccess: (source) => {
               toast.success(t('source:form.created_toast', { name: source.name }));
-              goBack();
+              leaveSaved();
             },
             onError: (e) => toast.error(errorMessage(t, e)),
           },
@@ -254,7 +271,7 @@ export default function SourceFormScreen(): React.JSX.Element {
       update.mutate(body, {
         onSuccess: (source) => {
           toast.success(t('source:form.saved_toast', { name: source.name }));
-          goBack();
+          leaveSaved();
         },
         onError: (e) => {
           // A 409 `stale_update` is the global handler's business (04 §3.8): it has already
@@ -264,11 +281,10 @@ export default function SourceFormScreen(): React.JSX.Element {
         },
       });
     },
-    [baseline, create, goBack, isEdit, netWorthPreview, t, update],
+    [baseline, create, isEdit, leaveSaved, netWorthPreview, t, update],
   );
 
   const submit = handleSubmit((values) => void onSubmit(values));
-  const busy = create.isPending || update.isPending;
   const title = isEdit ? t('source:form.edit_title') : t('source:form.new_title');
   // 04 §1.4: the narrow layout's top bar carries the title, so the page does not repeat it.
   useTopBar(title);
@@ -331,7 +347,7 @@ export default function SourceFormScreen(): React.JSX.Element {
         testID="source-cancel"
         label={t('common:button.cancel')}
         variant="soft"
-        onPress={goBack}
+        onPress={onCancel}
         disabled={busy}
         style={wide ? undefined : { flex: 1 }}
       />
@@ -365,7 +381,7 @@ export default function SourceFormScreen(): React.JSX.Element {
         testID="source-form"
         title={title}
         closeLabel={t('source:form.close_label')}
-        onClose={goBack}
+        onClose={onCancel}
         actions={actions}
         behind={<SourcesScreen />}
       >

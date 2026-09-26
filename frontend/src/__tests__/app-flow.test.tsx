@@ -61,7 +61,7 @@ import EditTransferRoute from '../../app/(app)/l/[ledgerId]/transfers/[pairId]/e
 import JoinLedgerRoute from '../../app/(app)/ledgers/join';
 import NewLedgerRoute from '../../app/(app)/ledgers/new';
 
-import { clearAuthToken } from '@/api/client';
+import { clearAuthToken, setAuthToken } from '@/api/client';
 import type { ImportRow, Transaction, TransactionListResponse } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { resetLedgerGone } from '@/navigation';
@@ -535,4 +535,62 @@ test('the switcher is the way to new / join / 账本设置, and /ledgers only la
   act(() => expoRouter.navigate('/ledgers'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
   expect(screen.queryByTestId('ledgers-screen')).toBeNull();
+});
+
+test('a half-filled 记一笔 has no tab bar on a phone, and every way out asks first (§14.65 f / g)', async () => {
+  // Signed in already: this walk is about the form and the chrome around it.
+  await setAuthToken(FRESH_TOKEN);
+  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
+
+  // ── ＋ opens the form: the ‹ bar stays, the tab bar goes (屏幕稿 04 at 375) ──────
+  fireEvent.press(screen.getByTestId('tab-add'));
+  expect(await screen.findByTestId('tx-new')).toBeTruthy();
+  expect(screen.getByTestId('top-bar-back')).toBeTruthy();
+  expect(screen.queryByTestId('bottom-tab-bar')).toBeNull();
+
+  // ── half-filled, the ‹ asks; staying keeps the amount ───────────────────────────
+  fireEvent.changeText(screen.getByTestId('tx-amount'), '38');
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('confirm-cancel'));
+  });
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`);
+  expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
+
+  // ── leaving is asked once, and lands where the form was opened from ─────────────
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  await act(async () => {
+    fireEvent.press(await screen.findByTestId('confirm-accept'));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+  expect(await screen.findByTestId('bottom-tab-bar')).toBeTruthy();
+});
+
+test('a half-filled 记一笔 on a wide screen: the sidebar asks before it leaves (§14.65 g)', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
+  await setAuthToken(FRESH_TOKEN);
+  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/transactions/new` });
+
+  fireEvent.changeText(await screen.findByTestId('tx-amount'), '38');
+  fireEvent.press(screen.getByTestId('sidebar-transactions'));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('confirm-cancel'));
+  });
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`);
+  expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
+
+  fireEvent.press(screen.getByTestId('sidebar-transactions'));
+  await act(async () => {
+    fireEvent.press(await screen.findByTestId('confirm-accept'));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
 });

@@ -11,6 +11,10 @@
  * Decision §14.64 b: the bar is on every page of the shell, not only inside a ledger. Outside
  * one it aims at the ledger the chrome names (`useChromeLedger`); 「我的」 is lit on
  * `/settings`, and nothing is lit on `/ledgers*`, which none of the five slots leads to.
+ *
+ * Every slot, sheet row and kind that changes page asks a form's leave guard first
+ * (§14.65 g). The bar itself is not drawn on the form pages (§14.65 f), but a wide window
+ * narrowed over a half-filled form must not open an unguarded exit either.
  */
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -27,6 +31,7 @@ import { useAuth } from '@/store/AuthContext';
 import { Icon, type IconName, KIND_ICON, Sheet, Text } from '@/ui';
 
 import { isActivePath } from './isActivePath';
+import { useGuardedNavigate } from './leaveGuard';
 import { useChromeLedger } from './useChromeLedger';
 
 /**
@@ -78,6 +83,7 @@ function Tab({
 function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  const guarded = useGuardedNavigate();
   const { logout } = useAuth();
   // Outside a ledger this is the ledger the chrome names — the one the other tabs open.
   const { ledgerId } = useChromeLedger();
@@ -124,7 +130,7 @@ function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.J
           accessibilityRole="button"
           onPress={() => {
             onClose();
-            row.run();
+            guarded(row.run);
           }}
           testID={`me-sheet-${row.key}`}
           style={styles.sheetRow}
@@ -180,6 +186,7 @@ export function BottomTabBar(): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
+  const guarded = useGuardedNavigate();
   const pathname = usePathname();
   const { ledgerId } = useChromeLedger();
   const bottom = React.useContext(SafeAreaInsetsContext)?.bottom ?? 0;
@@ -216,7 +223,7 @@ export function BottomTabBar(): React.JSX.Element {
     !onLedgerPages && isActivePath(pathname, spec.href, spec.exact);
 
   const openAdd = (kind: TxKind): void =>
-    router.navigate(l ? l.transactionNew({ kind }) : routes.ledgers());
+    guarded(() => router.navigate(l ? l.transactionNew({ kind }) : routes.ledgers()));
 
   return (
     <>
@@ -237,7 +244,7 @@ export function BottomTabBar(): React.JSX.Element {
             key={spec.key}
             spec={spec}
             active={isActive(spec)}
-            onPress={() => router.navigate(spec.href)}
+            onPress={() => guarded(() => router.navigate(spec.href))}
           />
         ))}
 
@@ -271,7 +278,7 @@ export function BottomTabBar(): React.JSX.Element {
             key={spec.key}
             spec={spec}
             active={isActive(spec)}
-            onPress={() => router.navigate(spec.href)}
+            onPress={() => guarded(() => router.navigate(spec.href))}
           />
         ))}
 

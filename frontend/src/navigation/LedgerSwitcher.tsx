@@ -12,6 +12,9 @@
  * beneath, and a tick on the current one; then "create a ledger", "join a ledger" and —
  * last — the current ledger's settings (§14.65 a; outside a ledger, the one the chrome
  * names). There is no ledger-list page to point at any more: this list is that page.
+ *
+ * Every row changes page, so every row asks a form's leave guard first (§14.65 g); the
+ * wide panel's ledger rows go through the sidebar's `onPick`, which asks there.
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -25,6 +28,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { Avatar, Divider, Icon, type IconName, Popover, Sheet, Text } from '@/ui';
 
+import { useGuardedNavigate } from './leaveGuard';
 import { useChromeLedger } from './useChromeLedger';
 
 export interface LedgerSwitcherProps {
@@ -165,6 +169,7 @@ function SwitcherRows({
 export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  const guarded = useGuardedNavigate();
   const ledgerContext = useOptionalLedgerContext();
   const { ledgerId, ledgers } = useChromeLedger();
 
@@ -182,12 +187,16 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
         currentId={ledgerId}
         onPick={(id) => {
           onClose();
-          if (ledgerContext) ledgerContext.switchTo(id);
-          else router.navigate(routes.l(id).home());
+          // The ledger already open is no page change, so nothing to ask about.
+          if (ledgerContext?.ledgerId === id) return;
+          guarded(() => {
+            if (ledgerContext) ledgerContext.switchTo(id);
+            else router.navigate(routes.l(id).home());
+          });
         }}
         onNavigate={(href) => {
           onClose();
-          router.navigate(href);
+          guarded(() => router.navigate(href));
         }}
       />
     </Sheet>
@@ -219,6 +228,7 @@ export function LedgerSwitcherPopover({
 }: LedgerSwitcherPopoverProps): React.JSX.Element | null {
   const { t } = useTranslation();
   const router = useRouter();
+  const guarded = useGuardedNavigate();
   return (
     <Popover
       open={open}
@@ -235,7 +245,7 @@ export function LedgerSwitcherPopover({
         onPick={onPick}
         onNavigate={(href) => {
           onClose();
-          router.navigate(href);
+          guarded(() => router.navigate(href));
         }}
       />
     </Popover>

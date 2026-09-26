@@ -30,7 +30,16 @@ import {
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Card, EmptyState, Page, PageHeader, SegmentedControl, Skeleton, Text } from '@/ui';
+import {
+  Card,
+  EmptyState,
+  Page,
+  PageHeader,
+  type PageHeaderBack,
+  SegmentedControl,
+  Skeleton,
+  Text,
+} from '@/ui';
 
 import { BulkBar } from './review/BulkBar';
 import { CommitBar } from './review/CommitBar';
@@ -116,8 +125,17 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const bid =
     typeof params.batchId === 'string' && params.batchId !== '' ? params.batchId : undefined;
 
-  // The committed panel's wide back (§14.64 e); the review header asks for its own.
+  // The wide back of the committed panel and of the loading / error states (§14.64 e); the
+  // review header asks for its own.
   const back = useBack();
+  const backTo = (title: string): PageHeaderBack | undefined =>
+    back.show
+      ? {
+          crumb: `${back.parentLabel} · ${title}`,
+          onPress: back.goBack,
+          label: t('common:button.back'),
+        }
+      : undefined;
   const batchQuery = useImportBatch(ledgerId, bid);
   const rowsQuery = useImportRows(ledgerId, bid);
   const categories = useCategories();
@@ -207,9 +225,17 @@ export default function ImportBatchScreen(): React.JSX.Element {
         : t('import:review.page_title'),
   );
 
+  // Still loading, or unreadable (a link to a batch undone since): the way back is there
+  // before the batch is. Narrow, the shell's ‹ bar already is; this draws nothing there.
+  const pendingTitle = t('import:review.page_title');
+  const pendingHeader = (
+    <PageHeader testID="import-batch-header" title={pendingTitle} back={backTo(pendingTitle)} />
+  );
+
   if (batchQuery.isPending || rowsQuery.isPending) {
     return (
       <Page testID="import-batch-screen">
+        {pendingHeader}
         <Skeleton variant="table" rows={6} testID="import-batch-skeleton" />
       </Page>
     );
@@ -218,6 +244,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
   if (batchQuery.isError || !batch) {
     return (
       <Page testID="import-batch-screen">
+        {pendingHeader}
         <EmptyState
           icon="alert-triangle"
           title={t('import:review.error_retry')}
@@ -248,15 +275,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
           testID="import-batch-header"
           title={batch.source_name}
           subtitle={reviewSubtitle(batch, t)}
-          back={
-            back.show
-              ? {
-                  crumb: `${back.parentLabel} · ${batch.source_name}`,
-                  onPress: back.goBack,
-                  label: t('common:button.back'),
-                }
-              : undefined
-          }
+          back={backTo(batch.source_name)}
         />
         <CommittedView ledgerId={ledgerId} batch={batch} result={committed} />
       </Page>

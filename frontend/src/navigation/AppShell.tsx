@@ -20,9 +20,14 @@
  * column stays (it is the way back out), but there is no tab bar to aim at a ledger, and
  * the narrow bar is the sub-page form, leading back to the onboarding page.
  *
+ * The form pages (记一笔, the edit forms, the account form — `isFormRoute`) have no tab bar
+ * on a narrow screen (§14.65 f): screens 04 / 05 / 06 / 09 at 375 draw none. The wide
+ * column is unaffected.
+ *
  * The shell owns exactly one piece of state, the narrow ledger switcher sheet, which the
  * top bar's ledger pill opens (the sidebar's card opens its own anchored panel). Page
- * titles travel the other way, through `TopBarProvider`.
+ * titles travel the other way, through `TopBarProvider`, and a form's leave guard through
+ * `LeaveGuardProvider`: every page change the chrome makes asks it first (§14.65 g).
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -33,7 +38,9 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
 
 import { BottomTabBar, TAB_BAR_HEIGHT } from './BottomTabBar';
+import { isFormRoute } from './formRoute';
 import { isActivePath } from './isActivePath';
+import { LeaveGuardProvider } from './leaveGuard';
 import { LedgerSwitcher } from './LedgerSwitcher';
 import { Sidebar } from './Sidebar';
 import {
@@ -107,7 +114,9 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
   const showSidebar = wide && !bare;
   const showTopBar = !wide && !bare;
   // Every tab is ledger-scoped: with no ledger at all there is nothing for them to open.
-  const showTabs = !wide && !noLedgers;
+  const narrowChrome = !wide && !noLedgers;
+  // A form page keeps the narrow top bar but not the tabs (§14.65 f).
+  const showTabs = narrowChrome && !isFormRoute(pathname);
   usePublishBottomTabInset(showTabs ? TAB_BAR_HEIGHT : 0);
 
   // `/ledgers*` is always a sub-page; new / join are one even while the ledger their
@@ -137,15 +146,17 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
       {showTabs ? <BottomTabBar /> : null}
       {/* Wide layouts get mockup 01's dropdown, anchored under the sidebar's ledger card
           and owned by the sidebar; only the narrow chrome opens this sheet. */}
-      {showTabs ? <LedgerSwitcher open={switcherOpen} onClose={closeSwitcher} /> : null}
+      {narrowChrome ? <LedgerSwitcher open={switcherOpen} onClose={closeSwitcher} /> : null}
     </View>
   );
 }
 
 export function AppShell({ children }: AppShellProps): React.JSX.Element {
   return (
-    <TopBarProvider>
-      <Chrome>{children}</Chrome>
-    </TopBarProvider>
+    <LeaveGuardProvider>
+      <TopBarProvider>
+        <Chrome>{children}</Chrome>
+      </TopBarProvider>
+    </LeaveGuardProvider>
   );
 }

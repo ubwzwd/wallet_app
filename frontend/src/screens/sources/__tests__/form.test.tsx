@@ -13,7 +13,7 @@ import type { FinanceSource } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
-import { TopBarProvider, TopBarSurface } from '@/navigation';
+import { LeaveGuardProvider, SubPageTopBar, TopBarProvider, TopBarSurface } from '@/navigation';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { AuthProvider, LedgerProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -61,6 +61,27 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
               confirmAgain: i18next.t('common:button.confirm_again'),
             }}
           />
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+}
+
+/** As `AppShell` draws a narrow sub-page: the ‹ bar, and the leave-guard registry it asks. */
+function ShellWrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider initialPref="light">
+        <AuthProvider queryClient={queryClient}>
+          <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
+            <LeaveGuardProvider>
+              <TopBarProvider>
+                <SubPageTopBar />
+                {children}
+              </TopBarProvider>
+            </LeaveGuardProvider>
+          </LedgerProvider>
+          <ConfirmHost labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }} />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -311,16 +332,72 @@ test('a currency quick chip picks that currency without opening the full list', 
   expect(JSON.parse(api.mock.history.post[0].data as string).default_currency).toBe('CNY');
 });
 
-test('cancelling goes back to the list without sending anything', async () => {
+test('cancelling an untouched form goes straight back to the list', async () => {
   const router = renderForm(NEW_URL);
 
-  fireEvent.changeText(await screen.findByTestId('source-name'), '不要了');
   await act(async () => {
-    fireEvent.press(screen.getByTestId('source-cancel'));
+    fireEvent.press(await screen.findByTestId('source-cancel'));
   });
 
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+});
+
+test('cancelling a half-typed form asks; staying keeps it, leaving sends nothing', async () => {
+  const router = renderForm(NEW_URL);
+
+  fireEvent.changeText(await screen.findByTestId('source-name'), '不要了');
+  fireEvent.press(screen.getByTestId('source-cancel'));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('confirm-cancel'));
+  });
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(router.getPathname()).toBe(NEW_URL);
+  expect(screen.getByTestId('source-name').props.value).toBe('不要了');
+
+  fireEvent.press(screen.getByTestId('source-cancel'));
+  await act(async () => {
+    fireEvent.press(await screen.findByTestId('confirm-accept'));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   expect(api.mock.history.post.length).toBe(0);
+});
+
+test('a half-typed form: the shell’s ‹ asks before leaving (§14.65 g)', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  const router = renderRouter(ROUTES, { initialUrl: NEW_URL, wrapper: ShellWrapper });
+
+  fireEvent.changeText(await screen.findByTestId('source-name'), '现金');
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  expect(await screen.findByTestId('confirm-dialog')).toBeTruthy();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('confirm-cancel'));
+  });
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(router.getPathname()).toBe(NEW_URL);
+  expect(screen.getByTestId('source-name').props.value).toBe('现金');
+
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  await act(async () => {
+    fireEvent.press(await screen.findByTestId('confirm-accept'));
+  });
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+});
+
+test('a saved account leaves for the list without asking about the changes just saved', async () => {
+  mockPost(SOURCES_PATH, makeSource({ id: 'new-src', name: '现金', type: 'cash' }));
+  const router = renderForm(NEW_URL);
+
+  fireEvent.changeText(await screen.findByTestId('source-name'), '现金');
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('source-submit'));
+  });
+
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources`));
+  expect(screen.queryByTestId('confirm-dialog')).toBeNull();
 });
 
 test('the wide dialog closes back to the list with its × (屏幕稿 09)', async () => {

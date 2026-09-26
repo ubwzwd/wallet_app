@@ -20,7 +20,7 @@ import type { Transaction, TxKind } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useBack } from '@/navigation';
+import { useBack, useBackOverride } from '@/navigation';
 import { qk, useTransaction, useUpdateTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
@@ -33,6 +33,7 @@ import {
   findConflicts,
   type FormConflict,
 } from './TransactionFormScreen';
+import { EditStateHeader } from './EditStateHeader';
 import type { TxFormValues } from './schemas';
 import { useLeaveGuard } from './useLeaveGuard';
 import {
@@ -160,12 +161,17 @@ export default function EditTransactionScreen(): React.JSX.Element {
       leaveForm();
     });
   }, [leave, leaveForm]);
+  // The narrow top bar's ‹ leaves the way 取消 and the wide breadcrumb do: asked once,
+  // `?next=` first (§14.65 h) — in every state of the screen, the error one included.
+  useBackOverride(onCancel);
+  const title = t('transaction:form.page_title_edit');
 
   if (query.isError) {
     // Deleted while the link sat in someone's chat, a ledger this session may not read, a
     // dropped connection: a permanent skeleton would be a dead end with nothing to press.
     return (
       <Page testID="tx-edit">
+        <EditStateHeader title={title} onBack={onCancel} />
         <EmptyState
           testID="tx-edit-error"
           icon="alert-triangle"
@@ -186,6 +192,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
   if (query.isPending || !tx || tx.transfer_pair_id !== null) {
     return (
       <Page testID="tx-edit">
+        <EditStateHeader title={title} onBack={onCancel} />
         <Skeleton variant="table" rows={6} testID="tx-edit-skeleton" />
       </Page>
     );
@@ -248,7 +255,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
       onSubmit={onSubmit}
       onCancel={onCancel}
       submitLabel={t('common:button.save')}
-      pageTitle={t('transaction:form.page_title_edit')}
+      pageTitle={title}
       lockLegs={tx.kind === 'transfer'}
       statsBaseline={sameCategory ? absMoney(tx.amount) : null}
       testID="tx-edit"
