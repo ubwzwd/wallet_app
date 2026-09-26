@@ -203,6 +203,26 @@ test('several candidates carry both flags, no prefill, the hint and a "pick one"
   expect(patchBodies()[0]).toEqual({ matched_transaction_id: 'tx-leg' });
 });
 
+test('the pair picker leaves out legs on accounts the uploader cannot use', async () => {
+  // Commit applies 03 §5.33 check 1a to the far leg's account, so the picker does not
+  // offer a leg that would only be refused later (a member's unshared card, an archived one).
+  const transfer = row({
+    id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
+    merchant: null, amount: '1000.0000', transfer_role: 'in', date: '2026-08-05',
+    flags: ['transfer_candidate', 'needs_review'], matched_transaction_id: null,
+    hint: '找到 2 条可以配对的转账，请选一条',
+  });
+  const THEIRS = makeLedgerSource({ id: 'src-theirs', name: '她的私房卡', mine: false, usable: false });
+  const theirLeg: Transaction = makeTransaction({ ...OTHER_LEG, id: 'tx-theirs', source_id: THEIRS.id });
+  seed([transfer], [SOURCE, SAVINGS, ARCHIVED, THEIRS]);
+  mockGet(TX_PATH, { items: [OTHER_LEG, theirLeg], total: 2, summary: null });
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-3-link-pick-one'));
+  expect(await screen.findByTestId('review-3-link-picker-row-tx-leg')).toBeTruthy();
+  expect(screen.queryByTestId('review-3-link-picker-row-tx-theirs')).toBeNull();
+});
+
 test('with no candidate nothing is preselected and the two counterparty controls exclude each other', async () => {
   const transfer = row({
     id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,

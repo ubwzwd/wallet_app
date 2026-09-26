@@ -3138,7 +3138,8 @@ PATCH .../rows/f6a7b8c9-...
 
 | 状态码 | code | 条件 |
 |---|---|---|
-| 404 | `not_found` | 账本 / 批次 / 行不可见；`counterpart_source_id` 对调用者不可用或已归档（决策 §14.53c、§14.62 e（2026-09-16 按决策 §14.62 同步）） |
+| 404 | `not_found` | 账本 / 批次 / 行不可见；`counterpart_source_id` 对调用者不可用或已归档（决策 §14.53c、§14.62 e（2026-09-16 按决策 §14.62 同步））；transfer 行 `matched_transaction_id` 指向的对腿，其账户对上传者不可用（§5.33 检查 1a，与提交同一道门，2026-09-27 第八阶段收口时补正） |
+| 409 | `source_archived` | transfer 行 `matched_transaction_id` 指向的对腿，其账户已归档（§5.33 检查 1a，2026-09-27 第八阶段收口时补正） |
 | 409 | `batch_not_ready` | 批次不是 `ready`（已提交的批次不能再改行） |
 | 400 | `category_invalid` / `category_kind_mismatch` | 分类不合法 |
 | 400 | `refund_target_invalid` | refund 行的 `matched_transaction_id` 不合法 |

@@ -30,7 +30,7 @@ from app.models.transaction import Transaction
 from app.schemas.importing import ImportRowsBulkRowPatch
 from app.services import source_access
 from app.services.importing import flagging
-from app.services.importing.commit_checks import assert_pairable, load_counterpart
+from app.services.importing.commit_checks import assert_pair_target, load_counterpart
 from app.services.importing.drafts import ImportContext, RowDraft
 from app.services.importing.rules import sanitize_category
 
@@ -215,8 +215,10 @@ def _check_row(
         elif row.kind != "transfer":
             raise invalid("matched_transaction_id needs a refund or transfer row")
     if matched is not None and row.kind == "transfer" and touched & _PAIR_INPUTS:
-        # The six conditions of §5.33, judged on the draft (400 pair_invalid).
-        assert_pairable(db.get(Transaction, matched), row, batch)
+        # The six conditions of §5.33 (400 pair_invalid) plus check 1a on the far leg's
+        # account (404 / 409), judged on the draft — the same gate commit applies, so review
+        # cannot accept a pair that commit would refuse.
+        assert_pair_target(db, db.get(Transaction, matched), row, batch)
     if row.counterpart_source_id is not None and touched & _LINK_INPUTS:
         load_counterpart(db, batch, row)  # 404 not_found / 400 same_source (§14.53c)
 
@@ -292,7 +294,10 @@ def _rerun_candidates(
         source_currency=source.default_currency,
         source_type=source.type,
         base_currency=ctx.ledger.base_currency,
-        actor_id=ctx.user.id,
+        # Candidates are judged for the uploader, whoever edits the row: commit judges
+        # usability for ``batch.created_by`` (``commit_checks.load_context``), so review must
+        # not offer a leg that commit will refuse, nor drop one it would accept.
+        actor_id=batch.created_by,
         category_version=batch.skill_version,
     )
     drafts = {row.id: _as_draft(row) for row in rows if row.kind in ("refund", "transfer")}

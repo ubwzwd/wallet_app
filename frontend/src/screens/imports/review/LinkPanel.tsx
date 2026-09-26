@@ -262,6 +262,9 @@ export function LinkPanel({ row, env, testID }: CellProps): React.JSX.Element | 
         filterRows={(tx) =>
           tx.transfer_pair_id === null &&
           tx.source_id !== env.batch.source_id &&
+          // Commit checks the far leg's account too (03 §5.33 1a): a leg on an account the
+          // uploader cannot use, or an archived one, would only be refused later.
+          env.sources.find((s) => s.id === tx.source_id)?.usable === true &&
           (row.currency === null || tx.currency === row.currency) &&
           (row.amount === null ||
             (cmpMoney(absMoney(tx.amount), absMoney(row.amount)) === 0 &&

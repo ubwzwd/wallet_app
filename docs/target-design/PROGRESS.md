@@ -12,7 +12,7 @@
 | 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | `v3/phase-6-import` → 已合回 `main`（60bf8cb） | **完成（2026-09-15）** |
 | 7 视觉 | 逐屏对稿重做表现层：组件库、宽屏侧栏壳、14 屏与深色、`verify-contrast.mjs` WCAG 门禁、日期 ISO 化 | `v3/phase-7-visual` → 已合回 `main`（272b4ec） | **完成（2026-09-16）**，收尾轮亦已合回（06aa97b） |
 | 7.5 导航统一 | 用户手测提出：所有登录后页面同一个壳、窄屏底栏全局、每个子页有返回（§14.64）；取消账本管理页、切换器末行「账本设置」、表单页无底栏、离开守卫覆盖所有出口（§14.65） | `v3/nav-shell`、`v3/nav-followup` → 已合回 `main`（b38c7bb、912406a） | **完成（2026-09-27）** |
-| 8 账户归人 | `finance_sources` 改归用户、`ledger_sources` 共享表、个人净资产、`/sources*` 与共享接口、全局账户页与选择器分组、空账本引导按交易判断（§14.62 k）、迁移（决策 §14.62） | `v3/phase-8-accounts` | 进行中（2026-09-27 启动） |
+| 8 账户归人 | `finance_sources` 改归用户、`ledger_sources` 共享表、个人净资产、`/sources*` 与共享接口、全局账户页与选择器分组、空账本引导按交易判断（§14.62 k）、迁移（决策 §14.62） | `v3/phase-8-accounts` + `v3/phase-8b-finish` → 已合回 `main`（c481b06） | **完成（2026-09-27）** |
 | 9 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
 
 ## 环境备忘
@@ -31,6 +31,10 @@
 
 ## 日志
 
+- 2026-09-27：第八阶段（账户归人，§14.62 a–k）完成并合回 `main`（c481b06 + 手工收口提交）。两轮工作流：第一轮（wf_e34282e2-271，9 任务 / 3 波）合入 6 个——两个被打回的任务代码本身没问题，卡在范围外（`a8-usage-checks` 等另一个后端分支先合入；`a8-fe-consumers` 被地基留下的 409 行 `fixtures.ts` 挡住），验收因此被跳过；编排者手工合入两者、修三个测试文件、把夹具拆成 `fixtures.ts` / `fixtures-sources.ts` / `ids.ts`、贯穿测试改到 `/accounts`。第二轮（wf_d4c075f3-b14，4 小项 + 验收）全部通过：验收在真机走查里又抓到并修了四个真缺陷（`useNestedEntrySync` 的 replace 丢了 query string、review 对手账户组标题样式、`ix_transactions_source_occurred` 模型与迁移都没建、导入提交配对时没查对腿账户）。终审三条 minor 由编排者手工收口（review 改 kind 的重新标记按上传者判断、review 选配对目标走与提交同一道门 404/409、前端配对选择器过滤不可用账户）。后端 1263 个测试、前端 70 套件 1154 个测试全绿。本机演示库已原地迁移（备份 `backend/wallet_local.pre-d47.db`）。
+  - **收口时发现的 main 上的导航 bug**：从账本外（`/settings`、`/accounts*`）进 `/l/:id/<子页>` 时 expo-router 6 把内层导航器初始化在首页，地址却是子页——§14.64 验收里「底栏交易」那张截图其实是首页，当时只看了地址。修法 `src/navigation/nestedEntry.ts`（`useNestedEntrySync`，挂在 `app/(app)/_layout.tsx`）：地址变化后读导航容器状态，发现错位就 `router.replace(pathname + 原 query)`。04 §1.4.1 已记。
+  - **基础设施**：后端守护脚本也改从 `.claude/preview-tree/backend` 起（`DATABASE_URL` 指向主检出的 `backend/wallet_local.db` 绝对路径），主检出切分支时 :8000 / :8081 都不受影响；合回 `main` 后 `git -C .claude/preview-tree checkout -q --detach main`，再按 pid 重启 uvicorn 与 expo。重启用脚本文件，不在命令行里写守护脚本名。
+  - 留档未做（minor，不阻塞）：review 表格对手账户组标题的像素样式与 `SourceField` 不完全一致；`review-link` 的分组测试不断言顺序；`LandingRedirect` 在缓存过期时多等一次刷新；`transaction_events` 同一时刻的两条事件排序靠随机 uuid（`test_patch_writes_refund_link_and_unlink_events` 偶发）；`test_import_flagging.py` 里一处函数内 import。
 - 2026-09-27：导航统一（插在第八阶段之前的两轮，都由用户手测驱动）合回 `main`（b38c7bb、912406a）。**§14.64**（wf_d7bacaf5-262，4 任务 / 3 波）：`src/navigation/` 新增 `backTarget.ts`（上级表纯函数）、`useBack.ts`、`useChromeLedger.ts`、`ledgerHistory.ts`（跨出账本再退回来时恢复账本内导航状态——`(app)` 是 `Slot`，离开账本时内层导航器被卸载，`router.back()` 只能重建首页，验收发现并修）；壳在 `/settings`、`/ledgers*` 也画；窄屏子页顶栏 = 圆 ‹ + 居中标题；宽屏子页 = `PageHeader` 的 `back` 面包屑；窄屏详情标题改「交易详情」（稿 07/08）。**§14.65**（wf_eb08f949-e68，4 任务 / 3 波）：`/ledgers` 有账本直接跳转、零账本引导；切换器末行「账本设置」；「我的」Sheet 三行；新建 / 加入是子页（加入宽屏不再是对话框）；404 / 账本不可用「回到首页」；`formRoute.ts`（表单页窄屏不画底栏）；`leaveGuard.tsx` 注册表（`useRegisterLeaveGuard` / `useGuardedNavigate` / `useBackOverride`）让壳里每个出口都先问脏表单——验收发现窄屏点底栏别的格会直接丢掉填了一半的表单；`EditStateHeader.tsx` 给编辑 / 批次的加载与错误态返回。审核抓到的真 bug：删除 / 退出当前账本后落地用了过期的账本列表（`LandingRedirect` 改为只在列表新鲜时决定）。前端 67 套件 1077 个测试，`CI=1 npm run verify` 全绿。
   - **基础设施**：预览 :8081 改从 `.claude/preview-tree`（钉在 `main` 的独立 worktree，硬链接 node_modules）出代码——工作流预检会把主检出切到集成分支并在那里合并，CI 模式的 Metro 拿着过期文件清单就白屏；合回 `main` 后 `git -C .claude/preview-tree checkout -q --detach main` 再重启 expo 进程。
   - **教训**：主会话按 Esc 会把后台工作流一起停掉，用 `resumeFromRunId` 续跑只重做被打断的那个 agent；kill 守护脚本时别在同一条命令里写它的名字（`pgrep -f` 会连自己的 shell 一起杀）。

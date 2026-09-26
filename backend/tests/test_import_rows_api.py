@@ -857,3 +857,101 @@ def test_a_transfer_row_stays_patchable_after_its_counterpart_is_archived(
 
     assert body.status_code == 200
     assert body.json()["status"] == "skipped"
+
+
+# ---------------------------------------------------------------------------
+# §5.41 judges the pair target and the re-flag for the uploader (§5.33 1a, §14.62 e)
+# ---------------------------------------------------------------------------
+
+
+def _shared_world(db, user_factory, ledger_factory, source_factory, owned_source_factory):
+    """Owner uploads into ``card``; ``member`` owns ``private``, shared nowhere."""
+    owner, member = user_factory(), user_factory()
+    ledger = ledger_factory(owner, members=[member])
+    card = source_factory(ledger, name="招商 信用卡", type="credit")
+    private = owned_source_factory(member, name="她的私房卡", type="checking")
+    db.flush()
+    return owner, member, ledger, card, private
+
+
+def test_rekind_candidates_are_judged_for_the_uploader(
+    db, client, user_factory, auth_headers, ledger_factory, source_factory,
+    owned_source_factory, transaction_factory,
+):
+    """A member re-kinding a row must not be offered a leg only *she* can use: commit
+    judges the pair for ``batch.created_by`` (05 §4.3), so the re-flag does too."""
+    owner, member, ledger, card, private = _shared_world(
+        db, user_factory, ledger_factory, source_factory, owned_source_factory
+    )
+    transaction_factory(
+        ledger,
+        private,
+        kind="transfer",
+        amount=Decimal("-500.0000"),
+        occurred_at=dt.date(2026, 8, 22),
+        transfer_role="out",
+        transfer_subtype="plain",
+    )
+    text = (
+        f"# version: {CATEGORY_VERSION}\n"
+        "date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,"
+        "category_l1,category_l2,source_ref\n"
+        "2026-08-22,500.00,CNY,income,,,,,social_income,transfer_in,p1:l40\n"
+    )
+    created = paste(client, auth_headers(owner), ledger, card, text).json()
+    row = created["rows"][0]
+
+    body = patch_row(
+        client,
+        auth_headers(member),
+        ledger,
+        created["batch"]["id"],
+        row["id"],
+        {"kind": "transfer", "transfer_role": "in", "transfer_subtype": "plain"},
+    ).json()
+
+    assert body["matched_transaction_id"] is None
+    assert body["counterpart_source_id"] is None
+    assert "transfer_candidate" not in body["flags"]
+
+
+def test_picking_a_pair_target_on_an_unusable_account_is_refused(
+    db, client, user_factory, auth_headers, ledger_factory, source_factory,
+    owned_source_factory, transaction_factory,
+):
+    """Choosing a pair target in review goes through the same gate as commit: the far
+    leg's account must be usable by the uploader (404) and not archived (409)."""
+    owner, member, ledger, card, private = _shared_world(
+        db, user_factory, ledger_factory, source_factory, owned_source_factory
+    )
+    old = source_factory(ledger, name="旧储蓄卡", type="checking")
+    old.archived, old.archived_at = True, dt.datetime(2026, 9, 1, 12, 0, 0)
+    db.flush()
+    legs = {}
+    for name, source in (("private", private), ("old", old)):
+        legs[name] = transaction_factory(
+            ledger,
+            source,
+            kind="transfer",
+            amount=Decimal("-3000.0000"),
+            occurred_at=dt.date(2026, 8, 20),
+            transfer_role="out",
+            transfer_subtype="plain",
+        )
+    headers = auth_headers(owner)
+    bid, rows = imported(client, headers, ledger, card)
+    transfer = rows[5]
+    assert transfer["matched_transaction_id"] is None  # neither leg is a candidate
+
+    refused = patch_row(
+        client, headers, ledger, bid, transfer["id"],
+        {"matched_transaction_id": str(legs["private"].id)},
+    )
+    assert (refused.status_code, refused.json()["code"]) == (404, "not_found")
+
+    archived = patch_row(
+        client, headers, ledger, bid, transfer["id"],
+        {"matched_transaction_id": str(legs["old"].id)},
+    )
+    assert (archived.status_code, archived.json()["code"]) == (409, "source_archived")
+
