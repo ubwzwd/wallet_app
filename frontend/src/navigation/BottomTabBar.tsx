@@ -6,6 +6,10 @@
  * offers the four kinds. "Me" is not a tab either: it opens a sheet that gathers personal
  * settings, ledger settings, switching ledger and signing out (decision §14.52 A21 — there
  * is no top-level reports or members page).
+ *
+ * Decision §14.64 b: the bar is on every page of the shell, not only inside a ledger. Outside
+ * one it aims at the ledger the chrome names (`useChromeLedger`); 「我的」 is lit on
+ * `/settings`, and nothing is lit on `/ledgers*`, which none of the five slots leads to.
  */
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -19,10 +23,10 @@ import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
-import { useLedgerContext } from '@/store/LedgerContext';
 import { Icon, type IconName, KIND_ICON, Sheet, Text } from '@/ui';
 
 import { isActivePath } from './isActivePath';
+import { useChromeLedger } from './useChromeLedger';
 
 /**
  * Screen 01 at 375: 8 above, a 49 tall slot, 14 below.
@@ -82,7 +86,8 @@ function MeSheet({
   const { t } = useTranslation();
   const router = useRouter();
   const { logout } = useAuth();
-  const { ledgerId } = useLedgerContext();
+  // Outside a ledger this is the ledger the chrome names — the one the other tabs open.
+  const { ledgerId } = useChromeLedger();
   const colors = useColors();
 
   const rows: { key: string; label: string; icon: IconName; run(): void }[] = [
@@ -92,12 +97,16 @@ function MeSheet({
       icon: 'user',
       run: () => router.navigate(routes.settings()),
     },
-    {
-      key: 'ledger-settings',
-      label: t('common:nav.ledger_settings'),
-      icon: 'users',
-      run: () => router.navigate(routes.l(ledgerId).settings()),
-    },
+    ...(ledgerId === null
+      ? []
+      : [
+          {
+            key: 'ledger-settings',
+            label: t('common:nav.ledger_settings'),
+            icon: 'users' as const,
+            run: () => router.navigate(routes.l(ledgerId).settings()),
+          },
+        ]),
     {
       key: 'switch-ledger',
       label: t('common:nav.switch_ledger'),
@@ -189,28 +198,42 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
-  const { ledgerId } = useLedgerContext();
+  const { ledgerId } = useChromeLedger();
   const bottom = React.useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
   const [meOpen, setMeOpen] = React.useState(false);
   const [kindOpen, setKindOpen] = React.useState(false);
 
-  const l = routes.l(ledgerId);
+  // `null` only while a cold page outside a ledger is still learning which ledger to name;
+  // like the sidebar, the slots lead to the ledger list until then.
+  const l = ledgerId === null ? null : routes.l(ledgerId);
+  const scoped = (href: RouteHref | undefined): RouteHref => href ?? routes.ledgers();
   const left: TabSpec[] = [
-    { key: 'home', label: t('common:nav.home'), icon: 'home', href: l.home(), exact: true },
+    { key: 'home', label: t('common:nav.home'), icon: 'home', href: scoped(l?.home()), exact: true },
     {
       key: 'transactions',
       label: t('common:nav.transactions'),
       icon: 'list',
-      href: l.transactions(),
+      href: scoped(l?.transactions()),
       exact: false,
     },
   ];
   const right: TabSpec[] = [
-    { key: 'imports', label: t('common:nav.imports'), icon: 'upload', href: l.imports(), exact: false },
+    {
+      key: 'imports',
+      label: t('common:nav.imports'),
+      icon: 'upload',
+      href: scoped(l?.imports()),
+      exact: false,
+    },
   ];
+  // None of the five slots is the ledger list or its sub-pages, so nothing is lit there.
+  const onLedgerPages = isActivePath(pathname, routes.ledgers(), false);
+  const isActive = (spec: TabSpec): boolean =>
+    !onLedgerPages && isActivePath(pathname, spec.href, spec.exact);
 
-  const openAdd = (kind: TxKind): void => router.navigate(l.transactionNew({ kind }));
+  const openAdd = (kind: TxKind): void =>
+    router.navigate(l ? l.transactionNew({ kind }) : routes.ledgers());
 
   return (
     <>
@@ -230,7 +253,7 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
           <Tab
             key={spec.key}
             spec={spec}
-            active={isActivePath(pathname, spec.href, spec.exact)}
+            active={isActive(spec)}
             onPress={() => router.navigate(spec.href)}
           />
         ))}
@@ -264,7 +287,7 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
           <Tab
             key={spec.key}
             spec={spec}
-            active={isActivePath(pathname, spec.href, spec.exact)}
+            active={isActive(spec)}
             onPress={() => router.navigate(spec.href)}
           />
         ))}
@@ -278,7 +301,8 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
             href: routes.settings(),
             exact: true,
           }}
-          active={meOpen}
+          // Lit while its sheet is open, and on the page it names (§14.64 b).
+          active={meOpen || isActivePath(pathname, routes.settings(), true)}
           onPress={() => setMeOpen(true)}
         />
       </View>

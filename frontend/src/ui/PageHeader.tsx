@@ -42,6 +42,41 @@ export interface PageHeaderProps {
   testID?: string;
 }
 
+/** Width of `BackButton`, for layouts that balance it with a spacer of the same size. */
+export const BACK_BUTTON_SIZE = BACK_SIZE;
+
+export interface BackButtonProps {
+  /** Accessible name — "back". */
+  label: string;
+  onPress(): void;
+  testID?: string;
+}
+
+/**
+ * The app's one round back button (decision §14.64 e): the wide header's crumb row, the
+ * narrow sub-page top bar and the standalone ledger pages all draw this rather than their
+ * own. A 40 circle lifted off the canvas, with slop out to the 44 touch target.
+ */
+export function BackButton({ label, onPress, testID }: BackButtonProps): React.JSX.Element {
+  const { colors, scheme } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={BACK_SLOP}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.back,
+        raisedShadow(colors, scheme),
+        { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
+      ]}
+    >
+      <Icon name="chevron-left" color={colors['fg.secondary']} />
+    </Pressable>
+  );
+}
+
 function MetaNode({ meta, testID }: { meta: React.ReactNode; testID?: string }): React.JSX.Element {
   if (typeof meta === 'string') {
     return (
@@ -62,7 +97,6 @@ export function PageHeader({
   style,
   testID,
 }: PageHeaderProps): React.JSX.Element | null {
-  const { colors, scheme } = useTheme();
   const wide = useIsWide();
   const id = testID ?? 'page-header';
 
@@ -75,20 +109,7 @@ export function PageHeader({
     <View testID={id} style={[styles.wrap, style]}>
       {wide && back ? (
         <View style={styles.crumbRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={back.label}
-            onPress={back.onPress}
-            hitSlop={BACK_SLOP}
-            testID={`${id}-back`}
-            style={({ pressed }) => [
-              styles.back,
-              raisedShadow(colors, scheme),
-              { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
-            ]}
-          >
-            <Icon name="chevron-left" color={colors['fg.secondary']} />
-          </Pressable>
+          <BackButton label={back.label} onPress={back.onPress} testID={`${id}-back`} />
           <Text variant="caption" tone="muted" numberOfLines={1} style={styles.crumb}>
             {back.crumb}
           </Text>

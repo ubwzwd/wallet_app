@@ -486,3 +486,52 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
   fireEvent.press(screen.getByTestId('settings-ledger-settings'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
 });
+
+test('the ledger list wears the shell: 账本管理 in the top bar, a way back, the tab bar (§14.64)', async () => {
+  // The walk the user took when they reported the dead end: open a ledger, go to the
+  // ledger list, and try to get back. Narrow, on the real route tree.
+  mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
+  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
+
+  await waitFor(() => expect(router.getPathname()).toBe('/login'));
+  fireEvent.changeText(await screen.findByTestId('login-email'), EMAIL);
+  fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
+  fireEvent.press(screen.getByTestId('login-submit'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+
+  // ── ledger pill → switcher → 账本管理 ────────────────────────────────────────────
+  fireEvent.press(await screen.findByTestId('top-bar-ledger'));
+  fireEvent.press(await screen.findByTestId('ledger-switcher-manage'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+
+  expect(await screen.findByTestId('ledgers-screen')).toBeTruthy();
+  // The sub-page top bar names the page; the page itself no longer draws a big title.
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+  expect(screen.getByTestId('bottom-tab-bar')).toBeTruthy();
+  expect(screen.getByText('切换后所有页面都跟着这本走')).toBeTruthy();
+
+  // ── 新建账本: the shell's bar replaces the page's own header ─────────────────────
+  fireEvent.press(screen.getByTestId('ledgers-create'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers/new'));
+  expect(await screen.findByTestId('new-ledger-screen')).toBeTruthy();
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('新建账本'));
+  expect(screen.queryByTestId('new-ledger-header')).toBeNull();
+
+  // ── back, and back again: history, not a dead end ────────────────────────────────
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  // The list stayed mounted under the stacked page; its title must come back with it.
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+
+  // ── 加入账本, then back: same story ───────────────────────────────────────────────
+  fireEvent.press(screen.getByTestId('ledgers-join'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers/join'));
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('加入账本'));
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+
+  fireEvent.press(await screen.findByTestId('top-bar-back'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  expect(await screen.findByTestId('top-bar-ledger')).toBeTruthy();
+});

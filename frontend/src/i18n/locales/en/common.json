@@ -23,8 +23,6 @@
     "imports": "Import",
     "me": "Me",
     "ledgers": "Ledgers",
-    "ledger_count_one": "{{count}} ledger",
-    "ledger_count_other": "{{count}} ledgers",
     "member_count_one": "{{count}} person",
     "member_count_other": "{{count}} people",
     "ledger_settings": "Ledger settings",

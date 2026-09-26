@@ -20,8 +20,10 @@ import type { Ledger, Uuid } from '@/api/types';
 import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { useLedgerContext } from '@/store/LedgerContext';
+import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { Avatar, Divider, Icon, type IconName, Popover, Sheet, Text } from '@/ui';
+
+import { useChromeLedger } from './useChromeLedger';
 
 export interface LedgerSwitcherProps {
   open: boolean;
@@ -151,11 +153,16 @@ function SwitcherRows({
   );
 }
 
-/** Narrow layouts: the shared bottom sheet, driven by the ledger context. */
+/**
+ * Narrow layouts: the shared bottom sheet. Inside a ledger, picking one keeps the page
+ * (`switchTo`); outside one (`/settings`, `/ledgers*`, §14.64 b) there is no page to keep,
+ * so picking a ledger opens its home.
+ */
 export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
-  const { ledgerId, ledgers, switchTo } = useLedgerContext();
+  const ledgerContext = useOptionalLedgerContext();
+  const { ledgerId, ledgers } = useChromeLedger();
 
   return (
     <Sheet
@@ -171,7 +178,8 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
         currentId={ledgerId}
         onPick={(id) => {
           onClose();
-          switchTo(id);
+          if (ledgerContext) ledgerContext.switchTo(id);
+          else router.navigate(routes.l(id).home());
         }}
         onNavigate={(href) => {
           onClose();
