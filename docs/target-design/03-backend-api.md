@@ -1681,7 +1681,7 @@ PUT /api/v1/sources/34fa63d8-5776-4775-982b-4d58deb0ace9/ledgers/c3d4e5f6-7a8b-4
 
 ### 5.24b `DELETE /api/v1/sources/{sid}/ledgers/{lid}`
 
-鉴权：已登录用户；调用者必须是账户 `sid` 的**主人**。决策 §14.62 b、g。（2026-09-16 按决策 §14.62 同步）
+鉴权：已登录用户；调用者必须是账户 `sid` 的**主人**，且是账本 `lid` 的**成员**（owner 或 member 都行）——与 §5.24a 同一条规则。决策 §14.62 b、g。（2026-09-16 按决策 §14.62 同步）
 
 取消共享。
 
@@ -1690,7 +1690,7 @@ DELETE /api/v1/sources/34fa63d8-5776-4775-982b-4d58deb0ace9/ledgers/c3d4e5f6-7a8
 -> 204
 ```
 
-**幂等**：本来就没共享（或 `lid` 根本不存在）也返回 204——结果都是"这张卡没有共享到这本账"。不要求调用者仍是 `lid` 的成员：退出账本时共享行已经被删（§5.15），这里只是让"取消"永远能成功。
+**幂等**：本来就没共享（共享行不存在）也返回 204——结果都是"这张卡没有共享到这本账"。但调用者不是 `sid` 的主人、或不是 `lid` 的成员（含 `lid` 根本不存在）→ 404 `not_found`，两种情形不作区分（§3.3，决策 §14.62 g）。主人退出或被移出账本时，他共享到这本账的行已经被自动删除（§5.14 / §5.15），所以不需要"非成员也能取消"。（2026-09-16 按决策 §14.62 同步）
 
 取消之后的效果（决策 §14.62 b）：
 
@@ -1702,7 +1702,7 @@ DELETE /api/v1/sources/34fa63d8-5776-4775-982b-4d58deb0ace9/ledgers/c3d4e5f6-7a8
 
 | 状态码 | code | 条件 |
 |---|---|---|
-| 404 | `not_found` | 账户不存在或不是调用者的 |
+| 404 | `not_found` | 账户不存在或不是调用者的；账本不存在或调用者不是其成员（两种情形不作区分，§3.3） |
 
 副作用：`DELETE FROM ledger_sources WHERE ledger_id = :lid AND source_id = :sid`（影响 0 行也算成功）。不改任何交易、不写事件。
 
@@ -2454,7 +2454,7 @@ DELETE /api/v1/ledgers/8f0f7b2e-.../transactions/transfer/77777777-8888-4999-aaa
 |---|---|---|---|
 | `other_transaction_id` | UUID | 是 | 要配对的另一条交易，见下面六条 |
 
-校验（除第 1、1a 条的 404 / 409 外，任何一条不过都是 400 `pair_invalid`，`detail` 说明是哪一条；第 1a 条是（2026-09-16 按决策 §14.62 同步））：
+校验（除第 1、1a 条的 404 / 409 外，任何一条不过都是 400 `pair_invalid`，`detail` 说明是哪一条）；第 1a 条是决策 §14.62 新增的（2026-09-16 按决策 §14.62 同步）：
 
 ```text
 1. 两条都存在且 ledger_id 都等于路径里的账本      （否则 404 not_found / 400 pair_invalid）
@@ -3729,7 +3729,7 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 | `PATCH /sources/{sid}` | 带 `default_currency`（哪怕值不变）→ 400 `currency_locked`（决策 §14.50）；`archived: true` 之后 `archived_at` 非空、取消归档后回到 `null`；归档账户上的历史交易仍可 PATCH（决策 §14.40 的 01-12），但新建交易 → 409 `source_archived`；带 `share_to` / `owner_id` → 422 |
 | `DELETE /sources/{sid}` | 无交易 → 204 且 `ledger_sources` 行随之消失；本账本无交易、但**另一本账**里有交易或导入批次 → 409 `source_has_transactions`（决策 §14.62 f）（2026-09-16 按决策 §14.62 同步） |
 | `PUT /sources/{sid}/ledgers/{lid}` | 共享后该账本的另一个成员能用这张卡记账（201）；重复 PUT → 204 且只有一行；不是主人 → 404；主人不是 `lid` 的成员 → 404；共享归档账户 → 204，但成员用它记账 → 409 `source_archived`（2026-09-16 按决策 §14.62 同步） |
-| `DELETE /sources/{sid}/ledgers/{lid}` | 取消共享后另一个成员用它记一笔 / 转账 / 导入上传 / review 设对手账户 → 404 `not_found`；他之前用它记的交易原样还在（列表、详情都能看到账户名）；主人自己在这本账里照样能用；本来没共享 → 204；不是主人 → 404；review 设好对手账户后主人取消共享，再 commit → 404 且一条都没建（2026-09-16 按决策 §14.62 同步） |
+| `DELETE /sources/{sid}/ledgers/{lid}` | 取消共享后另一个成员用它记一笔 / 转账 / 导入上传 / review 设对手账户 → 404 `not_found`；他之前用它记的交易原样还在（列表、详情都能看到账户名）；主人自己在这本账里照样能用；本来没共享 → 204；不是主人 → 404；主人已不是 `lid` 成员（例如 `lid` 是别人的账本）→ 404；review 设好对手账户后主人取消共享，再 commit → 404 且一条都没建（2026-09-16 按决策 §14.62 同步） |
 | `GET /ledgers/{id}/sources` | 三类都在：自己的（含没共享的）、别人共享进来的、只被本账本交易引用的（`usable=false`，且 `include_archived=false` 时也在）；**非本人的行 `opening_balance` / `balance` / `balance_base` / `balance_rate` / `balance_rate_date` / `shared_to` 全为 null、`rate_missing_count = 0`**（决策 §14.62 c）；本人的行与 `GET /sources` 同一账户逐字段相同；没有 `assets` / `liabilities` / `net_worth`；排序 checking → credit → cash → other 再按名字（2026-09-16 按决策 §14.62 同步） |
 | `POST /transactions` | 四种 kind 各建一条；符号与 kind 不匹配 → 400；transfer 带分类 → 400；transfer 带 `merchant` → 400（决策 §14.52 B16）；单腿转账币种 ≠ 账户币种 → 400（A11）；`repayment` + `transfer_role='in'` 落在非信用卡账户 → 400 `repayment_target_not_credit`，同一条改成 `transfer_role='out'`（储蓄卡那一腿）→ 201；expense 用收入分类 → 400 `category_kind_mismatch`；`refund_of` 指向 income → 400；不给分类的 refund 沿用原单分类；归档账户 → 409；用别人的、没共享到本账本的卡 → 404，用别人共享进来的卡 → 201（2026-09-16 按决策 §14.62 同步）；`occurred_at` = 今天+2 天 → 422；**每建一条就多一条 `transaction_events(created)`，`client` 取自 `X-Client`** |
 | `GET /transactions` | 决策 §4 的每个参数**逐个**有用例 + 一个组合用例；`import_batch_id` 筛选只返回那一批（决策 §14.46）；`currency` 筛原币；**`min_amount` / `max_amount` 按基准币种折算后比较**——一笔 1000 JPY（≈50 CNY）在 `min_amount=100` 下**不**出现，而一笔 20 EUR（≈166 CNY）出现（决策 §14.49）；`summary` 的三个数与全量结果一致且**翻页不变**、转账不计入 `net`（§14.52 A14）；`{items,total}` 的 total 是过滤后的；排序稳定；`refunded_total` / `refundable` 只出现在 expense 行且数值正确；`source_id` 是 §5.24c 不会列出的账户 → 404，是只被交易引用的（`usable=false`）账户 → 200 照常过滤（2026-09-16 按决策 §14.62 同步） |
