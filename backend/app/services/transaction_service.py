@@ -584,6 +584,12 @@ def pair(
     for row in sorted((first, second), key=lambda leg: leg.id.bytes):
         _lock_transaction(db, row.id)
 
+    # Check 1a (§14.62 e): both legs' accounts must be usable by the caller in
+    # this ledger (else 404, like a missing one) and live (else 409).
+    sources = {
+        row.id: _pair_leg_source(db, actor_id, ledger, row) for row in (first, second)
+    }
+
     for row in (first, second):
         if row.kind != "transfer":
             raise ApiError(
@@ -605,9 +611,7 @@ def pair(
         )
 
     out_leg, in_leg = _split_legs([first, second], ErrorCode.PAIR_INVALID, 400)
-    # Pairing ties two rows that already exist; it books nothing new on either
-    # account, so only the transaction-level rules above apply (§14.62).
-    in_source = _current_source(db, in_leg.source_id)
+    in_source = sources[in_leg.id]
     subtype = unify_subtype(
         out_leg.transfer_subtype, in_leg.transfer_subtype, in_source.type
     )
@@ -1062,6 +1066,22 @@ def _load_source(
     as a missing one: 404 ``not_found``. Archival is left to the caller (409).
     """
     return source_access.load_usable_source(db, actor_id, ledger, source_id)
+
+
+def _pair_leg_source(
+    db: Session, actor_id: uuid.UUID, ledger: Ledger, leg: Transaction
+) -> FinanceSource:
+    """The account a leg to be paired sits on, judged by §5.33 check 1a.
+
+    Someone else's account no longer shared into this ledger is 404
+    ``not_found``; an archived one is 409 ``source_archived`` (§14.62 e).
+    """
+    source = source_access.load_usable_source(db, actor_id, ledger, leg.source_id)
+    if source.archived:
+        raise ApiError(
+            409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived"
+        )
+    return source
 
 
 def _current_source(db: Session, source_id: uuid.UUID) -> FinanceSource:

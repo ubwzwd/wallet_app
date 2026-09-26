@@ -1299,8 +1299,8 @@ def test_pair_ties_two_single_legs_together(world):
     assert changes["counterparty"] == {"before": "工资卡", "after": None}
 
 
-def test_pairing_is_judged_on_the_rows_not_on_account_sharing(world, db):
-    """Pairing books nothing new: a leg on a card unshared since still pairs."""
+def test_pairing_a_leg_on_a_card_unshared_since_is_not_found(world, db):
+    """§5.33 check 1a: someone else's card no longer shared here is a 404."""
     partner = make_user(db)
     add_member(db, world["ledger"], partner)
     theirs = make_source(db, world["ledger"], partner, name="她的信用卡", type="credit")
@@ -1308,7 +1308,37 @@ def test_pairing_is_judged_on_the_rows_not_on_account_sharing(world, db):
     in_leg = make_leg(world, theirs, "in", Decimal("500"), subtype="repayment")
     unshare_from(db, world["ledger"], theirs)
 
-    paired_out, paired_in = do_pair(world, out_leg, in_leg)
+    with pytest.raises(ApiError) as exc:
+        do_pair(world, out_leg, in_leg)
+    assert exc.value.status_code == 404
+    assert exc.value.code == "not_found"
+    assert out_leg.transfer_pair_id is None and in_leg.transfer_pair_id is None
+    assert "paired" not in names(world, out_leg) + names(world, in_leg)
+
+
+def test_pairing_a_leg_on_an_archived_account_is_rejected(world):
+    """§5.33 check 1a: a usable but archived account is a 409."""
+    out_leg = make_leg(world, world["checking"], "out", Decimal("-500"))
+    in_leg = make_leg(world, world["archived"], "in", Decimal("500"))
+
+    with pytest.raises(ApiError) as exc:
+        do_pair(world, out_leg, in_leg)
+    assert exc.value.status_code == 409
+    assert exc.value.code == "source_archived"
+    assert out_leg.transfer_pair_id is None and in_leg.transfer_pair_id is None
+
+
+def test_pairing_works_across_the_callers_own_and_a_shared_account(world, db):
+    """One leg on the caller's unshared card, the other on a member's shared one."""
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的信用卡", type="credit")
+    mine = make_source(db, world["ledger"], world["user"], name="私房卡", share=False)
+    out_leg = make_leg(world, mine, "out", Decimal("-500"))
+    in_leg = make_leg(world, theirs, "in", Decimal("500"), subtype="repayment")
+
+    paired_out, paired_in = do_pair(world, in_leg, out_leg)
+    assert (paired_out.id, paired_in.id) == (out_leg.id, in_leg.id)
     assert paired_out.transfer_pair_id == paired_in.transfer_pair_id is not None
     assert paired_in.transfer_subtype == "repayment"
 

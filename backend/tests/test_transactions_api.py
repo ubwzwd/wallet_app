@@ -424,6 +424,50 @@ def test_transfer_legs_follow_sharing(env, db, partner_card, share_source, leg):
     assert env.post(body, "/transfer").status_code == 404
 
 
+def test_pair_needs_both_legs_on_usable_live_accounts(
+    env, db, partner_card, share_source
+):
+    """§5.33 check 1a: 404 once a leg's card is unshared, 409 once archived."""
+
+    def leg(source, role, amount):
+        response = env.post(
+            {
+                "source_id": str(source.id),
+                "kind": "transfer",
+                "amount": amount,
+                "currency": "CNY",
+                "occurred_at": SEP6.isoformat(),
+                "transfer_role": role,
+                "transfer_subtype": "plain",
+            }
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    share_source(env.ledger, partner_card)
+    out_id = leg(env.bank, "out", "-100.00")
+    in_id = leg(partner_card, "in", "100.00")
+    pair = f"/{out_id}/pair"
+
+    unshare(db, env.ledger, partner_card)
+    hidden = env.post({"other_transaction_id": in_id}, pair)
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(env.ledger, partner_card)
+    env.bank.archived, env.bank.archived_at = True, utcnow()
+    db.flush()
+    archived = env.post({"other_transaction_id": in_id}, pair)
+    assert archived.status_code == 409
+    assert archived.json()["code"] == "source_archived"
+
+    env.bank.archived, env.bank.archived_at = False, None
+    db.flush()
+    paired = env.post({"other_transaction_id": in_id}, pair)
+    assert paired.status_code == 200, paired.text
+    assert paired.json()["in"]["source_id"] == str(partner_card.id)
+
+
 def test_patch_moves_a_row_only_onto_a_usable_account(env, db, partner_card, share_source):
     created = env.post(expense_body(env)).json()
 
