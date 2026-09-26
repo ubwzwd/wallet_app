@@ -165,7 +165,8 @@ def test_source_patch_allows_default_currency_to_appear_unvalidated():
 def test_source_response_serializes_decimals_with_fixed_digits():
     resp = SourceResponse(
         id=UID(),
-        ledger_id=UID(),
+        owner_id=UID(),
+        shared_to=[],
         name="Revolut EUR",
         type="other",
         default_currency="EUR",

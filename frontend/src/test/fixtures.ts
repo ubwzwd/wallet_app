@@ -9,7 +9,6 @@ import type {
   Category,
   CategoryTree,
   CurrencyList,
-  FinanceSource,
   ImportBatch,
   ImportCommitResult,
   ImportDeleteResult,
@@ -17,7 +16,6 @@ import type {
   ImportRow,
   ImportUploadResult,
   Ledger,
-  LedgerSource,
   Money,
   StatsSummary,
   StatsTrend,
@@ -27,13 +25,17 @@ import type {
   Uuid,
 } from '@/api/types';
 
-export const LEDGER_ID: Uuid = '8f0f7b2e-1111-4222-8333-444455556666';
-export const USER_ID: Uuid = '4ee1c8fa-2222-4333-8444-555566667777';
-export const SOURCE_ID: Uuid = '5b6c7d8e-3333-4444-8555-666677778888';
-export const TX_ID: Uuid = '9a8b7c6d-4444-4555-8666-777788889999';
-export const BATCH_ID: Uuid = 'd1e2f3a4-5566-4778-899a-bbccddeeff00';
-export const IMPORT_ROW_ID: Uuid = 'e5f6a7b8-6666-4777-8888-999900001111';
-export const CATEGORY_VERSION = '2026-09-10';
+export * from './ids';
+export * from './fixtures-sources';
+import {
+  BATCH_ID,
+  CATEGORY_VERSION,
+  IMPORT_ROW_ID,
+  LEDGER_ID,
+  SOURCE_ID,
+  TX_ID,
+  USER_ID,
+} from './ids';
 
 export function makeUser(over: Partial<User> = {}): User {
   return {
@@ -60,38 +62,6 @@ export function makeLedger(over: Partial<Ledger> = {}): Ledger {
     member_count: 2,
     ...over,
   };
-}
-
-export function makeSource(over: Partial<FinanceSource> = {}): FinanceSource {
-  return {
-    id: SOURCE_ID,
-    owner_id: USER_ID,
-    name: '招商 信用卡',
-    type: 'credit',
-    default_currency: 'CNY',
-    opening_balance: '-3204.0000',
-    archived: false,
-    archived_at: null,
-    created_by: USER_ID,
-    updated_by: null,
-    created_at: '2026-02-01T09:05:00.000000Z',
-    updated_at: '2026-09-01T12:00:00.000000Z',
-    shared_to: [LEDGER_ID],
-    balance: '-4120.5500',
-    balance_base: '-4120.5500',
-    balance_rate: '1.00000000',
-    balance_rate_date: '2026-09-11',
-    rate_missing_count: 0,
-    ...over,
-  };
-}
-
-/** A `GET /ledgers/{id}/sources` row: mine by default; `mine: false` nulls owner-only fields. */
-export function makeLedgerSource(over: Partial<LedgerSource> = {}): LedgerSource {
-  const { mine = true, usable = true, ...rest } = over;
-  const ownerOnly = { opening_balance: null, balance: null, balance_base: null, shared_to: null };
-  const hidden = mine ? {} : { ...ownerOnly, balance_rate: null, balance_rate_date: null };
-  return { ...makeSource({ ...hidden, ...rest }), mine, usable };
 }
 
 export function makeTransaction(over: Partial<Transaction> = {}): Transaction {

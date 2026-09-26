@@ -94,25 +94,9 @@ class Flow:
         return response.json()["items"]
 
     def balance(self, source) -> str:
-        """Opening balance plus every entry on ``source`` in this ledger.
-
-        Read back through the transaction list (§5.25) rather than an account
-        endpoint: accounts are personal since decision §14.62 and their
-        balance spans every ledger, while this story is about what one batch
-        does to one ledger. Every amount here is CNY, the account's currency.
-        """
-        response = self.client.get(
-            f"{self.base}/transactions",
-            params={"source_id": str(source.id), "limit": 100},
-            headers=self.headers,
-        )
+        response = self.client.get(f"/api/v1/sources/{source.id}", headers=self.headers)
         assert response.status_code == 200, response.text
-        body = response.json()
-        assert body["total"] == len(body["items"])
-        total = source.opening_balance + sum(
-            (Decimal(item["amount"]) for item in body["items"]), Decimal("0")
-        )
-        return f"{total:.4f}"
+        return response.json()["balance"]
 
     def event_names(self, tid) -> list[str]:
         return [event["event"] for event in self.transaction(tid)["events"]]

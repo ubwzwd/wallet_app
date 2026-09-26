@@ -76,7 +76,7 @@ import {
   makeImportFormat,
   makeImportRow,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeStatsSummary,
   makeStatsTrend,
   makeTransaction,
@@ -113,14 +113,14 @@ const APP_ROUTES = {
   '(app)/l/[ledgerId]/index': LedgerHomeRoute,
   '(app)/l/[ledgerId]/transactions/index': TransactionsRoute,
   '(app)/l/[ledgerId]/transactions/new': NewTransactionRoute,
-  '(app)/l/[ledgerId]/sources/index': SourcesRoute,
+  '(app)/accounts/index': SourcesRoute,
   '(app)/l/[ledgerId]/imports/index': ImportsRoute,
   '(app)/l/[ledgerId]/imports/guide': ImportsGuideRoute,
   '(app)/l/[ledgerId]/imports/new': NewImportRoute,
   '(app)/l/[ledgerId]/imports/[batchId]': ImportBatchRoute,
   '(app)/l/[ledgerId]/settings': LedgerSettingsRoute,
-  '(app)/l/[ledgerId]/sources/new': NewSourceRoute,
-  '(app)/l/[ledgerId]/sources/[sourceId]/edit': EditSourceRoute,
+  '(app)/accounts/new': NewSourceRoute,
+  '(app)/accounts/[sourceId]/edit': EditSourceRoute,
   '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
   '(app)/l/[ledgerId]/transactions/[txId]/edit': EditTransactionRoute,
   '(app)/l/[ledgerId]/transfers/[pairId]/index': TransferDetailRoute,
@@ -129,7 +129,7 @@ const APP_ROUTES = {
   '(app)/ledgers/new': NewLedgerRoute,
 };
 
-const CHECKING = makeSource({
+const CHECKING = makeLedgerSource({
   id: 'src-checking',
   name: '招行储蓄卡',
   type: 'checking',
@@ -137,7 +137,7 @@ const CHECKING = makeSource({
   balance: '1200.0000',
   balance_base: '1200.0000',
 });
-const CREDIT = makeSource({
+const CREDIT = makeLedgerSource({
   id: 'src-credit',
   name: '招行信用卡',
   type: 'credit',
@@ -262,6 +262,15 @@ beforeEach(async () => {
   mockGet('/categories', makeCategoryTree());
   mockGet('/rates/currencies', makeCurrencyList());
   mockGet(`/ledgers/${LEDGER}/sources`, { items: [CHECKING, CREDIT], total: 2 });
+  // Personal accounts with the server-side totals the home header reads (§14.62 d).
+  mockGet('/sources', {
+    items: [CHECKING, CREDIT],
+    total: 2,
+    base_currency: 'CNY',
+    assets: '1200.0000',
+    liabilities: '-300.0000',
+    net_worth: '900.0000',
+  });
   mockGet(`/ledgers/${LEDGER}/stats/summary`, makeStatsSummary());
   mockGet(`/ledgers/${LEDGER}/stats/trend`, makeStatsTrend());
   mockGet(`/ledgers/${LEDGER}/transactions`, TX_PAGE);
@@ -460,9 +469,9 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
   expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
 
-  // ── 账户: its own destination since this phase (屏幕稿 09) ───────────────────────
+  // ── 账户: a global page since §14.62 (屏幕稿 09) ─────────────────────────────────
   fireEvent.press(screen.getByTestId('sidebar-sources'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources`));
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts'));
   expect(await screen.findByTestId('sources-screen')).toBeTruthy();
 
   // ── 导入 ─────────────────────────────────────────────────────────────────────────
