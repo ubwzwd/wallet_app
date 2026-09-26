@@ -1,6 +1,6 @@
 {
   "home": {
-    "net_worth_line": "Net worth · converted to {{currency}}",
+    "net_worth_line": "Your net worth · converted to {{currency}}",
     "assets_amount": "Assets {{amount}}",
     "liabilities_amount": "Liabilities {{amount}}",
     "excluded_archived_one": "Not counting {{count}} archived account",
@@ -10,6 +10,7 @@
     "month_expense": "{{month}} expenses",
     "month_income": "{{month}} income",
     "accounts_title": "Accounts",
+    "accounts_empty": "You have no account of your own yet",
     "manage_accounts": "Manage accounts",
     "manage_accounts_short": "Manage",
     "categories_title": "{{month}} expenses by category",
@@ -41,6 +42,8 @@
       "invite": "Invite a member",
       "title": "This ledger is still empty",
       "body": "Three steps to get going: add an account → record or import transactions → invite someone to share it. Categories are built in and fixed, so there is nothing to configure first.",
+      "body_two_steps": "Two steps to get going: record or import transactions → invite someone to share it. Your accounts work in every ledger you are in, and categories are built in and fixed, so there is nothing to configure first.",
+      "header_record": "Add a transaction",
       "step_source_title": "Add an account",
       "step_source_body": "A bank card, cash or a credit card all count",
       "step_source_cta": "Add",

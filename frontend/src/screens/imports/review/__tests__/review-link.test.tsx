@@ -29,7 +29,7 @@ import {
   makeImportBatch,
   makeImportRow,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTestQueryClient,
   makeTransaction,
   makeUser,
@@ -44,9 +44,9 @@ let queryClient: QueryClient;
 let api: MockApi;
 
 const LEDGER = makeLedger({ base_currency: 'CNY' });
-const SOURCE = makeSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
-const SAVINGS = makeSource({ id: 'src-savings', name: '招行储蓄卡' });
-const ARCHIVED = makeSource({ id: 'src-old', name: '旧卡', archived: true });
+const SOURCE = makeLedgerSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
+const SAVINGS = makeLedgerSource({ id: 'src-savings', name: '招行储蓄卡' });
+const ARCHIVED = makeLedgerSource({ id: 'src-old', name: '旧卡', archived: true, usable: false });
 const BATCH_PATH = `/ledgers/${LEDGER_ID}/imports/${BATCH_ID}`;
 const ROWS_PATH = `${BATCH_PATH}/rows`;
 const TX_PATH = `/ledgers/${LEDGER_ID}/transactions`;

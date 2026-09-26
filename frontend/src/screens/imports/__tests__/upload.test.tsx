@@ -28,7 +28,7 @@ import {
   makeImportFormat,
   makeImportUploadResult,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTestHandlers,
   makeTestQueryClient,
   makeUser,
@@ -62,8 +62,29 @@ function setWide(wide: boolean): void {
 }
 
 const LEDGER = makeLedger({ base_currency: 'CNY' });
-const SOURCE = makeSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
-const ARCHIVED = makeSource({ id: 'src-archived', name: '旧卡', archived: true });
+const SOURCE = makeLedgerSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
+const ARCHIVED = makeLedgerSource({
+  id: 'src-archived',
+  name: '旧卡',
+  archived: true,
+  usable: false,
+});
+/** A member's card shared into this ledger (decision §14.62): usable, balance not mine. */
+const SHARED = makeLedgerSource({
+  id: 'src-bob',
+  name: 'Bob 的储蓄卡',
+  type: 'checking',
+  owner_id: 'user-bob',
+  mine: false,
+});
+/** Bob stopped sharing it; old entries here still name it. */
+const UNSHARED = makeLedgerSource({
+  id: 'src-bob-old',
+  name: 'Bob 的旧卡',
+  owner_id: 'user-bob',
+  mine: false,
+  usable: false,
+});
 const IMPORTS_PATH = `/ledgers/${LEDGER_ID}/imports`;
 
 function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -136,7 +157,10 @@ beforeEach(async () => {
   await i18next.changeLanguage('zh');
   setWide(true);
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
-  mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE, ARCHIVED], total: 2 });
+  mockGet(`/ledgers/${LEDGER_ID}/sources`, {
+    items: [SOURCE, ARCHIVED, SHARED, UNSHARED],
+    total: 4,
+  });
   mockGet('/import-format', makeImportFormat());
   mockGet(IMPORTS_PATH, { items: [], total: 0 });
   pickFileMock.mockReset();
@@ -162,6 +186,29 @@ test('the target account offers only unarchived accounts and names its currency'
   fireEvent.press(screen.getByTestId(`upload-source-picker-option-${SOURCE_ID}`));
   expect(await screen.findByTestId('upload-source-hint')).toBeTruthy();
   expect(screen.getByTestId('upload-source-hint').props.children).toContain('CNY');
+});
+
+test('the target account groups mine and shared, without a balance that is not mine', async () => {
+  renderUpload();
+
+  fireEvent.press(await screen.findByTestId('upload-source-picker-trigger'));
+  expect(await screen.findByTestId('upload-source-picker-group-mine')).toHaveTextContent('我的');
+  expect(screen.getByTestId('upload-source-picker-group-shared')).toHaveTextContent(
+    '成员共享的',
+  );
+  expect(screen.getByTestId(`upload-source-picker-option-${SOURCE_ID}`)).toHaveTextContent(
+    /4,120\.55/,
+  );
+  const shared = screen.getByTestId('upload-source-picker-option-src-bob');
+  expect(shared).toHaveTextContent(/储蓄卡 · CNY/);
+  expect(shared).not.toHaveTextContent(/\d\.\d\d/);
+  // No longer shared: an import cannot target it.
+  expect(screen.queryByTestId('upload-source-picker-option-src-bob-old')).toBeNull();
+
+  fireEvent.press(shared);
+  expect(await screen.findByTestId('upload-source-picker-value')).toHaveTextContent(
+    'Bob 的储蓄卡',
+  );
 });
 
 test('a successful upload goes straight to review without a second request', async () => {

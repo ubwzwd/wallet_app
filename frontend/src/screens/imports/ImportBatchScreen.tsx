@@ -142,7 +142,9 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const currencies = useCurrencies();
   // 屏幕稿 03's 币种 picker reads 「CNY 人民币」, not the server's ISO English name.
   const currencyNames = useCurrencyNames(currencies.names);
-  const sources = useLedgerSources(ledgerId);
+  // Archived and no-longer-shared accounts included: the review names the accounts the
+  // matched entries sit on, and the counterpart picker filters to the usable ones itself.
+  const sources = useLedgerSources(ledgerId, { include_archived: true });
 
   // The first page decides whether there is anything else to fetch: an upload seeds the
   // whole batch under this key, in which case `total` equals what is already here.

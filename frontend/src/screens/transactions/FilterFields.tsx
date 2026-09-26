@@ -12,7 +12,7 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, TransactionListParams, TxKind } from '@/api/types';
+import type { LedgerSource, TransactionListParams, TxKind } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { dateRangePreset } from '@/domain/dates';
 import { KINDS } from '@/domain/kinds';
@@ -45,7 +45,7 @@ export interface FilterFieldProps {
   filters: TransactionListParams;
   onPatch(next: Partial<TransactionListParams>): void;
   index: CategoryIndex | null;
-  sources: readonly FinanceSource[];
+  sources: readonly LedgerSource[];
   currencyCodes: readonly string[];
   baseCurrency: string;
   lang: Lang;

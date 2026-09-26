@@ -28,7 +28,7 @@ import {
   makeCategoryTree,
   makeCurrencyList,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTransaction,
   makeUser,
   mockApi,
@@ -56,8 +56,26 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
 };
 
-const SOURCE_A = makeSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
-const SOURCE_B = makeSource({ id: 's2', name: '建行信用卡', type: 'credit' });
+const SOURCE_A = makeLedgerSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
+const SOURCE_B = makeLedgerSource({ id: 's2', name: '建行信用卡', type: 'credit' });
+/** Bob's card, shared into this ledger (decision §14.62): no balance of his reaches me. */
+const SOURCE_SHARED = makeLedgerSource({
+  id: 's3',
+  name: 'Bob 的储蓄卡',
+  type: 'checking',
+  owner_id: 'user-bob',
+  mine: false,
+});
+/** Bob stopped sharing this one; old entries here still sit on it. */
+const SOURCE_GONE = makeLedgerSource({
+  id: 's4',
+  name: 'Bob 的日元卡',
+  type: 'cash',
+  default_currency: 'JPY',
+  owner_id: 'user-bob',
+  mine: false,
+  usable: false,
+});
 
 const SUMMARY: TransactionSummary = {
   base_currency: 'CNY',
@@ -125,7 +143,10 @@ beforeEach(async () => {
   });
   mockGet('/categories', makeCategoryTree());
   mockGet('/rates/currencies', makeCurrencyList());
-  mockGet(`/ledgers/${LEDGER}/sources`, { items: [SOURCE_A, SOURCE_B], total: 2 });
+  mockGet(`/ledgers/${LEDGER}/sources`, {
+    items: [SOURCE_A, SOURCE_B, SOURCE_SHARED, SOURCE_GONE],
+    total: 4,
+  });
   setWide(true);
 });
 
@@ -178,6 +199,51 @@ test('the narrow layout puts the same controls behind a counted filter button', 
   fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
   await waitFor(() => expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull());
   expect(searchOf(router).kind).toEqual(['expense', 'income']);
+});
+
+test('the account filter offers every account the ledger names, grouped, balances mine only', async () => {
+  setWide(false);
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.press(await screen.findByTestId('tx-filter-bar-open'));
+  expect(await screen.findByTestId('tx-filter-bar-source-group-mine')).toHaveTextContent('我的');
+  expect(screen.getByTestId('tx-filter-bar-source-group-shared')).toHaveTextContent('成员共享的');
+  // Filtering is about entries already written: an account no longer shared still filters.
+  expect(screen.getByTestId('tx-filter-bar-source-s4')).toHaveTextContent(/Bob 的日元卡/);
+  // Mine carries its balance; Bob's do not.
+  expect(screen.getByTestId('tx-filter-bar-source-s1')).toHaveTextContent(/4,120\.55/);
+  expect(screen.getByTestId('tx-filter-bar-source-s3')).not.toHaveTextContent(/\d\.\d\d/);
+  // The currency pills come from the same list.
+  expect(screen.getByTestId('tx-filter-bar-currency-JPY')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('tx-filter-bar-source-s4'));
+  await waitFor(() => expect(searchOf(router).source_id).toBe('s4'));
+  fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
+  // The chip names it, rather than printing an id.
+  expect(await screen.findByTestId('tx-filter-bar-chips-source_id-s4')).toHaveTextContent(
+    /Bob 的日元卡/,
+  );
+});
+
+test('the wide account dropdown groups the same way, and a title is never a filter', async () => {
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.press(await screen.findByTestId('tx-filter-bar-source-trigger'));
+  const titleMine = await screen.findByTestId('tx-filter-bar-source-option-__group-mine');
+  expect(titleMine).toHaveTextContent('我的');
+  expect(screen.getByTestId('tx-filter-bar-source-option-__group-shared')).toHaveTextContent(
+    '成员共享的',
+  );
+  const order = screen
+    .getAllByTestId(/^tx-filter-bar-source-option-/)
+    .map((node) => String(node.props.testID).replace('tx-filter-bar-source-option-', ''));
+  expect(order).toEqual(['__group-mine', 's1', 's2', '__group-shared', 's3', 's4']);
+
+  fireEvent.press(titleMine);
+  fireEvent.press(screen.getByTestId('tx-filter-bar-source-option-s3'));
+  await waitFor(() => expect(searchOf(router).source_id).toBe('s3'));
 });
 
 test('leaving the screen for good closes the narrow drawer; coming back never reopens it', async () => {

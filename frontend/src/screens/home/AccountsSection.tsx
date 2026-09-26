@@ -7,6 +7,10 @@
  * Archived accounts never appear here; they are only counted in the header's "not counting
  * N archived accounts" line. `balance_base === null` says "no rate yet" rather than reading
  * as zero (04 §4.5).
+ *
+ * The accounts are mine (decision §14.62) — the same list `/accounts` manages, with balances
+ * over every ledger they are used in — so 「管理账户」 leads out of the ledger, while a row
+ * still opens this ledger's entries on that account.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -35,6 +39,8 @@ export interface AccountsSectionProps {
   baseCurrency: string;
   /** Opens the account list. */
   onManage(): void;
+  /** Opens the new-account form — offered when I have no live account of my own. */
+  onCreate(): void;
   /** Opens the transaction list pre-filtered to that account. */
   onPressSource(sourceId: Uuid): void;
 }
@@ -45,6 +51,7 @@ export function AccountsSection({
   query,
   baseCurrency,
   onManage,
+  onCreate,
   onPressSource,
 }: AccountsSectionProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -89,6 +96,21 @@ export function AccountsSection({
   // page sorts by, so the two screens never disagree about which account leads the list.
   const all = query.data.items.filter((source) => !source.archived);
   const active = SOURCE_TYPE_ORDER.flatMap((type) => all.filter((s) => s.type === type));
+
+  // Entries here, but none of my own accounts live (I book onto ones members shared in).
+  if (active.length === 0) {
+    return (
+      <View style={styles.section} testID="home-balances">
+        {header}
+        <EmptyState
+          icon="wallet"
+          title={t('stats:home.accounts_empty')}
+          primaryAction={{ label: t('stats:home.empty.step_source_title'), onPress: onCreate }}
+          testID="home-balances-empty"
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.section} testID="home-balances">

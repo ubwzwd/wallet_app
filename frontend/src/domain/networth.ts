@@ -3,6 +3,9 @@
  * §14.50): credit accounts are liabilities (their `balance_base` is already negative and stays
  * that way), everything else is an asset; archived accounts don't count at all; an account
  * whose `balance_base` couldn't be converted is counted separately, never coerced to zero.
+ *
+ * Net worth is personal (decision §14.62): given a ledger's account list, the accounts other
+ * members shared in (`mine: false`, no balance of theirs is ever sent) are skipped outright.
  */
 import type { FinanceSource, Money, SourceType } from '@/api/types';
 import { formatMoney4, parseMoney } from './money';
@@ -19,7 +22,10 @@ export interface NetWorthSummary {
   byType: Record<SourceType, { subtotal: Money; count: number }>;
 }
 
-export function sumSources(sources: FinanceSource[]): NetWorthSummary {
+/** A row of `GET /sources` (always mine) or of `GET /ledgers/{id}/sources` (carries `mine`). */
+type SummedSource = FinanceSource & { mine?: boolean };
+
+export function sumSources(sources: readonly SummedSource[]): NetWorthSummary {
   let assets = 0n;
   let liabilities = 0n;
   let archivedCount = 0;
@@ -33,6 +39,7 @@ export function sumSources(sources: FinanceSource[]): NetWorthSummary {
   };
 
   for (const source of sources) {
+    if (source.mine === false) continue;
     if (source.archived) {
       archivedCount++;
       continue;

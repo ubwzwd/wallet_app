@@ -6,16 +6,19 @@
  * white card on a narrow screen). Assets and liabilities stay on screen — decision §14.50
  * asks for all three — but as one small line under the number rather than two more cards.
  *
- * The three numbers are summed locally by `sumSources`, the one place that knows the rules:
- * credit cards are liabilities, archived accounts do not count at all, and a balance that
- * could not be converted is counted as "no rate yet" rather than read as zero.
+ * Net worth is personal (decision §14.62): the three numbers are the caller's own, as
+ * `GET /sources` totals them in the caller's base currency — every ledger's entries on every
+ * one of my accounts, whichever ledger this page belongs to. The server leaves all three out
+ * when any live account cannot be converted; the header then falls back to `sumSources`
+ * over the accounts that can, and says how many could not (never reading "no rate" as 0).
+ * The archived count and the 「无法折算」 lines come from the same list.
  */
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { UseQueryResult } from '@tanstack/react-query';
 
-import type { FinanceSource, Paged } from '@/api/types';
+import type { Money, SourceListResponse } from '@/api/types';
 import { absMoney, parseMoney, sumSources } from '@/domain';
 import { useLang } from '@/i18n';
 import { formatAmountPlain, formatMoney } from '@/i18n/format';
@@ -27,7 +30,8 @@ import { EmptyState, ListCard, Skeleton, Text } from '@/ui';
 const TABULAR = { fontVariant: ['tabular-nums' as const] };
 
 export interface NetWorthHeaderProps {
-  query: UseQueryResult<Paged<FinanceSource>>;
+  query: UseQueryResult<SourceListResponse>;
+  /** Used until the response names my own base currency. */
   baseCurrency: string;
   /** The two month tint cards. Wide: right of the number; narrow: under it. */
   totals?: React.ReactNode;
@@ -41,9 +45,40 @@ export interface NetWorthHeaderProps {
   onPressArchived(): void;
 }
 
+interface Figures {
+  assets: Money;
+  liabilities: Money;
+  net: Money;
+  archivedCount: number;
+  unconvertibleCount: number;
+  /** Entries skipped inside my balances for want of a rate (`rate_missing_count`). */
+  rateMissing: number;
+}
+
+/** The server's totals when it could make them, `sumSources`' partial sums otherwise. */
+function figuresOf(data: SourceListResponse): Figures {
+  const local = sumSources(data.items);
+  const server =
+    data.assets !== null && data.liabilities !== null && data.net_worth !== null
+      ? { assets: data.assets, liabilities: data.liabilities, net: data.net_worth }
+      : null;
+  const rateMissing = data.items
+    .filter((s) => !s.archived)
+    .reduce((n, s) => n + s.rate_missing_count, 0);
+  return {
+    assets: server?.assets ?? local.assets,
+    // Printed through `absMoney` below, so either sign reads as the positive "owed" figure.
+    liabilities: server?.liabilities ?? local.liabilities,
+    net: server?.net ?? local.net,
+    archivedCount: local.archivedCount,
+    unconvertibleCount: local.unconvertibleCount,
+    rateMissing,
+  };
+}
+
 export function NetWorthHeader({
   query,
-  baseCurrency,
+  baseCurrency: fallbackCurrency,
   totals,
   actions,
   hint,
@@ -54,7 +89,8 @@ export function NetWorthHeader({
   const lang = useLang();
   const wide = useIsWide();
 
-  const summary = query.data ? sumSources(query.data.items) : null;
+  const summary = query.data ? figuresOf(query.data) : null;
+  const baseCurrency = query.data?.base_currency ?? fallbackCurrency;
 
   // The month's tint cards come from a different request than the balances, so they stay on
   // screen while this block is loading or has failed (04 §4.4: every block carries its own
@@ -142,6 +178,12 @@ export function NetWorthHeader({
       {summary.unconvertibleCount > 0 ? (
         <Text variant="caption" tone="warning" testID="home-unconvertible-hint">
           {t('stats:home.no_rate_hint', { count: summary.unconvertibleCount })}
+        </Text>
+      ) : null}
+
+      {summary.rateMissing > 0 ? (
+        <Text variant="caption" tone="warning" testID="home-rate-missing-hint">
+          {t('stats:home.rate_missing', { count: summary.rateMissing })}
         </Text>
       ) : null}
 

@@ -7,9 +7,9 @@
  * paste box). Narrow stacks them in the same order.
  *
  * One account, one file: the CSV carries no account column, so the target account is
- * picked here and archived accounts are not offered (decision §3). The two entry points —
- * a `.csv` upload and a pasted block of CSV text — post to the same endpoint and run the
- * same validation; there is no JSON entry point.
+ * picked here and only accounts usable in this ledger are offered (decisions §3, §14.62).
+ * The two entry points — a `.csv` upload and a pasted block of CSV text — post to the same
+ * endpoint and run the same validation; there is no JSON entry point.
  *
  * Validation is synchronous (decision §5): a 201 already carries the batch and every draft
  * row, both of which `useUploadImport` seeds into the cache, so this screen `router.replace`s
@@ -89,7 +89,9 @@ export default function NewImportScreen(): React.JSX.Element {
   // Wide: the round back button and 「导入 · 上传账单」 over the title (§14.64 e).
   const back = useBack();
 
-  const sourcesQuery = useLedgerSources(ledgerId);
+  // The ledger's whole account list, under the key the entry form and the review share; the
+  // picker offers only the usable ones (decision §14.62).
+  const sourcesQuery = useLedgerSources(ledgerId, { include_archived: true });
   const formatQuery = useImportFormat();
   const recentQuery = useImports(ledgerId, { limit: RECENT_LIMIT });
   // Both mutations render their own failure in the card below, so neither raises the

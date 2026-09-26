@@ -8,7 +8,9 @@
     "date_from": "从",
     "date_to": "到",
     "empty": "没有符合条件的交易",
-    "fixed_kind": "只看{{kinds}}"
+    "fixed_kind": "只看{{kinds}}",
+    "group_mine": "我的",
+    "group_shared": "成员共享的"
   },
   "list": {
     "title": "交易",
@@ -235,7 +237,7 @@
     "quick_add": "快捷加数",
     "quick_multiply": "×2",
     "calculator_hint": "支持算式，如 12.5+8.8*2",
-    "no_sources": "先去建一个账户",
+    "no_sources": "这本账里还没有你能用的账户：建一个自己的，或请成员把账户共享进来",
     "no_sources_action": "去建账户",
     "recent_merchants": "最近商户",
     "save_and_next": "保存并再记一笔",

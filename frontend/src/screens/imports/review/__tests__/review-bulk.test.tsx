@@ -27,7 +27,7 @@ import {
   makeImportBatch,
   makeImportRow,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTestQueryClient,
   makeUser,
   mockApi,
@@ -43,7 +43,7 @@ let api: MockApi;
 let serverRows: ImportRow[] = [];
 
 const LEDGER = makeLedger({ base_currency: 'CNY' });
-const SOURCE = makeSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
+const SOURCE = makeLedgerSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
 const BATCH_PATH = `/ledgers/${LEDGER_ID}/imports/${BATCH_ID}`;
 const ROWS_PATH = `${BATCH_PATH}/rows`;
 const REVIEW_URL = `/l/${LEDGER_ID}/imports/${BATCH_ID}`;

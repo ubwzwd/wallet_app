@@ -8,7 +8,9 @@
     "date_from": "From",
     "date_to": "To",
     "empty": "No transaction matches these conditions",
-    "fixed_kind": "{{kinds}} only"
+    "fixed_kind": "{{kinds}} only",
+    "group_mine": "Mine",
+    "group_shared": "Shared by members"
   },
   "list": {
     "title": "Transactions",
@@ -249,7 +251,7 @@
     "quick_add": "Quick add",
     "quick_multiply": "×2",
     "calculator_hint": "Supports expressions, e.g. 12.5+8.8*2",
-    "no_sources": "Create an account first",
+    "no_sources": "No account you can use in this ledger yet: add one of your own, or ask a member to share one in",
     "no_sources_action": "Create an account",
     "recent_merchants": "Recent merchants",
     "save_and_next": "Save and add another",

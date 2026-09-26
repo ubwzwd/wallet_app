@@ -155,8 +155,11 @@
       "delete_confirm_label": "Type the ledger name to confirm — {{name}}",
       "delete_tile": {
         "transactions": "Transactions",
-        "sources": "Accounts",
+        "sources": "Shared accounts",
         "imports": "Import batches"
+      },
+      "delete_tile_note": {
+        "sources": "Only unshared — the accounts are kept"
       },
       "delete_tile_value": {
         "transactions": "{{count}} rows",

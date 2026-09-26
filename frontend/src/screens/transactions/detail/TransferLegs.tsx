@@ -13,7 +13,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, IsoDate, Money, TransferRole, Uuid } from '@/api/types';
+import type { IsoDate, LedgerSource, Money, TransferRole, Uuid } from '@/api/types';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -34,7 +34,7 @@ export interface LegLike {
   occurred_at?: IsoDate;
 }
 
-export type SourceMap = Readonly<Record<Uuid, FinanceSource>>;
+export type SourceMap = Readonly<Record<Uuid, LedgerSource>>;
 
 /** The counterparty of a single leg: a name, on the side the ledger's own leg is not. */
 export interface ExternalSide {

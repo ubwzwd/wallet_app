@@ -14,9 +14,9 @@
  * `confirm-cancel` / `confirm-require-text`) because to everything outside it *is* the
  * confirmation dialog of this flow.
  *
- * The 账户 tile shows the account total alone: `GET /ledgers/{id}` counts sources without
- * splitting archived ones out, so the mockup's 「4 个 + 2 归档」 has no second number to
- * print (03 §5, `LedgerDetail.counts`).
+ * The 账户 tile is 「共享账户 N · 只解除共享，不删账户」 (decision §14.62): accounts belong to
+ * people, so deleting a ledger only drops the shares into it — `LedgerDetail.counts.sources`
+ * counts exactly those (03 §5.10) — and every account lives on with its owner.
  */
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -53,18 +53,29 @@ export interface DeleteLedgerDialogProps {
 
 type TileKey = 'transactions' | 'sources' | 'imports';
 const TILES: readonly TileKey[] = ['transactions', 'sources', 'imports'];
+/** Tiles whose count needs a word on what deleting actually does to it. */
+const TILE_NOTES: Partial<Record<TileKey, true>> = { sources: true };
 
 function Tile({ tileKey, count, wide }: { tileKey: TileKey; count: number; wide: boolean }) {
   const { t } = useTranslation();
   const colors = useColors();
+  const note = TILE_NOTES[tileKey] ? (
+    <Text variant="micro" tone="secondary" testID={`delete-ledger-tile-${tileKey}-note`}>
+      {t(`ledger:settings.danger.delete_tile_note.${tileKey}`)}
+    </Text>
+  ) : null;
   return (
     <View
       testID={`delete-ledger-tile-${tileKey}`}
       style={[wide ? styles.tileWide : styles.tileNarrow, { backgroundColor: colors['bg.canvas'] }]}
     >
-      <Text variant="caption" tone="muted">
-        {t(`ledger:settings.danger.delete_tile.${tileKey}`)}
-      </Text>
+      <View style={styles.tileLabel}>
+        <Text variant="caption" tone="muted">
+          {t(`ledger:settings.danger.delete_tile.${tileKey}`)}
+        </Text>
+        {/* Narrow puts the note under the label, left of the number. */}
+        {!wide && note !== null ? note : null}
+      </View>
       <Text
         variant={wide ? 'heading' : 'subheading'}
         mono
@@ -73,6 +84,7 @@ function Tile({ tileKey, count, wide }: { tileKey: TileKey; count: number; wide:
       >
         {t(`ledger:settings.danger.delete_tile_value.${tileKey}`, { count })}
       </Text>
+      {wide && note !== null ? note : null}
     </View>
   );
 }
@@ -315,6 +327,7 @@ const styles = StyleSheet.create({
     paddingVertical: space['3'] + 2,
     borderRadius: radius.md,
   },
+  tileLabel: { flexShrink: 1, minWidth: 0, gap: 2 },
   tileNarrow: {
     flexDirection: 'row',
     alignItems: 'center',

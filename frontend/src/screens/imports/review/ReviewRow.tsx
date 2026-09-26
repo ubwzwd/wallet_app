@@ -21,10 +21,10 @@ import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type {
-  FinanceSource,
   ImportBatch,
   ImportRow,
   ImportRowPatch,
+  LedgerSource,
   Uuid,
 } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
@@ -47,7 +47,7 @@ export interface ReviewEnv {
   lang: Lang;
   currencyCodes: readonly string[];
   currencyNames: Readonly<Record<string, string>>;
-  sources: readonly FinanceSource[];
+  sources: readonly LedgerSource[];
 }
 
 /** What the keyboard needs from whichever cell is being edited (04 §4.11.7). */

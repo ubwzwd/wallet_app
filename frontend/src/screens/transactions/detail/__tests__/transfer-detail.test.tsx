@@ -30,7 +30,7 @@ import {
   makeCategoryTree,
   makeCurrencyList,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTransaction,
   makeUser,
 } from '@/test/fixtures';
@@ -40,8 +40,8 @@ import { toast } from '@/ui';
 const LEDGER = 'ledger-transfer';
 const PAIR = 'pair-77';
 
-const SOURCE_A = makeSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
-const SOURCE_B = makeSource({ id: 's2', name: '建行信用卡', type: 'credit' });
+const SOURCE_A = makeLedgerSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
+const SOURCE_B = makeLedgerSource({ id: 's2', name: '建行信用卡', type: 'credit' });
 
 const ROUTES = {
   _layout: RootLayout,

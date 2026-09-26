@@ -6,27 +6,39 @@
  * Only the trigger changes: the options are the same accounts `SourcePicker` offers
  * (`selectableSources`, so an archived account still only appears while it is the one this
  * entry already sits on) and they keep the `<id>-trigger` / `<id>-option-<uuid>` test ids
- * the behaviour tests address.
+ * the behaviour tests address. As in `SourcePicker`, the list splits into 「我的」 and
+ * 「成员共享的」 once a member has shared an account in, and someone else's account shows no
+ * balance — the server does not send one (decision §14.62).
  */
 import React from 'react';
 import { ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, Uuid } from '@/api/types';
+import type { LedgerSource, Uuid } from '@/api/types';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { ListRow, Popover, Sheet, SourceTypeIcon, Text, selectableSources } from '@/ui';
+import {
+  ListRow,
+  Popover,
+  Sheet,
+  SourceGroupLabel,
+  SourceTypeIcon,
+  Text,
+  groupSources,
+  selectableSources,
+  showsSourceGroups,
+} from '@/ui';
 
 import { useAmountText } from '../amount';
 import { FieldLabel, RowField } from './parts';
 
 export interface SourceFieldProps {
-  sources: readonly FinanceSource[];
+  sources: readonly LedgerSource[];
   value: Uuid | null;
   onChange(next: Uuid | null): void;
   /** Extra restriction, e.g. "credit cards only" for a card repayment (04 §4.6.4). */
-  filter?(source: FinanceSource): boolean;
+  filter?(source: LedgerSource): boolean;
   /** Keeps this archived account selectable (edit mode only, 04 §4.7). */
   allowArchivedId?: Uuid | null;
   label: string;
@@ -47,7 +59,7 @@ export interface SourceFieldProps {
 }
 
 /** 「储蓄 · CNY」 — the type and currency line under an account's name. */
-function subtitleOf(source: FinanceSource, t: (key: string) => string): string {
+function subtitleOf(source: LedgerSource, t: (key: string) => string): string {
   return `${t(`source:type.${source.type}`)} · ${source.default_currency}`;
 }
 
@@ -75,7 +87,8 @@ export function SourceField({
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef<View>(null);
 
-  const options = selectableSources(sources, filter, allowArchivedId);
+  const groups = groupSources(selectableSources(sources, filter, allowArchivedId));
+  const titled = showsSourceGroups(groups);
   const current = value === null ? undefined : sources.find((s) => s.id === value);
   const hasError = typeof error === 'string' && error.length > 0;
 
@@ -86,27 +99,36 @@ export function SourceField({
 
   const list = (
     <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-      {options.length === 0 ? (
+      {groups.length === 0 ? (
         <Text variant="body" tone="muted" style={styles.empty}>
           {t('common:status.none')}
         </Text>
       ) : null}
-      {options.map((source) => (
-        <ListRow
-          key={source.id}
-          testID={`${testID}-option-${source.id}`}
-          icon={<SourceTypeIcon type={source.type} size={34} />}
-          title={source.name}
-          subtitle={
-            source.archived
-              ? `${subtitleOf(source, t)} · ${t('common:status.archived')}`
-              : subtitleOf(source, t)
-          }
-          amount={money(source.balance ?? '0', source.default_currency)}
-          amountTone="secondary"
-          selected={source.id === value}
-          onPress={() => pick(source.id)}
-        />
+      {groups.map((group) => (
+        <React.Fragment key={group.key}>
+          {titled ? (
+            <SourceGroupLabel group={group.key} testID={`${testID}-group-${group.key}`} />
+          ) : null}
+          {group.sources.map((source) => (
+            <ListRow
+              key={source.id}
+              testID={`${testID}-option-${source.id}`}
+              icon={<SourceTypeIcon type={source.type} size={34} />}
+              title={source.name}
+              subtitle={
+                source.archived
+                  ? `${subtitleOf(source, t)} · ${t('common:status.archived')}`
+                  : subtitleOf(source, t)
+              }
+              amount={
+                source.balance === null ? undefined : money(source.balance, source.default_currency)
+              }
+              amountTone="secondary"
+              selected={source.id === value}
+              onPress={() => pick(source.id)}
+            />
+          ))}
+        </React.Fragment>
       ))}
     </ScrollView>
   );
@@ -127,7 +149,11 @@ export function SourceField({
           value={current?.name ?? label}
           valueTone={current ? 'primary' : 'muted'}
           hint={inRow || !current ? undefined : subtitleOf(current, t)}
-          amount={current ? money(current.balance ?? '0', current.default_currency) : undefined}
+          amount={
+            current && current.balance !== null
+              ? money(current.balance, current.default_currency)
+              : undefined
+          }
           amountSub={inRow && current ? subtitleOf(current, t) : undefined}
           filled={!inRow}
           onPress={() => setOpen((v) => !v)}

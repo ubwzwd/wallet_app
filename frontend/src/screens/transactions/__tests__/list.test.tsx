@@ -26,7 +26,7 @@ import {
   makeCategoryTree,
   makeCurrencyList,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTransaction,
   makeUser,
   mockApi,
@@ -57,8 +57,8 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
 };
 
-const SOURCE_A = makeSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
-const SOURCE_B = makeSource({ id: 's2', name: '建行信用卡', type: 'credit' });
+const SOURCE_A = makeLedgerSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
+const SOURCE_B = makeLedgerSource({ id: 's2', name: '建行信用卡', type: 'credit' });
 
 /**
  * Six legs → five rows: the two transfer legs of `PAIR_ID` merge. The summary below is

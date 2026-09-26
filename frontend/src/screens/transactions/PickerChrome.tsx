@@ -10,7 +10,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, TransactionListParams } from '@/api/types';
+import type { LedgerSource, TransactionListParams } from '@/api/types';
 import type { Lang } from '@/i18n';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -29,7 +29,7 @@ export interface PickerFiltersProps {
   lang: Lang;
   filters: PickerFilterValues;
   onChange(next: (current: PickerFilterValues) => PickerFilterValues): void;
-  sources: readonly FinanceSource[];
+  sources: readonly LedgerSource[];
   /** Conditions the caller pinned; they are labels, never chips (decision §14.52 B11). */
   fixed: Partial<TransactionListParams>;
   /** An extra condition the caller owns — the refund tab's 「还有可退余额」 chip. */

@@ -153,7 +153,9 @@ export function TransactionForm({
     );
   }
 
-  if (sources.filter((s) => !s.archived).length === 0 && ctrl.mode === 'create') {
+  // Nothing to book onto: none of my own accounts is live here and no member shared one in
+  // (decision §14.62). An edit keeps going — its entry already has an account.
+  if (!sources.some((s) => s.usable) && ctrl.mode === 'create') {
     return (
       <Page testID={testID ?? 'tx-form'}>
         <EmptyState

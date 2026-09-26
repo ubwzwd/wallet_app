@@ -294,6 +294,11 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
   // 屏幕稿 12 · 删除账本 draws the three counts as tiles, one number each.
   expect(screen.getByTestId('delete-ledger-tile-transactions-value')).toHaveTextContent('328 笔');
   expect(screen.getByTestId('delete-ledger-tile-sources-value')).toHaveTextContent('4 个');
+  // Accounts belong to people (decision §14.62): deleting the ledger only drops the shares.
+  expect(screen.getByTestId('delete-ledger-tile-sources')).toHaveTextContent(/共享账户/);
+  expect(screen.getByTestId('delete-ledger-tile-sources-note')).toHaveTextContent(
+    '只解除共享，不删账户',
+  );
   expect(screen.getByTestId('delete-ledger-tile-imports-value')).toHaveTextContent('12 批');
 
   const accept = screen.getByTestId('confirm-accept');

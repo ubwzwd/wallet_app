@@ -15,7 +15,7 @@ import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
-import type { FinanceSource, TransactionListParams, Uuid } from '@/api/types';
+import type { LedgerSource, TransactionListParams, Uuid } from '@/api/types';
 import type { CategoryIndex } from '@/domain/categories';
 import { filterChips, type FilterChip as DomainFilterChip } from '@/domain/filters';
 import { categoryName } from '@/i18n/category';
@@ -93,7 +93,7 @@ export interface FilterBarProps {
   onPatch(next: Partial<TransactionListParams>): void;
   onRemove(key: keyof TransactionListParams, value?: string): void;
   onClear(): void;
-  sources: readonly FinanceSource[];
+  sources: readonly LedgerSource[];
   index: CategoryIndex | null;
   baseCurrency: string;
   lang: Lang;
