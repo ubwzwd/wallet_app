@@ -1,10 +1,10 @@
 /**
  * The one reader of the `last_ledger_id` preference (04 §2.2).
  *
- * Three callers need it and they used to hold three copies with three different loading
- * semantics: the landing redirect (`/` picks a ledger), the sidebar (the chrome outside a
- * ledger aims somewhere) and the ledger list (which card is marked 「当前」). They all read
- * the same value, so they all read it here.
+ * Its callers used to hold separate copies with different loading semantics: the landing
+ * redirect (`/`, and `/ledgers` with a ledger, pick one — §14.65 c) and the chrome outside a
+ * ledger (the sidebar card, the top bar pill and the tab bar aim at the same ledger). They
+ * all read the same value, so they all read it here.
  *
  * The value is a convenience, never state: everything past the redirect takes the ledger id
  * from the URL.

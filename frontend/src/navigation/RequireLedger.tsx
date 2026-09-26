@@ -114,7 +114,7 @@ export function RequireLedger({ ledgerId, children }: RequireLedgerProps): React
 
   if (found && !gone) return <>{children(ledgers)}</>;
 
-  // Nothing to offer and nothing to show: the empty ledger list page guides the user.
+  // Nothing to offer and nothing to show: `/ledgers` is the no-ledger onboarding (§14.65 c).
   if (ledgers.length === 0) return <Redirect href={routes.ledgers()} />;
 
   return <LedgerGone ledgerId={ledgerId} ledgers={ledgers} />;

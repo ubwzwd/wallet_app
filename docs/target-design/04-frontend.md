@@ -206,9 +206,10 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 | 导入批次 | `/l/:id/imports` | 导入 |
 | 账本设置 | `/l/:id` | 首页 |
 | 新建 / 加入账本（有账本时） | 最近那本账的首页（`chromeLedgerId`；为 `null` 时返回 `null`，不画返回） | 首页 |
-| `/settings`（仅当用户一本账都没有，这时它没有底栏） | `/ledgers`（零账本引导页） | 引导页（不再叫「账本管理」） |
+| 新建 / 加入账本（一本账都没有时，无壳） | `/ledgers`（零账本引导页） | 不画面包屑（`StandaloneHeader` 只有返回键与标题） |
+| `/settings`（仅当用户一本账都没有，这时它没有底栏） | `/ledgers`（零账本引导页） | 开始（`common:nav.ledgers`，en「Get started」，指引导页；不再叫「账本管理」） |
 
-上表的变化：删掉了 `/ledgers` 一行——有账本时它直接跳到最近那本账的首页，`backTargetFor('/ledgers')` 用不到，保留返回 `null` 即可；新建 / 加入账本的上级从 `/ledgers` 改成最近那本账的首页（`parentKey: 'home'`）。零账本时新建 / 加入两页没有壳，由页面自己的 `StandaloneHeader` 画返回 → `/ledgers` 引导页，不走这张表。（2026-09-26 按决策 §14.65 同步）
+上表的变化：删掉了 `/ledgers` 一行——有账本时它直接跳到最近那本账的首页，`backTargetFor('/ledgers')` 用不到，保留返回 `null` 即可；新建 / 加入账本的上级从 `/ledgers` 改成最近那本账的首页（`parentKey: 'home'`）。零账本时新建 / 加入两页没有壳，由页面自己的 `StandaloneHeader` 画返回，它同样经 `useBack()` 走这张表，落到 `/ledgers` 引导页（`parentKey: 'ledgers'`）。（2026-09-26 按决策 §14.65 同步；两行零账本的上级名 2026-09-27 验收时按代码补正）
 
 上级由一个纯函数按路径算出（`backTargetFor(pathname, {wide, chromeLedgerId, hasLedgers})`，未知路径与一级页返回 `null`），页面通过 `useBack()` 拿到 `show` / `parentLabel` / `goBack()`，不各写一套。页面若有自己的回退逻辑（例如记一笔的 `?next=`），用下文「表单自己的去向优先」的 `useBackOverride` 注册进来，壳的返回键与面包屑一起走它；「没有历史时的兜底」仍对齐上表。（2026-09-26 按决策 §14.65 同步）
 

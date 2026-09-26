@@ -6,9 +6,9 @@
  * The mockup draws it as a modal laid over the dimmed account list, vertically centred —
  * not as a card at the top of an empty page. The route is still a page of its own (04 §1.2
  * owns the route table), so the list behind arrives as the `behind` prop and is rendered
- * as the backdrop, the same shape `JoinDialogFrame` uses for 屏幕稿 13: RN `Modal` portals
- * the dialog and traps focus in it, while `pointerEvents="none"` + `aria-hidden` keep the
- * pointer and the screen reader out of the layer behind.
+ * as the backdrop: RN `Modal` portals the dialog and traps focus in it, while
+ * `pointerEvents="none"` + `aria-hidden` keep the pointer and the screen reader out of the
+ * layer behind.
  *
  * It is only the frame — what is inside it, and what the buttons do, belongs to
  * `SourceFormScreen`. Narrow layouts do not use it: there the same blocks run full width
