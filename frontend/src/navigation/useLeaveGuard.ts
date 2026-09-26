@@ -18,8 +18,9 @@ import React from 'react';
 import { useNavigation, useNavigationContainerRef } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import { type LeaveGuardHandle, useRegisterLeaveGuard } from '@/navigation';
 import { confirm } from '@/ui';
+
+import { type LeaveGuardHandle, useRegisterLeaveGuard } from './leaveGuard';
 
 /** The slice of the navigation object this hook needs; expo-router's type is wider. */
 interface RemovalEvent {

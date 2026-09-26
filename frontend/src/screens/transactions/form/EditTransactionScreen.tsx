@@ -20,7 +20,7 @@ import type { Transaction, TxKind } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useBack, useBackOverride } from '@/navigation';
+import { useBack, useBackOverride, useLeaveGuard } from '@/navigation';
 import { qk, useTransaction, useUpdateTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
@@ -35,7 +35,6 @@ import {
 } from './TransactionFormScreen';
 import { EditStateHeader } from './EditStateHeader';
 import type { TxFormValues } from './schemas';
-import { useLeaveGuard } from './useLeaveGuard';
 import {
   toTransactionUpdate,
   useTransactionForm,
