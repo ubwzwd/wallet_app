@@ -168,13 +168,17 @@ describe('narrow (<1024)', () => {
     expect(router.getByTestId('ledger-switcher-join')).toBeTruthy();
   });
 
-  test('the switcher ends with a way to the full ledger list', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+  test('the switcher ends with the current ledger’s settings (§14.65 a)', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/transactions` });
 
     fireEvent.press(await router.findByTestId('top-bar-ledger'));
-    fireEvent.press(await router.findByTestId('ledger-switcher-manage'));
+    const row = await router.findByTestId('ledger-switcher-settings');
+    expect(row).toHaveTextContent('账本设置');
+    // There is no ledger-list page left to point at.
+    expect(router.queryByText('账本管理')).toBeNull();
+    fireEvent.press(row);
 
-    await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/settings`));
   });
 
   test('the top bar carries the member disc, which leads to personal settings', async () => {
@@ -266,10 +270,10 @@ describe('narrow (<1024)', () => {
     expect(router.getByLabelText('关闭')).toBeTruthy();
   });
 
-  test('/ledgers wears the shell at 375: a sub-page top bar and the tab bar (§14.64)', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+  test('/ledgers/new wears the shell at 375: a sub-page top bar and the tab bar (§14.64)', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
 
-    expect(await router.findByText('ledgers-page')).toBeTruthy();
+    expect(await router.findByText('new-ledger-page')).toBeTruthy();
     expect(router.getByTestId('top-bar')).toBeTruthy();
     expect(await router.findByTestId('top-bar-back')).toBeTruthy();
     expect(router.queryByTestId('top-bar-ledger')).toBeNull();
@@ -480,18 +484,18 @@ describe('wide (>=1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
   });
 
-  test('/ledgers wears the same column as /settings: ledger card, five entries, 记一笔', async () => {
+  test('/ledgers/join wears the same column as /settings: ledger card, five entries, 记一笔', async () => {
     await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join' });
 
-    expect(await router.findByText('ledgers-page')).toBeTruthy();
+    expect(await router.findByText('join-ledger-page')).toBeTruthy();
     expect(router.getByTestId('app-shell-wide')).toBeTruthy();
     // §14.64 c: the card names the ledger the user last had open, as on `/settings`.
     expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
     expect(router.getByText('家庭账本')).toBeTruthy();
     expect(router.queryByTestId('sidebar-ledgers-link')).toBeNull();
 
-    // All five entries, none of them lit — the ledger list is none of them.
+    // All five entries, none of them lit — `/ledgers*` is none of them.
     for (const key of ['home', 'transactions', 'sources', 'imports', 'settings']) {
       expect(router.getByTestId(`sidebar-${key}`).props.accessibilityState.selected).toBe(false);
     }
@@ -502,9 +506,9 @@ describe('wide (>=1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`));
   });
 
-  test('/ledgers with nothing remembered names the ledger `/` would open', async () => {
+  test('/ledgers/new with nothing remembered names the ledger `/` would open', async () => {
     await setPref(PREF_NAMES.lastLedgerId, null);
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
 
     expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
     expect(router.getByText('家庭账本')).toBeTruthy();
@@ -544,14 +548,14 @@ describe('wide (>=1024)', () => {
     expect(row).toHaveTextContent(/ali@example\.com/);
   });
 
-  test('a cold /ledgers holds the card slot until the ledger to name is known', async () => {
+  test('a cold /ledgers/new holds the card slot until the ledger to name is known', async () => {
     await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
     // Hold `GET /ledgers` open: until it lands there is no ledger for the card to name.
     const pending: { resolve?: (reply: [number, unknown]) => void } = {};
     api.mock
       .onGet(apiUrl('/ledgers'))
       .reply(() => new Promise((resolve) => (pending.resolve = resolve)));
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
 
     expect(await router.findByTestId('sidebar-ledger-pending')).toBeTruthy();
     expect(router.queryByTestId('sidebar-ledger')).toBeNull();

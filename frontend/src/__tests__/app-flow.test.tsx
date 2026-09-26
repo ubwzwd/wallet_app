@@ -25,7 +25,8 @@
  * GET /ledgers), which URL the router ended up at, and what actually rendered.
  */
 import React from 'react';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { router as expoRouter } from 'expo-router';
 import i18next from 'i18next';
 
 // `expo-font` reaches for `expo-asset`; fonts never gate rendering, so the root layout's
@@ -40,7 +41,6 @@ import LoginRoute from '../../app/(auth)/login';
 import RegisterRoute from '../../app/(auth)/register';
 import AppGroupLayout from '../../app/(app)/_layout';
 import LedgersRoute from '../../app/(app)/ledgers/index';
-import LedgersGroupLayout from '../../app/(app)/ledgers/_layout';
 import PersonalSettingsRoute from '../../app/(app)/settings';
 import LedgerLayout from '../../app/(app)/l/[ledgerId]/_layout';
 import LedgerHomeRoute from '../../app/(app)/l/[ledgerId]/index';
@@ -108,7 +108,6 @@ const APP_ROUTES = {
   '(auth)/register': RegisterRoute,
   '(app)/_layout': AppGroupLayout,
   '(app)/settings': PersonalSettingsRoute,
-  '(app)/ledgers/_layout': LedgersGroupLayout,
   '(app)/ledgers/index': LedgersRoute,
   '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': LedgerHomeRoute,
@@ -487,10 +486,15 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
 });
 
-test('the ledger list wears the shell: 账本管理 in the top bar, a way back, the tab bar (§14.64)', async () => {
-  // The walk the user took when they reported the dead end: open a ledger, go to the
-  // ledger list, and try to get back. Narrow, on the real route tree.
+test('the switcher is the way to new / join / 账本设置, and /ledgers only lands (§14.65)', async () => {
+  // The walk the user took when they reported the dead end, after §14.65: open a ledger,
+  // reach 新建 / 加入 from the switcher, get back, and end on 账本设置 — no ledger-list page
+  // on the way. Narrow, on the real route tree.
   mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
+  mockGet(`/ledgers/${LEDGER}`, {
+    ...makeLedger({ id: LEDGER, name: '家庭账本', base_currency: 'CNY' }),
+    counts: { transactions: 1, sources: 2, import_batches: 0 },
+  });
   const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
 
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
@@ -499,39 +503,36 @@ test('the ledger list wears the shell: 账本管理 in the top bar, a way back, 
   fireEvent.press(screen.getByTestId('login-submit'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
 
-  // ── ledger pill → switcher → 账本管理 ────────────────────────────────────────────
+  // ── ledger pill → switcher → 新建账本: the shell's bar replaces the page's header ──
   fireEvent.press(await screen.findByTestId('top-bar-ledger'));
-  fireEvent.press(await screen.findByTestId('ledger-switcher-manage'));
-  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
-
-  expect(await screen.findByTestId('ledgers-screen')).toBeTruthy();
-  // The sub-page top bar names the page; the page itself no longer draws a big title.
-  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
-  expect(screen.getByTestId('bottom-tab-bar')).toBeTruthy();
-  expect(screen.getByText('切换后所有页面都跟着这本走')).toBeTruthy();
-
-  // ── 新建账本: the shell's bar replaces the page's own header ─────────────────────
-  fireEvent.press(screen.getByTestId('ledgers-create'));
+  fireEvent.press(await screen.findByTestId('ledger-switcher-new'));
   await waitFor(() => expect(router.getPathname()).toBe('/ledgers/new'));
   expect(await screen.findByTestId('new-ledger-screen')).toBeTruthy();
   await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('新建账本'));
   expect(screen.queryByTestId('new-ledger-header')).toBeNull();
+  expect(screen.getByTestId('bottom-tab-bar')).toBeTruthy();
 
-  // ── back, and back again: history, not a dead end ────────────────────────────────
+  // ── back: history, straight to the ledger home it was opened from ────────────────
   fireEvent.press(screen.getByTestId('top-bar-back'));
-  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
-  // The list stayed mounted under the stacked page; its title must come back with it.
-  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  expect(await screen.findByTestId('top-bar-ledger')).toBeTruthy();
 
   // ── 加入账本, then back: same story ───────────────────────────────────────────────
-  fireEvent.press(screen.getByTestId('ledgers-join'));
+  fireEvent.press(screen.getByTestId('top-bar-ledger'));
+  fireEvent.press(await screen.findByTestId('ledger-switcher-join'));
   await waitFor(() => expect(router.getPathname()).toBe('/ledgers/join'));
   await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('加入账本'));
   fireEvent.press(screen.getByTestId('top-bar-back'));
-  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
-  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
-
-  fireEvent.press(await screen.findByTestId('top-bar-back'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
-  expect(await screen.findByTestId('top-bar-ledger')).toBeTruthy();
+
+  // ── the switcher's last row is this ledger's settings ────────────────────────────
+  fireEvent.press(await screen.findByTestId('top-bar-ledger'));
+  fireEvent.press(await screen.findByTestId('ledger-switcher-settings'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  expect(await screen.findByTestId('ledger-settings-screen')).toBeTruthy();
+
+  // ── `/ledgers` (a fallback link, an old bookmark) is not a page: it lands home ────
+  act(() => expoRouter.navigate('/ledgers'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  expect(screen.queryByTestId('ledgers-screen')).toBeNull();
 });

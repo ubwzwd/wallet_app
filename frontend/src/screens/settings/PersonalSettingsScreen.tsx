@@ -217,13 +217,6 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
         onPress={goLedgerSettings}
         trailing={<Icon name="chevron-right" size={16} color={colors['fg.muted']} />}
       />
-      <ListRow
-        testID="settings-switch-ledger"
-        icon={<IconWell name="wallet" tone="neutral" size={32} />}
-        title={t('common:nav.ledgers')}
-        onPress={() => router.push(routes.ledgers() as Href)}
-        trailing={<Icon name="chevron-right" size={16} color={colors['fg.muted']} />}
-      />
     </ListCard>
   );
 

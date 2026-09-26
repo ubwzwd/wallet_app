@@ -5,7 +5,8 @@
  *   narrow → a top bar above the content and a five-slot tab bar below it
  *
  * Decision §14.64: this is the one shell of every signed-in page — the ledger pages,
- * `/ledgers*` and `/settings` alike. Outside a ledger route it aims at the ledger the user
+ * `/ledgers*` (in practice `/ledgers/new` and `/ledgers/join`: `/ledgers` itself only
+ * redirects to a ledger, §14.65 c) and `/settings` alike. Outside a ledger route it aims at the ledger the user
  * last had open (`useChromeLedger`), so the column, the tab bar and the sheets behave the
  * same everywhere.
  *
@@ -19,9 +20,9 @@
  * column stays (it is the way back out), but there is no tab bar to aim at a ledger, and
  * the narrow bar is the sub-page form, leading back to the onboarding page.
  *
- * The shell owns exactly one piece of state, the ledger switcher sheet, because three
- * different affordances open it (the sidebar header, the top bar's ledger pill, and the
- * "me" sheet). Page titles travel the other way, through `TopBarProvider`.
+ * The shell owns exactly one piece of state, the narrow ledger switcher sheet, which the
+ * top bar's ledger pill opens (the sidebar's card opens its own anchored panel). Page
+ * titles travel the other way, through `TopBarProvider`.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -109,7 +110,7 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
   const showTabs = !wide && !noLedgers;
   usePublishBottomTabInset(showTabs ? TAB_BAR_HEIGHT : 0);
 
-  // `/ledgers*` is always a sub-page; the ledger list is one even while the ledger its
+  // `/ledgers*` is always a sub-page; new / join are one even while the ledger their
   // button returns to is still loading, so the bar keeps its shape through the cold load.
   const subPage = back.show || onLedgerPages;
 
@@ -133,7 +134,7 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
       <View style={{ flex: 1 }}>
         <ShellTopBarContext.Provider value={showTopBar}>{children}</ShellTopBarContext.Provider>
       </View>
-      {showTabs ? <BottomTabBar onOpenSwitcher={openSwitcher} /> : null}
+      {showTabs ? <BottomTabBar /> : null}
       {/* Wide layouts get mockup 01's dropdown, anchored under the sidebar's ledger card
           and owned by the sidebar; only the narrow chrome opens this sheet. */}
       {showTabs ? <LedgerSwitcher open={switcherOpen} onClose={closeSwitcher} /> : null}

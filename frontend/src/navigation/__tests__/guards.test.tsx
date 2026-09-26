@@ -254,7 +254,25 @@ describe('rule 4 — a 404 on the ledger detail is the anchor for "you were remo
     expect(router.getPathname().startsWith(`/l/${LEDGER_A}`)).toBe(true);
     expect(router.queryByText('transactions-page')).toBeNull();
     // The other ledger is still reachable, so the notice offers a way over to it.
-    expect(router.getByText('看我的账本')).toBeTruthy();
+    expect(router.getByText('回到首页')).toBeTruthy();
+  });
+
+  test('「回到首页」 goes to `/`, which lands on a ledger the user can still open (§14.65 e)', async () => {
+    await signIn();
+    mockLedgers([LEDGER_A, LEDGER_B]);
+
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/transactions` });
+    expect(await router.findByText('transactions-page')).toBeTruthy();
+
+    // The re-read list no longer has the ledger the user was removed from.
+    mockLedgers([LEDGER_B]);
+    act(() => markLedgerGone(LEDGER_A));
+
+    const home = await router.findByText('回到首页');
+    fireEvent.press(home);
+
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
+    expect(await router.findByText('ledger-home')).toBeTruthy();
   });
 
   test('everything cached under the vanished ledger is dropped, not just marked stale', async () => {
@@ -306,6 +324,16 @@ describe('the catch-all route', () => {
     mockLedgers([LEDGER_A]);
     const router = renderRouter(ROUTES, { initialUrl: '/nowhere-at-all' });
     expect(await router.findByText('页面不存在')).toBeTruthy();
-    expect(router.getByText('回到我的账本')).toBeTruthy();
+    expect(router.getByText('回到首页')).toBeTruthy();
+  });
+
+  test('「回到首页」 on the 404 screen goes to `/` and lands on the ledger (§14.65 e)', async () => {
+    await signIn();
+    mockLedgers([LEDGER_A]);
+    const router = renderRouter(ROUTES, { initialUrl: '/nowhere-at-all' });
+
+    fireEvent.press(await router.findByTestId('not-found-actions'));
+
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
   });
 });

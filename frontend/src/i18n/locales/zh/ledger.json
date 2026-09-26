@@ -1,22 +1,8 @@
 {
   "list": {
-    "title": "账本管理",
-    "subtitle": "切换后所有页面都跟着这本走",
-    "current_badge": "当前",
-    "enter": "进入这本",
-    "switch_to": "切到这本",
-    "footnote": "新建的账本你是 owner；用码加入的账本你是成员，改不了基准币种和成员。",
     "card": {
       "role_owner": "创建者",
-      "role_member": "成员",
-      "role_line_owner": "你是 owner · 可邀请与删除",
-      "role_line_member": "你是成员 · 由别人邀请",
-      "members_label": "成员",
-      "currency_label": "基准币种"
-    },
-    "new_card": {
-      "title": "新建账本",
-      "body": "比如给旅行、给爸妈各开一本。账本之间完全独立。"
+      "role_member": "成员"
     },
     "empty": {
       "create_button": "新建账本",
@@ -103,7 +89,7 @@
     "invite": {
       "title": "邀请码",
       "generate": "生成邀请码",
-      "idle_hint": "邀请码有效 10 分钟，只能用一次。让对方在他的账本列表页输码加入。",
+      "idle_hint": "邀请码有效 10 分钟，只能用一次。让对方在账本切换器里点「用邀请码加入」输码。",
       "expires_in": "{{time}} 后失效",
       "revoke": "作废",
       "revoke_title": "作废邀请码",

@@ -22,7 +22,7 @@
     "sources": "Accounts",
     "imports": "Import",
     "me": "Me",
-    "ledgers": "Ledgers",
+    "ledgers": "Get started",
     "member_count_one": "{{count}} person",
     "member_count_other": "{{count}} people",
     "ledger_settings": "Ledger settings",
@@ -45,13 +45,13 @@
   "not_found": {
     "title": "Page not found",
     "body": "The address you visited doesn't exist, or it's been moved.",
-    "action": "Back to my ledgers"
+    "action": "Back to home"
   },
   "ledger_unavailable": {
     "title": "This ledger doesn't exist, or you're not a member of it",
     "body": "It may have been deleted, or you may have been removed from it.",
     "switch_last": "Switch to {{name}}",
-    "view_ledgers": "View my ledgers"
+    "back_home": "Back to home"
   },
   "toast": {
     "show_detail": "Show details"

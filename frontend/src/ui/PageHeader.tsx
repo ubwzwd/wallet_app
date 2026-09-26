@@ -77,6 +77,39 @@ export function BackButton({ label, onPress, testID }: BackButtonProps): React.J
   );
 }
 
+export interface PageBackRowProps extends PageHeaderBack {
+  /** The row's testID. */
+  testID?: string;
+  /** The button's testID; `${testID}-back` by default. */
+  backTestID?: string;
+}
+
+/**
+ * The wide back row on its own: the round `BackButton` and the grey trail beside it
+ * (屏幕稿 08). `PageHeader` draws its `back` with this, and so does a page whose head is not
+ * a `PageHeader` (屏幕稿 12's ledger head is its own card), so the two can never drift.
+ */
+export function PageBackRow({
+  crumb,
+  onPress,
+  label,
+  testID,
+  backTestID,
+}: PageBackRowProps): React.JSX.Element {
+  return (
+    <View style={styles.crumbRow} testID={testID}>
+      <BackButton
+        label={label}
+        onPress={onPress}
+        testID={backTestID ?? (testID === undefined ? undefined : `${testID}-back`)}
+      />
+      <Text variant="caption" tone="muted" numberOfLines={1} style={styles.crumb}>
+        {crumb}
+      </Text>
+    </View>
+  );
+}
+
 function MetaNode({ meta, testID }: { meta: React.ReactNode; testID?: string }): React.JSX.Element {
   if (typeof meta === 'string') {
     return (
@@ -108,12 +141,12 @@ export function PageHeader({
   return (
     <View testID={id} style={[styles.wrap, style]}>
       {wide && back ? (
-        <View style={styles.crumbRow}>
-          <BackButton label={back.label} onPress={back.onPress} testID={`${id}-back`} />
-          <Text variant="caption" tone="muted" numberOfLines={1} style={styles.crumb}>
-            {back.crumb}
-          </Text>
-        </View>
+        <PageBackRow
+          crumb={back.crumb}
+          onPress={back.onPress}
+          label={back.label}
+          backTestID={`${id}-back`}
+        />
       ) : null}
 
       <View style={styles.row}>

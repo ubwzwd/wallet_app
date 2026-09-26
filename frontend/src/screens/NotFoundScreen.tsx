@@ -1,7 +1,7 @@
 /**
  * The catch-all route (04 §1.2, last row): one sentence and a way back to a page that
- * certainly exists. `/` re-runs the landing redirect, so the button lands on whichever
- * ledger the user was last in.
+ * certainly exists: 「回到首页」 (§14.65 e). `/` re-runs the landing redirect, so the button
+ * lands on whichever ledger the user was last in — or, with none, on the onboarding page.
  *
  * It borrows screen 17's "registration is closed" composition — brand bar, centred 420
  * column, one card with a neutral tile — because it is the same kind of page: a dead end

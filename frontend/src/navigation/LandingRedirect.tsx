@@ -1,16 +1,19 @@
 /**
  * The landing redirect of 04 §1.5 rule 2: `/` (and `/login` while signed in) lands on the
- * last ledger the device used, else the first ledger, else the ledger list.
+ * last ledger the device used, else the first ledger, else the no-ledger onboarding page.
+ *
+ * `/ledgers` asks the same question (decision §14.65 c: with a ledger it is not a page, only
+ * a redirect), so the answer lives in one hook, `useLandingTarget`, and both use it.
  *
  * The stored `last_ledger_id` is a convenience, not state (04 §2.2): everything after this
  * redirect takes the ledger id from the URL. `useLastLedgerId` is the one module that reads
- * it — the chrome and the ledger list use the same hook, for the same reason.
+ * it — the chrome uses the same hook, for the same reason.
  */
 import React from 'react';
 import { Redirect } from 'expo-router';
 
 import type { Ledger } from '@/api/types';
-import { routes } from '@/domain/routes';
+import { type RouteHref, routes } from '@/domain/routes';
 import { useLedgers } from '@/queries';
 import { useAuth } from '@/store/AuthContext';
 
@@ -26,19 +29,48 @@ export function pickLandingLedger(
   return ledgers.find((l) => l.id === lastLedgerId) ?? ledgers[0];
 }
 
-/** Signed-in half, split out so `GET /ledgers` is never requested while anonymous. */
-function AuthenticatedLanding(): React.JSX.Element {
-  const { data, isPending, isError } = useLedgers();
+/** Where a signed-in user lands, once that is known. */
+export type LandingTarget =
+  /** The ledger list (or its re-read) or the remembered id is still on its way — never guess. */
+  | { kind: 'pending' }
+  /** `GET /ledgers` failed: that is not a "no ledgers" answer. */
+  | { kind: 'error'; retry(): void }
+  /** The user belongs to no ledger at all. */
+  | { kind: 'none' }
+  | { kind: 'ledger'; href: RouteHref };
+
+/**
+ * The answer `/` and `/ledgers` share. Only call it while signed in: it requests
+ * `GET /ledgers`.
+ *
+ * A list that is being re-read is not an answer to redirect on: deleting or leaving the
+ * current ledger invalidates the list and goes to `/ledgers` at once, while the cache (and
+ * `last_ledger_id`) still name the ledger that is gone — trusting them would land straight
+ * back in it. So a ledger destination waits for the re-read. "No ledgers" does not: showing
+ * the onboarding a moment longer is harmless, and it must not flash a skeleton on every
+ * background refetch.
+ */
+export function useLandingTarget(): LandingTarget {
+  const { data, isPending, isFetching, isError, refetch } = useLedgers();
   const lastLedgerId = useLastLedgerId();
 
-  // 04 §1.5: while the ledger list is unknown we wait — we never guess a destination.
-  if (isPending || lastLedgerId === undefined) return <AppSkeleton />;
-  // A failed list is not a "no ledgers" answer; `/ledgers` is the page that owns retrying.
-  if (isError) return <Redirect href={routes.ledgers()} />;
-
+  if (isError) return { kind: 'error', retry: () => void refetch() };
+  if (isPending || lastLedgerId === undefined) return { kind: 'pending' };
   const target = pickLandingLedger(data.items, lastLedgerId);
-  if (!target) return <Redirect href={routes.ledgers()} />;
-  return <Redirect href={routes.l(target.id).home()} />;
+  if (!target) return { kind: 'none' };
+  if (isFetching) return { kind: 'pending' };
+  return { kind: 'ledger', href: routes.l(target.id).home() };
+}
+
+/** Signed-in half, split out so `GET /ledgers` is never requested while anonymous. */
+function AuthenticatedLanding(): React.JSX.Element {
+  const target = useLandingTarget();
+
+  // 04 §1.5: while the ledger list is unknown we wait — we never guess a destination.
+  if (target.kind === 'pending') return <AppSkeleton />;
+  // A failure and "no ledgers" both belong to `/ledgers`: it owns retrying and onboarding.
+  if (target.kind !== 'ledger') return <Redirect href={routes.ledgers()} />;
+  return <Redirect href={target.href} />;
 }
 
 export function LandingRedirect(): React.JSX.Element {

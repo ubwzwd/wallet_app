@@ -1,6 +1,6 @@
 /**
- * Decision §14.64 d / f: which pages are top-level (no back button) and where every
- * sub-page's back button leads when there is no history to step back through.
+ * Decisions §14.64 d / f and §14.65 d: which pages are top-level (no back button) and where
+ * every sub-page's back button leads when there is no history to step back through.
  */
 import { routes } from '@/domain/routes';
 
@@ -53,9 +53,9 @@ describe('every sub-page leads to its parent (the table in §14.64 f)', () => {
     ['import format guide', l.importsGuide(), l.importsNew(), 'imports'],
     ['import batch', l.importBatch(BATCH), l.imports(), 'imports'],
     ['ledger settings', l.settings(), l.home(), 'home'],
-    ['the ledger list', routes.ledgers(), routes.l(RECENT).home(), 'home'],
-    ['new ledger', routes.ledgersNew(), routes.ledgers(), 'ledgers'],
-    ['join a ledger', routes.ledgersJoin(), routes.ledgers(), 'ledgers'],
+    // §14.65 d: the recent ledger's home, not a ledger-list page (there is none).
+    ['new ledger', routes.ledgersNew(), routes.l(RECENT).home(), 'home'],
+    ['join a ledger', routes.ledgersJoin(), routes.l(RECENT).home(), 'home'],
   ])('%s', (_name, path, href, parentKey) => {
     const expected = { href, parentKey };
     expect(backTargetFor(path, NARROW)).toEqual(expected);
@@ -77,10 +77,28 @@ describe('every sub-page leads to its parent (the table in §14.64 f)', () => {
   });
 });
 
-describe('the ledger list and personal settings depend on the user’s ledgers', () => {
-  test('the ledger list has no back button while no recent ledger is known', () => {
-    expect(backTargetFor(routes.ledgers(), { ...NARROW, chromeLedgerId: null })).toBeNull();
-    expect(backTargetFor(routes.ledgers(), { ...WIDE, chromeLedgerId: null })).toBeNull();
+describe('the /ledgers pages and personal settings depend on the user’s ledgers', () => {
+  test('`/ledgers` itself never has a back button: it redirects, or it is the onboarding', () => {
+    expect(backTargetFor(routes.ledgers(), NARROW)).toBeNull();
+    expect(backTargetFor(routes.ledgers(), WIDE)).toBeNull();
+    const none = { wide: false, chromeLedgerId: null, hasLedgers: false };
+    expect(backTargetFor(routes.ledgers(), none)).toBeNull();
+  });
+
+  test.each([
+    ['new ledger', routes.ledgersNew()],
+    ['join a ledger', routes.ledgersJoin()],
+  ])('%s has no back button while the recent ledger is still unknown', (_name, path) => {
+    expect(backTargetFor(path, { ...NARROW, chromeLedgerId: null })).toBeNull();
+    expect(backTargetFor(path, { ...WIDE, chromeLedgerId: null })).toBeNull();
+  });
+
+  test.each([
+    ['new ledger', routes.ledgersNew()],
+    ['join a ledger', routes.ledgersJoin()],
+  ])('%s leads to the onboarding page for a user with no ledger at all', (_name, path) => {
+    const none = { wide: true, chromeLedgerId: null, hasLedgers: false };
+    expect(backTargetFor(path, none)).toEqual({ href: routes.ledgers(), parentKey: 'ledgers' });
   });
 
   test('personal settings leads to the onboarding list for a user with no ledger', () => {

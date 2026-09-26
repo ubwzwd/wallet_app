@@ -30,14 +30,12 @@ const PARENT_LABEL_KEY: Record<BackParentKey, string> = {
   transactions: 'common:nav.transactions',
   sources: 'common:nav.sources',
   imports: 'common:nav.imports',
+  // Only a user with no ledger has `/ledgers` as a parent, and there it is the onboarding
+  // page (§14.65 c), so the label names that, never a ledger list.
   ledgers: 'common:nav.ledgers',
 };
 
-/**
- * `at` answers for a page other than the one in the URL — the ledger list drawn behind the
- * wide join dialog is `/ledgers`, although the URL says `/ledgers/join`.
- */
-export function useBack(at?: string): BackControl {
+export function useBack(): BackControl {
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
@@ -45,7 +43,7 @@ export function useBack(at?: string): BackControl {
   const { ledgerId } = useChromeLedger();
   const noLedgers = useHasNoLedgers();
 
-  const target = backTargetFor(at ?? pathname, {
+  const target = backTargetFor(pathname, {
     wide,
     chromeLedgerId: ledgerId,
     hasLedgers: !noLedgers,
@@ -54,8 +52,8 @@ export function useBack(at?: string): BackControl {
 
   const goBack = React.useCallback((): void => {
     if (router.canGoBack()) {
-      // Crossing back into a ledger from `/ledgers*` or `/settings` has to restore the
-      // ledger's own history, which its unmounted navigator lost (see ledgerHistory.ts).
+      // Crossing back into a ledger from `/ledgers*` has to restore the ledger's own
+      // history, which its unmounted navigator lost (see ledgerHistory.ts).
       if (!stepBackRestoringLedger()) router.back();
     } else if (href !== null) router.replace(href);
   }, [href, router]);

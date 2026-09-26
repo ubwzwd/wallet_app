@@ -2,8 +2,8 @@
  * "Once you join" — the block screen 13 puts under the code input, because what a member
  * can and cannot do is the question families actually ask.
  *
- * Narrow draws it as a second white card with three bulleted lines; the wide frame folds
- * the same three sentences into one tinted paragraph inside the dialog.
+ * A second white card with three bulleted lines, at both widths (the wide dialog that
+ * folded them into one tinted paragraph is gone, §14.65 d).
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -15,12 +15,7 @@ import { Card, Text } from '@/ui';
 
 const BULLET = 6;
 
-export interface JoinBenefitsProps {
-  /** `card` is the narrow standalone card; `inline` the tinted block inside the wide card. */
-  variant: 'card' | 'inline';
-}
-
-export function JoinBenefits({ variant }: JoinBenefitsProps): React.JSX.Element {
+export function JoinBenefits(): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   const lines = [
@@ -28,19 +23,6 @@ export function JoinBenefits({ variant }: JoinBenefitsProps): React.JSX.Element 
     t('ledger:join.benefits.two'),
     t('ledger:join.benefits.three'),
   ];
-
-  if (variant === 'inline') {
-    return (
-      <View
-        testID="join-benefits"
-        style={[styles.inline, { backgroundColor: colors['bg.canvas'] }]}
-      >
-        <Text variant="body" tone="secondary">
-          {lines.join(' ')}
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <Card variant="raised" testID="join-benefits" style={styles.card}>
@@ -67,7 +49,6 @@ export function JoinBenefits({ variant }: JoinBenefitsProps): React.JSX.Element 
 }
 
 const styles = StyleSheet.create({
-  inline: { padding: space['4'], borderRadius: radius.md },
   card: { padding: space['4'], gap: space['2'] },
   lines: { gap: space['2'] },
   line: { flexDirection: 'row', gap: 9 },

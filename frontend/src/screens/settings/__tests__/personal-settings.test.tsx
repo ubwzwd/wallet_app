@@ -53,6 +53,7 @@ afterEach(async () => {
   toast.clear();
   await setPref(PREF_NAMES.theme, null);
   await setPref(PREF_NAMES.lang, null);
+  await setPref(PREF_NAMES.lastLedgerId, null);
   await i18next.changeLanguage('zh');
 });
 
@@ -178,6 +179,25 @@ test('without a ledger in context the ledger-settings entry falls back to /ledge
   expect(mockRouter.push).toHaveBeenCalledWith('/ledgers');
 });
 
+test('the entries card is 账本设置 alone: no 「账本管理」 row (§14.65 b)', async () => {
+  await setPref(PREF_NAMES.lastLedgerId, 'led-2');
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: 'led-1' }), makeLedger({ id: 'led-2' })],
+    total: 2,
+  });
+  await renderSettings();
+
+  const entries = await screen.findByTestId('entries-card');
+  expect(within(entries).getByText('账本设置')).toBeTruthy();
+  expect(within(entries).queryByText('账本管理')).toBeNull();
+
+  // The one row left opens the ledger the chrome names — the remembered one.
+  await waitFor(() => {
+    fireEvent.press(screen.getByTestId('settings-ledger-settings'));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/l/led-2/settings');
+  });
+});
+
 test('logging out clears the session and lands on /login', async () => {
   await renderSettings();
 
@@ -237,7 +257,7 @@ test('with a ledger, 我的 is a top-level page: no back button', async () => {
   expect(screen.queryByTestId('personal-settings-back')).toBeNull();
 });
 
-test('with no ledger at all, the wide header leads back to 账本管理', async () => {
+test('with no ledger at all, the wide header leads back to the onboarding (开始), not a ledger list', async () => {
   const user = makeUser({ ledger_count: 0 });
   mockGet('/me', user);
   mockGet('/ledgers', { items: [], total: 0 });
@@ -247,7 +267,7 @@ test('with no ledger at all, the wide header leads back to 账本管理', async 
   });
 
   expect(await screen.findByTestId('personal-settings-back')).toBeTruthy();
-  expect(screen.getByText('账本管理 · 我的')).toBeTruthy();
+  expect(screen.getByText('开始 · 我的')).toBeTruthy();
   fireEvent.press(screen.getByTestId('personal-settings-back'));
   expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers');
 });
