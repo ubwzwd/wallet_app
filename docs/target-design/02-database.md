@@ -228,11 +228,11 @@ CREATE INDEX ix_finance_sources_owner_id ON finance_sources (owner_id);
 
 列语义：**账户属于用户，通过 `ledger_sources` 共享到账本**（决策 §14.62 a、b）。`owner_id` 是账户主人，创建时等于调用者、之后不可改；外键无 `ON DELETE` 动作（NO ACTION），因为用户不会被删（§6.9）。主人在自己所在的任何账本里都能直接用自己的账户，别的成员只有在它被共享到那本账（`ledger_sources` 有对应行）时才能用——这条"可用"判断由应用层做（§3.2），数据库只存事实。表上**没有** `ledger_id`：删账本不会碰这张表（§6.7）（2026-09-16 按决策 §14.62 同步）。
 
-`type` **四选一**——`checking` 储蓄卡 / `credit` 信用卡 / `cash` 现金 / `other` 其他（决策 §3、§14.48）：新加坡没有储蓄户口与活期户口的区分，界面上的"储蓄卡"就是 `checking`，所以第五种取值不存在，迁移把存量旧值一律改写成 `checking`（§5.3）。相对现状（backend/app/models/finance_source.py:19 只有注释、没有 CHECK），这里加上了真正的 CHECK。`opening_balance` 是账户建立时的初始余额，**以账户自己的 `default_currency` 计价**；账户余额 = `opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`，同币种交易不换算（决策 §3、§14.2）。这里的交易是这张卡在**所有账本**里的交易（决策 §14.62 f），取数不带 `ledger_id` 条件（§4）。因此**不存**余额列，也不按币种分桶；接口另给一个 `balance_base`＝按**最新**汇率把余额折算到**主人的** `users.base_currency`（决策 §14.2、§14.62 f，接口形状见 [`03-backend-api.md`](./03-backend-api.md)）（2026-09-16 按决策 §14.62 同步）。`default_currency` 建后不可改（应用层：`PATCH` 的请求体里没有这个字段）。`archived` 同样没有 `DEFAULT`（初始迁移 e533c88884b7:51 建列时就没给，第 3 步也不补），Python 侧 `default=False`；本表里唯一带 `server_default` 的列是 `opening_balance`，因为它是第 3 步给存量行加的非空列（§5.3）。`archived = TRUE` 的账户不能再记账、不能作为导入目标，历史保留（决策 §3）；有交易的账户（任何账本里的交易或导入批次引用了它）不能删除，只能归档——这条由应用层保证，数据库侧 `transactions.source_id` 用 NO ACTION 兜底（§1.6.2）（2026-09-16 按决策 §14.62 同步）。
+`type` **四选一**——`checking` 储蓄卡 / `credit` 信用卡 / `cash` 现金 / `other` 其他（决策 §3、§14.48）：新加坡没有储蓄户口与活期户口的区分，界面上的"储蓄卡"就是 `checking`，所以第五种取值不存在，迁移把存量旧值一律改写成 `checking`（§5.3）。相对现状（backend/app/models/finance_source.py:19 只有注释、没有 CHECK），这里加上了真正的 CHECK。`opening_balance` 是账户建立时的初始余额，**以账户自己的 `default_currency` 计价**；账户余额 = `opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`，同币种交易不换算（决策 §3、§14.2）。这里的交易是这张卡在**所有账本**里的交易（决策 §14.62 f），取数不带 `ledger_id` 条件（§4）。因此**不存**余额列，也不按币种分桶；接口另给一个 `balance_base`＝按**最新**汇率把余额折算到**主人的** `users.base_currency`（决策 §14.2、§14.62 f，接口形状见 [`03-backend-api.md`](./03-backend-api.md)）（2026-09-16 按决策 §14.62 同步）。`default_currency` 建后不可改（应用层：`PATCH` 请求体带 `default_currency`（即使值不变）→ 400 `currency_locked`，与 [`03-backend-api.md`](./03-backend-api.md) §5.23、[`01-domain-and-flows.md`](./01-domain-and-flows.md) §3.10 一致）（2026-09-27 第八阶段收口时补正）。`archived` 同样没有 `DEFAULT`（初始迁移 e533c88884b7:51 建列时就没给，第 3 步也不补），Python 侧 `default=False`；本表里唯一带 `server_default` 的列是 `opening_balance`，因为它是第 3 步给存量行加的非空列（§5.3）。`archived = TRUE` 的账户不能再记账、不能作为导入目标，历史保留（决策 §3）；有交易的账户（任何账本里的交易或导入批次引用了它）不能删除，只能归档——这条由应用层保证，数据库侧 `transactions.source_id` 用 NO ACTION 兜底（§1.6.2）（2026-09-16 按决策 §14.62 同步）。
 
 `archived_at`（决策 §14.50）记归档发生的时刻（naive UTC），账户列表里的归档分组直接显示它（"2026-03-12 归档"）。它与 `archived` 由 `ck_finance_sources_archived_at` 绑死：`archived = TRUE` ⇔ `archived_at IS NOT NULL`。为什么不干脆用 `archived_at IS NULL` 一列代替布尔列：`archived` 是所有查询的过滤条件（`WHERE archived = FALSE`），保留布尔列让索引与代码都直白，多出来的那一列由 CHECK 保证不会说谎。取消归档（`PATCH {"archived": false}`）时把 `archived_at` 置回 NULL——不保留"上次归档时间"，因为界面上没有这个概念。**归档账户不计入净资产与首页合计**（决策 §14.50）：这是读取时的过滤（`WHERE archived = FALSE`），数据库不为此存任何东西。
 
-`default_currency` **创建后不可改**（决策 §14.50）：`PATCH` 的请求体里没有这个字段。理由是账户余额以它计价（决策 §14.2），改币种会让历史折算全部失去意义；要换币种就新建账户、把旧账户归档。
+`default_currency` **创建后不可改**（决策 §14.50）：`PATCH` 请求体带 `default_currency`（即使值不变）→ 400 `currency_locked`（03 §5.23、01 §3.10）。理由是账户余额以它计价（决策 §14.2），改币种会让历史折算全部失去意义；要换币种就新建账户、把旧账户归档（2026-09-27 第八阶段收口时补正）。
 
 **同一人下的账户允许同名**（决策 §14.40 关闭 02-D-5，§14.62 a 改成 owner 口径）：不加 `UNIQUE (owner_id, name)`，也不加 `UNIQUE (owner_id, lower(name))`——"招商银行"这类同名不同卡号的账户是真实场景，按 id 区分，只在界面上提示"已有同名账户"（[`01-domain-and-flows.md`](./01-domain-and-flows.md)）（2026-09-16 按决策 §14.62 同步）。
 
@@ -1815,14 +1815,9 @@ COMMIT;
 
 ### 6.7 账本删除
 
-owner 调用 `DELETE /ledgers/{id}`（决策 §2）。数据库侧六条 CASCADE 会自动清理 `ledger_members`、`ledger_invites`、`ledger_sources`、`transactions`（进而 `transaction_events`）、`import_batches`（进而 `import_rows`）、以及直接挂在账本上的 `transaction_events`；**`finance_sources` 不在其中**——账户属于人，删账本只解除这本账上的共享，账户留在主人名下，余额里少掉这本账的交易（决策 §14.62 f）。应用层仍在同一事务内按依赖顺序显式删除，保证在 SQLite 上（外键默认不生效，见 `../current-design/02-database.md` §1.2）行为一致（2026-09-16 按决策 §14.62 同步）：
+owner 调用 `DELETE /ledgers/{id}`（决策 §2）。数据库侧六条 CASCADE 会自动清理 `ledger_members`、`ledger_invites`、`ledger_sources`、`transactions`（进而 `transaction_events`）、`import_batches`（进而 `import_rows`）、以及直接挂在账本上的 `transaction_events`；**`finance_sources` 不在其中**——账户属于人，删账本只解除这本账上的共享，账户留在主人名下，余额里少掉这本账的交易（决策 §14.62 f）。应用层只执行一条 `DELETE FROM ledgers`，靠外键级联删 `ledger_sources` / 交易 / 批次 / 成员 / 邀请码 / 事件，不碰 `finance_sources`（`app/api/ledgers.py` 的 `delete_ledger`，与 [`03-backend-api.md`](./03-backend-api.md) §5.12 一致）；SQLite 上连接建立时执行 `PRAGMA foreign_keys=ON`（`app/core/database.py`），级联行为与 Postgres 一致，所以不需要按依赖顺序逐表显式删除（2026-09-27 第八阶段收口时补正）。
 
-```
-transaction_events -> import_rows -> transactions -> import_batches
-                   -> ledger_sources -> ledger_invites -> ledger_members -> ledgers
-```
-
-上一版的删除顺序里有 `finance_sources`（必须排在 `transactions` 之后，否则撞 `transactions.source_id` 的外键）；删账本不再删账户之后，这一环连同那条顺序约束一起消失。
+上一版按依赖顺序显式删子表，顺序里还有 `finance_sources`（必须排在 `transactions` 之后，否则撞 `transactions.source_id` 的外键）；删账本不再删账户、改由外键级联之后，这条顺序连同那条约束一起消失（2026-09-27 第八阶段收口时补正）。
 
 **磁盘侧：什么都不用做**——服务端没有任何文件系统状态（决策 §14.28）。
 

@@ -133,6 +133,7 @@
 | §14.43 · §14.44 | 后端一批数值与形态定死：`created_by` / `updated_by` 只回 id；删除类端点统一 204（撤销导入回条数）；注册限流同 IP 5 次/小时；撤销 `dry_run` 报数；分类当月支出可为负；`FX_MAX_BACKFILL_DAYS = 10`；`occurred_at` 最晚今天 + 1 天；`limit` 上限 200 / 500 | API | [03 §4.3 分页](./03-backend-api.md#43-分页) · [03 §6.2 回退算法](./03-backend-api.md#62-函数签名与回退算法) · [03 §8.2 各限流点](./03-backend-api.md#82-各限流点) · [03 §5.44 DELETE imports](./03-backend-api.md#544-delete-apiv1ledgersidimportsbid) |
 | §14.45 | 视觉方向定稿「**04 柔和圆润**」：Figtree + IBM Plex Mono、C2 密度、淡鼠尾草底、交易四色、森林绿强调；token 的唯一来源是 [`mockups/tokens.json`](./mockups/tokens.json)，16 张屏幕稿在同一目录；04 章原 A/B/C 三方向作废，实现前**不再另出 mockup** | 前端 | [mockups/README.md](./mockups/README.md) · [04 §6 视觉设计](./04-frontend.md#6-视觉设计已定稿04-柔和圆润) · [04 §6.2 设计 token](./04-frontend.md#62-设计-token) |
 | §14.46 | 前端五条收尾：路由用 Expo Router；加匿名可读的 `GET /config`；支出详情带 `refunds[]`、退款详情展开原单摘要；交易列表加 `?import_batch_id=`；不做按成员筛选 | API · 前端 | [03 §5.6 GET /config](./03-backend-api.md#56-get-apiv1config) · [03 §5.27 交易详情](./03-backend-api.md#527-get-apiv1ledgersidtransactionstid) · [04 §1.1 路由库](./04-frontend.md#11-路由库) · [04 §4.7 交易详情](./04-frontend.md#47-交易详情-lledgeridtransactionstxid-与编辑) |
+| §14.62（覆盖 §14.37 P-13） | §14.37 P-13「账本内账户完全共享」被推翻：账户归人、按账本共享（`owner_id` + `ledger_sources`）（2026-09-27 第八阶段收口时补正） | DB · API · 前端 · 导入 | 本文 §2.4 末行（§14.62） |
 
 ### 2.4 §14.47–§14.53 与 §14.62：屏幕稿审阅、最终同步与账户归人的裁定
 
