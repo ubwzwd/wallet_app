@@ -17,7 +17,14 @@ import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { routes } from '@/domain/routes';
-import { pickLandingLedger, useBack, useLastLedgerId, useTopBar } from '@/navigation';
+import {
+  pickLandingLedger,
+  useBack,
+  useChromeLedger,
+  useHasNoLedgers,
+  useLastLedgerId,
+  useTopBar,
+} from '@/navigation';
 import { useLedgers } from '@/queries';
 import { useAuth } from '@/store';
 import { radius, space } from '@/theme/tokens';
@@ -96,6 +103,14 @@ export default function LedgersScreen(): React.JSX.Element {
   // Answered for `/ledgers` itself: the wide join dialog draws this page behind it while
   // the URL says `/ledgers/join`.
   const back = useBack(routes.ledgers());
+  // On a cold open the fallback target (the remembered ledger's home) is a round trip
+  // away. The crumb's parent is always 首页, so draw the row from the first frame instead
+  // of letting it pop in and push the title down; the button simply steps back through
+  // history (or waits) until the target is known.
+  const chromePending = useChromeLedger().pending;
+  const noLedgers = useHasNoLedgers();
+  const showCrumb = back.show || (chromePending && !noLedgers);
+  const crumbParent = back.show ? back.parentLabel : t('common:nav.home');
 
   const goCreate = React.useCallback(() => router.push(routes.ledgersNew() as Href), [router]);
   const goJoin = React.useCallback(() => router.push(routes.ledgersJoin() as Href), [router]);
@@ -108,9 +123,9 @@ export default function LedgersScreen(): React.JSX.Element {
     <PageHeader
       title={title}
       back={
-        back.show
+        showCrumb
           ? {
-              crumb: `${back.parentLabel} · ${title}`,
+              crumb: `${crumbParent} · ${title}`,
               onPress: back.goBack,
               label: t('common:button.back'),
             }

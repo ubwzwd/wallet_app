@@ -15,7 +15,15 @@ import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
 import { qk } from '@/queries';
-import { makeLedger, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
+import {
+  apiUrl,
+  makeLedger,
+  makeUser,
+  mockApi,
+  mockGet,
+  mockPost,
+  type MockApi,
+} from '@/test';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import LedgersScreen from '../LedgersScreen';
@@ -228,6 +236,17 @@ test('宽屏 the header is 「账本管理」 with a back crumb to the recent le
   // A cold open has no history to step back through, so the crumb goes to the parent.
   fireEvent.press(screen.getByTestId('ledgers-header-back'));
   await waitFor(() => expect(router.getPathname()).toBe('/l/led-2'));
+});
+
+test('宽屏 a cold open reserves the crumb row before the recent ledger is known (no pop-in)', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  // The ledger list never answers, so the back target stays unknown.
+  api.mock.onGet(apiUrl('/ledgers')).reply(() => new Promise(() => undefined));
+  renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  expect(await screen.findByTestId('ledger-skeleton-0')).toBeTruthy();
+  expect(screen.getByTestId('ledgers-header-back')).toBeTruthy();
+  expect(screen.getByText('首页 · 账本管理')).toBeTruthy();
 });
 
 test('窄屏 the page leaves the title to the shell’s top bar and keeps the grey line', async () => {

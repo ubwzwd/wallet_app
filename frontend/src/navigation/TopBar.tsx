@@ -16,6 +16,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { NavigationContext } from '@react-navigation/native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
@@ -31,14 +32,29 @@ import { useChromeLedger } from './useChromeLedger';
 
 interface TopBarState {
   title: string | null;
-  setTitle(title: string | null): void;
+  /** Make `owner` the page whose title the bar shows. */
+  publish(owner: object, title: string | null): void;
+  /** Clear the title — but only if `owner` is still the page that published it. */
+  release(owner: object): void;
 }
 
 const TopBarContext = React.createContext<TopBarState | null>(null);
 
 export function TopBarProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const [title, setTitle] = React.useState<string | null>(null);
-  const value = React.useMemo<TopBarState>(() => ({ title, setTitle }), [title]);
+  const [state, setState] = React.useState<{ owner: object | null; title: string | null }>({
+    owner: null,
+    title: null,
+  });
+  const publish = React.useCallback((owner: object, title: string | null): void => {
+    setState({ owner, title });
+  }, []);
+  const release = React.useCallback((owner: object): void => {
+    setState((current) => (current.owner === owner ? { owner: null, title: null } : current));
+  }, []);
+  const value = React.useMemo<TopBarState>(
+    () => ({ title: state.title, publish, release }),
+    [state.title, publish, release],
+  );
   return <TopBarContext.Provider value={value}>{children}</TopBarContext.Provider>;
 }
 
@@ -47,14 +63,45 @@ export function useTopBarTitle(): string | null {
   return React.useContext(TopBarContext)?.title ?? null;
 }
 
-/** Publish this page's title for as long as the calling component is mounted. */
+/**
+ * Whether the calling page is the navigator's current screen. A stacked navigator
+ * (`/ledgers` → `/ledgers/new`) keeps the page underneath mounted, so "mounted" is not
+ * enough to own the top bar. Outside any navigator (unit tests) a page is always current.
+ */
+function useScreenFocused(): boolean {
+  const navigation = React.useContext(NavigationContext);
+  const subscribe = React.useCallback(
+    (onChange: () => void) => {
+      if (!navigation) return () => undefined;
+      const offFocus = navigation.addListener('focus', onChange);
+      const offBlur = navigation.addListener('blur', onChange);
+      return () => {
+        offFocus();
+        offBlur();
+      };
+    },
+    [navigation],
+  );
+  const read = React.useCallback(() => navigation?.isFocused() ?? true, [navigation]);
+  return React.useSyncExternalStore(subscribe, read, read);
+}
+
+/**
+ * Publish this page's title while the calling page is the current screen. It publishes
+ * again when a stacked page closes over it and it becomes current once more, and a page
+ * leaving only clears the title if nobody has published since.
+ */
 export function useTopBar(title: string | null | undefined): void {
-  const setTitle = React.useContext(TopBarContext)?.setTitle;
+  const context = React.useContext(TopBarContext);
+  const publish = context?.publish;
+  const release = context?.release;
+  const focused = useScreenFocused();
+  const owner = React.useRef({}).current;
   React.useEffect(() => {
-    if (!setTitle) return;
-    setTitle(title ?? null);
-    return () => setTitle(null);
-  }, [setTitle, title]);
+    if (!publish || !release || !focused) return;
+    publish(owner, title ?? null);
+    return () => release(owner);
+  }, [publish, release, owner, title, focused]);
 }
 
 /** Declarative form of `useTopBar`; renders nothing. */

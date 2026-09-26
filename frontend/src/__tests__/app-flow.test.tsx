@@ -520,6 +520,17 @@ test('the ledger list wears the shell: 账本管理 in the top bar, a way back, 
   // ── back, and back again: history, not a dead end ────────────────────────────────
   fireEvent.press(screen.getByTestId('top-bar-back'));
   await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  // The list stayed mounted under the stacked page; its title must come back with it.
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+
+  // ── 加入账本, then back: same story ───────────────────────────────────────────────
+  fireEvent.press(screen.getByTestId('ledgers-join'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers/join'));
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('加入账本'));
+  fireEvent.press(screen.getByTestId('top-bar-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+
   fireEvent.press(await screen.findByTestId('top-bar-back'));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
   expect(await screen.findByTestId('top-bar-ledger')).toBeTruthy();
