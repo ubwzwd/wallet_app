@@ -17,6 +17,7 @@ import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
 import { makeLedger, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
+import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import JoinLedgerScreen from '../JoinLedgerScreen';
 
@@ -52,9 +53,9 @@ beforeEach(async () => {
   });
   await initI18n();
   await i18next.changeLanguage('zh');
+  await setPref(PREF_NAMES.lastLedgerId, null);
   mockGet('/me', makeUser());
-  // The 1440 frame draws the ledger list behind the dialog, so the list query has to answer
-  // there too; the narrow frame never asks for it.
+  // The head asks which ledger the chrome names — the home its back button returns to.
   mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: '家庭账本' })], total: 1 });
 });
 
@@ -220,37 +221,52 @@ test('a rejected code swaps the join button for a fresh start', async () => {
 });
 
 /**
- * 屏幕稿 13 · 「1440 · Dialog」: on a wide screen 加入账本 is a modal laid over the ledger
- * list, with 取消 / 加入 in its foot band. Everything below is unreachable at the jest
- * default width, so the wide composition needs a frame of its own.
+ * Decision §14.65 d: with no ledger list left to lay a dialog over, the wide join page is a
+ * sub-page like any other — the 「首页 · 加入账本」 crumb over the same centred card.
+ * Everything below is unreachable at the jest default width, so it needs its own frame.
  */
-test('宽屏 the join card is a dialog over the list, and 取消 goes back to it', async () => {
+test('宽屏 the join page is a sub-page: a crumb to home, the card, and no list behind it', async () => {
   jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
-  mockPost('/ledgers/join', makeLedger());
+  await setPref(PREF_NAMES.lastLedgerId, 'led-1');
   const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
-  expect(await screen.findByTestId('join-dialog')).toBeTruthy();
-  // The list is drawn behind the dim as the backdrop of the mockup, and only as a
-  // backdrop: `aria-hidden` keeps it out of the accessibility tree (RNTL's default query
-  // is the a11y tree, so it has to be asked for explicitly to be found at all), and the
-  // dialog itself lives in a `Modal`, which react-native-web portals and focus-traps.
-  expect(screen.queryByTestId('join-dialog-behind')).toBeNull();
-  expect(screen.getByTestId('join-dialog-behind', { includeHiddenElements: true })).toBeTruthy();
+  expect(await screen.findByTestId('join-header-title')).toHaveTextContent('加入账本');
+  expect(await screen.findByText('首页 · 加入账本')).toBeTruthy();
+  expect(screen.getByTestId('join-code-0')).toBeTruthy();
+  expect(screen.getByTestId('join-benefits')).toBeTruthy();
+  // No dialog, and nothing drawn behind it — not even hidden from the a11y tree.
+  expect(screen.queryByTestId('join-dialog', { includeHiddenElements: true })).toBeNull();
+  expect(screen.queryByText('ledger list page', { includeHiddenElements: true })).toBeNull();
 
-  fireEvent.press(screen.getByTestId('join-cancel'));
-
-  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  // A cold open has no history: the crumb goes to the recent ledger's home.
+  fireEvent.press(screen.getByTestId('join-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/l/led-1'));
   expect(joinRequests()).toEqual([]);
 });
 
-test('宽屏 a pasted code still auto-submits exactly once from the dialog', async () => {
+test('宽屏 a pasted code still auto-submits exactly once', async () => {
   jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
   mockPost('/ledgers/join', makeLedger({ id: 'joined-3', name: '合租账本' }));
   const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
-  await screen.findByTestId('join-dialog');
   await pasteCode('123456');
 
   await waitFor(() => expect(router.getPathname()).toBe('/l/joined-3'));
   expect(joinRequests()).toEqual(['123456']);
+});
+
+test('a user with no ledger keeps the standalone header, and its back goes to onboarding', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  mockGet('/me', makeUser({ ledger_count: 0 }));
+  mockGet('/ledgers', { items: [], total: 0 });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
+
+  // The standalone form once the session says there is no ledger: the button and the
+  // title, no crumb trail (the shell steps aside, 屏幕稿 15).
+  await waitFor(() => {
+    expect(screen.getByTestId('join-header-title')).toHaveTextContent('加入账本');
+    expect(screen.queryByText('首页 · 加入账本')).toBeNull();
+  });
+  fireEvent.press(screen.getByTestId('join-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
 });

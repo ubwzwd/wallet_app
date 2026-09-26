@@ -1,7 +1,11 @@
 /**
  * Decision §14.64: one shell on every signed-in page, a global tab bar, and a back button
  * on every sub-page that steps back through history or, without any, goes to the page's
- * fixed parent.
+ * fixed parent. Decision §14.65: `/ledgers/new` and `/ledgers/join` are sub-pages of the
+ * recent ledger's home, the switcher ends with 账本设置, and the "me" sheet has three rows.
+ *
+ * `/ledgers` is a probe here only for the no-ledger cases; with ledgers it redirects, which
+ * `screens/ledgers/__tests__/ledgers.test.tsx` covers on the real screen.
  */
 import React from 'react';
 import { Text } from 'react-native';
@@ -132,11 +136,11 @@ afterEach(() => {
 describe('narrow (<1024)', () => {
   beforeEach(() => setWide(false));
 
-  test('/ledgers: sub-page top bar, the tab bar with nothing lit, and a cold back to the recent ledger', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+  test('/ledgers/new: sub-page top bar, the tab bar with nothing lit, and a cold back to the recent ledger', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
 
     expect(await router.findByTestId('top-bar-back')).toBeTruthy();
-    expect(router.getByTestId('top-bar-title')).toHaveTextContent('账本管理');
+    expect(router.getByTestId('top-bar-title')).toHaveTextContent('新建账本');
     expect(router.queryByTestId('top-bar-ledger')).toBeNull();
     expect(router.getByTestId('bottom-tab-bar')).toBeTruthy();
     for (const id of ['tab-home', 'tab-transactions', 'tab-imports', 'tab-me']) {
@@ -148,14 +152,15 @@ describe('narrow (<1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
   });
 
-  test('/ledgers opened from inside a ledger: back returns to that very page', async () => {
+  test('/ledgers/join opened from inside a ledger: back returns to that very page', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/imports` });
     expect(await router.findByTestId('top-bar-ledger')).toBeTruthy();
 
-    // The switcher's last row: leaving the ledger's shell for the global one must not
+    // The switcher's join row: leaving the ledger's shell for the global one must not
     // throw away the history, or the button can only fall back to the fixed parent.
-    act(() => expoRouter.navigate('/ledgers'));
-    await waitFor(() => expect(router.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+    fireEvent.press(router.getByTestId('top-bar-ledger'));
+    fireEvent.press(await router.findByTestId('ledger-switcher-join'));
+    await waitFor(() => expect(router.getByTestId('top-bar-title')).toHaveTextContent('加入账本'));
     fireEvent.press(router.getByTestId('top-bar-back'));
 
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/imports`));
@@ -178,7 +183,7 @@ describe('narrow (<1024)', () => {
   });
 
   test('outside a ledger the tabs aim at the recent ledger', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+    const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
 
     fireEvent.press(await router.findByTestId('tab-add'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/transactions/new`));
@@ -236,23 +241,39 @@ describe('narrow (<1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/settings`));
   });
 
+  test('the "me" sheet is 个人设置 / 账本设置 / 登出 and nothing else (§14.65 b)', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    fireEvent.press(await router.findByTestId('tab-me'));
+    expect(await router.findByTestId('me-sheet-settings')).toBeTruthy();
+    expect(router.getByTestId('me-sheet-ledger-settings')).toBeTruthy();
+    expect(router.getByTestId('me-sheet-logout')).toBeTruthy();
+    // Switching ledger is the top bar's pill; the sheet no longer repeats it.
+    expect(router.queryByTestId('me-sheet-switch-ledger')).toBeNull();
+    expect(router.queryByText('切换账本')).toBeNull();
+  });
+
   test('the switcher sheet outside a ledger opens the picked ledger’s home', async () => {
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
     // The top bar's pill names the recent ledger and opens the sheet.
     expect(await router.findByText('旅行账本')).toBeTruthy();
-    fireEvent.press(router.getByTestId('tab-me'));
-    fireEvent.press(await router.findByTestId('me-sheet-switch-ledger'));
+    fireEvent.press(router.getByTestId('top-bar-ledger'));
     fireEvent.press(await router.findByTestId(`ledger-switcher-row-${LEDGER_A}`));
 
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
   });
 
-  test('the top bar’s pill opens the switcher on /settings too', async () => {
+  test('outside a ledger the switcher’s last row opens the recent ledger’s settings', async () => {
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
     fireEvent.press(await router.findByTestId('top-bar-ledger'));
-    expect(await router.findByTestId(`ledger-switcher-row-${LEDGER_A}`)).toBeTruthy();
+    const row = await router.findByTestId('ledger-switcher-settings');
+    expect(row).toHaveTextContent('账本设置');
+    fireEvent.press(row);
+
+    // Not the first ledger in the list: the one the chrome names (§14.65 a).
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/settings`));
   });
 
   test('a user with no ledger: /ledgers* has no chrome at all (屏幕稿 15)', async () => {
@@ -314,12 +335,23 @@ describe('wide (>=1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
   });
 
-  test('the ledger list’s breadcrumb names home and leads to the recent ledger', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
+  test.each([
+    ['/ledgers/new', '首页 · 新建账本'],
+    ['/ledgers/join', '首页 · 加入账本'],
+  ])('%s: the breadcrumb names home and, cold, leads to the recent ledger', async (url, crumb) => {
+    const router = renderRouter(ROUTES, { initialUrl: url });
 
-    expect(await router.findByText('首页 · 账本管理')).toBeTruthy();
+    expect(await router.findByText(crumb)).toBeTruthy();
     fireEvent.press(router.getByTestId('page-header-back'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
+  });
+
+  test('inside a ledger the switcher panel’s last row opens that ledger’s settings', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/transactions` });
+
+    fireEvent.press(await router.findByTestId('sidebar-ledger'));
+    fireEvent.press(await router.findByTestId('ledger-switcher-settings'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/settings`));
   });
 
   test('a user with no ledger: /ledgers has no column (屏幕稿 15)', async () => {

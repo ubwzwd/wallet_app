@@ -44,9 +44,11 @@ export function LedgerGone({ ledgerId, ledgers }: LedgerGoneProps): React.JSX.El
   const router = useRouter();
   const remembered = useRememberedLedger(ledgers, ledgerId);
 
-  const viewLedgers = {
-    label: t('common:ledger_unavailable.view_ledgers'),
-    onPress: () => router.replace(routes.ledgers()),
+  // 「回到首页」 (§14.65 e): `/` re-runs the landing redirect against the re-read list — a
+  // ledger the user can open, or the onboarding page when none is left.
+  const backHome = {
+    label: t('common:ledger_unavailable.back_home'),
+    onPress: () => router.replace('/'),
   };
   const switchToLast = remembered
     ? {
@@ -61,8 +63,8 @@ export function LedgerGone({ ledgerId, ledgers }: LedgerGoneProps): React.JSX.El
         icon="alert-triangle"
         title={t('common:ledger_unavailable.title')}
         body={t('common:ledger_unavailable.body')}
-        primaryAction={switchToLast ?? viewLedgers}
-        secondaryAction={switchToLast ? viewLedgers : undefined}
+        primaryAction={switchToLast ?? backHome}
+        secondaryAction={switchToLast ? backHome : undefined}
         testID="ledger-gone-actions"
       />
     </Page>

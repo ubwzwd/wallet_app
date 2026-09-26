@@ -8,7 +8,8 @@
  *
  * The column is the same on every page (§14.64 c): outside a ledger route (`/settings`,
  * `/ledgers*`) it names the ledger the user last had open. On `/ledgers*` none of the five
- * is lit — the way to the ledger list is the last row of the card's switcher (§14.63).
+ * is lit. The card's switcher lists every ledger, the ways to add one, and — last — the
+ * ledger's settings (§14.65 a); there is no ledger-list page.
  *
  * "Ledger settings" is deliberately not a destination (§14.56): the card's chevron and the
  * personal-settings page are the two ways in. Neither is "reports" or "members" (§14.52
@@ -63,8 +64,8 @@ export interface NavDestination {
 
 /**
  * The sidebar destinations, in order (§14.56): home, transactions, accounts, imports, me.
- * Without a ledger to scope them to, the four ledger-scoped entries all lead to the ledger
- * list — which is where the user has to pick one anyway.
+ * Without a ledger to scope them to, the four ledger-scoped entries all lead to `/ledgers`
+ * — which lands on a ledger, or is the onboarding page for a user with none.
  */
 export function useSidebarDestinations(ledgerId: string | null): NavDestination[] {
   const { t } = useTranslation();
@@ -170,7 +171,7 @@ export function Sidebar(): React.JSX.Element {
     : (user?.email ?? '');
 
   // No card for a user who belongs to no ledger at all: there is nothing to name, and the
-  // five entries already lead to the ledger list.
+  // five entries already lead to `/ledgers`, the onboarding page.
   const ledgerCard =
     ledger === undefined ? null : (
       <View ref={cardRef} collapsable={false}>

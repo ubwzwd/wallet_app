@@ -3,8 +3,9 @@
  * defaults to the user's own `base_currency` (decision §2).
  *
  * Screen 13 has no frame of its own for this page, so it borrows the join page's: the same
- * standalone header, the same centred white card, one primary button at the bottom. On a
- * narrow screen inside the shell, the shell's sub-page top bar is that header (§14.64 e).
+ * head (`LedgerPageHead` — for a user with ledgers a sub-page of 首页, §14.65 d: the wide
+ * crumb 「首页 · 新建账本」, the narrow shell's top bar), the same centred white card, one
+ * primary button at the bottom.
  *
  * `useCreateLedger` already invalidates the ledger list on success, so this screen only
  * has to navigate into the ledger it just made.
@@ -18,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 
 import { routes } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useBack, useShellDrawsTopBar, useTopBar } from '@/navigation';
+import { useTopBar } from '@/navigation';
 import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useCreateLedger, useCurrencies, useLedgers } from '@/queries';
 import {
@@ -33,8 +34,8 @@ import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, Page, Text, TextField, toast } from '@/ui';
 import { CurrencyPicker } from '@/ui';
 
+import { LedgerPageHead } from './LedgerPageHead';
 import { MAX_LEDGERS } from './ledgerLimits';
-import { StandaloneHeader } from './StandaloneHeader';
 
 const CARD_MAX_WIDTH = 520;
 
@@ -89,14 +90,10 @@ export default function NewLedgerScreen(): React.JSX.Element {
   const blocked = create.isPending || atLimit;
   const title = t('ledger:create.title');
   useTopBar(title);
-  const back = useBack();
-  const shellBar = useShellDrawsTopBar();
 
   return (
     <Page testID="new-ledger-screen" contentStyle={styles.page}>
-      {shellBar ? null : (
-        <StandaloneHeader title={title} onBack={back.goBack} testID="new-ledger-header" />
-      )}
+      <LedgerPageHead title={title} testID="new-ledger-header" />
 
       <View style={[styles.centre, wide ? styles.centreWide : null]}>
         <View style={[styles.column, { maxWidth: CARD_MAX_WIDTH }]}>

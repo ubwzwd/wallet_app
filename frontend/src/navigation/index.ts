@@ -1,7 +1,12 @@
 /** Route guards and the navigation chrome (04 §1.4, §1.5). Only `app/` imports from here. */
 export { AppShell, type AppShellProps } from './AppShell';
-export { BottomTabBar, TAB_BAR_HEIGHT, type BottomTabBarProps } from './BottomTabBar';
-export { LandingRedirect, pickLandingLedger } from './LandingRedirect';
+export { BottomTabBar, TAB_BAR_HEIGHT } from './BottomTabBar';
+export {
+  LandingRedirect,
+  pickLandingLedger,
+  useLandingTarget,
+  type LandingTarget,
+} from './LandingRedirect';
 export { LedgerGone, type LedgerGoneProps } from './LedgerGone';
 export {
   LedgerSwitcher,

@@ -4,8 +4,9 @@
  *
  * The centre button is not a tab — it goes straight to a new expense, and a long press
  * offers the four kinds. "Me" is not a tab either: it opens a sheet that gathers personal
- * settings, ledger settings, switching ledger and signing out (decision §14.52 A21 — there
- * is no top-level reports or members page).
+ * settings, ledger settings and signing out (decision §14.52 A21 — there is no top-level
+ * reports or members page). Switching ledger is the top bar's ledger pill, and only that
+ * (§14.65 b).
  *
  * Decision §14.64 b: the bar is on every page of the shell, not only inside a ledger. Outside
  * one it aims at the ledger the chrome names (`useChromeLedger`); 「我的」 is lit on
@@ -73,16 +74,8 @@ function Tab({
   );
 }
 
-/** The sheet behind the "me" tab. */
-function MeSheet({
-  open,
-  onClose,
-  onSwitchLedger,
-}: {
-  open: boolean;
-  onClose(): void;
-  onSwitchLedger(): void;
-}): React.JSX.Element {
+/** The sheet behind the "me" tab: 个人设置 / 账本设置 / 登出 (§14.65 b). */
+function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const { logout } = useAuth();
@@ -107,12 +100,6 @@ function MeSheet({
             run: () => router.navigate(routes.l(ledgerId).settings()),
           },
         ]),
-    {
-      key: 'switch-ledger',
-      label: t('common:nav.switch_ledger'),
-      icon: 'arrow-left-right',
-      run: onSwitchLedger,
-    },
     {
       key: 'logout',
       label: t('common:nav.logout'),
@@ -189,11 +176,7 @@ function KindSheet({
   );
 }
 
-export interface BottomTabBarProps {
-  onOpenSwitcher(): void;
-}
-
-export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.Element {
+export function BottomTabBar(): React.JSX.Element {
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
@@ -205,7 +188,7 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
   const [kindOpen, setKindOpen] = React.useState(false);
 
   // `null` only while a cold page outside a ledger is still learning which ledger to name;
-  // like the sidebar, the slots lead to the ledger list until then.
+  // like the sidebar, the slots lead to `/ledgers` until then, which lands on a ledger.
   const l = ledgerId === null ? null : routes.l(ledgerId);
   const scoped = (href: RouteHref | undefined): RouteHref => href ?? routes.ledgers();
   const left: TabSpec[] = [
@@ -227,7 +210,7 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
       exact: false,
     },
   ];
-  // None of the five slots is the ledger list or its sub-pages, so nothing is lit there.
+  // None of the five slots is `/ledgers*`, so nothing is lit there.
   const onLedgerPages = isActivePath(pathname, routes.ledgers(), false);
   const isActive = (spec: TabSpec): boolean =>
     !onLedgerPages && isActivePath(pathname, spec.href, spec.exact);
@@ -307,11 +290,7 @@ export function BottomTabBar({ onOpenSwitcher }: BottomTabBarProps): React.JSX.E
         />
       </View>
 
-      <MeSheet
-        open={meOpen}
-        onClose={() => setMeOpen(false)}
-        onSwitchLedger={onOpenSwitcher}
-      />
+      <MeSheet open={meOpen} onClose={() => setMeOpen(false)} />
       <KindSheet open={kindOpen} onClose={() => setKindOpen(false)} onPick={openAdd} />
     </>
   );

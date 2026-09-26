@@ -9,7 +9,9 @@
  *   narrow → `LedgerSwitcher`, the shared bottom `Sheet`
  *
  * A row is a square letter tile, the ledger's name, its base currency and member count
- * beneath, and a tick on the current one; then "create a ledger" and "join a ledger".
+ * beneath, and a tick on the current one; then "create a ledger", "join a ledger" and —
+ * last — the current ledger's settings (§14.65 a; outside a ledger, the one the chrome
+ * names). There is no ledger-list page to point at any more: this list is that page.
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -143,12 +145,14 @@ function SwitcherRows({
         onPress={() => onNavigate(routes.ledgersJoin())}
         testID="ledger-switcher-join"
       />
-      <ActionRow
-        label={t('common:nav.ledgers')}
-        icon="list"
-        onPress={() => onNavigate(routes.ledgers())}
-        testID="ledger-switcher-manage"
-      />
+      {currentId === null ? null : (
+        <ActionRow
+          label={t('common:nav.ledger_settings')}
+          icon="settings"
+          onPress={() => onNavigate(routes.l(currentId).settings())}
+          testID="ledger-switcher-settings"
+        />
+      )}
     </>
   );
 }

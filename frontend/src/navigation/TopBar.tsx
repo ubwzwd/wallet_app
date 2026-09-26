@@ -16,6 +16,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+// Not a declared dependency: this is expo-router's own copy (hoisted with it), and it has to
+// be — a second copy would be a different context object, and every screen would read `null`.
 import { NavigationContext } from '@react-navigation/native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -65,7 +67,7 @@ export function useTopBarTitle(): string | null {
 
 /**
  * Whether the calling page is the navigator's current screen. A stacked navigator
- * (`/ledgers` → `/ledgers/new`) keeps the page underneath mounted, so "mounted" is not
+ * (a ledger's list → its detail) keeps the page underneath mounted, so "mounted" is not
  * enough to own the top bar. Outside any navigator (unit tests) a page is always current.
  */
 function useScreenFocused(): boolean {
@@ -187,9 +189,9 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
 
 /**
  * The sub-page form: round ‹, centred title, and a spacer as wide as the button so the
- * title lands dead centre. The button goes where `useBack` says; on `/ledgers` while the
- * ledger it would return to is still loading, the slot is held empty rather than letting
- * the bar change shape a frame later.
+ * title lands dead centre. The button goes where `useBack` says; on `/ledgers/new` or
+ * `/ledgers/join` while the ledger it would return to is still loading, the slot is held
+ * empty rather than letting the bar change shape a frame later.
  */
 export function SubPageTopBar(): React.JSX.Element {
   const colors = useColors();

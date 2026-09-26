@@ -1,22 +1,8 @@
 {
   "list": {
-    "title": "Ledgers",
-    "subtitle": "Switching takes every page with it",
-    "current_badge": "Current",
-    "enter": "Open this one",
-    "switch_to": "Switch to this one",
-    "footnote": "A ledger you create is yours to own; one you join with a code makes you a member, who cannot change the base currency or the member list.",
     "card": {
       "role_owner": "Owner",
-      "role_member": "Member",
-      "role_line_owner": "You're the owner · can invite and delete",
-      "role_line_member": "You're a member · someone invited you",
-      "members_label": "Members",
-      "currency_label": "Base currency"
-    },
-    "new_card": {
-      "title": "New ledger",
-      "body": "One for a trip, one for your parents. Ledgers are completely independent."
+      "role_member": "Member"
     },
     "empty": {
       "create_button": "Create a ledger",

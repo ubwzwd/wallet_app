@@ -1,16 +1,13 @@
 /**
  * The header `/ledgers/new` and `/ledgers/join` draw for themselves where nothing above
- * them already carries a title and a way back (decision §14.64 e):
+ * them carries a title and a way back — for a user with no ledger at all, at both widths:
+ * the shell steps aside there (屏幕稿 15, §14.59), so the page is on its own, and its back
+ * leads to the onboarding page. Everyone else gets the shell's top bar (narrow) or a
+ * `PageHeader` crumb (wide); `LedgerPageHead` picks.
  *
- *   - for a user with no ledger at all, at both widths — the shell steps aside there
- *     (屏幕稿 15, §14.59), so the page is on its own;
- *   - on a wide screen for everyone else — the wide shell has no top bar.
- *
- * On a narrow screen inside the shell the sub-page top bar already draws exactly this, so
- * the pages leave it out (`useShellDrawsTopBar`). Screen 13 draws the narrow form — the
- * round back button on the left, the page title centred, a matching gap on the right — and
- * on a wide screen the same two elements sit on one left-aligned line, the way every other
- * page's `PageHeader` crumb does. The button is the app's one `BackButton`.
+ * Screen 13 draws the narrow form — the round back button on the left, the page title
+ * centred, a matching gap on the right — and on a wide screen the same two elements sit on
+ * one left-aligned line. The button is the app's one `BackButton`.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -22,7 +19,7 @@ import { BACK_BUTTON_SIZE, BackButton, Text } from '@/ui';
 
 export interface StandaloneHeaderProps {
   title: string;
-  /** Where the back button goes; usually the ledger list. */
+  /** Where the back button goes. */
   onBack(): void;
   testID?: string;
 }

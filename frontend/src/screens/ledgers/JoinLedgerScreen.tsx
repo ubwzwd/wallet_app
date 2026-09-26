@@ -3,11 +3,11 @@
  * the last one lands — the 「加入」 button is the same action for anyone who pastes and then
  * reaches for a button.
  *
- * Screen 13's wide frame is named 「1440 · Dialog」: on a wide screen this is a modal laid
- * over the ledger list, with 取消 / 加入 in the foot band on the right, so the list is
- * rendered behind it and the page draws no header of its own. Narrow keeps the standalone
- * page of the 375 frame (a round back button, the title, the card, the benefits card); inside
- * the shell that back button and title are the shell's sub-page top bar (§14.64 e).
+ * Decision §14.65 d: there is no ledger list to lay a dialog over any more, so at both
+ * widths this is a sub-page — the head (`LedgerPageHead`: the wide `PageHeader` crumb
+ * 「首页 · 加入账本」, the narrow shell's top bar, or for a user with no ledger its own
+ * standalone header), then the same card, centred and no wider than 屏幕稿 13's 520 dialog,
+ * and the benefits card under it.
  *
  * There is deliberately **no preview** of the ledger behind a code (decision §14.52 B17,
  * and screen 13's own note: nothing about a ledger is shown before the code is spent).
@@ -25,30 +25,27 @@ import { useTranslation } from 'react-i18next';
 import { isApiClientError } from '@/api/errors';
 import { routes } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useBack, useShellDrawsTopBar, useTopBar } from '@/navigation';
+import { useTopBar } from '@/navigation';
 import { useJoinLedger } from '@/queries';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
-import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, Icon, Page, Text } from '@/ui';
 import { toast } from '@/ui';
 
 import { CODE_LENGTH, CodeInput } from './CodeInput';
 import { JoinBenefits } from './JoinBenefits';
-import { JoinDialogFrame } from './JoinDialogFrame';
-import { StandaloneHeader } from './StandaloneHeader';
+import { LedgerPageHead } from './LedgerPageHead';
 
 /** Used when a 429 arrives without a usable `Retry-After` header; the limit is 1 QPS. */
 const DEFAULT_RETRY_AFTER = 5;
 
-/** Screen 13's wide frame: a 520 dialog. */
+/** Screen 13's wide frame was a 520 dialog; the card keeps that width. */
 const CARD_MAX_WIDTH = 520;
 const KEY_TILE = 48;
 
 export default function JoinLedgerScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
-  const wide = useIsWide();
   const router = useRouter();
   const { mutate, isPending } = useJoinLedger({ silent: true });
 
@@ -123,17 +120,9 @@ export default function JoinLedgerScreen(): React.JSX.Element {
 
   const title = t('ledger:join.title');
   useTopBar(title);
-  const back = useBack();
-  const goBack = back.goBack;
-  const shellBar = useShellDrawsTopBar();
 
   const intro = (
-    <View
-      style={[
-        styles.intro,
-        wide ? { borderBottomColor: colors['border.default'], borderBottomWidth: 1 } : null,
-      ]}
-    >
+    <View style={styles.intro}>
       <View style={[styles.keyTile, { backgroundColor: colors['accent.subtle'] }]}>
         <Icon name="key-round" size={22} color={colors['accent.solid']} />
       </View>
@@ -194,53 +183,25 @@ export default function JoinLedgerScreen(): React.JSX.Element {
       testID="join-restart"
       label={t('ledger:join.retry_button')}
       variant="soft"
-      size={wide ? 'md' : 'lg'}
+      size="lg"
       onPress={restart}
-      fullWidth={!wide}
+      fullWidth
     />
   ) : (
     <Button
       testID="join-submit"
       label={t('ledger:join.submit')}
-      size={wide ? 'md' : 'lg'}
+      size="lg"
       onPress={() => submit(code)}
       loading={isPending}
       disabled={!complete || waiting}
-      fullWidth={!wide}
+      fullWidth
     />
   );
 
-  // ------------------------------------------------------------- 1440 · Dialog
-  if (wide) {
-    return (
-      <JoinDialogFrame
-        maxWidth={CARD_MAX_WIDTH}
-        onDismiss={goBack}
-        foot={
-          <>
-            <Button
-              testID="join-cancel"
-              label={t('common:button.cancel')}
-              variant="soft"
-              onPress={goBack}
-            />
-            {action}
-          </>
-        }
-      >
-        {intro}
-        {cells}
-        {verdict}
-        {countdown}
-        <JoinBenefits variant="inline" />
-      </JoinDialogFrame>
-    );
-  }
-
-  // ------------------------------------------------------------------- 375 页
   return (
     <Page testID="join-ledger-screen" contentStyle={styles.page}>
-      {shellBar ? null : <StandaloneHeader title={title} onBack={goBack} testID="join-header" />}
+      <LedgerPageHead title={title} testID="join-header" />
 
       <View style={styles.centre}>
         <View style={[styles.column, { maxWidth: CARD_MAX_WIDTH }]}>
@@ -251,7 +212,7 @@ export default function JoinLedgerScreen(): React.JSX.Element {
             {countdown}
             {action}
           </Card>
-          <JoinBenefits variant="card" />
+          <JoinBenefits />
         </View>
       </View>
     </Page>

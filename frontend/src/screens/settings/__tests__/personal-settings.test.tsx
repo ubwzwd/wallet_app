@@ -53,6 +53,7 @@ afterEach(async () => {
   toast.clear();
   await setPref(PREF_NAMES.theme, null);
   await setPref(PREF_NAMES.lang, null);
+  await setPref(PREF_NAMES.lastLedgerId, null);
   await i18next.changeLanguage('zh');
 });
 
@@ -176,6 +177,25 @@ test('without a ledger in context the ledger-settings entry falls back to /ledge
 
   fireEvent.press(await screen.findByTestId('settings-ledger-settings'));
   expect(mockRouter.push).toHaveBeenCalledWith('/ledgers');
+});
+
+test('the entries card is 账本设置 alone: no 「账本管理」 row (§14.65 b)', async () => {
+  await setPref(PREF_NAMES.lastLedgerId, 'led-2');
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: 'led-1' }), makeLedger({ id: 'led-2' })],
+    total: 2,
+  });
+  await renderSettings();
+
+  const entries = await screen.findByTestId('entries-card');
+  expect(within(entries).getByText('账本设置')).toBeTruthy();
+  expect(within(entries).queryByText('账本管理')).toBeNull();
+
+  // The one row left opens the ledger the chrome names — the remembered one.
+  await waitFor(() => {
+    fireEvent.press(screen.getByTestId('settings-ledger-settings'));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/l/led-2/settings');
+  });
 });
 
 test('logging out clears the session and lands on /login', async () => {

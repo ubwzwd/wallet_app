@@ -44,13 +44,13 @@
   "not_found": {
     "title": "页面不存在",
     "body": "你访问的地址不存在，或者已经被移动。",
-    "action": "回到我的账本"
+    "action": "回到首页"
   },
   "ledger_unavailable": {
     "title": "这个账本不存在，或者你不在它的成员里",
     "body": "它可能已被删除，或者你被移出了这个账本。",
     "switch_last": "切到 {{name}}",
-    "view_ledgers": "看我的账本"
+    "back_home": "回到首页"
   },
   "toast": {
     "show_detail": "查看详情"
