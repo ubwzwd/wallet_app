@@ -82,8 +82,8 @@ export default function TransferDetailScreen(): React.JSX.Element {
   const remove = useDeleteTransfer(ledgerId);
   const unpair = useUnpairTransfer(ledgerId);
 
-  // 屏幕稿 07 (decision B16): 「交易 · 09-08 · 招行储蓄卡 → 建行信用卡」, so the bar and the
-  // breadcrumb both say which move this is without opening anything.
+  // 屏幕稿 07 · 1440 (decision B16): 「交易 · 09-08 · 招行储蓄卡 → 建行信用卡」, so the wide
+  // breadcrumb says which move this is without opening anything.
   const crumb = pair
     ? [
         t('transaction:list.title'),
@@ -94,7 +94,8 @@ export default function TransferDetailScreen(): React.JSX.Element {
         }),
       ].join(' · ')
     : t('transaction:list.title');
-  useTopBar(crumb);
+  // Narrow: the sub-page bar is 「‹ 交易详情」 (屏幕稿 07 · 375); the legs below name the move.
+  useTopBar(t('transaction:detail.page_title'));
 
   const l = routes.l(ledgerId);
 

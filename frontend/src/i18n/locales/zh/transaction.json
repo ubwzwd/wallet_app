@@ -284,6 +284,7 @@
     }
   },
   "detail": {
+    "page_title": "交易详情",
     "rate_used": "按 {{date}} 汇率 1 {{from}} = {{rate}} {{to}}",
     "rate_fallback_hint": "该日无行情，用了 {{date}} 的汇率",
     "refunds_title": "已关联的退款",

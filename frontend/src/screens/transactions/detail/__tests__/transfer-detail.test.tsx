@@ -190,10 +190,18 @@ test('both legs are shown with their own account and amount, and no running bala
   expect(router.getByTestId('transfer-detail-header-extra')).toHaveTextContent('信用卡还款');
   expect(router.queryByText(containing('余后'))).toBeNull();
 
-  // 屏幕稿 07 (B16): the bar names the move, not just 「交易」.
-  expect(router.getByTestId('top-bar-title')).toHaveTextContent(
-    '交易 · 09-08 · 招行储蓄卡 → 建行信用卡',
-  );
+  // 屏幕稿 07 · 375: the sub-page bar is 「‹ 交易详情」; the legs above name the move.
+  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易详情');
+});
+
+test('宽屏 the breadcrumb names the move (屏幕稿 07 · 1440, B16)', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
+  mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...OUT, events: [] });
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+
+  expect(await router.findByText('交易 · 09-08 · 招行储蓄卡 → 建行信用卡')).toBeTruthy();
+  expect(router.getByTestId('transfer-detail-crumb-back')).toBeTruthy();
 });
 
 test('a cross-currency pair gives each leg its own rate line', async () => {
@@ -392,10 +400,18 @@ test('a single leg names the other side and offers 「关联为转账对腿」',
   expect(await router.findByTestId('tx-detail-pair-counterparty')).toHaveTextContent('工资卡');
   await openActions(router, 'tx-detail-actions');
   expect(router.getByTestId('tx-detail-actions-pair')).toBeTruthy();
-  // 屏幕稿 07 (B16): 「交易 · 09-05 · 对方：工资卡」.
-  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易 · 09-05 · 对方：工资卡');
+  // 屏幕稿 07 · 375: 「‹ 交易详情」; the other side is named in the card above.
+  expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易详情');
   // A single leg has nothing to unpair.
   expect(router.queryByTestId('tx-detail-actions-unpair')).toBeNull();
+});
+
+test('宽屏 a single leg’s breadcrumb names the other side (B16)', async () => {
+  wideSpy.mockReturnValue(true);
+  mockGet(`/ledgers/${LEDGER}/transactions/solo`, SOLO);
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
+
+  expect(await router.findByText('交易 · 09-05 · 对方：工资卡')).toBeTruthy();
 });
 
 test('a single leg with no counterparty text says 对方不在应用里', async () => {
