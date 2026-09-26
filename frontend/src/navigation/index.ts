@@ -26,6 +26,7 @@ export {
   userLabel,
   type NavDestination,
 } from './Sidebar';
+export { resetLedgerHistory, useRememberLedgerHistory } from './ledgerHistory';
 export { useLastLedgerId } from './useLastLedgerId';
 export {
   SubPageTopBar,

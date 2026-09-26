@@ -298,6 +298,7 @@
     }
   },
   "detail": {
+    "page_title": "Transaction",
     "rate_used": "At the {{date}} rate: 1 {{from}} = {{rate}} {{to}}",
     "rate_fallback_hint": "No rate for that day — used the {{date}} rate instead",
     "refunds_title": "Linked refunds",

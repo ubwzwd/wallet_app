@@ -10,10 +10,13 @@ import React from 'react';
 import { Slot, usePathname } from 'expo-router';
 
 import { routes } from '@/domain/routes';
-import { AppShell, RequireAuth, isActivePath } from '@/navigation';
+import { AppShell, RequireAuth, isActivePath, useRememberLedgerHistory } from '@/navigation';
 
 export default function AppLayout(): React.JSX.Element {
   const pathname = usePathname();
+  // So a back step from `/ledgers*` or `/settings` returns to the ledger page the user
+  // left, not to that ledger's first page (§14.64 f; see `ledgerHistory.ts`).
+  useRememberLedgerHistory();
   const withShell =
     pathname === routes.settings() || isActivePath(pathname, routes.ledgers(), false);
 

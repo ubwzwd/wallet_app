@@ -96,7 +96,8 @@ export default function TransactionDetailScreen(): React.JSX.Element {
           : [tx.merchant ?? formatDateShort(tx.occurred_at)]),
       ].join(' · ')
     : t('transaction:list.title');
-  useTopBar(crumb);
+  // Narrow: the sub-page bar is 「‹ 交易详情」 (屏幕稿 08 · 375); the crumb is the wide header's.
+  useTopBar(t('transaction:detail.page_title'));
 
   const l = routes.l(ledgerId);
 

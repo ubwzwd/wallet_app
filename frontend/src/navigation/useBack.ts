@@ -15,6 +15,7 @@ import { useIsWide } from '@/theme/useBreakpoint';
 
 import { type BackParentKey, backTargetFor } from './backTarget';
 import { useChromeLedger, useHasNoLedgers } from './useChromeLedger';
+import { stepBackRestoringLedger } from './ledgerHistory';
 
 export interface BackControl {
   /** Whether this page is a sub-page, i.e. whether a back button belongs on it. */
@@ -52,8 +53,11 @@ export function useBack(at?: string): BackControl {
   const href = target?.href ?? null;
 
   const goBack = React.useCallback((): void => {
-    if (router.canGoBack()) router.back();
-    else if (href !== null) router.replace(href);
+    if (router.canGoBack()) {
+      // Crossing back into a ledger from `/ledgers*` or `/settings` has to restore the
+      // ledger's own history, which its unmounted navigator lost (see ledgerHistory.ts).
+      if (!stepBackRestoringLedger()) router.back();
+    } else if (href !== null) router.replace(href);
   }, [href, router]);
 
   return {
