@@ -39,7 +39,9 @@ from uuid import UUID
 from sqlalchemy import Row, and_, select
 from sqlalchemy.orm import Session, aliased
 
+from app.models.finance_source import FinanceSource
 from app.models.transaction import Transaction
+from app.services import source_access
 from app.services.importing.validation import (
     ImportContext,
     RowDraft,
@@ -167,7 +169,9 @@ def flag_transfer_candidates(
         if len(single) == 1:
             row.flags.add("transfer_candidate")
             row.matched_transaction_id = single[0].id
-            row.counterpart_source_id = single[0].source_id
+            row.counterpart_source_id = _prefillable_counterpart(
+                db, ctx, single[0].source_id
+            )
             add_hint(row, "已勾选：与另一个账户上的那条转账合并为一笔，可取消")
         elif len(single) > 1:
             # Several candidates: pick none, store none (decision §14.53b). The
@@ -187,6 +191,24 @@ def flag_transfer_candidates(
             # counterpart account would create a transaction out of thin air.
             row.counterpart_source_id = None
             add_hint(row, "没找到对腿；对方账户在应用里就选一个，不在就填对方名字或留空")
+
+
+def _prefillable_counterpart(
+    db: Session, ctx: ImportContext, source_id: UUID
+) -> UUID | None:
+    """The unique leg's account, but only if it is still fit to pre-fill.
+
+    A row whose counterpart is unusable (unshared since, someone else's,
+    deleted) or archived would otherwise pass review only to have
+    ``load_counterpart`` 404 it at commit (§4.5 ②); leaving it ``None`` here
+    lets the user pick a real account instead (decision §14.62).
+    """
+    source = db.get(FinanceSource, source_id)
+    if source is None or source.archived:
+        return None
+    if not source_access.is_usable(db, ctx.actor_id, ctx.ledger_id, source):
+        return None
+    return source_id
 
 
 def _fetch_transfer_legs(

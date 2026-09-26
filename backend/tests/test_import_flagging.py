@@ -628,6 +628,64 @@ def test_transfer_one_paired_and_one_single_prefills_the_single(
     assert row.counterpart_source_id == free.id
 
 
+def test_transfer_unique_leg_on_an_unusable_account_is_not_prefilled(
+    db, ledger, credit, user_factory, owned_source_factory, transaction_factory
+):
+    """The counterpart is unique but belongs to someone else, unshared here.
+
+    Pre-filling it anyway would pass review only to have ``load_counterpart``
+    404 it at commit (§4.5 ②, decision §14.62); leaving it ``None`` lets the
+    user pick a real account.
+    """
+    stranger = user_factory()
+    outside = owned_source_factory(stranger, name="陌生人的储蓄卡")
+    leg = transaction_factory(
+        ledger,
+        outside,
+        kind="transfer",
+        amount=Decimal("-3000.0000"),
+        occurred_at=DAY,
+        transfer_role="out",
+        created_by=stranger.id,
+    )
+    row = transfer_draft("in", "3000.00")
+
+    flag_rows(db, context(ledger, credit), [row])
+
+    assert row.flags == {"transfer_candidate"}
+    assert row.matched_transaction_id == leg.id
+    assert row.counterpart_source_id is None
+    assert "已勾选" in row.hint
+
+
+def test_transfer_unique_leg_on_an_archived_account_is_not_prefilled(
+    db, ledger, credit, source_factory, transaction_factory
+):
+    """The counterpart is unique and usable, but archived (decision §14.62)."""
+    from datetime import datetime, timezone
+
+    archived_checking = source_factory(ledger, name="已归档储蓄卡")
+    leg = transaction_factory(
+        ledger,
+        archived_checking,
+        kind="transfer",
+        amount=Decimal("-3000.0000"),
+        occurred_at=DAY,
+        transfer_role="out",
+    )
+    archived_checking.archived = True
+    archived_checking.archived_at = datetime.now(timezone.utc)
+    db.flush()
+    row = transfer_draft("in", "3000.00")
+
+    flag_rows(db, context(ledger, credit), [row])
+
+    assert row.flags == {"transfer_candidate"}
+    assert row.matched_transaction_id == leg.id
+    assert row.counterpart_source_id is None
+    assert "已勾选" in row.hint
+
+
 def test_transfer_without_counterpart_never_guesses_one_account(
     db, ledger, credit, checking
 ):
