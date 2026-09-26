@@ -34,7 +34,6 @@ from app.core.deps import (
     pagination,
 )
 from app.core.errors import ApiError, ErrorCode
-from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
 from app.schemas.common import CURRENCY_PATTERN
@@ -59,7 +58,7 @@ from app.schemas.transaction import (
     UnpairedLeg,
     UnpairResponse,
 )
-from app.services import events, transaction_service, valuation
+from app.services import events, source_access, transaction_service, valuation
 from app.services.transaction_service import SingleTxInput, TransferInput
 
 router = APIRouter(prefix="/ledgers/{id}/transactions", tags=["Transactions"])
@@ -257,21 +256,18 @@ def _check_currencies(raw: list[str]) -> list[str]:
 
 
 def _check_sources(db: Session, ctx: LedgerContext, source_ids: list[uuid.UUID]) -> None:
-    """Every ``source_id`` filter value has to be an account of this ledger (§5.25)."""
+    """Every ``source_id`` filter value has to be listed by §5.24c (§5.25).
+
+    That is the caller's own accounts, the ones shared into this ledger, and
+    the ones this ledger's transactions or batches point at (§14.62); archived
+    ones count, since a filter is about history.
+    """
     if not source_ids:
         return
-    wanted = set(source_ids)
-    found = set(
-        db.execute(
-            select(FinanceSource.id).where(
-                FinanceSource.ledger_id == ctx.ledger.id,
-                FinanceSource.id.in_(wanted),
-            )
-        )
-        .scalars()
-        .all()
+    visible = source_access.visible_source_ids(
+        db, ctx.user.id, ctx.ledger.id, include_archived=True
     )
-    if wanted - found:
+    if set(source_ids) - visible.keys():
         raise ApiError(404, ErrorCode.NOT_FOUND, "Account not found")
 
 

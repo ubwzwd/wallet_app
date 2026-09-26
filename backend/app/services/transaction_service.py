@@ -34,7 +34,7 @@ from app.core.errors import ApiError, ErrorCode
 from app.models.finance_source import FinanceSource
 from app.models.ledger import Ledger
 from app.models.transaction import Transaction
-from app.services import events, fx
+from app.services import events, fx, source_access
 from app.services.valuation import quantize_amount
 
 KINDS = ("expense", "income", "refund", "transfer")
@@ -155,7 +155,7 @@ def create_single(
     Only single rows: a two-leg transfer goes through :func:`create_transfer`,
     so ``transfer_pair_id`` is always NULL here.
     """
-    source = _load_source(db, ledger, data.source_id)
+    source = _load_source(db, actor_id, ledger, data.source_id)
     if source.archived:
         raise ApiError(
             409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived"
@@ -241,9 +241,13 @@ def update_single(
     merged = dict(before)
     merged.update(edits)
 
-    source = _load_source(db, ledger, merged["source_id"])
-    # A historical row on an archived account stays editable (decision §14.40,
-    # 01-12); moving one *onto* an archived account does not.
+    # Moving a row onto another account needs that account to be usable by the
+    # caller here (§14.62); a row that stays where it is stays editable even if
+    # its account was archived (decision §14.40, 01-12) or unshared since.
+    if merged["source_id"] == tx.source_id:
+        source = _current_source(db, tx.source_id)
+    else:
+        source = _load_source(db, actor_id, ledger, merged["source_id"])
     if source.id != tx.source_id and source.archived:
         raise ApiError(
             409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived"
@@ -333,8 +337,8 @@ def create_transfer(
 
     The pair id is generated here — a client never names it.
     """
-    from_source = _load_source(db, ledger, data.from_source_id)
-    to_source = _load_source(db, ledger, data.to_source_id)
+    from_source = _load_source(db, actor_id, ledger, data.from_source_id)
+    to_source = _load_source(db, actor_id, ledger, data.to_source_id)
 
     for source in (from_source, to_source):
         if source.archived:
@@ -432,8 +436,10 @@ def update_transfer(
     before_out = events.snapshot(out_leg, SINGLE_FIELDS)
     before_in = events.snapshot(in_leg, SINGLE_FIELDS)
 
-    from_source = _resolve_source(db, ledger, edits, "from_source_id", out_leg)
-    to_source = _resolve_source(db, ledger, edits, "to_source_id", in_leg)
+    from_source = _resolve_source(
+        db, actor_id, ledger, edits, "from_source_id", out_leg
+    )
+    to_source = _resolve_source(db, actor_id, ledger, edits, "to_source_id", in_leg)
     if from_source.id == to_source.id:
         raise ApiError(
             400, ErrorCode.SAME_SOURCE, "A transfer needs two different accounts"
@@ -599,7 +605,9 @@ def pair(
         )
 
     out_leg, in_leg = _split_legs([first, second], ErrorCode.PAIR_INVALID, 400)
-    in_source = _load_source(db, ledger, in_leg.source_id)
+    # Pairing ties two rows that already exist; it books nothing new on either
+    # account, so only the transaction-level rules above apply (§14.62).
+    in_source = _current_source(db, in_leg.source_id)
     subtype = unify_subtype(
         out_leg.transfer_subtype, in_leg.transfer_subtype, in_source.type
     )
@@ -896,14 +904,21 @@ def _refund_event(before: object, after: object) -> str | None:
 
 def _resolve_source(
     db: Session,
+    actor_id: uuid.UUID,
     ledger: Ledger,
     edits: dict[str, object],
     key: str,
     leg: Transaction,
 ) -> FinanceSource:
-    """The account a transfer leg ends up on, archived only if it already was."""
+    """The account a transfer leg ends up on, archived only if it already was.
+
+    A leg that keeps its account keeps it whatever happened to it since; a leg
+    moved to another account needs that account usable by the caller (§14.62).
+    """
     source_id = edits.get(key, leg.source_id)
-    source = _load_source(db, ledger, source_id)
+    if source_id == leg.source_id:
+        return _current_source(db, leg.source_id)
+    source = _load_source(db, actor_id, ledger, source_id)
     if source.id != leg.source_id and source.archived:
         raise ApiError(
             409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived"
@@ -1039,11 +1054,20 @@ def _as_dict(data: SingleTxInput) -> dict[str, object]:
 
 
 def _load_source(
-    db: Session, ledger: Ledger, source_id: object
+    db: Session, actor_id: uuid.UUID, ledger: Ledger, source_id: object
 ) -> FinanceSource:
-    """An account of this ledger; anything else is invisible (§3.3)."""
-    source = db.get(FinanceSource, source_id) if source_id is not None else None
-    if source is None or source.ledger_id != ledger.id:
+    """An account ``actor_id`` may book on in ``ledger`` (§3.2, §14.62).
+
+    Someone else's account that is not shared into this ledger is as invisible
+    as a missing one: 404 ``not_found``. Archival is left to the caller (409).
+    """
+    return source_access.load_usable_source(db, actor_id, ledger, source_id)
+
+
+def _current_source(db: Session, source_id: uuid.UUID) -> FinanceSource:
+    """The account an existing row already sits on (the foreign key holds it)."""
+    source = db.get(FinanceSource, source_id)
+    if source is None:  # pragma: no cover - foreign key
         raise ApiError(404, ErrorCode.NOT_FOUND, "Account not found")
     return source
 

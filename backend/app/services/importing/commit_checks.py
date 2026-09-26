@@ -25,6 +25,7 @@ from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch, ImportRow
 from app.models.ledger import Ledger
 from app.models.transaction import Transaction
+from app.services import source_access
 from app.services.importing.drafts import ImportContext
 
 
@@ -79,7 +80,17 @@ def validate_batch(
         raise CommitRejected(409, ErrorCode.BATCH_NOT_READY, "This batch is not ready")
 
     source = db.get(FinanceSource, batch.source_id)
-    if source is not None and source.archived:
+    ledger = db.get(Ledger, batch.ledger_id)
+    # The target account may have been unshared since the upload (§14.62): the
+    # uploader can no longer book on it here, which is the same 404 as a gone
+    # account. Archival stays its own 409.
+    if (
+        source is None
+        or ledger is None
+        or not source_access.is_usable(db, ctx.actor_id, ledger.id, source)
+    ):
+        raise CommitRejected(404, ErrorCode.NOT_FOUND, "Account not found")
+    if source.archived:
         raise CommitRejected(
             409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived"
         )
@@ -202,7 +213,12 @@ def assert_pairable(
 
 
 def load_counterpart(db: Session, batch: ImportBatch, row: ImportRow) -> FinanceSource:
-    """The counterpart account of §4.5 ②: same ledger, not archived, not self."""
+    """The counterpart account of §4.5 ②: usable, not archived, not self.
+
+    Usable means usable by the batch's uploader in the batch's ledger — theirs,
+    or shared into it (§14.62); a counterpart unshared after review is the same
+    404 as an archived or deleted one.
+    """
     if row.counterpart_source_id == batch.source_id:
         raise CommitRejected(
             400,
@@ -211,7 +227,11 @@ def load_counterpart(db: Session, batch: ImportBatch, row: ImportRow) -> Finance
             [row.row_no],
         )
     source = db.get(FinanceSource, row.counterpart_source_id)
-    if source is None or source.ledger_id != batch.ledger_id or source.archived:
+    if (
+        source is None
+        or source.archived
+        or not source_access.is_usable(db, batch.created_by, batch.ledger_id, source)
+    ):
         raise CommitRejected(
             404, ErrorCode.NOT_FOUND, "Counterpart account not found", [row.row_no]
         )

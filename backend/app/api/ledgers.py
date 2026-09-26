@@ -305,9 +305,12 @@ def delete_ledger(
     """Delete a ledger and everything in it (§5.12); owner only.
 
     ``confirm_name`` has to be typed out and match exactly, because the delete
-    is unrecoverable: accounts, transactions, events and import batches all go
-    with it through the database's ``ON DELETE CASCADE`` (§5.12, decision
-    §14.52 A22). Nothing on disk to clean up — uploads are never stored.
+    is unrecoverable: transactions, events, import batches, account shares,
+    members and invites all go with it through the database's
+    ``ON DELETE CASCADE`` (§5.12, decision §14.52 A22). Accounts belong to
+    people, not ledgers, so ``finance_sources`` is never touched — only their
+    shares into this ledger go (§14.62 f). Nothing on disk to clean up —
+    uploads are never stored.
     """
     if confirm_name != ctx.ledger.name:
         raise ApiError(
@@ -316,9 +319,11 @@ def delete_ledger(
             "query.confirm_name: must match the ledger name exactly",
         )
 
-    # A plain ``DELETE FROM ledgers``: every child table hangs off the ledger
-    # with ``ON DELETE CASCADE``, so the database empties them in the same
-    # statement and the ORM never has to walk the graph.
+    # A plain ``DELETE FROM ledgers``: every child table — ledger_sources,
+    # transactions, import batches, members, invites, events — hangs off the
+    # ledger with ``ON DELETE CASCADE``, so the database empties them in the
+    # same statement and the ORM never has to walk the graph. finance_sources
+    # has no ledger column and is not touched (§14.62 f).
     db.execute(delete(Ledger).where(Ledger.id == ctx.ledger.id))
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

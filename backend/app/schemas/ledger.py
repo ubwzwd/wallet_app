@@ -10,7 +10,12 @@ INVITE_CODE_PATTERN = r"^[0-9]{6}$"
 
 
 class LedgerCounts(ApiModel):
-    """The three counts shown in the delete-confirmation dialog (§5.10, §5.19)."""
+    """The three counts shown in the delete-confirmation dialog (§5.10, §5.19).
+
+    ``sources`` counts the accounts *shared into* the ledger (its
+    ``ledger_sources`` rows, decision §14.62 f) — deleting the ledger only
+    withdraws those shares, it never deletes an account.
+    """
 
     transactions: int
     sources: int
