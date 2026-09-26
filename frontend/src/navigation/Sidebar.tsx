@@ -7,7 +7,7 @@
  * — pushed to the foot — the signed-in member.
  *
  * The column is the same on every page (§14.64 c): outside a ledger route (`/settings`,
- * `/ledgers*`) it names the ledger the user last had open. On `/ledgers*` none of the five
+ * `/accounts*`, `/ledgers*`) it names the ledger the user last had open. On `/ledgers*` none of the five
  * is lit. The card's switcher lists every ledger, the ways to add one, and — last — the
  * ledger's settings (§14.65 a); there is no ledger-list page.
  *
@@ -67,8 +67,9 @@ export interface NavDestination {
 
 /**
  * The sidebar destinations, in order (§14.56): home, transactions, accounts, imports, me.
- * Without a ledger to scope them to, the four ledger-scoped entries all lead to `/ledgers`
- * — which lands on a ledger, or is the onboarding page for a user with none.
+ * Accounts belong to the user, not to a ledger (decision §14.62), so that entry is always
+ * `/accounts`. Without a ledger to scope them to, the three ledger-scoped entries lead to
+ * `/ledgers` — which lands on a ledger, or is the onboarding page for a user with none.
  */
 export function useSidebarDestinations(ledgerId: string | null): NavDestination[] {
   const { t } = useTranslation();
@@ -86,7 +87,7 @@ export function useSidebarDestinations(ledgerId: string | null): NavDestination[
       key: 'sources',
       label: t('common:nav.sources'),
       icon: 'wallet',
-      href: inLedger(l?.sources()),
+      href: routes.accounts(),
     },
     {
       key: 'imports',
@@ -147,7 +148,8 @@ export function Sidebar(): React.JSX.Element {
   const ledgerContext = useOptionalLedgerContext();
 
   // Mockup 14 keeps the ledger named even on `/settings`; §14.64 c does the same on
-  // `/ledgers*`, where none of the destinations is the page the user is on.
+  // `/accounts*` (where 「账户」 is lit) and on `/ledgers*`, where none of the destinations
+  // is the page the user is on.
   const onLedgerPages = isActivePath(pathname, routes.ledgers(), false);
   const chrome = useChromeLedger();
   const ledger = chrome.ledger ?? undefined;

@@ -22,12 +22,12 @@ import type { TextTone } from '@/ui';
 /** An account in the red (a credit card's debt, an overdrawn account) reads as expense. */
 export function balanceTone(source: FinanceSource, muted: boolean): TextTone {
   if (muted) return 'muted';
-  return parseMoney(source.balance) < 0n ? 'expense' : 'primary';
+  return parseMoney(source.balance ?? '0') < 0n ? 'expense' : 'primary';
 }
 
 /** The balance in the account's own currency; bare when that is the ledger's base. */
 export function balanceText(source: FinanceSource, lang: Lang, baseCurrency: string): string {
-  return formatLedgerAmount(source.balance, source.default_currency, baseCurrency, lang);
+  return formatLedgerAmount(source.balance ?? '0', source.default_currency, baseCurrency, lang);
 }
 
 /** Whether this account's balance is worth converting at all. */

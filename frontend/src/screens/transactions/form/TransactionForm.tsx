@@ -162,7 +162,7 @@ export function TransactionForm({
           title={t('transaction:form.no_sources')}
           primaryAction={{
             label: t('transaction:form.no_sources_action'),
-            onPress: () => router.navigate(routes.l(ledgerId).sourceNew() as Href),
+            onPress: () => router.navigate(routes.accountNew(ledgerId) as Href),
           }}
         />
       </Page>

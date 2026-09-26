@@ -47,6 +47,15 @@ export const routes = {
   ledgersJoin: () => href('/ledgers/join'),
   /** Personal settings — `/settings`, distinct from a ledger's own `l(id).settings()`. */
   settings: () => href('/settings'),
+  /**
+   * My accounts (decision §14.62): an account belongs to its owner, not to a ledger, so the
+   * list and its form live outside `/l/:id`. `?ledger=` preselects that ledger in the new
+   * form's 「共享到」.
+   */
+  accounts: (includeArchived?: boolean) =>
+    href(`/accounts${buildQuery({ include_archived: includeArchived ? '1' : undefined })}`),
+  accountNew: (ledgerId?: Uuid) => href(`/accounts/new${buildQuery({ ledger: ledgerId })}`),
+  accountEdit: (sourceId: Uuid) => href(`/accounts/${sourceId}/edit`),
 
   l: (ledgerId: Uuid) => ({
     home: (month?: string) => href(`/l/${ledgerId}${buildQuery({ month })}`),
@@ -69,9 +78,6 @@ export const routes = {
     transactionEdit: (txId: Uuid) => href(`/l/${ledgerId}/transactions/${txId}/edit`),
     transfer: (pairId: Uuid) => href(`/l/${ledgerId}/transfers/${pairId}`),
     transferEdit: (pairId: Uuid) => href(`/l/${ledgerId}/transfers/${pairId}/edit`),
-    sources: (includeArchived?: boolean) => href(`/l/${ledgerId}/sources${buildQuery({ include_archived: includeArchived ? '1' : undefined })}`),
-    sourceNew: () => href(`/l/${ledgerId}/sources/new`),
-    sourceEdit: (sourceId: Uuid) => href(`/l/${ledgerId}/sources/${sourceId}/edit`),
     imports: () => href(`/l/${ledgerId}/imports`),
     importsGuide: () => href(`/l/${ledgerId}/imports/guide`),
     importsNew: () => href(`/l/${ledgerId}/imports/new`),
@@ -130,8 +136,6 @@ function fallbackPath(segments: string[]): string {
     case 'transfers':
       // There's no standalone transfers list route; the transactions list is the closest one.
       return '/transactions';
-    case 'sources':
-      return segments[1] === 'new' ? '/sources/new' : '/sources';
     case 'imports':
       if (segments[1] === 'guide') return '/imports/guide';
       if (segments[1] === 'new') return '/imports/new';
@@ -146,7 +150,7 @@ function fallbackPath(segments: string[]): string {
 /**
  * Rewrite a `/l/:fromLedgerId/...` path to `/l/:toLedgerId/...`, preserving the route's shape
  * but falling back to that resource's list page when the path embeds a resource id (a
- * transaction, source, or import batch id doesn't carry over to another ledger), and keeping
+ * transaction or import batch id doesn't carry over to another ledger), and keeping
  * only the query params that are meaningful across ledgers (04 §2.2) — `source_id`,
  * `import_batch_id`, and `offset` are dropped along with any path-embedded id.
  */

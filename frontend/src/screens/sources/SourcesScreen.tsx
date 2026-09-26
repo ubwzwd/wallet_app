@@ -24,7 +24,7 @@ import { routes } from '@/domain/routes';
 import { formatAmountPlain, formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
-import { useDeleteSource, useSources } from '@/queries';
+import { useDeleteSource, useMySources } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -66,20 +66,20 @@ export default function SourcesScreen(): React.JSX.Element {
     : params.include_archived;
   const showArchived = rawFlag === '1';
 
-  const query = useSources(ledgerId, { include_archived: true });
-  const remove = useDeleteSource(ledgerId);
+  const query = useMySources({ include_archived: true });
+  const remove = useDeleteSource();
   const [deleteBlockedId, setDeleteBlockedId] = React.useState<string | null>(null);
 
   const goNew = React.useCallback(
-    () => router.push(routes.l(ledgerId).sourceNew() as Href),
+    () => router.push(routes.accountNew(ledgerId) as Href),
     [ledgerId, router],
   );
   const openSource = React.useCallback(
-    (source: FinanceSource) => router.push(routes.l(ledgerId).sourceEdit(source.id) as Href),
+    (source: FinanceSource) => router.push(routes.accountEdit(source.id) as Href),
     [ledgerId, router],
   );
   const toggleArchived = React.useCallback(
-    () => router.replace(routes.l(ledgerId).sources(!showArchived) as Href),
+    () => router.replace(routes.accounts(!showArchived) as Href),
     [ledgerId, router, showArchived],
   );
 

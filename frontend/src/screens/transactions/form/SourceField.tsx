@@ -102,7 +102,7 @@ export function SourceField({
               ? `${subtitleOf(source, t)} · ${t('common:status.archived')}`
               : subtitleOf(source, t)
           }
-          amount={money(source.balance, source.default_currency)}
+          amount={money(source.balance ?? '0', source.default_currency)}
           amountTone="secondary"
           selected={source.id === value}
           onPress={() => pick(source.id)}
@@ -127,7 +127,7 @@ export function SourceField({
           value={current?.name ?? label}
           valueTone={current ? 'primary' : 'muted'}
           hint={inRow || !current ? undefined : subtitleOf(current, t)}
-          amount={current ? money(current.balance, current.default_currency) : undefined}
+          amount={current ? money(current.balance ?? '0', current.default_currency) : undefined}
           amountSub={inRow && current ? subtitleOf(current, t) : undefined}
           filled={!inRow}
           onPress={() => setOpen((v) => !v)}

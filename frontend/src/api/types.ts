@@ -79,22 +79,36 @@ export interface TransferOwnershipRequest { to_user_id: Uuid; }
 // ---------- 资金账户（决策 §3、§14.48、§14.50）----------
 // 四种类型，没有 savings（新加坡没有这个区分，「储蓄」就是 checking，决策 §14.48）
 export type SourceType = 'checking' | 'credit' | 'cash' | 'other';
+// 账户归用户、按账本共享（决策 §14.62）。本人视角（GET /sources）下 opening_balance、余额四件套、
+// shared_to 都有值；账本内列表（GET /ledgers/{id}/sources）里别人的账户（mine=false）这些字段全为 null。
 export interface FinanceSource {
-  id: Uuid; ledger_id: Uuid; name: string; type: SourceType;
+  id: Uuid; owner_id: Uuid; name: string; type: SourceType;
   default_currency: string;          // 创建后不可改（决策 §14.50）
-  opening_balance: Money;            // 信用卡填欠款，存为负数（决策 §14.52 A13）
+  opening_balance: Money | null;     // 信用卡填欠款，存为负数（决策 §14.52 A13）；非本人为 null
   archived: boolean;
   archived_at: IsoDateTime | null;   // 决策 §14.50；归档账户不计入净资产
   created_by: Uuid; updated_by: Uuid | null;
   created_at: IsoDateTime; updated_at: IsoDateTime;
-  // 余额四件套（口径见决策 §14.2）：
-  balance: Money;                    // 以账户 default_currency 计价；异币种交易按发生日汇率折进来
-  balance_base: Money | null;        // 按最新汇率折到账本 base_currency
+  shared_to: Uuid[] | null;          // 共享到的账本（只列调用者仍是成员的）；非本人为 null
+  // 余额四件套（口径见决策 §14.2、§14.62）——这张卡在所有账本里的交易之和；非本人全为 null：
+  balance: Money | null;             // 以账户 default_currency 计价；异币种交易按发生日汇率折进来
+  balance_base: Money | null;        // 按最新汇率折到主人的 base_currency
   balance_rate: Money | null;        // 这次用的汇率，8 位小数
   balance_rate_date: IsoDate | null; // 该汇率的行情日
+  rate_missing_count: number;        // 折不出来被跳过的交易数；非本人为 0
+}
+// GET /ledgers/{id}/sources 的一行：本人的、成员共享进来的、以及本账本交易引用到的（usable=false）
+export type LedgerSource = FinanceSource & { mine: boolean; usable: boolean };
+// GET /sources：本人全部账户 + 个人净资产三个数（任一未归档账户折不出来则三个都为 null）
+export interface SourceListResponse extends Paged<FinanceSource> {
+  base_currency: string;
+  assets: Money | null;
+  liabilities: Money | null;
+  net_worth: Money | null;
 }
 export interface FinanceSourceCreate {
   name: string; type: SourceType; default_currency: string; opening_balance?: Money;
+  share_to?: Uuid[];                 // 建好即共享到这些账本（都必须是我所在的）
 }
 // default_currency 不在可改字段里（决策 §14.50）
 export interface FinanceSourceUpdate {

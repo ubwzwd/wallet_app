@@ -45,7 +45,7 @@ function amountSubOf(
   if (!isForeign(source, baseCurrency)) return undefined;
   if (source.balance_base === null) return t('source:list.no_rate_cell');
   const converted = formatConverted(
-    source.balance,
+    source.balance ?? '0',
     source.default_currency,
     source.balance_base,
     baseCurrency,

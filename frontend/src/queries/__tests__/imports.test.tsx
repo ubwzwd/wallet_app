@@ -218,7 +218,7 @@ describe('row edits', () => {
 });
 
 describe('commit and delete', () => {
-  it('commit sweeps imports, transactions, sources and stats', async () => {
+  it('commit sweeps imports, transactions, sources, stats and my accounts', async () => {
     mockPost(`${BASE}/${B}/commit`, makeImportCommitResult());
     const spy = jest.spyOn(qc, 'invalidateQueries');
 
@@ -232,6 +232,8 @@ describe('commit and delete', () => {
     expect(swept).toContain(JSON.stringify(k.txRoot()));
     expect(swept).toContain(JSON.stringify(k.sourcesRoot()));
     expect(swept).toContain(JSON.stringify(k.statsRoot()));
+    // Balances sum every ledger an account is used in (decision §14.62).
+    expect(swept).toContain(JSON.stringify(qk.global.sourcesRoot()));
   });
 
   it('a dry run changes nothing in the cache', async () => {
@@ -259,6 +261,7 @@ describe('commit and delete', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(spy).toHaveBeenCalledWith({ queryKey: qk.ledger(L).txRoot() });
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.global.sourcesRoot() });
     expect(qc.getQueryData(qk.ledger(L).importB(B))).toBeUndefined();
     expect(qc.getQueryData(rowsKey())).toBeUndefined();
   });

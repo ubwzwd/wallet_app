@@ -68,7 +68,7 @@ export function SourcePicker({
     const parts = [
       t(`source:type.${s.type}`),
       s.default_currency,
-      formatMoney(s.balance, s.default_currency, l),
+      formatMoney(s.balance ?? '0', s.default_currency, l),
     ];
     if (s.archived) parts.push(t('common:status.archived'));
     return {

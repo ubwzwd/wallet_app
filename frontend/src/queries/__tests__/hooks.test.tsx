@@ -35,7 +35,12 @@ import {
   useUpdateLedger,
 } from '../useLedgers';
 import { useUpdateMe } from '../useMe';
-import { useCreateSource, useDeleteSource, useUpdateSource } from '../useSources';
+import {
+  useCreateSource,
+  useDeleteSource,
+  useShareSource,
+  useUpdateSource,
+} from '../useSources';
 import {
   useCreateTransaction,
   useCreateTransfer,
@@ -253,9 +258,10 @@ describe('query hooks', () => {
       useRemoveMember: () => useRemoveMember(L, { silent: true }) as AnyMutation,
       useTransferOwnership: () => useTransferOwnership(L, { silent: true }) as AnyMutation,
       useLeaveLedger: () => useLeaveLedger(L, { silent: true }) as AnyMutation,
-      useCreateSource: () => useCreateSource(L, { silent: true }) as AnyMutation,
-      useUpdateSource: () => useUpdateSource(L, 's1', { silent: true }) as AnyMutation,
-      useDeleteSource: () => useDeleteSource(L, { silent: true }) as AnyMutation,
+      useCreateSource: () => useCreateSource({ silent: true }) as AnyMutation,
+      useUpdateSource: () => useUpdateSource('s1', { silent: true }) as AnyMutation,
+      useDeleteSource: () => useDeleteSource({ silent: true }) as AnyMutation,
+      useShareSource: () => useShareSource({ silent: true }) as AnyMutation,
       useCreateTransaction: () => useCreateTransaction(L, { silent: true }) as AnyMutation,
       useUpdateTransaction: () => useUpdateTransaction(L, 't1', { silent: true }) as AnyMutation,
       useDeleteTransaction: () => useDeleteTransaction(L, { silent: true }) as AnyMutation,
@@ -357,7 +363,7 @@ describe('query hooks', () => {
     expect(result.current.data?.pages.flatMap((p) => p.items).length).toBe(70);
   });
 
-  test('useCreateTransaction invalidates transactions, sources and stats', async () => {
+  test('useCreateTransaction invalidates transactions, sources, stats and my accounts', async () => {
     mockPost(`/ledgers/${L}/transactions`, makeTransaction(), 201);
     const invalidate = jest.spyOn(qc, 'invalidateQueries');
 
@@ -375,6 +381,8 @@ describe('query hooks', () => {
       ['l', L, 'tx'],
       ['l', L, 'sources'],
       ['l', L, 'stats'],
+      // A balance sums every ledger the account is used in (decision §14.62).
+      ['global', 'sources'],
     ]);
   });
 });

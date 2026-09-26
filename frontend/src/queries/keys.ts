@@ -16,12 +16,21 @@ const global = {
   importFormat: () => ['global', 'import-format'] as const,
   currencies: () => ['global', 'currencies'] as const,
   ledgers: () => ['global', 'ledgers'] as const,
+  /**
+   * My own accounts (decision §14.62): an account belongs to a user, not to a ledger, so
+   * its list (with the net-worth totals) and its detail live here. `sourcesRoot` is the
+   * prefix both sit under.
+   */
+  sourcesRoot: () => ['global', 'sources'] as const,
+  sources: (p?: { include_archived?: boolean }) => ['global', 'sources', p ?? {}] as const,
+  source: (sid: Uuid) => ['global', 'sources', 'detail', sid] as const,
 };
 
 /**
  * Ledger-scoped keys. The `*Root()` entries are not query keys of their own: they are
  * the prefixes the invalidation matrix (§3.6) works with — `txRoot` covers every filter
- * combination, `sourcesRoot` covers both the list variants and the detail keys.
+ * combination, `sourcesRoot` both variants of the accounts this ledger can see
+ * (`GET /ledgers/{id}/sources`; an account's own detail is global, see above).
  */
 function ledger(l: Uuid) {
   return {
@@ -30,7 +39,6 @@ function ledger(l: Uuid) {
     members: () => ['l', l, 'members'] as const,
     sourcesRoot: () => ['l', l, 'sources'] as const,
     sources: (p?: { include_archived?: boolean }) => ['l', l, 'sources', p ?? {}] as const,
-    source: (sid: Uuid) => ['l', l, 'sources', 'detail', sid] as const,
     txRoot: () => ['l', l, 'tx'] as const,
     txList: (p: TransactionListParams) => ['l', l, 'tx', 'list', normalizeParams(p)] as const,
     tx: (tid: Uuid) => ['l', l, 'tx', 'detail', tid] as const,

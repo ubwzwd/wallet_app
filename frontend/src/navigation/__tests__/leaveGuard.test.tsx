@@ -90,6 +90,9 @@ const ROUTES = {
   '(app)/ledgers/new': page('新建账本'),
   '(app)/ledgers/join': page('加入账本'),
   '(app)/settings': page('个人设置'),
+  '(app)/accounts/index': page('账户'),
+  '(app)/accounts/new': formPage('新建账户'),
+  '(app)/accounts/[sourceId]/edit': formPage('编辑账户'),
   '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': page('首页'),
   '(app)/l/[ledgerId]/transactions/index': page('交易'),
@@ -98,9 +101,6 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transactions/[txId]/edit': formPage('编辑'),
   '(app)/l/[ledgerId]/transfers/[pairId]/index': page('转账详情'),
   '(app)/l/[ledgerId]/transfers/[pairId]/edit': formPage('编辑转账'),
-  '(app)/l/[ledgerId]/sources/index': page('账户'),
-  '(app)/l/[ledgerId]/sources/new': formPage('新建账户'),
-  '(app)/l/[ledgerId]/sources/[sourceId]/edit': formPage('编辑账户'),
   '(app)/l/[ledgerId]/imports/index': page('导入'),
   // Not a form route, but a page that can hold unsaved changes and keeps the tab bar.
   '(app)/l/[ledgerId]/settings': formPage('账本设置'),
@@ -188,8 +188,8 @@ describe('narrow (<1024)', () => {
     ['记一笔', `${L}/transactions/new?kind=income`],
     ['编辑', `${L}/transactions/tx-1/edit`],
     ['编辑转账', `${L}/transfers/pair-1/edit`],
-    ['新建账户', `${L}/sources/new`],
-    ['编辑账户', `${L}/sources/src-1/edit`],
+    ['新建账户', '/accounts/new'],
+    ['编辑账户', '/accounts/src-1/edit'],
   ])('%s: the ‹ bar but no tab bar, and no inset for it (§14.65 f)', async (title, url) => {
     const router = renderRouter(ROUTES, { initialUrl: url });
 

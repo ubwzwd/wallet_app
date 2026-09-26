@@ -4,13 +4,14 @@
  *
  * The centre button is not a tab — it goes straight to a new expense, and a long press
  * offers the four kinds. "Me" is not a tab either: it opens a sheet that gathers personal
- * settings, ledger settings and signing out (decision §14.52 A21 — there is no top-level
- * reports or members page). Switching ledger is the top bar's ledger pill, and only that
+ * settings, ledger settings, my accounts and signing out (decision §14.52 A21 — there is no
+ * top-level reports or members page; §14.62 — accounts belong to the user). Switching ledger is the top bar's ledger pill, and only that
  * (§14.65 b).
  *
  * Decision §14.64 b: the bar is on every page of the shell, not only inside a ledger. Outside
  * one it aims at the ledger the chrome names (`useChromeLedger`); 「我的」 is lit on
- * `/settings`, and nothing is lit on `/ledgers*`, which none of the five slots leads to.
+ * `/settings`, and nothing is lit on `/accounts` or `/ledgers*`, which none of the five
+ * slots leads to.
  *
  * Every slot, sheet row and kind that changes page asks a form's leave guard first
  * (§14.65 g). The bar itself is not drawn on the form pages (§14.65 f), but a wide window
@@ -79,7 +80,7 @@ function Tab({
   );
 }
 
-/** The sheet behind the "me" tab: 个人设置 / 账本设置 / 登出 (§14.65 b). */
+/** The sheet behind the "me" tab: 个人设置 / 账本设置 / 账户 / 登出 (§14.65 b, §14.62). */
 function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
@@ -106,6 +107,13 @@ function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.J
             run: () => router.navigate(routes.l(ledgerId).settings()),
           },
         ]),
+    // My accounts are not scoped to a ledger, so the row is there inside a ledger or not.
+    {
+      key: 'accounts',
+      label: t('common:nav.sources'),
+      icon: 'wallet',
+      run: () => router.navigate(routes.accounts()),
+    },
     {
       key: 'logout',
       label: t('common:nav.logout'),

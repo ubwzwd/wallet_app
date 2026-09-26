@@ -20,7 +20,7 @@ import type { Transaction, TransactionListParams } from '@/api/types';
 import { useLang } from '@/i18n';
 import { formatDate } from '@/i18n/format';
 import { categoryName } from '@/i18n/category';
-import { useCategories, useSources, useTransactions } from '@/queries';
+import { useCategories, useLedgerSources, useTransactions } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { radius, space } from '@/theme/tokens';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -114,7 +114,7 @@ export function TransactionPicker({
   // The picker stays mounted (rendering nothing) next to the form that owns it, so both
   // queries wait for it to actually open — otherwise merely showing the refund tab would
   // fetch the accounts a second time, under a key the form does not share.
-  const sources = useSources(open ? ledgerId : undefined);
+  const sources = useLedgerSources(open ? ledgerId : undefined);
   const id = testID ?? 'tx-picker';
 
   const [filters, setFilters] = React.useState<PickerFilterValues>(() => seed(initial));

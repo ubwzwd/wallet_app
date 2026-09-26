@@ -8,8 +8,9 @@
  *   transaction / transfer detail  → the transaction list
  *   transaction / transfer edit    → its detail
  *   new transaction                → the transaction list
- *   new / edit account             → the account list
- *   account list (narrow only)     → home
+ *   `/accounts/new`, `/accounts/:sid/edit` → `/accounts`, my account list
+ *   `/accounts` (narrow only)      → home of the ledger the chrome names (while that is
+ *                                    still unknown, no button)
  *   import upload, import batch    → the import history
  *   import format guide            → the import upload
  *   ledger settings                → home
@@ -30,7 +31,7 @@ export type BackParentKey = 'home' | 'transactions' | 'sources' | 'imports' | 'l
 export type BackTarget = { href: RouteHref; parentKey: BackParentKey };
 
 export interface BackTargetOptions {
-  /** Wide layouts reach the account list from the sidebar, so it is top-level there. */
+  /** Wide layouts reach `/accounts` from the sidebar, so it is top-level there. */
   wide: boolean;
   /** The ledger the chrome names outside a ledger route (`useChromeLedger`). */
   chromeLedgerId: string | null;
@@ -50,6 +51,26 @@ export function barePath(pathname: string): string {
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
 }
 
+/**
+ * My accounts (decision §14.62) live outside any ledger. The list is one of the sidebar's
+ * five on a wide screen; the narrow tab bar has no slot for it (the "me" sheet leads there),
+ * so there it is a sub-page of the home the chrome aims at — screen 09 at 375 is
+ * 「‹ 账户」. The form is a sub-page of the list at both widths.
+ */
+function inAccounts(path: string, opts: BackTargetOptions): BackTarget | null {
+  const list = routes.accounts();
+  if (path === list) {
+    if (opts.wide || opts.chromeLedgerId === null) return null;
+    return { href: routes.l(opts.chromeLedgerId).home(), parentKey: 'home' };
+  }
+  if (path === routes.accountNew()) return { href: list, parentKey: 'sources' };
+  const [resourceId] = path.slice(list.length + 1).split('/');
+  if (resourceId && path === routes.accountEdit(resourceId)) {
+    return { href: list, parentKey: 'sources' };
+  }
+  return null;
+}
+
 function inLedger(path: string, wide: boolean): BackTarget | null {
   const ledgerId = path.slice(LEDGER_PREFIX.length).split('/')[0];
   if (!ledgerId) return null;
@@ -58,11 +79,9 @@ function inLedger(path: string, wide: boolean): BackTarget | null {
 
   // Top-level pages: the sidebar's five and the tab bar's four.
   if (path === l.home() || path === l.transactions() || path === l.imports()) return null;
-  if (path === l.sources()) return wide ? null : to(l.home(), 'home');
 
   // Fixed sub-pages.
   if (path === l.transactionNew()) return to(l.transactions(), 'transactions');
-  if (path === l.sourceNew()) return to(l.sources(), 'sources');
   if (path === l.importsNew()) return to(l.imports(), 'imports');
   if (path === l.importsGuide()) return to(l.importsNew(), 'imports');
   if (path === l.settings()) return to(l.home(), 'home');
@@ -81,8 +100,6 @@ function inLedger(path: string, wide: boolean): BackTarget | null {
       if (path === l.transfer(resourceId)) return to(l.transactions(), 'transactions');
       if (path === l.transferEdit(resourceId)) return to(l.transfer(resourceId), 'transactions');
       return null;
-    case 'sources':
-      return path === l.sourceEdit(resourceId) ? to(l.sources(), 'sources') : null;
     case 'imports':
       return path === l.importBatch(resourceId) ? to(l.imports(), 'imports') : null;
     default:
@@ -102,6 +119,9 @@ export function backTargetFor(pathname: string, opts: BackTargetOptions): BackTa
     return opts.chromeLedgerId === null
       ? null
       : { href: routes.l(opts.chromeLedgerId).home(), parentKey: 'home' };
+  }
+  if (path === routes.accounts() || path.startsWith(`${routes.accounts()}/`)) {
+    return inAccounts(path, opts);
   }
   if (path.startsWith(LEDGER_PREFIX)) {
     return inLedger(path, opts.wide);

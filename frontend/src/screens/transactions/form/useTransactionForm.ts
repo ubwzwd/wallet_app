@@ -30,7 +30,7 @@ import { kindOfCategoryTree } from '@/domain/kinds';
 import { absMoney, cmpMoney, normalizeAmountInput } from '@/domain/money';
 import { useLang, type Lang } from '@/i18n';
 import { todayLocalIso } from '@/i18n/format';
-import { useCategories, useCurrencies, useSources, type CurrenciesResult } from '@/queries';
+import { useCategories, useCurrencies, useLedgerSources, type CurrenciesResult } from '@/queries';
 import { PREF_NAMES, getJsonPref, setJsonPref, setPref, getPref } from '@/utils/prefs';
 
 import {
@@ -115,7 +115,7 @@ export interface TxFormController {
 export function useTransactionForm(opts: UseTransactionFormOptions): TxFormController {
   const { ledgerId, mode, initial, allowArchivedId = null, autoFillSource = true } = opts;
   const lang = useLang();
-  const sourcesQuery = useSources(ledgerId, { include_archived: true });
+  const sourcesQuery = useLedgerSources(ledgerId, { include_archived: true });
   const categories = useCategories();
   const currencies = useCurrencies();
 
