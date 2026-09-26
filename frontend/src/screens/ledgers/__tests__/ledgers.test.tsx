@@ -213,3 +213,37 @@ test('宽屏 the new-ledger tile opens the create page', async () => {
   fireEvent.press(await screen.findByTestId('ledgers-create-tile'));
   await waitFor(() => expect(router.getPathname()).toBe('/ledgers/new'));
 });
+
+test('宽屏 the header is 「账本管理」 with a back crumb to the recent ledger’s home (§14.64)', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
+  await setPref(PREF_NAMES.lastLedgerId, 'led-2');
+  mockGet('/ledgers', {
+    items: [makeLedger({ id: 'led-1', name: 'A' }), makeLedger({ id: 'led-2', name: 'B' })],
+    total: 2,
+  });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  expect(await screen.findByTestId('ledgers-header-title')).toHaveTextContent('账本管理');
+  expect(await screen.findByText('首页 · 账本管理')).toBeTruthy();
+  // A cold open has no history to step back through, so the crumb goes to the parent.
+  fireEvent.press(screen.getByTestId('ledgers-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/l/led-2'));
+});
+
+test('窄屏 the page leaves the title to the shell’s top bar and keeps the grey line', async () => {
+  mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: 'A' })], total: 1 });
+  renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+
+  expect(await screen.findByTestId('ledger-card-led-1')).toBeTruthy();
+  expect(screen.getByText('切换后所有页面都跟着这本走')).toBeTruthy();
+  expect(screen.queryByText('账本管理')).toBeNull();
+});
+
+test('outside the shell (a user with no ledger) the create page draws its own way back', async () => {
+  mockGet('/ledgers', { items: [], total: 0 });
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers/new', wrapper: Wrapper });
+
+  expect(await screen.findByTestId('new-ledger-header-title')).toHaveTextContent('新建账本');
+  fireEvent.press(screen.getByTestId('new-ledger-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+});

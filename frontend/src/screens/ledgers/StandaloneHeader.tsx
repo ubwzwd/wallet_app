@@ -1,22 +1,24 @@
 /**
- * The header `/ledgers/new` and `/ledgers/join` draw for themselves.
+ * The header `/ledgers/new` and `/ledgers/join` draw for themselves where nothing above
+ * them already carries a title and a way back (decision §14.64 e):
  *
- * Both pages live outside the app shell (04 §1.2), so nothing above them carries a title
- * or a way back. Screen 13 draws the narrow form of it — a round back button on the left,
- * the page title centred, a matching gap on the right — and on a wide screen the same two
- * elements sit on one left-aligned line, the way every other page's `PageHeader` crumb does.
+ *   - for a user with no ledger at all, at both widths — the shell steps aside there
+ *     (屏幕稿 15, §14.59), so the page is on its own;
+ *   - on a wide screen for everyone else — the wide shell has no top bar.
+ *
+ * On a narrow screen inside the shell the sub-page top bar already draws exactly this, so
+ * the pages leave it out (`useShellDrawsTopBar`). Screen 13 draws the narrow form — the
+ * round back button on the left, the page title centred, a matching gap on the right — and
+ * on a wide screen the same two elements sit on one left-aligned line, the way every other
+ * page's `PageHeader` crumb does. The button is the app's one `BackButton`.
  */
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import { radius, space } from '@/theme/tokens';
-import { useTheme } from '@/theme/ThemeProvider';
+import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
-import { Icon, Text, raisedShadow } from '@/ui';
-
-const BACK_SIZE = 40;
-const BACK_SLOP = (44 - BACK_SIZE) / 2;
+import { BACK_BUTTON_SIZE, BackButton, Text } from '@/ui';
 
 export interface StandaloneHeaderProps {
   title: string;
@@ -30,26 +32,12 @@ export function StandaloneHeader({
   onBack,
   testID = 'standalone-header',
 }: StandaloneHeaderProps): React.JSX.Element {
-  const { colors, scheme } = useTheme();
   const { t } = useTranslation();
   const wide = useIsWide();
 
   return (
     <View style={styles.row} testID={testID}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('common:button.back')}
-        onPress={onBack}
-        hitSlop={BACK_SLOP}
-        testID={`${testID}-back`}
-        style={({ pressed }) => [
-          styles.back,
-          raisedShadow(colors, scheme),
-          { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
-        ]}
-      >
-        <Icon name="chevron-left" color={colors['fg.secondary']} />
-      </Pressable>
+      <BackButton label={t('common:button.back')} onPress={onBack} testID={`${testID}-back`} />
       <Text
         variant="heading"
         weight={700}
@@ -68,14 +56,7 @@ export function StandaloneHeader({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space['3'], alignSelf: 'stretch' },
-  back: {
-    width: BACK_SIZE,
-    height: BACK_SIZE,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   titleWide: { flex: 1 },
   titleNarrow: { flex: 1, textAlign: 'center', fontSize: 17, lineHeight: 24 },
-  spacer: { width: BACK_SIZE },
+  spacer: { width: BACK_BUTTON_SIZE },
 });

@@ -26,14 +26,23 @@ export {
   userLabel,
   type NavDestination,
 } from './Sidebar';
-export { showsLedgerManageCard } from './SidebarCards';
 export { useLastLedgerId } from './useLastLedgerId';
 export {
+  SubPageTopBar,
   TopBar,
   TopBarProvider,
   TopBarSurface,
+  useShellDrawsTopBar,
   useTopBar,
   useTopBarTitle,
   type TopBarSurfaceProps,
 } from './TopBar';
+export {
+  backTargetFor,
+  type BackParentKey,
+  type BackTarget,
+  type BackTargetOptions,
+} from './backTarget';
+export { useBack, type BackControl } from './useBack';
+export { useChromeLedger, useHasNoLedgers, type ChromeLedger } from './useChromeLedger';
 export { useSwUpdateToast } from './useSwUpdateToast';

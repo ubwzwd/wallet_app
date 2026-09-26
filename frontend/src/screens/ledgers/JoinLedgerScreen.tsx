@@ -6,7 +6,8 @@
  * Screen 13's wide frame is named 「1440 · Dialog」: on a wide screen this is a modal laid
  * over the ledger list, with 取消 / 加入 in the foot band on the right, so the list is
  * rendered behind it and the page draws no header of its own. Narrow keeps the standalone
- * page of the 375 frame (a round back button, the title, the card, the benefits card).
+ * page of the 375 frame (a round back button, the title, the card, the benefits card); inside
+ * the shell that back button and title are the shell's sub-page top bar (§14.64 e).
  *
  * There is deliberately **no preview** of the ledger behind a code (decision §14.52 B17,
  * and screen 13's own note: nothing about a ledger is shown before the code is spent).
@@ -24,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { isApiClientError } from '@/api/errors';
 import { routes } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
+import { useBack, useShellDrawsTopBar, useTopBar } from '@/navigation';
 import { useJoinLedger } from '@/queries';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -119,7 +121,11 @@ export default function JoinLedgerScreen(): React.JSX.Element {
     setMessage((current) => (current === null ? current : null));
   }, []);
 
-  const goBack = React.useCallback(() => router.replace(routes.ledgers() as Href), [router]);
+  const title = t('ledger:join.title');
+  useTopBar(title);
+  const back = useBack();
+  const goBack = back.goBack;
+  const shellBar = useShellDrawsTopBar();
 
   const intro = (
     <View
@@ -234,7 +240,7 @@ export default function JoinLedgerScreen(): React.JSX.Element {
   // ------------------------------------------------------------------- 375 页
   return (
     <Page testID="join-ledger-screen" contentStyle={styles.page}>
-      <StandaloneHeader title={t('ledger:join.title')} onBack={goBack} testID="join-header" />
+      {shellBar ? null : <StandaloneHeader title={title} onBack={goBack} testID="join-header" />}
 
       <View style={styles.centre}>
         <View style={[styles.column, { maxWidth: CARD_MAX_WIDTH }]}>

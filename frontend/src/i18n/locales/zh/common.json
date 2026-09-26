@@ -23,7 +23,6 @@
     "imports": "导入",
     "me": "我的",
     "ledgers": "账本管理",
-    "ledger_count_other": "{{count}} 本",
     "member_count_other": "{{count}} 人",
     "ledger_settings": "账本设置",
     "settings": "个人设置",

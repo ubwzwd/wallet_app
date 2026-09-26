@@ -2,10 +2,12 @@
  * `/ledgers` (04 §4.3, screen 13): every ledger the user belongs to, as a grid of cards —
  * there are only ever two or three of them, so a list row would be the wrong shape.
  *
- * Wide: a page header (title, the grey "switching takes every page with it" line, the two
- * actions) over three columns, the last cell of which is the dashed "new ledger" tile —
- * an empty slot is its own entry point. Narrow: the same cards stacked, with the two
- * actions moved to the foot of the page where a thumb is.
+ * Wide: a page header (the back crumb 「首页 · 账本管理」, the title, the grey "switching
+ * takes every page with it" line, the two actions) over three columns, the last cell of
+ * which is the dashed "new ledger" tile — an empty slot is its own entry point. Narrow: the
+ * shell's sub-page top bar carries the back button and the title (§14.64 e), and the page
+ * keeps the grey line over the same cards stacked, with the two actions moved to the foot
+ * of the page where a thumb is.
  *
  * With no ledgers at all the page is screen 15's onboarding instead (`NoLedgerGuide`).
  */
@@ -15,7 +17,7 @@ import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { routes } from '@/domain/routes';
-import { pickLandingLedger, useLastLedgerId } from '@/navigation';
+import { pickLandingLedger, useBack, useLastLedgerId, useTopBar } from '@/navigation';
 import { useLedgers } from '@/queries';
 import { useAuth } from '@/store';
 import { radius, space } from '@/theme/tokens';
@@ -89,6 +91,12 @@ export default function LedgersScreen(): React.JSX.Element {
     [],
   );
 
+  const title = t('ledger:list.title');
+  useTopBar(title);
+  // Answered for `/ledgers` itself: the wide join dialog draws this page behind it while
+  // the URL says `/ledgers/join`.
+  const back = useBack(routes.ledgers());
+
   const goCreate = React.useCallback(() => router.push(routes.ledgersNew() as Href), [router]);
   const goJoin = React.useCallback(() => router.push(routes.ledgersJoin() as Href), [router]);
   const goProfile = React.useCallback(() => router.push(routes.settings() as Href), [router]);
@@ -98,7 +106,16 @@ export default function LedgersScreen(): React.JSX.Element {
 
   const header = wide ? (
     <PageHeader
-      title={t('ledger:list.title')}
+      title={title}
+      back={
+        back.show
+          ? {
+              crumb: `${back.parentLabel} · ${title}`,
+              onPress: back.goBack,
+              label: t('common:button.back'),
+            }
+          : undefined
+      }
       meta={
         <Text variant="caption" tone="muted">
           {t('ledger:list.subtitle')}
@@ -125,10 +142,7 @@ export default function LedgersScreen(): React.JSX.Element {
       testID="ledgers-header"
     />
   ) : (
-    <View style={styles.narrowHeader} testID="ledgers-header">
-      <Text variant="title" accessibilityRole="header">
-        {t('ledger:list.title')}
-      </Text>
+    <View testID="ledgers-header">
       <Text variant="body" tone="muted">
         {t('ledger:list.subtitle')}
       </Text>
@@ -235,7 +249,6 @@ export default function LedgersScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   guidePage: { flexGrow: 1, gap: 0 },
-  narrowHeader: { gap: space['1'] },
   grid: { gap: space['3'] },
   gridWide: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: GRID_GAP },
   narrowActions: { gap: space['3'] },

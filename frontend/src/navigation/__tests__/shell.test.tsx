@@ -28,7 +28,6 @@ import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import { TAB_BAR_HEIGHT } from '../BottomTabBar';
 import { resetLedgerGone } from '../RequireLedger';
-import { showsLedgerManageCard } from '../Sidebar';
 import { useSwUpdateToast } from '../useSwUpdateToast';
 
 const LEDGER_A = 'ledger-a';
@@ -210,7 +209,7 @@ describe('narrow (<1024)', () => {
     expect(bar.paddingTop + slotHeight + bar.paddingBottom).toBe(TAB_BAR_HEIGHT);
   });
 
-  test('the toast host clears the tab bar inside a ledger and sits low outside it', async () => {
+  test('the toast host clears the tab bar wherever there is one (§14.64 b)', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
     expect(await router.findByTestId('bottom-tab-bar')).toBeTruthy();
 
@@ -223,10 +222,10 @@ describe('narrow (<1024)', () => {
     ) as { bottom?: number };
     expect(inLedger.bottom).toBe(space['4'] + TAB_BAR_HEIGHT);
 
-    // `/settings` has no tab bar, so nothing has to be cleared.
+    // `/settings` carries the tab bar too now, so the toast clears it there as well.
     router.unmount();
     const settings = renderRouter(ROUTES, { initialUrl: '/settings' });
-    expect(await settings.findByText('settings-page')).toBeTruthy();
+    expect(await settings.findByTestId('bottom-tab-bar')).toBeTruthy();
 
     act(() => {
       toast.info('哟');
@@ -235,7 +234,24 @@ describe('narrow (<1024)', () => {
     const outside = StyleSheet.flatten(
       (await settings.findByTestId('toast-host')).props.style,
     ) as { bottom?: number };
-    expect(outside.bottom).toBe(space['4']);
+    expect(outside.bottom).toBe(space['4'] + TAB_BAR_HEIGHT);
+  });
+
+  test('a user with no ledger has no tab bar, so the toast host sits low', async () => {
+    mockGet('/me', makeUser({ display_name: '阿狸', ledger_count: 0 }));
+    mockGet('/ledgers', { items: [], total: 0 });
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+    expect(await router.findByText('settings-page')).toBeTruthy();
+
+    act(() => {
+      toast.info('哟');
+    });
+
+    const host = StyleSheet.flatten((await router.findByTestId('toast-host')).props.style) as {
+      bottom?: number;
+    };
+    expect(host.bottom).toBe(space['4']);
+    expect(router.queryByTestId('bottom-tab-bar')).toBeNull();
   });
 
   test('an error toast names its detail toggle and its close button from the pack', async () => {
@@ -250,25 +266,31 @@ describe('narrow (<1024)', () => {
     expect(router.getByLabelText('关闭')).toBeTruthy();
   });
 
-  test('/ledgers draws its own header: the shell adds no bar and no tabs at 375', async () => {
+  test('/ledgers wears the shell at 375: a sub-page top bar and the tab bar (§14.64)', async () => {
     const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
 
     expect(await router.findByText('ledgers-page')).toBeTruthy();
-    // Mockup 13 at 375 puts the back button and the title inside the page itself.
-    expect(router.queryByTestId('top-bar')).toBeNull();
-    expect(router.queryByTestId('bottom-tab-bar')).toBeNull();
+    expect(router.getByTestId('top-bar')).toBeTruthy();
+    expect(await router.findByTestId('top-bar-back')).toBeTruthy();
+    expect(router.queryByTestId('top-bar-ledger')).toBeNull();
+    expect(router.getByTestId('bottom-tab-bar')).toBeTruthy();
     expect(router.queryByTestId('sidebar')).toBeNull();
   });
 
-  test('/settings keeps the chrome: a title bar with a way back, and no tabs', async () => {
+  test('/settings keeps the top-level bar and the tab bar, with 「我的」 lit', async () => {
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
     expect(await router.findByText('settings-page')).toBeTruthy();
     expect(router.getByTestId('app-shell-narrow')).toBeTruthy();
-    expect(router.getByLabelText('返回')).toBeTruthy();
-    // Every tab is ledger-scoped, and there is no ledger here.
-    expect(router.queryByTestId('bottom-tab-bar')).toBeNull();
-    expect(router.queryByTestId('top-bar-ledger')).toBeNull();
+    // Top-level: the ledger pill and the member disc, no back button.
+    expect(await router.findByText('家庭账本')).toBeTruthy();
+    expect(router.getByTestId('top-bar-ledger')).toBeTruthy();
+    expect(router.queryByTestId('top-bar-back')).toBeNull();
+    expect(router.getByTestId('bottom-tab-bar')).toBeTruthy();
+    expect(router.getByTestId('tab-me').props.accessibilityState.selected).toBe(true);
+    for (const id of ['tab-home', 'tab-transactions', 'tab-imports']) {
+      expect(router.getByTestId(id).props.accessibilityState.selected).toBe(false);
+    }
   });
 });
 
@@ -445,50 +467,49 @@ describe('wide (>=1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`));
   });
 
-  test('with no ledgers at all the card names the list and there is nowhere to add', async () => {
+  test('with no ledgers at all there is no card and nowhere to add', async () => {
     mockGet('/ledgers', { items: [], total: 0 });
     const router = renderRouter(ROUTES, { initialUrl: '/settings' });
 
-    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
+    expect(await router.findByTestId('sidebar-home')).toBeTruthy();
+    await waitFor(() => expect(router.queryByTestId('sidebar-ledger-pending')).toBeNull());
+    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
     expect(router.queryByTestId('sidebar-add')).toBeNull();
 
     fireEvent.press(router.getByTestId('sidebar-home'));
     await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
   });
 
-  test('/ledgers draws mockup 13\'s column: 「账本管理」, three entries, no 记一笔', async () => {
+  test('/ledgers wears the same column as /settings: ledger card, five entries, 记一笔', async () => {
     await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
     const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
 
     expect(await router.findByText('ledgers-page')).toBeTruthy();
     expect(router.getByTestId('app-shell-wide')).toBeTruthy();
-    // The card names the list, not one ledger — even though a ledger is remembered.
-    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
-    expect(router.getByText('账本管理')).toBeTruthy();
-    expect(router.getByText('2 本')).toBeTruthy();
-    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
+    // §14.64 c: the card names the ledger the user last had open, as on `/settings`.
+    expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
+    expect(router.getByText('家庭账本')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledgers-link')).toBeNull();
 
-    for (const label of ['首页', '交易', '导入']) expect(router.getByText(label)).toBeTruthy();
-    for (const key of ['sources', 'settings']) {
-      expect(router.queryByTestId(`sidebar-${key}`)).toBeNull();
+    // All five entries, none of them lit — the ledger list is none of them.
+    for (const key of ['home', 'transactions', 'sources', 'imports', 'settings']) {
+      expect(router.getByTestId(`sidebar-${key}`).props.accessibilityState.selected).toBe(false);
     }
-    // Screen 13 draws no primary button: no ledger is open to add a transaction to.
-    expect(router.queryByTestId('sidebar-add')).toBeNull();
+    expect(router.getByTestId('sidebar-add')).toBeTruthy();
 
-    // The three entries lead into the ledger the user last had open.
+    // The entries lead into the ledger the user last had open.
     fireEvent.press(router.getByTestId('sidebar-transactions'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions`));
   });
 
-  test('/ledgers with nothing remembered draws the card and no navigation at all', async () => {
+  test('/ledgers with nothing remembered names the ledger `/` would open', async () => {
     await setPref(PREF_NAMES.lastLedgerId, null);
-    mockGet('/ledgers', { items: [], total: 0 });
     const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
 
-    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
-    for (const key of ['home', 'transactions', 'imports']) {
-      expect(router.queryByTestId(`sidebar-${key}`)).toBeNull();
-    }
+    expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
+    expect(router.getByText('家庭账本')).toBeTruthy();
+    fireEvent.press(router.getByTestId('sidebar-add'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions/new`));
   });
 
   test('a user with no ledger at all gets no column: 屏幕稿 15 is full-bleed', async () => {
@@ -523,36 +544,22 @@ describe('wide (>=1024)', () => {
     expect(row).toHaveTextContent(/ali@example\.com/);
   });
 
-  test('only the ledger pages swap the card for 「账本管理 · N 本」 (mockups 13 / 14)', () => {
-    const ledger = makeLedger({ id: LEDGER_A });
-    expect(showsLedgerManageCard('/settings', ledger)).toBe(false);
-    expect(showsLedgerManageCard(`/l/${LEDGER_A}`, ledger)).toBe(false);
-    expect(showsLedgerManageCard('/ledgers', ledger)).toBe(true);
-    expect(showsLedgerManageCard('/ledgers/new', ledger)).toBe(true);
-    // Nothing to name is the other way in — a device that never opened a ledger.
-    expect(showsLedgerManageCard('/settings', undefined)).toBe(true);
-  });
-
-  test('a cold /ledgers holds the nav slot rather than popping three rows in', async () => {
+  test('a cold /ledgers holds the card slot until the ledger to name is known', async () => {
     await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
-    // Hold `GET /ledgers` open: until it lands there is no ledger for 首页 / 交易 / 导入 to
-    // point at, and an empty nav area that fills a round trip later is the same pop-in the
-    // card's placeholder exists to avoid.
+    // Hold `GET /ledgers` open: until it lands there is no ledger for the card to name.
     const pending: { resolve?: (reply: [number, unknown]) => void } = {};
     api.mock
       .onGet(apiUrl('/ledgers'))
       .reply(() => new Promise((resolve) => (pending.resolve = resolve)));
     const router = renderRouter(ROUTES, { initialUrl: '/ledgers' });
 
-    expect(await router.findByTestId('sidebar-nav-pending')).toBeTruthy();
-    for (const key of ['home', 'transactions', 'imports']) {
-      expect(router.queryByTestId(`sidebar-${key}`)).toBeNull();
-    }
+    expect(await router.findByTestId('sidebar-ledger-pending')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledger')).toBeNull();
 
     pending.resolve?.([200, { items: [makeLedger({ id: LEDGER_A, name: '家庭账本' })], total: 1 }]);
 
-    expect(await router.findByTestId('sidebar-home')).toBeTruthy();
-    expect(router.queryByTestId('sidebar-nav-pending')).toBeNull();
+    expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
+    expect(router.queryByTestId('sidebar-ledger-pending')).toBeNull();
   });
 
   test('/ledgers/new and /ledgers/join are full-bleed too for a 0-ledger user', async () => {
@@ -561,7 +568,7 @@ describe('wide (>=1024)', () => {
     mockGet('/ledgers', { items: [], total: 0 });
 
     // 屏幕稿 15 sends a user with nothing to list straight to these two pages; the column
-    // would name an empty list there just as it would on `/ledgers` itself, and both pages
+    // would point at nothing there just as it would on `/ledgers` itself, and both pages
     // carry their own way back, so the whole `/ledgers*` subtree runs full-bleed.
     const created = renderRouter(ROUTES, { initialUrl: '/ledgers/new' });
     expect(await created.findByText('new-ledger-page')).toBeTruthy();
@@ -580,8 +587,9 @@ describe('wide (>=1024)', () => {
 
     expect(await router.findByText('new-ledger-page')).toBeTruthy();
     expect(await router.findByTestId('sidebar')).toBeTruthy();
-    // Mockup 13's card, on the sub-page as well as on the list itself.
-    expect(await router.findByTestId('sidebar-ledgers-link')).toBeTruthy();
+    // The same ledger card as everywhere else (§14.64 c).
+    expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();
+    expect(router.getByTestId('sidebar-add')).toBeTruthy();
   });
 
 });

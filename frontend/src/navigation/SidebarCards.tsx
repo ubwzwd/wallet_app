@@ -1,10 +1,9 @@
 /**
- * The two cards that can sit at the top of the wide sidebar (mockups 01 / 13 / 14 at 1440).
+ * The card at the top of the wide sidebar (mockups 01 / 14 at 1440), and the empty slot it
+ * holds while the ledger it names is still loading.
  *
- * Inside a ledger — and on `/settings`, which mockup 14 draws with the ledger still named —
- * it is `LedgerCard`: the body opens the switcher, the chevron goes to that ledger's own
- * settings. On mockup 13's own pages (`/ledgers*`) it is `LedgerManageCard` instead, because
- * there is no single ledger the page is about.
+ * It is the same card on every page (§14.64 c) — inside a ledger, on `/settings` and on
+ * `/ledgers*`: the body opens the switcher, the chevron goes to that ledger's own settings.
  *
  * Split out of `Sidebar.tsx` to keep both files inside the project's 400-line rule.
  */
@@ -13,13 +12,10 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { Ledger } from '@/api/types';
-import { routes } from '@/domain/routes';
 import { memberLabel, useMembers } from '@/queries';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Avatar, Icon, Text } from '@/ui';
-
-import { isActivePath } from './isActivePath';
 
 /** At most this many members are named in full on the ledger card; beyond it, a count. */
 const NAMED_MEMBER_LIMIT = 3;
@@ -96,62 +92,9 @@ export function LedgerCard({
 }
 
 /**
- * Which card sits at the top of the column, once the ledger is known.
- *
- * Mockup 14 (个人设置 1440) keeps the *ledger* card on `/settings`, so the chrome does not
- * change identity when the user opens 「我的」; only mockup 13's own pages — `/ledgers`,
- * `/ledgers/new`, `/ledgers/join` — swap it for 「账本管理 · N 本」. A user with no ledger
- * to name gets the list card wherever they are, because there is nothing else to show.
- */
-export function showsLedgerManageCard(pathname: string, ledger: Ledger | undefined): boolean {
-  return ledger === undefined || isActivePath(pathname, routes.ledgers(), false);
-}
-
-/** Screen 13: on the ledger pages themselves the card names the ledger list instead. */
-export function LedgerManageCard({
-  count,
-  onPress,
-}: {
-  count: number;
-  onPress(): void;
-}): React.JSX.Element {
-  const colors = useColors();
-  const { t } = useTranslation();
-  const title = t('common:nav.ledgers');
-  return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={title}
-      onPress={onPress}
-      testID="sidebar-ledgers-link"
-      style={({ pressed }) => [
-        styles.card,
-        styles.cardBody,
-        styles.cardAlone,
-        { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.selected'] },
-      ]}
-    >
-      <Avatar name={title} size={32} shape="square" tone="accent" />
-      <View style={styles.cardText}>
-        <Text
-          weight={600}
-          style={[styles.cardName, { color: colors['accent.solid'] }]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        <Text mono tone="secondary" style={styles.cardMeta} numberOfLines={1}>
-          {t('common:nav.ledger_count', { count })}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-/**
- * The slot both cards occupy, held empty while it is not yet known which of them belongs
- * there (the remembered id and the ledger list both arrive a frame or two late). Holding it
- * is what keeps the chrome from changing identity mid-load.
+ * The card's slot, held empty while it is not yet known which ledger belongs there (the
+ * remembered id and the ledger list both arrive a frame or two late). Holding it is what
+ * keeps the chrome from changing identity mid-load.
  */
 export function LedgerCardPlaceholder(): React.JSX.Element {
   return <View testID="sidebar-ledger-pending" style={styles.card} />;
@@ -173,8 +116,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space['3'],
     borderRadius: radius.md,
   },
-  // The one-piece card is a row of its own, so it must not grow like the inner body does.
-  cardAlone: { flexGrow: 0, gap: 10, paddingRight: space['3'] },
   cardText: { flex: 1, minWidth: 0 },
   cardName: { fontSize: 15, lineHeight: 20 },
   cardMeta: { fontSize: 11, lineHeight: 15 },
