@@ -26,6 +26,7 @@ import {
   mockPost,
   type MockApi,
 } from '@/test';
+import { qk } from '@/queries';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import LedgersScreen from '../LedgersScreen';
@@ -132,6 +133,38 @@ test('while the list is loading /ledgers waits with placeholders and guesses not
 
   expect(await screen.findByTestId('ledger-skeleton-0')).toBeTruthy();
   expect(router.getPathname()).toBe('/ledgers');
+});
+
+test('after the current ledger is removed, /ledgers waits for the re-read instead of landing back in it', async () => {
+  // DangerZone: `removeLedger` invalidates the list and goes to `/ledgers` straight away,
+  // while the cache and `last_ledger_id` still name the ledger that is gone.
+  await setPref(PREF_NAMES.lastLedgerId, 'led-1');
+  queryClient.setQueryData(qk.global.ledgers(), TWO);
+  let resolveGet: (value: [number, unknown]) => void = () => undefined;
+  api.mock.onGet(apiUrl('/ledgers')).reply(
+    () =>
+      new Promise<[number, unknown]>((resolve) => {
+        resolveGet = resolve;
+      }),
+  );
+  const router = renderRouter(ROUTES, { initialUrl: '/ledgers', wrapper: Wrapper });
+  const seen: string[] = [];
+  const record = (): void => {
+    const path = router.getPathname();
+    if (seen[seen.length - 1] !== path) seen.push(path);
+  };
+  void queryClient.invalidateQueries({ queryKey: qk.global.ledgers() });
+
+  expect(await screen.findByTestId('ledger-skeleton-0')).toBeTruthy();
+  record();
+  expect(router.getPathname()).toBe('/ledgers');
+
+  resolveGet([200, { items: [makeLedger({ id: 'led-2', name: 'B' })], total: 1 }]);
+  await waitFor(() => {
+    record();
+    expect(router.getPathname()).toBe('/l/led-2');
+  });
+  expect(seen).not.toContain('/l/led-1');
 });
 
 test('a load failure offers a retry that refetches, and then lands', async () => {

@@ -257,7 +257,7 @@ test('with a ledger, 我的 is a top-level page: no back button', async () => {
   expect(screen.queryByTestId('personal-settings-back')).toBeNull();
 });
 
-test('with no ledger at all, the wide header leads back to 账本管理', async () => {
+test('with no ledger at all, the wide header leads back to the onboarding (开始), not a ledger list', async () => {
   const user = makeUser({ ledger_count: 0 });
   mockGet('/me', user);
   mockGet('/ledgers', { items: [], total: 0 });
@@ -267,7 +267,7 @@ test('with no ledger at all, the wide header leads back to 账本管理', async 
   });
 
   expect(await screen.findByTestId('personal-settings-back')).toBeTruthy();
-  expect(screen.getByText('账本管理 · 我的')).toBeTruthy();
+  expect(screen.getByText('开始 · 我的')).toBeTruthy();
   fireEvent.press(screen.getByTestId('personal-settings-back'));
   expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers');
 });

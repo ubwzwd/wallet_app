@@ -22,7 +22,7 @@
     "sources": "Accounts",
     "imports": "Import",
     "me": "Me",
-    "ledgers": "Ledgers",
+    "ledgers": "Get started",
     "member_count_one": "{{count}} person",
     "member_count_other": "{{count}} people",
     "ledger_settings": "Ledger settings",

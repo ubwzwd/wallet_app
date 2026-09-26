@@ -79,7 +79,7 @@ const ROUTES = {
   index: () => <Text>landing</Text>,
   '(auth)/login': () => <Text>login-page</Text>,
   '(app)/_layout': AppGroupLayout,
-  '(app)/ledgers/index': page('账本管理'),
+  '(app)/ledgers/index': page('开始'),
   '(app)/ledgers/new': page('新建账本'),
   '(app)/ledgers/join': page('加入账本'),
   '(app)/settings': page('个人设置'),
@@ -361,6 +361,16 @@ describe('wide (>=1024)', () => {
     expect(await router.findByTestId('probe-back')).toBeTruthy();
     await waitFor(() => expect(router.queryByTestId('sidebar')).toBeNull());
     expect(router.getByTestId('probe-back')).toHaveTextContent('no-back');
+  });
+
+  test('a user with no ledger: the /settings crumb names the onboarding, not a ledger list', async () => {
+    noLedgers();
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+
+    await waitFor(() => expect(router.getByTestId('probe-back')).toHaveTextContent('back:开始'));
+    expect(router.queryByText(/账本管理/)).toBeNull();
+    fireEvent.press(router.getByTestId('page-header-back'));
+    await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
   });
 
   test('the leave guard holds for the breadcrumb’s back button', async () => {

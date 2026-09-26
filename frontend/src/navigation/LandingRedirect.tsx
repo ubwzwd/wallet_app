@@ -31,7 +31,7 @@ export function pickLandingLedger(
 
 /** Where a signed-in user lands, once that is known. */
 export type LandingTarget =
-  /** The ledger list or the remembered id is still on its way — never guess meanwhile. */
+  /** The ledger list (or its re-read) or the remembered id is still on its way — never guess. */
   | { kind: 'pending' }
   /** `GET /ledgers` failed: that is not a "no ledgers" answer. */
   | { kind: 'error'; retry(): void }
@@ -42,15 +42,23 @@ export type LandingTarget =
 /**
  * The answer `/` and `/ledgers` share. Only call it while signed in: it requests
  * `GET /ledgers`.
+ *
+ * A list that is being re-read is not an answer to redirect on: deleting or leaving the
+ * current ledger invalidates the list and goes to `/ledgers` at once, while the cache (and
+ * `last_ledger_id`) still name the ledger that is gone — trusting them would land straight
+ * back in it. So a ledger destination waits for the re-read. "No ledgers" does not: showing
+ * the onboarding a moment longer is harmless, and it must not flash a skeleton on every
+ * background refetch.
  */
 export function useLandingTarget(): LandingTarget {
-  const { data, isPending, isError, refetch } = useLedgers();
+  const { data, isPending, isFetching, isError, refetch } = useLedgers();
   const lastLedgerId = useLastLedgerId();
 
   if (isError) return { kind: 'error', retry: () => void refetch() };
   if (isPending || lastLedgerId === undefined) return { kind: 'pending' };
   const target = pickLandingLedger(data.items, lastLedgerId);
   if (!target) return { kind: 'none' };
+  if (isFetching) return { kind: 'pending' };
   return { kind: 'ledger', href: routes.l(target.id).home() };
 }
 

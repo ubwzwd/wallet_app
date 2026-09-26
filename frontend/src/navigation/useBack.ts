@@ -30,6 +30,8 @@ const PARENT_LABEL_KEY: Record<BackParentKey, string> = {
   transactions: 'common:nav.transactions',
   sources: 'common:nav.sources',
   imports: 'common:nav.imports',
+  // Only a user with no ledger has `/ledgers` as a parent, and there it is the onboarding
+  // page (§14.65 c), so the label names that, never a ledger list.
   ledgers: 'common:nav.ledgers',
 };
 
