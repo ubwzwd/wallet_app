@@ -1097,6 +1097,7 @@ def test_legacy_indexes_are_dropped(migrated_db):
         "ix_transactions_ledger_occurred",
         "ix_transactions_ledger_source",
         "ix_transactions_ledger_kind_cat",
+        "ix_transactions_source_occurred",
         "ix_finance_sources_owner_id",
     } <= indexes
     # §14.62: accounts belong to people, so the ledger index went with the column
@@ -1154,6 +1155,8 @@ def test_upgrade_head_on_sqlite_drops_legacy_indexes(sqlite_migrated_db):
         tables = set(inspect(engine).get_table_names())
 
     assert "ix_transactions_user_id" not in tx_indexes
+    # §14.62 f: the cross-ledger balance reads transactions by source_id alone
+    assert "ix_transactions_source_occurred" in tx_indexes
     # Both names on purpose: the Alembic path really builds ix_accounts_user_id
     # (the initial migration's name), while ix_finance_sources_user_id only
     # shows up in a create_all database (the naming fork of §5.3).
@@ -1351,6 +1354,7 @@ def _check_downgrade_restores_ledger_id(url: str) -> None:
         tables = set(insp.get_table_names())
         columns = {col["name"] for col in insp.get_columns("finance_sources")}
         indexes = {ix["name"] for ix in insp.get_indexes("finance_sources")}
+        tx_indexes = {ix["name"] for ix in insp.get_indexes("transactions")}
         fks = {fk["name"]: fk for fk in insp.get_foreign_keys("finance_sources")}
         restored = {
             _as_uuid(row.id): (_as_uuid(row.ledger_id), _as_uuid(row.created_by))
@@ -1363,6 +1367,7 @@ def _check_downgrade_restores_ledger_id(url: str) -> None:
     assert "owner_id" not in columns and "ledger_id" in columns
     assert "ix_finance_sources_ledger_id" in indexes
     assert "ix_finance_sources_owner_id" not in indexes
+    assert "ix_transactions_source_occurred" not in tx_indexes
     assert "fk_finance_sources_owner_id_users" not in fks
     ledger_fk = fks["fk_finance_sources_ledger_id_ledgers"]
     assert ledger_fk["referred_table"] == "ledgers"

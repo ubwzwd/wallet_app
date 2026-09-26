@@ -193,6 +193,7 @@ EXPECTED_INDEXES = {
     "transactions": {
         "ix_transactions_ledger_occurred",
         "ix_transactions_ledger_source",
+        "ix_transactions_source_occurred",  # §14.62 f: cross-ledger balances
         "ix_transactions_ledger_kind_cat",
         "ix_transactions_refund_of",
         "ix_transactions_import_batch_id",

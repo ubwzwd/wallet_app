@@ -7,13 +7,14 @@ Create Date: 2026-09-27 00:00:00.000000
 Phase 8 (decision §14.62): an account stops belonging to a ledger and starts
 belonging to a person, who shares it into the ledgers they choose.
 
-Upgrade, in four steps:
+Upgrade, in five steps:
 
 1. create ``ledger_sources`` — one row per (ledger, account) share;
 2. share every account into the ledger it used to live in, so every member who
    could use it before still can (behaviour is unchanged by the migration);
 3. add ``finance_sources.owner_id``, backfilled from ``created_by``;
-4. drop ``finance_sources.ledger_id`` with its index and foreign key.
+4. drop ``finance_sources.ledger_id`` with its index and foreign key;
+5. index ``transactions (source_id, occurred_at)`` for the cross-ledger balance.
 
 The downgrade puts every account back into one ledger: the earliest share, or
 failing that the owner's earliest ledger. Development only (§5.7).
@@ -97,6 +98,13 @@ def upgrade() -> None:
         b.drop_column("ledger_id")
     op.create_index("ix_finance_sources_owner_id", "finance_sources", ["owner_id"])
 
+    # 5. balances now read an account's entries across every ledger (§14.62 f):
+    # the query filters on source_id alone, which ix_transactions_ledger_source
+    # (ledger_id first) cannot serve (02 §4).
+    op.create_index(
+        "ix_transactions_source_occurred", "transactions", ["source_id", "occurred_at"]
+    )
+
 
 def downgrade() -> None:
     """Development only (§5.7); lossy: every account keeps a single ledger.
@@ -108,6 +116,8 @@ def downgrade() -> None:
     Other shares than the chosen one are lost with the table.
     """
     bind = op.get_bind()
+
+    op.drop_index("ix_transactions_source_occurred", table_name="transactions")
 
     with op.batch_alter_table("finance_sources") as b:
         b.add_column(sa.Column("ledger_id", sa.Uuid(), nullable=True))

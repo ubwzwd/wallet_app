@@ -155,6 +155,9 @@ Index(
     Transaction.created_at.desc(),
 )
 Index("ix_transactions_ledger_source", Transaction.ledger_id, Transaction.source_id)
+# Account balances span every ledger (decision §14.62 f): the balance query
+# filters on source_id alone and groups by occurred_at (02 §4).
+Index("ix_transactions_source_occurred", Transaction.source_id, Transaction.occurred_at)
 Index(
     "ix_transactions_ledger_kind_cat",
     Transaction.ledger_id,
