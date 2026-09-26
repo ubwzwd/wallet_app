@@ -106,6 +106,40 @@ export function SourceGroupLabel({
 /** Pseudo-option values for the group titles inside `Select` (never a real account id). */
 const GROUP_PREFIX = '__group-';
 
+/** More accounts than this and `SourcePicker` shows a search box. */
+const SEARCH_THRESHOLD = 8;
+
+/** Whether a `Select` option is one of the group titles `sourceGroupOptions` inserts. */
+export function isSourceGroupTitle(option: SelectOption): boolean {
+  return option.value.startsWith(GROUP_PREFIX);
+}
+
+/**
+ * Flattens grouped accounts into `Select` options. `Select` has no notion of sections, so
+ * when `titled` each group's title rides along as a disabled pseudo-option ahead of its
+ * accounts (it can never be picked); draw it with `renderSourceGroupTitle`.
+ */
+export function sourceGroupOptions<T extends LedgerSource>(
+  groups: readonly SourceGroup<T>[],
+  titled: boolean,
+  toOption: (source: T) => SelectOption,
+  title: (group: SourceGroupKey) => string,
+): SelectOption[] {
+  return groups.flatMap((g) => [
+    ...(titled ? [{ value: `${GROUP_PREFIX}${g.key}`, label: title(g.key), disabled: true }] : []),
+    ...g.sources.map(toOption),
+  ]);
+}
+
+/** A group title pseudo-option's body inside a `Select` list. */
+export function renderSourceGroupTitle(option: SelectOption): React.ReactNode {
+  return (
+    <Text variant="micro" tone="muted" weight={600} accessibilityRole="header">
+      {option.label}
+    </Text>
+  );
+}
+
 export function SourcePicker({
   sources,
   value,
@@ -128,7 +162,11 @@ export function SourcePicker({
   const fieldLabel = label ?? t('transaction:form.source');
 
   const groups = groupSources(selectableSources(sources, filter, allowArchivedId));
-  const titled = showsSourceGroups(groups);
+  const accountCount = groups.reduce((n, g) => n + g.sources.length, 0);
+  const searchable = accountCount > SEARCH_THRESHOLD;
+  // `Select`'s search filters option by option, so a title would either vanish or be left
+  // standing over nothing; a searchable list goes untitled.
+  const titled = showsSourceGroups(groups) && !searchable;
 
   const toOption = (s: LedgerSource): SelectOption => {
     const parts = [t(`source:type.${s.type}`), s.default_currency];
@@ -143,27 +181,14 @@ export function SourcePicker({
     };
   };
 
-  const options: SelectOption[] = groups.flatMap((g) => [
-    ...(titled
-      ? [
-          {
-            value: `${GROUP_PREFIX}${g.key}`,
-            label: t(`transaction:picker.group_${g.key}`),
-            disabled: true,
-          },
-        ]
-      : []),
-    ...g.sources.map(toOption),
-  ]);
-  const accountCount = groups.reduce((n, g) => n + g.sources.length, 0);
+  const options = sourceGroupOptions(groups, titled, toOption, (key) =>
+    t(`transaction:picker.group_${key}`),
+  );
 
-  // `Select` has no notion of sections, so a group title rides along as a disabled option
-  // and is drawn as a caption; every other option keeps `Select`'s own two-line body.
+  // A title is drawn as a caption; every account keeps the icon + two-line body.
   const renderOption = (option: SelectOption): React.ReactNode =>
-    option.value.startsWith(GROUP_PREFIX) ? (
-      <Text variant="micro" tone="muted" weight={600} accessibilityRole="header">
-        {option.label}
-      </Text>
+    isSourceGroupTitle(option) ? (
+      renderSourceGroupTitle(option)
     ) : (
       <View style={styles.option}>
         {option.icon ? <Icon name={option.icon} size={18} color={colors['fg.secondary']} /> : null}
@@ -186,7 +211,7 @@ export function SourcePicker({
       label={fieldLabel}
       placeholder={placeholder ?? fieldLabel}
       closeLabel={t('common:button.close')}
-      searchable={accountCount > 8}
+      searchable={searchable}
       searchPlaceholder={fieldLabel}
       emptyLabel={t('common:status.none')}
       options={options}

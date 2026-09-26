@@ -362,6 +362,29 @@ describe('SourcePicker', () => {
       expect(screen.getByTestId('src-option-mine-1')).toBeTruthy();
       expect(screen.queryByTestId('src-option-__group-mine')).toBeNull();
     });
+
+    test('a searchable list (more than 8 accounts) drops the titles, so no stray one is left', () => {
+      const many = Array.from({ length: 8 }, (_, i) =>
+        makeLedgerSource({ id: `mine-${i + 2}`, name: `我的卡 ${i + 2}` }),
+      );
+      renderThemed(
+        <SourcePicker
+          sources={[mine, ...many, shared]}
+          value={null}
+          onChange={() => undefined}
+          lang="zh"
+          testID="src"
+        />,
+      );
+      fireEvent.press(screen.getByTestId('src-trigger'));
+      expect(screen.getByTestId('src-search')).toBeTruthy();
+      expect(screen.queryByTestId('src-option-__group-mine')).toBeNull();
+      expect(screen.queryByTestId('src-option-__group-shared')).toBeNull();
+
+      fireEvent.changeText(screen.getByTestId('src-search'), '我');
+      expect(screen.queryByTestId('src-option-__group-mine')).toBeNull();
+      expect(screen.getByTestId('src-option-mine-2')).toBeTruthy();
+    });
   });
 });
 

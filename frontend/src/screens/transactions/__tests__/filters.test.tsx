@@ -226,6 +226,26 @@ test('the account filter offers every account the ledger names, grouped, balance
   );
 });
 
+test('the wide account dropdown groups the same way, and a title is never a filter', async () => {
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
+  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+
+  fireEvent.press(await screen.findByTestId('tx-filter-bar-source-trigger'));
+  const titleMine = await screen.findByTestId('tx-filter-bar-source-option-__group-mine');
+  expect(titleMine).toHaveTextContent('我的');
+  expect(screen.getByTestId('tx-filter-bar-source-option-__group-shared')).toHaveTextContent(
+    '成员共享的',
+  );
+  const order = screen
+    .getAllByTestId(/^tx-filter-bar-source-option-/)
+    .map((node) => String(node.props.testID).replace('tx-filter-bar-source-option-', ''));
+  expect(order).toEqual(['__group-mine', 's1', 's2', '__group-shared', 's3', 's4']);
+
+  fireEvent.press(titleMine);
+  fireEvent.press(screen.getByTestId('tx-filter-bar-source-option-s3'));
+  await waitFor(() => expect(searchOf(router).source_id).toBe('s3'));
+});
+
 test('leaving the screen for good closes the narrow drawer; coming back never reopens it', async () => {
   setWide(false);
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));

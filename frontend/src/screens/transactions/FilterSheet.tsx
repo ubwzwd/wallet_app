@@ -26,7 +26,10 @@ import {
   SourceGroupLabel,
   Text,
   groupSources,
+  isSourceGroupTitle,
+  renderSourceGroupTitle,
   showsSourceGroups,
+  sourceGroupOptions,
   sourceTypeLabelKey,
   type SelectOption,
 } from '@/ui';
@@ -50,8 +53,8 @@ import {
  *
  * Every account the ledger can see is offered, including ones that can no longer be booked
  * onto (archived, or no longer shared — decision §14.62): filtering is about the entries
- * already written. The drawer splits them into 「我的」 and 「成员共享的」 once there are
- * others', whose balances stay the owner's business.
+ * already written. Both the drawer and the wide dropdown split them into 「我的」 and
+ * 「成员共享的」 once there are others', whose balances stay the owner's business.
  */
 export function SourceField(props: FilterFieldProps & { inline?: boolean }): React.JSX.Element {
   const { t } = useTranslation();
@@ -77,11 +80,30 @@ export function SourceField(props: FilterFieldProps & { inline?: boolean }): Rea
   const groups = groupSources(props.sources);
   const titled = showsSourceGroups(groups);
 
-  const options: SelectOption[] = props.sources.map((s) => ({
-    value: s.id,
-    label: s.name,
-    hint: s.default_currency,
-  }));
+  // The wide dropdown groups the same way; its titles are disabled pseudo-options, so they
+  // can never land in `source_id`.
+  const options = sourceGroupOptions(
+    groups,
+    titled,
+    (s): SelectOption => ({ value: s.id, label: s.name, hint: s.default_currency }),
+    (key) => t(`transaction:picker.group_${key}`),
+  );
+
+  const renderOption = (option: SelectOption): React.ReactNode =>
+    isSourceGroupTitle(option) ? (
+      renderSourceGroupTitle(option)
+    ) : (
+      <>
+        <Text variant="body" numberOfLines={1}>
+          {option.label}
+        </Text>
+        {option.hint !== undefined ? (
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {option.hint}
+          </Text>
+        ) : null}
+      </>
+    );
 
   return (
     <FilterField
@@ -157,6 +179,7 @@ export function SourceField(props: FilterFieldProps & { inline?: boolean }): Rea
           options={options}
           values={values}
           selectedLabel={summary}
+          renderOption={titled ? renderOption : undefined}
           onChange={(next) => props.onPatch({ source_id: next.length > 0 ? next : undefined })}
           testID={`${props.id}-source`}
         />
