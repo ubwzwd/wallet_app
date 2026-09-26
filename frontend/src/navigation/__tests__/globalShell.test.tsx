@@ -27,6 +27,7 @@ import * as breakpoint from '@/theme/useBreakpoint';
 import { PageHeader, toast } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
+import { resetLedgerHistory } from '../ledgerHistory';
 import { resetLedgerGone } from '../RequireLedger';
 import { useTopBar } from '../TopBar';
 import { useBack } from '../useBack';
@@ -104,6 +105,7 @@ beforeEach(async () => {
   api = mockApi();
   queryClient.clear();
   resetLedgerGone();
+  resetLedgerHistory();
   await initI18n();
   await i18next.changeLanguage('zh');
   // The ledger the user last had open — the one the chrome names outside a ledger route.
@@ -144,6 +146,35 @@ describe('narrow (<1024)', () => {
     // A cold open has no history: the button goes to the recent ledger's home.
     fireEvent.press(router.getByTestId('top-bar-back'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
+  });
+
+  test('/ledgers opened from inside a ledger: back returns to that very page', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/imports` });
+    expect(await router.findByTestId('top-bar-ledger')).toBeTruthy();
+
+    // The switcher's last row: leaving the ledger's shell for the global one must not
+    // throw away the history, or the button can only fall back to the fixed parent.
+    act(() => expoRouter.navigate('/ledgers'));
+    await waitFor(() => expect(router.getByTestId('top-bar-title')).toHaveTextContent('账本管理'));
+    fireEvent.press(router.getByTestId('top-bar-back'));
+
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/imports`));
+  });
+
+  test('the ledger’s whole inner history survives the trip to /ledgers/new and back', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+    expect(await router.findByTestId('top-bar-ledger')).toBeTruthy();
+    act(() => expoRouter.push(`/l/${LEDGER_A}/transactions/${TX}`));
+    await waitFor(() => expect(router.getByTestId('top-bar-title')).toHaveTextContent('交易详情'));
+
+    act(() => expoRouter.navigate('/ledgers/new'));
+    await waitFor(() => expect(router.getByTestId('top-bar-title')).toHaveTextContent('新建账本'));
+    fireEvent.press(router.getByTestId('top-bar-back'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}/transactions/${TX}`));
+
+    // One more step back is the page before the detail — home — not the detail's parent.
+    fireEvent.press(await router.findByTestId('top-bar-back'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
   });
 
   test('outside a ledger the tabs aim at the recent ledger', async () => {
