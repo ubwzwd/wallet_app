@@ -20,6 +20,7 @@
 > - **分类说明文字**（决策 §14.20、§14.21）：一级分类带 `desc_zh` / `desc_en` 判据，随 `GET /categories` 下发。
 > - **金额区间筛选按账本基准币种折算后比较**（决策 §14.49）；交易列表在 `{items, total}` 之外多返回一个 `summary`（决策 §14.52 A14）。
 > - **用户资料**：加 `display_name`（决策 §14.6、§14.40）与 `language`，删除现状的默认账户列。
+> - **账户归人，按账本共享**（决策 §14.62，2026-09-16）：`finance_sources` 去掉 `ledger_id`、改挂 `owner_id`（账户主人）；新表 `ledger_sources` 记「主人把这张卡共享到这本账」；一本账里对调用者**可用的账户** = 他自己的未归档账户 + 别人共享到本账本的未归档账户；余额跨所有账本、按主人的 `users.base_currency` 折算；资产 / 负债 / 净资产是**个人**的；删账本只解除共享、不删账户；成员退出 / 被移除时他共享进来的账户自动取消共享。涉及 §0.1、§1.1、§1.2、§1.4、§1.6、§3.5、§3.7–§3.17、§4.2–§4.4、§5.4、§5.5、§6.1、§6.2、待决 6。（2026-09-16 按决策 §14.62 同步）
 > - **本轮按决策 §14.53（2026-09-11）统一各章打架之处**：配对**不要求**两腿 `transfer_subtype` 原本相同，改为**配对时统一子类型**（§1.9、§3.15、§4.2、§6.2），统一时**只有子类型真的变了的那一腿写一条 `updated` 事件**（§1.10 路径表同步）；导入提交时新建的那条腿只有 `imported`，`paired` 只写在库里已有那条上；多候选转账不新增字段，只打 `needs_review` + `hint`，由用户在 review 里自己挑一条（§3.15 A）；没找到对腿时 `counterpart_source_id` **留空、不猜**（§3.17）；错误 code 一律取 [`./03-backend-api.md`](./03-backend-api.md) §4.2 注册表里的名字（`pair_invalid` / `import_format_invalid` / `currency_locked`）；导入校验的顺序是**解码 → 结构（含缺 `# version:` 行）→ 版本**（§3.17）。
 >
 > 本章篇幅不作为验收项（决策 §14.8）：被作废的内容是**删掉**，不是留旧文加一句"已作废"。
@@ -36,21 +37,21 @@
 
 | # | 主题 | 现状 | 目标 | 决策 |
 |---|---|---|---|---|
-| 1 | 数据归属 | 一切挂在 `users.id` 下，没有账本概念 (backend/app/models/transaction.py:17) | 引入 `ledgers` / `ledger_members` / `ledger_invites`；账户、交易、导入都挂 `ledger_id`，鉴权 = "调用者是该账本成员" | §2 |
+| 1 | 数据归属 | 一切挂在 `users.id` 下，没有账本概念 (backend/app/models/transaction.py:17) | 引入 `ledgers` / `ledger_members` / `ledger_invites`；交易、导入挂 `ledger_id`，鉴权 = "调用者是该账本成员"；**账户挂 `owner_id`（属于用户）**，经 `ledger_sources` 共享到账本（2026-09-16 按决策 §14.62 同步） | §2、§14.62 |
 | 2 | 交易种类 | 没有 `kind` 列，方向完全由 `amount` 的符号承载 (backend/app/models/transaction.py:19)，前端编辑时按符号反推类型 (frontend/src/screens/TransactionFormScreen.tsx:76-87) | 显式 `kind ∈ {expense, income, refund, transfer}`，符号由数据库 CHECK 保证 | §1、§10 |
 | 3 | 退款 | 不存在退款概念，只能记成一条正金额交易（会被算成收入） | 独立 kind `refund`，可关联原支出 `refund_of`，统计时按退款日期冲减该分类的支出 | §1.1 |
 | 4 | 转账 | 两行共享 `transfer_pair_id`，后端零校验，单腿也被接受 (backend/app/api/transactions.py:91-100)，删除时按 pair 批量删 (backend/app/api/transactions.py:447-459) | `transfer_role` / `transfer_subtype` 必填；`transfer_pair_id` **可空**（对手账户不在应用里就是单腿，可填 `counterparty` 文本）；两腿走专用接口原子创建/修改/删除；两腿允许跨币种、金额可不等；两条单腿可以**配对**成两腿，两腿也可以**拆开** | §1.2、§14.34 |
 | 5 | 分类 | 自由标签表 `transaction_tags` (backend/app/models/transaction_tag.py:11-20)，规范化只有 `strip().lower()`，重复标签会 500 | 后端常量里的固定两级分类表，一级带中英**说明文字**（归类判据），`category_l1` / `category_l2` 存 code，服务端校验；**删除** `transaction_tags`、`?tag=` 筛选和标签输入框 | §1.3、§14.20、§14.21 |
 | 6 | 备注字段 | `transactions.description` (backend/app/models/transaction.py:22) | 改名 `note`（≤500 字），语义"这笔账的备注"；`merchant`（≤200 字）保留为独立字段 | §1.4 |
 | 7 | 资金账户 | 无期初余额、无 `cash` 类型（API 正则只认 checking/savings/credit/other，backend/app/schemas/finance_source.py:21-26）、无删除接口 | 类型四种 `checking` / `credit` / `cash` / `other`（**没有** `savings`）；加 `opening_balance`、`archived_at`；`default_currency` 创建后不可改；有交易的账户不能删只能归档；归档账户真正禁止记账，且不计入净资产 | §3、§14.48、§14.50 |
-| 8 | 余额 | 没有余额概念 | 余额以账户 `default_currency` 计价 = `opening_balance` + Σ 该账户交易折算到账户币种（异币种按发生日汇率），含单腿转账；首页给资产 / 负债 / 净资产三个数 | §3、§7、§14.2、§14.50 |
+| 8 | 余额 | 没有余额概念 | 余额以账户 `default_currency` 计价 = `opening_balance` + Σ 该账户在**所有账本**里的交易折算到账户币种（异币种按发生日汇率），含单腿转账；首页与账户页给本人的资产 / 负债 / 净资产三个数，按主人的 `users.base_currency` 折算（2026-09-16 按决策 §14.62 同步） | §3、§7、§14.2、§14.50、§14.62 |
 | 9 | 汇率换算 | 两套公式：单行路径 `amount × rate` (backend/app/api/transactions.py:20-46；backend/app/services/rates.py:135-139)，列表路径 `amount / rate` (backend/app/api/transactions.py:244-255)，且 `conversion_date` 永远是服务器当天 | 统一为一个函数：交易与统计用**发生日**汇率，账户余额用**最新**汇率，无行情日回退到最近一个已公布交易日 | §8 |
 | 10 | 汇率缓存 | 无缓存表（`exchange_rates` 已被迁移删除，backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25），每次响应现拉 Frankfurter | **新建** `exchange_rates(date, base, symbol, rate, fetched_at)` 缓存表，按主键 upsert、保留全部历史行、不做整表刷新 | §8、§10、§14.1 |
 | 11 | 账单导入 | 完全没有 | 用户在自己的 ChatGPT / Claude 里用我们的 skill 把账单整理成**标准 CSV**，上传或粘贴到应用；服务端**同步**校验（秒级）→ `ready` → review → commit → 整批撤销。`import_batches` + `import_rows` 两张表、**两态**状态机 | §5、§6、§14.47 |
 | 12 | 大模型 | 完全没有 | **应用本身不调用任何大模型**：没有模型设置实体、没有 API key、没有服务端解析、没有解析进度、没有页面缩略图。交付物是仓库里的 `skills/wallet-import/` | §5、§6、§14.25 |
 | 13 | 并发 | 无任何保护，两个客户端后写覆盖先写 | `transactions` / `finance_sources` / `ledgers` 带 `updated_at`，PATCH 必须回传，不一致返回 409 `stale_update` | §2 |
 | 14 | 统计 | 没有统计接口 | 月度分类汇总（可下钻二级）+ 最近 12 个月**支出**趋势（首页不放收入趋势），全部折算到**账本**基准币种 | §7、§14.52 |
-| 15 | 基准币种 | 属于用户 `users.base_currency` (backend/app/models/user.py:19) | 属于**账本** `ledgers.base_currency`；`users.base_currency` 降级为"新建账本时的默认值" | §2 |
+| 15 | 基准币种 | 属于用户 `users.base_currency` (backend/app/models/user.py:19) | 统计与交易折算属于**账本** `ledgers.base_currency`；`users.base_currency` 是"新建账本时的默认值"，同时是本人账户 `balance_base` 与个人净资产的折算币种（2026-09-16 按决策 §14.62 同步） | §2、§14.62 |
 | 16 | 错误响应 | `{"detail": "..."}`，422 时 `detail` 是数组 | 统一 `{"detail": "...", "code": "snake_case_code"}`；`code` 取值只能来自 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的唯一注册表 | §9、§14.4 |
 | 17 | 界面语言 | 只有英文硬编码 | 中英双语 i18n（`users.language`，NULL 跟随系统），分类名、说明文字和错误信息都双语 | §0.4、§14.6 |
 | 18 | 用户资料 | 只有邮箱、密码、基准币种、默认账户 | 加 `display_name`（没填时界面显示邮箱 `@` 前的部分）、`language`；**删除**默认账户列 | §14.6、§14.40 |
@@ -63,52 +64,46 @@
 ### 1.1 实体关系总览
 
 ```
-                 +--------+
-                 | users  |
-                 +--------+
-                   |    ^
-      created_by / |    | user_id
-      updated_by   |    |
-                   v    |
-               +-----------------+  N        1  +---------+
-               | ledger_members  |------------->| ledgers |
-               +-----------------+              +---------+
-                                                  ^  ^  ^
-                                     ledger_id    |  |  |
-        +-----------------+  N -------------------+  |  |
-        | ledger_invites  |                          |  |
-        +-----------------+                          |  |
-                                                     |  |
-        +------------------+  N ---------------------+  |
-        | finance_sources  |                            |
-        +------------------+                            |
-             ^        ^                                 |
-   source_id |        | source_id (导入的目标账户)      |
-             |        |                                 |
-        +--------------+  N ----------------------------+
-        | transactions |
-        +--------------+
-          ^  |     ^  ^
- refund_of|  |     |  | transaction_id   +---------------------+
-   (自引用)|  |     |  +-----------------| transaction_events  |
-          +--+     |                     +---------------------+
-                   | import_batch_id
-                   |
-                   |     +----------------+  N ------> ledgers
-                   +-----| import_batches |
-                         +----------------+
-                                 ^ batch_id
-                                 |
-                         +----------------+
-                         |  import_rows   |-- matched_transaction_id --> transactions
-                         +----------------+-- counterpart_source_id ---> finance_sources
+   +--------+        owner_id（账户主人）        +------------------+
+   | users  |<-----------------------------------| finance_sources  |
+   +--------+                                    +------------------+
+       ^                                                 ^
+       | user_id                                         | source_id
+ +-----------------+                            +-----------------+
+ | ledger_members  |                            | ledger_sources  |  一行 = 主人把这张卡
+ +-----------------+                            +-----------------+  共享到这本账
+       | ledger_id                                       | ledger_id
+       v                                                 v
+ +---------------------------------------------------------------+
+ |                            ledgers                            |
+ +---------------------------------------------------------------+
+     ^ ledger_id             ^ ledger_id               ^ ledger_id
+     |                       |                         |
+ +----------------+   +--------------+  import_batch_id  +----------------+
+ | ledger_invites |   | transactions |------------------>| import_batches |
+ +----------------+   +--------------+                   +----------------+
+                        ^  |    ^                                ^
+              refund_of |  |    | transaction_id                 | batch_id
+                (自引用) +--+    |                                |
+                        +---------------------+          +----------------+
+                        | transaction_events  |          |  import_rows   |
+                        +---------------------+          +----------------+
 
-        +----------------+
-        | exchange_rates |   全局行情缓存，不属于任何账本
-        +----------------+
+   指向 finance_sources 的外键（同一张卡可以被多本账的交易引用）：
+     transactions.source_id               交易记在哪个账户上
+     import_batches.source_id             导入的目标账户
+     import_rows.counterpart_source_id    转账草稿行的对手账户
+   其余：import_rows.matched_transaction_id -> transactions；
+         各表的 created_by / updated_by / actor_id / shared_by -> users
+
+   +----------------+
+   | exchange_rates |   全局行情缓存，不属于任何账本
+   +----------------+
 ```
 
-目标表共 **10 张**：`users`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`transactions`、`transaction_events`、`import_batches`、`import_rows`、`exchange_rates`。除 `transaction_events` 外都是决策 §10 列的表（模型设置表已随决策 §14.25 的导入改版取消）；`transaction_events` 是决策 §14.51 新增的一张。`transaction_tags` 删除（决策 §10）。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM（决策 §10）。
+**账户挂在用户下面，不挂在账本下面**（决策 §14.62 a）：`finance_sources.owner_id → users`；`ledger_sources(ledger_id, source_id)` 一行表示「主人把这张卡共享到这本账」，账本的其他成员才能在这本账里用它。交易、导入批次仍属于账本（`ledger_id`），它们的 `source_id` 指向某人的账户——同一张卡可以出现在多本账的交易里，余额是所有账本的合计（§5.4）。（2026-09-16 按决策 §14.62 同步）
+
+目标表共 **11 张**：`users`、`ledgers`、`ledger_members`、`ledger_invites`、`finance_sources`、`ledger_sources`、`transactions`、`transaction_events`、`import_batches`、`import_rows`、`exchange_rates`。除 `transaction_events` 与 `ledger_sources` 外都是决策 §10 列的表（模型设置表已随决策 §14.25 的导入改版取消）；`transaction_events` 是决策 §14.51 新增的一张，`ledger_sources` 是决策 §14.62 新增的一张（2026-09-16 按决策 §14.62 同步）。`transaction_tags` 删除（决策 §10）。枚举一律 `VARCHAR + CHECK`，不用 Postgres ENUM（决策 §10）。
 
 时间戳一律是**不带时区的 UTC**（`created_at` / `updated_at` / `expires_at` / `at`），接口输出带 `Z`，前端按浏览器时区显示（决策 §14.26）。唯一的例外是日历日期字段 `occurred_at`，它是 Postgres `DATE`，不带时刻也不带时区（决策 §14.32）。
 
@@ -122,7 +117,7 @@
 | `email` | VARCHAR | 登录邮箱，唯一 | 是 |
 | `password_hash` | VARCHAR | bcrypt 哈希 | 是 |
 | `display_name` | VARCHAR(40) | 显示名；**可空**，没填时界面显示邮箱 `@` 前的部分；`PATCH /me` 可改（决策 §14.6） | 否 |
-| `base_currency` | CHAR(3) | **新建账本时的默认基准币种**，不再直接参与任何换算（决策 §2、§13.6） | 是 |
+| `base_currency` | CHAR(3) | **新建账本时的默认基准币种**；同时是本人账户 `balance_base` 与个人资产 / 负债 / 净资产的折算币种（决策 §2、§13.6、§14.62 f）；不参与交易与统计的折算（2026-09-16 按决策 §14.62 同步） | 是 |
 | `language` | VARCHAR(8) | 界面语言，`zh` / `en`；**可空，NULL 表示跟随系统**；`PATCH /me` 可改（决策 §14.6） | 否 |
 | `created_at` | TIMESTAMP | 注册时间 | 是 |
 | `updated_at` | TIMESTAMP | 最后修改时间（审计用；`PATCH /me` 不做乐观并发） | 是 |
@@ -130,7 +125,7 @@
 - **没有头像**（决策 §14.6、§14.52 B22）：界面用 `display_name` 的首字母做圆形色块。
 - **记账人怎么显示**（决策 §14.40，01-7）：交易上的 `created_by` / `updated_by` 只回用户 id（决策 §14.43，03-4），前端拿成员列表映射成 `display_name`，没填就显示邮箱前缀；成员退出或被移除后**照旧显示**，不做匿名化。
 - **外观（浅色 / 深色 / 跟随系统）存本机**，不上服务器（决策 §14.52 A23）——它不是 `users` 的列。
-- 现状的 `users.default_source_id` (backend/app/models/user.py:20) 在多账本模型里语义不再成立（账户属于账本，一个用户可能在 10 本账里各有账户），**决策 §14.6 已裁定删除该列**：记账表单改用前端本地记住的"该账本内上次使用的账户"。`PATCH /me` 也不再接受这个字段（决策 §14.42，03-2），不留兼容别名。
+- 现状的 `users.default_source_id` (backend/app/models/user.py:20) 在多账本模型里语义不再成立（账户属于用户，可共享到多本账，一个用户在不同账本里常用的卡并不相同（2026-09-16 按决策 §14.62 同步）），**决策 §14.6 已裁定删除该列**：记账表单改用前端本地记住的"该账本内上次使用的账户"。`PATCH /me` 也不再接受这个字段（决策 §14.42，03-2），不留兼容别名。
 
 ### 1.3 账本 `ledgers`（决策 §2）
 
@@ -138,14 +133,14 @@
 |---|---|---|---|
 | `id` | UUID | 主键 | 是 |
 | `name` | VARCHAR(100) | 账本名，如"我的账本""家庭账本" | 是 |
-| `base_currency` | CHAR(3) | **基准币种属于账本**：余额合计、统计汇总都折算到它 | 是 |
+| `base_currency` | CHAR(3) | **基准币种属于账本**：交易折算、统计汇总都折算到它；账户余额与净资产不按它折算（按账户主人的 `users.base_currency`，§5.4、§5.5）（2026-09-16 按决策 §14.62 同步） | 是 |
 | `created_by` | UUID | 创建者 `users.id` | 是 |
 | `created_at` | TIMESTAMP | 创建时间 | 是 |
 | `updated_at` | TIMESTAMP | 乐观并发用（决策 §2） | 是 |
 
 软限制：每人最多 10 本账（决策 §2），只在应用层 `COUNT(*)` 校验，不加触发器（决策 §14.41，02-D-7）。
 
-`GET /ledgers/{id}` 额外返回 `counts: {transactions, sources, import_batches}`，供删除账本前的二次确认展示（决策 §14.52 A22）。账本列表卡片**不算净资产**，只显示成员数与基准币种（决策 §14.52 A16）。
+`GET /ledgers/{id}` 额外返回 `counts: {transactions, sources, import_batches}`，供删除账本前的二次确认展示（决策 §14.52 A22）；其中 `sources` 是**共享到本账本的账户数**（`ledger_sources` 行数），删账本只解除这些共享、不删账户（2026-09-16 按决策 §14.62 同步）。账本列表卡片**不算净资产**，只显示成员数与基准币种（决策 §14.52 A16）；账本本身也没有净资产，资产 / 负债 / 净资产是个人的（§5.5）（2026-09-16 按决策 §14.62 同步）。
 
 ### 1.4 成员 `ledger_members`（决策 §2）
 
@@ -157,12 +152,13 @@
 | `joined_at` | TIMESTAMP | 加入时间；创建者取账本创建时间 | 是 |
 
 - 创建者自动成为 `owner`；**每本账恰有一个 owner**，由应用层保证（决策 §2）。
-- 权限矩阵（决策 §2；屏幕稿里"撤销导入 owner 独占""成员不能管账户"的写法与决策矛盾，按决策 §14.52 B9 以本表为准）：
+- 权限矩阵（决策 §2；屏幕稿里"撤销导入 owner 独占"的写法与决策矛盾，按决策 §14.52 B9 以本表为准；账户一栏按决策 §14.62 改成"账户主人"，与账本角色无关（2026-09-16 按决策 §14.62 同步））：
 
 | 操作 | owner | member |
 |---|---|---|
 | 记账、改账、删账 | ✓ | ✓ |
-| 管理账户（增 / 改 / 归档 / 删空账户） | ✓ | ✓ |
+| 管理账户（增 / 改 / 归档 / 删空账户） | 仅账户主人（与账本成员身份无关，走个人的 `/sources*`） | 同左 |
+| 把自己的账户共享 / 取消共享到本账本 | 仅账户主人（须是本账本成员） | 同左 |
 | 账单导入、review、提交、**撤销** | ✓ | ✓ |
 | 交易配对 / 拆开 | ✓ | ✓ |
 | 查看成员列表 | ✓ | ✓ |
@@ -174,6 +170,8 @@
 | 自行退出 | 必须先转让 | ✓ |
 
 软限制：每本账最多 10 人（决策 §2、§14.52 B7），同样只在应用层校验。
+
+账户那两行的"同左"意思是：owner 和 member 在这件事上没有区别，决定权只在账户主人手里——owner 也不能改、归档、删除或取消共享别人的账户（2026-09-16 按决策 §14.62 同步）。
 
 ### 1.5 邀请码 `ledger_invites`（决策 §2、§14.29）
 
@@ -193,30 +191,55 @@
 - owner 可以主动**作废**一个还没用掉的码：`DELETE /ledgers/{id}/invites/{code}` 直接删除该行（决策 §14.52 A2）。
 - 输码时**不做就地预览**（决策 §14.52 B17）：没有"输满 6 位就返回账本名"的接口，唯一入口是 `POST /ledgers/join`。
 
-### 1.6 资金账户 `finance_sources`（决策 §3、§14.48、§14.50）
+### 1.6 资金账户 `finance_sources`（决策 §3、§14.48、§14.50、§14.62）
+
+**账户属于用户，不属于账本**（决策 §14.62 a）：一张卡是一条记录，主人在自己所在的任何账本里都能直接用它记账；想让某本账的**其他成员**也能用，就把它共享到那本账（`ledger_sources`，§1.6.1）。表上没有 `ledger_id`（2026-09-16 按决策 §14.62 同步）。
 
 | 字段 | 类型 | 含义 | 必填 |
 |---|---|---|---|
 | `id` | UUID | 主键 | 是 |
-| `ledger_id` | UUID | 所属账本；账本内账户完全共享（决策 §2） | 是 |
+| `owner_id` | UUID | 账户主人，外键 `users.id`；创建时 = 调用者，之后不可改（决策 §14.62 a）（2026-09-16 按决策 §14.62 同步） | 是 |
 | `name` | VARCHAR(100) | 账户名，如"招行储蓄卡""招行信用卡" | 是 |
 | `type` | VARCHAR(32) | **四种**：`checking`（储蓄卡 / Checking）、`credit`（信用卡）、`cash`（现金）、`other`（其他）。**没有 `savings`**（决策 §14.48） | 是 |
 | `default_currency` | CHAR(3) | 记账时的默认币种（单笔交易可以是别的币种）；**创建后不可改**（决策 §14.50） | 是 |
 | `opening_balance` | NUMERIC(18,4) | 期初余额，默认 `0`。信用卡在表单里填"欠款"，服务端**存为负数**（决策 §14.52 A13） | 是 |
 | `archived` | BOOLEAN | 归档标志，默认 `false` | 是 |
 | `archived_at` | TIMESTAMP | 归档时刻；`archived=false` 时为 NULL（决策 §14.50） | 否 |
-| `created_by` | UUID | 创建者 | 是 |
-| `updated_by` | UUID | 最后修改者 | 是 |
+| `created_by` | UUID | 创建者（= `owner_id`） | 是 |
+| `updated_by` | UUID | 最后修改者（接口只允许主人改；迁移前的旧行可能是别的成员） | 是 |
 | `created_at` | TIMESTAMP | | 是 |
 | `updated_at` | TIMESTAMP | 乐观并发用 | 是 |
 
-**余额是算出来的，不落库**：`balance = opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`——该账户的所有交易（含单腿转账、含两腿转账的每一条腿），同币种不换算（决策 §3、§14.2）。精确定义与算例见 §5.4。
+**余额是算出来的，不落库**：`balance = opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`——该账户在**所有账本**里的全部交易（含单腿转账、含两腿转账的每一条腿），同币种不换算（决策 §3、§14.2、§14.62 f）；`balance_base` 再按**主人**的 `users.base_currency` 用最新汇率折算。余额只返回给主人，别人看到的这几个字段都是 `null`（决策 §14.62 c）。精确定义与算例见 §5.4（2026-09-16 按决策 §14.62 同步）。
+
+**同一人下允许同名**（决策 §14.40 01-6、§14.62 a）：不加唯一约束，只在界面提示"已有同名账户"。**每人最多 50 个账户**（`MAX_SOURCES_PER_USER = 50`，含已归档），超出 → 409 `source_limit_reached`（2026-09-16 按决策 §14.62 同步）。
 
 **期初余额不是一笔交易**（决策 §14.52 B5）：它是账户上的一列，不生成任何 `transactions` 行，界面文案要写成"记在账户上，不是一笔交易"。
 
 **归档账户不计入净资产**（决策 §14.50）：账户列表按 `type` 分组并给每组小计，归档账户单列一组、其余额既不进分组小计也不进资产 / 负债 / 净资产；归档时前端提示"该账户余额将从净资产中移除"。定义见 §5.5。
 
 与现状的差别：现状没有 `opening_balance`、没有 `archived_at`、没有 `cash` 类型且多了一个 `savings` (backend/app/schemas/finance_source.py:21-26)、也没有删除接口（`backend/app/api/finance_sources.py` 只注册了 post / get / get / patch 四个路由）。迁移时现有 `savings` 行回填成 `checking`（决策 §13.3、§14.48）。
+
+#### 1.6.1 账户共享 `ledger_sources`（决策 §14.62 b）
+
+一行 = **主人把这张卡共享到这本账**，这本账的其他成员从此可以用它记账、在账本的账户列表里看到它（看不到余额）。
+
+| 字段 | 类型 | 含义 | 必填 |
+|---|---|---|---|
+| `ledger_id` | UUID | 外键 `ledgers.id`，`ON DELETE CASCADE`——删账本时共享关系随之删除，账户不动 | 是 |
+| `source_id` | UUID | 外键 `finance_sources.id`，`ON DELETE CASCADE`——删空账户时它的共享关系随之删除 | 是 |
+| `shared_by` | UUID | 外键 `users.id`，做共享的人（= 账户主人） | 是 |
+| `shared_at` | TIMESTAMP | 共享时刻 | 是 |
+
+主键 `(ledger_id, source_id)`：同一张卡在同一本账里最多共享一次，重复共享是幂等的无操作。
+
+- **谁能共享**：只有账户主人，而且只能共享到**自己是成员**的账本（`PUT /sources/{sid}/ledgers/{lid}`）；不满足一律 404 `not_found`。取消共享（`DELETE /sources/{sid}/ledgers/{lid}`）同样只有主人，幂等——本来没共享也 204。
+- **主人自己不需要共享**：主人在自己所在的任何账本里都能直接用自己的账户（决策 §14.62 b）。共享只影响**其他成员**。
+- **取消共享的效果**：其他成员不能再用这张卡在这本账里记新账（记一笔 / 转账 / 导入 / review 选对手账户都 404 `not_found`）；**已经记下的交易原样保留**，账户名照旧可见（`GET /ledgers/{id}/sources` 把被交易引用的账户列成 `usable=false`，§3.10）。
+- **成员退出 / 被移除**：他共享到这本账的行（`source.owner_id = 该成员`）自动删除，他记的交易留在账本里（§3.7、§3.8）。
+- **迁移**：迁移前每本账里的每个账户都写一行 `ledger_sources(原 ledger_id, source_id)`，所以迁移前后「账本里人人可用」的行为不变（决策 §14.62 i）。
+
+**可用账户**（全部校验与账本内账户列表共用同一个判断，决策 §14.62 b）：账户 `a` 对用户 `U` 在账本 `L` 内**可用** ⟺ `a.archived = false` 且（`a.owner_id = U` 或存在 `ledger_sources(L, a)`）。归档另判（409 `source_archived`），其余不可用的情形一律 404 `not_found`（不存在、别人的且没共享到本账本，对外不作区分）。（2026-09-16 按决策 §14.62 同步）
 
 ### 1.7 交易 `transactions`（决策 §1、§10）
 
@@ -226,7 +249,7 @@
 |---|---|---|---|
 | `id` | UUID | 主键 | 是 |
 | `ledger_id` | UUID | 所属账本 | 是 |
-| `source_id` | UUID | 资金账户，外键 `finance_sources.id` | 是 |
+| `source_id` | UUID | 资金账户，外键 `finance_sources.id`；写入时必须对调用者在本账本内**可用**（§1.6.1），账户可以属于别的成员（2026-09-16 按决策 §14.62 同步） | 是 |
 | `kind` | VARCHAR(16) | `expense` / `income` / `refund` / `transfer` | 是 |
 | `amount` | NUMERIC(18,4) | **带符号**金额，符号由 `kind`（转账再看 `transfer_role`）决定 | 是 |
 | `currency` | CHAR(3) | ISO 4217，大写 | 是 |
@@ -338,7 +361,7 @@
 |---|---|---|---|
 | `id` | UUID | 主键 | 是 |
 | `ledger_id` | UUID | 所属账本 | 是 |
-| `source_id` | UUID | 目标资金账户（不能是已归档账户） | 是 |
+| `source_id` | UUID | 目标资金账户：必须对上传人在本账本内**可用**（§1.6.1），不能是已归档账户（2026-09-16 按决策 §14.62 同步） | 是 |
 | `created_by` | UUID | 上传人 | 是 |
 | `source` | VARCHAR(16) | 来源：`csv`（上传文件） / `paste`（在应用内粘贴 CSV 文本）。**没有 `json`**（决策 §14.47） | 是 |
 | `filename` | VARCHAR(255) | 原始文件名；`paste` 时为 NULL | 否 |
@@ -382,7 +405,7 @@
 | `hint` | VARCHAR(200) | 服务端给 review 界面的一句提示（如"币种 XX 无效，已改为账户币种"），**只读、不进** `transactions.note`（决策 §14.19） | 否 |
 | `flags` | 字符串数组 | 服务端标记，**只有四种**：`duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review`（决策 §5、§14.31、§14.34） | 否 |
 | `matched_transaction_id` | UUID | `refund_candidate` 的原单、或 `transfer_candidate` 的对腿（唯一候选时预填） | 否 |
-| `counterpart_source_id` | UUID | 转账 / 还款行的对手账户：找到唯一对腿时预填成它所在的账户，**没找到就留空、不猜**（决策 §14.53c）；用户在 review 里填时必须是**本账本的未归档账户**，否则 404 `not_found`——不存在、不属于本账本、已归档三种情形对外都是"这个账户你拿不来记账"，不作区分（决策 §14.53c） | 否 |
+| `counterpart_source_id` | UUID | 转账 / 还款行的对手账户：找到唯一对腿时预填成它所在的账户，**没找到就留空、不猜**（决策 §14.53c）；用户在 review 里填时必须是**对调用者在本账本内可用的未归档账户**（§1.6.1），否则 404 `not_found`——不存在、对调用者不可用（别人的且没共享到本账本，或 review 之后被取消共享）、已归档三种情形对外都是"这个账户你拿不来记账"，不作区分（决策 §14.53c、§14.62 e）（2026-09-16 按决策 §14.62 同步） | 否 |
 | `counterparty` | VARCHAR(100) | 对方文本；**校验阶段恒为 NULL**（skill 不猜对手账户，CSV 里没有这一列），只有用户在 review 里填才有值，提交单腿转账时写入 `transactions.counterparty`（决策 §14.10、§14.16） | 否 |
 | `transaction_id` | UUID | 提交后建出来的交易 id | 否 |
 | `created_at` / `updated_at` | TIMESTAMP | | 是 |
@@ -554,7 +577,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
   6. 目标账本成员数已达 10 → 409 `member_limit_reached`（不消耗邀请码）。
   7. 调用者账本数已达 10 → 409 `ledger_limit_reached`（不消耗邀请码）。
   8. 同一事务内：插入 `ledger_members(role='member')` + **删除**这行 `ledger_invites` → 200 返回账本。
-- **状态变化**：邀请码这一行消失；用户成为 member；该账本的全部账户、交易、导入对他立即可见可改。
+- **状态变化**：邀请码这一行消失；用户成为 member；该账本的交易、导入对他立即可见可改；别人共享到这本账的账户他立即可以用来记账（看不到余额）；他自己的账户在这本账里也立即可用，不需要先共享（决策 §14.62 b）（2026-09-16 按决策 §14.62 同步）。
 - **失败分支**：5/6/7 是"码没问题、条件不满足"，**不消耗码**，用户解决问题后可以用同一个码再试（只要还没过期）。限流只看端点整体速率，输错码本身不再有"同一用户 15 分钟 5 次"这类计数（决策 §14.35 已删除该规则）。
 
 ### 3.6 转让 owner（决策 §2）
@@ -570,26 +593,26 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 - **触发者**：member。
 - **前置**：调用者角色是 `member`；不是自己唯一的账本也没关系（允许退到 0 本账，界面进 §3.1 的引导页）。
-- **步骤**：`POST /api/v1/ledgers/{id}/leave`（空体）→ 删除自己的 `ledger_members` 行 → 204（无响应体，见 [`./03-backend-api.md`](./03-backend-api.md) §5.19）。
+- **步骤**：`POST /api/v1/ledgers/{id}/leave`（空体）→ 同一事务内删除自己的 `ledger_members` 行，并删除**他共享到这本账**的 `ledger_sources` 行（`source.owner_id = 他`）→ 204（无响应体，见 [`./03-backend-api.md`](./03-backend-api.md) §5.19）（2026-09-16 按决策 §14.62 同步）。
 - **服务端校验**：调用者是 owner → 409 `owner_must_transfer`（决策 §2："owner 必须先转让再退出"）。
-- **状态变化**：该账本从他的 `GET /ledgers` 里消失；他此前创建的账户、交易和操作记录**留在账本里**（`created_by` / `actor_id` 仍指向他，界面照旧显示他的 `display_name`，决策 §14.40）。
+- **状态变化**：该账本从他的 `GET /ledgers` 里消失；**他共享进来的账户自动取消共享**，其他成员不能再用这些卡记新账；**他记的交易和操作记录留在账本里**（`created_by` / `actor_id` 仍指向他，界面照旧显示他的 `display_name`，决策 §14.40），这些交易引用的账户名照旧可见（决策 §14.62 f）。账户本身属于他，不受影响（2026-09-16 按决策 §14.62 同步）。
 - **失败分支**：owner 直接退出被拒；界面提示先转让。
 
 ### 3.8 移除成员（决策 §2）
 
 - **触发者**：owner。
 - **前置**：目标是该账本的 `member`。
-- **步骤**：`DELETE /api/v1/ledgers/{id}/members/{user_id}` → 删除对应 `ledger_members` 行 → 204。
+- **步骤**：`DELETE /api/v1/ledgers/{id}/members/{user_id}` → 同一事务内删除对应 `ledger_members` 行，并删除**被移除者共享到这本账**的 `ledger_sources` 行 → 204（2026-09-16 按决策 §14.62 同步）。
 - **服务端校验**：非 owner → 403 `not_owner`；目标不存在 → 404 `member_not_found`；目标是自己（即 owner）→ 409 `cannot_remove_owner`。
-- **状态变化**：同 §3.7，被移除者的数据留在账本里。
+- **状态变化**：同 §3.7——被移除者共享进来的账户自动取消共享，他记的交易留在账本里（2026-09-16 按决策 §14.62 同步）。
 - **失败分支**：无副作用。
 
 ### 3.9 删除账本（决策 §2、§14.52 A22）
 
 - **触发者**：owner。
-- **前置**：**二次确认要用户手打一遍账本名**，并在确认框里先显示 `GET /ledgers/{id}` 回的 `counts`：将删除多少条交易、多少个账户、多少批导入（决策 §14.52 A22）。
+- **前置**：**二次确认要用户手打一遍账本名**，并在确认框里先显示 `GET /ledgers/{id}` 回的 `counts`：将删除多少条交易、多少批导入，以及**共享到本账本的账户**有多少个（只解除共享，不删账户）（决策 §14.52 A22、§14.62 f）（2026-09-16 按决策 §14.62 同步）。
 - **步骤**：`DELETE /api/v1/ledgers/{id}` → 一个事务内级联删除 → 204。
-- **级联范围**（决策 §2："删除账本（级联删除账户、交易、导入）"）：
+- **级联范围**（决策 §2 的"级联删除交易、导入"；账户按决策 §14.62 f **不删**（2026-09-16 按决策 §14.62 同步））：
 
 | 被删对象 | 说明 |
 |---|---|
@@ -597,41 +620,47 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 | `ledger_invites` | 该账本所有邀请码（含未过期的） |
 | `transactions` | 该账本所有交易，含两腿转账两条腿 |
 | `transaction_events` | 随交易级联删除（决策 §14.51） |
-| `finance_sources` | 该账本所有账户，含已归档的 |
+| `ledger_sources` | 共享到该账本的全部关系（只解除共享）（2026-09-16 按决策 §14.62 同步） |
 | `import_batches` / `import_rows` | 该账本所有导入批次与草稿行 |
 | `ledgers` | 账本本身 |
-| **不删** `users` / `exchange_rates` | 它们不属于账本 |
+| **不删** `users` / `finance_sources` / `exchange_rates` | 它们不属于账本；账户属于人，余额里扣掉这本账的交易后照常存在（2026-09-16 按决策 §14.62 同步） |
 
 - **服务端校验**：非 owner → 403 `not_owner`；确认串与账本名不一致由前端拦（服务端不接收这个串）。
-- **状态变化**：账本及其全部下属数据消失，不可恢复，没有回收站，也没有"导出后再删"（本版本不做导出，决策 §14.52 A1）。
+- **状态变化**：账本及其全部下属数据消失（账户留在各自主人名下，余额不再含这本账的交易）（2026-09-16 按决策 §14.62 同步），不可恢复，没有回收站，也没有"导出后再删"（本版本不做导出，决策 §14.52 A1）。
 - **失败分支**：事务回滚，什么都不删。
 
-### 3.10 账户的创建 / 编辑 / 归档 / 删除（决策 §3、§14.48、§14.50）
+### 3.10 账户的创建 / 编辑 / 归档 / 删除 / 共享（决策 §3、§14.48、§14.50、§14.62）
+
+账户是**个人**的：增删改走 `/api/v1/sources*`，不在任何账本路径下；触发者一律是**账户主人**，与他在哪本账里是 owner 还是 member 无关（决策 §14.62 a、g）。别人的账户 id 在这些接口里一律 404 `not_found`（不区分"不存在"和"不是你的"）。本节整节（2026-09-16 按决策 §14.62 同步）。
+
+**可用账户**（§1.6.1 的定义，本章其余各节都引用它）：账户对用户 `U` 在账本 `L` 内可用 ⟺ 未归档，且 `owner_id = U` 或已共享到 `L`。归档的账户对任何人都不可用（409 `source_archived`），其余不可用一律 404 `not_found`。
 
 **创建**
 
-- **触发者**：任何成员。
-- **步骤**：`POST /ledgers/{id}/sources`，体 `{"name", "type", "default_currency", "opening_balance"}` → 201。
+- **触发者**：任何已登录用户（成为这张卡的主人）。
+- **步骤**：`POST /sources`，体 `{"name", "type", "default_currency", "opening_balance", "share_to"}`（`opening_balance` 缺省 0，`share_to` 是可选的账本 id 数组）→ 201。
 - **校验**：
   - `type ∈ {checking, credit, cash, other}`——**四种，没有 `savings`**（决策 §14.48），否则 422 `validation_error`；
   - `default_currency` 3 位大写；
   - `opening_balance` ≤ 4 位小数。**信用卡的表单填的是"当前欠款"（正数），服务端存成负数**（决策 §14.52 A13）；其余类型按填写的正负原样存。界面文案："期初余额记在账户上，不是一笔交易"（决策 §14.52 B5）。
-  - 同账本内 `name` 重复**允许**（决策 §14.40，01-6）：夫妻各有一张"招行储蓄卡"是常态，按 id 区分，只在界面上提示"已有同名账户"，不加唯一约束、不拦保存。
-- **状态变化**：账户 `archived=false`、`archived_at=NULL`，`created_by = updated_by =` 调用者。
+  - **同一人下** `name` 重复**允许**（决策 §14.40，01-6）：按 id 区分，只在界面上提示"已有同名账户"，不加唯一约束、不拦保存；不同人各有一张"招行储蓄卡"更是常态。
+  - 本人账户数（含已归档）已达 50 → 409 `source_limit_reached`；
+  - `share_to` 里每本账都必须是调用者所在的账本，否则 404 `not_found`，**整个请求不生效**（不会建出账户再只共享一部分）。
+- **状态变化**：账户 `archived=false`、`archived_at=NULL`，`owner_id = created_by = updated_by =` 调用者；`share_to` 里的每本账各写一行 `ledger_sources(ledger_id, source_id, shared_by=调用者)`。不传 `share_to` 也没关系：主人在自己所在的任何账本里都能直接用它（决策 §14.62 b）。
 
 **编辑**
 
-- **步骤**：`PATCH /ledgers/{id}/sources/{sid}`，体带要改的字段 + **必须带 `updated_at`**（乐观并发，见 §3.16）。
-- **可改字段**：`name`、`type`、`opening_balance`、`archived`。
+- **步骤**：`PATCH /sources/{sid}`，体带要改的字段 + **必须带 `updated_at`**（乐观并发，见 §3.16）。
+- **可改字段**：`name`、`type`、`opening_balance`、`archived`。`owner_id` 不可改——本版本没有"把账户转给别人"。
 - **`default_currency` 创建后不可改**（决策 §14.50）：传了一个与现值不同的币种 → 400 `currency_locked`，`detail` 提示"账户币种创建后不可更改，请新建账户"。传一个与现值相同的值视为无操作。理由是账户余额、历史折算都以它为计价基准，改它会让所有历史余额无声变脸。
-- **注意**：改 `opening_balance` 会立刻改变余额与净资产（§5.4、§5.5）。
+- **注意**：改 `opening_balance` 会立刻改变余额与主人的净资产（§5.4、§5.5）；改名、改类型会出现在所有用到这张卡的账本里。
 - **状态变化**：`updated_by` / `updated_at` 刷新。
 
 **归档 / 取消归档**
 
-- **步骤**：`PATCH .../sources/{sid}` 带 `{"archived": true|false, "updated_at": "..."}`；服务端同时写 `archived_at = now()`（归档）或置 NULL（取消归档）。
+- **步骤**：`PATCH /sources/{sid}` 带 `{"archived": true|false, "updated_at": "..."}`；服务端同时写 `archived_at = now()`（归档）或置 NULL（取消归档）。
 - **归档前的提示**（决策 §14.50）：前端在确认框里写明"该账户余额将从净资产中移除"，并显示它当前的余额。
-- **归档后的效果**（决策 §3，比现状严格）：
+- **归档后的效果**（决策 §3，比现状严格）——对**所有账本、所有人**生效，共享关系保留（取消归档后照旧可用）：
   - 不能再在该账户上创建交易 → `POST /transactions` 返回 409 `source_archived`；
   - 不能作为导入目标账户 → `POST /imports` 返回 409 `source_archived`；
   - 不能作为两腿转账的任一腿、也不能作为配对的对腿 → 409 `source_archived`；
@@ -643,15 +672,24 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 **删除**
 
-- **步骤**：`DELETE /ledgers/{id}/sources/{sid}` → 204。
-- **校验**：该账户上存在任何交易（含已归档期间的、含导入产生的）→ **409 `source_has_transactions`**，提示"有交易的账户不能删除，只能归档"（决策 §3）；该账户被任何 `import_batches.source_id` 引用 → 同样拒绝（先删导入批次）。
-- **状态变化**：空账户被物理删除。
+- **步骤**：`DELETE /sources/{sid}` → 204。
+- **校验**：该账户在**任何账本**里有任何交易（含已归档期间的、含导入产生的）→ **409 `source_has_transactions`**，提示"有交易的账户不能删除，只能归档"（决策 §3、§14.62 f）；该账户被任何账本的 `import_batches.source_id` 引用 → 同样拒绝（先删导入批次）。
+- **状态变化**：空账户被物理删除，它的 `ledger_sources` 行随外键级联删除。
 - 现状对比：现状**根本没有** DELETE 接口。
+
+**共享到账本 / 取消共享**（决策 §14.62 b）
+
+- **共享**：`PUT /sources/{sid}/ledgers/{lid}`（空体）→ 204。调用者必须是账户主人、且是账本 `lid` 的成员，否则 404 `not_found`。**幂等**：已经共享过就什么都不做，照样 204。写一行 `ledger_sources(lid, sid, shared_by=调用者, shared_at=now())`。归档账户也可以共享（共享关系只决定"谁能用"，归档另判）。
+- **取消共享**：`DELETE /sources/{sid}/ledgers/{lid}` → 204。调用者必须是账户主人，否则 404 `not_found`。**幂等**：本来没共享也 204。删掉那一行。
+- **取消共享的效果**：这本账的其他成员不能再用这张卡记新账（记一笔 / 转账 / 导入 / review 选对手账户 → 404 `not_found`）；**已记的交易原样保留**，账户名在交易、交易筛选里照旧可见；主人自己在这本账里照旧能用。已经 review 过、还没提交的导入行若把它选成对手账户，提交时 → 404 `not_found`（§3.17）。
+- **状态变化**：只有 `ledger_sources` 变化；余额、交易、统计都不变。
+
+**账本内的账户列表**：`GET /ledgers/{id}/sources` 回"这本账里我能看到的账户"——① 我自己的账户，② 别人共享到本账本的账户，③ 本账本的交易或导入批次引用到、但不属于 ①② 的账户（总是列出，供界面解析名字）。每行带 `mine` 与 `usable`（`usable = 未归档 且 (mine 或已共享到本账本)`）；`mine=false` 的行余额与期初字段为 `null`（决策 §14.62 c）。记一笔 / 转账 / 导入 / 交易筛选的账户选择器都用它（接口形态见 [`./03-backend-api.md`](./03-backend-api.md) §5.24c）。
 
 ### 3.11 记一笔支出 / 收入（决策 §1、§1.3）
 
 - **触发者**：任何成员。
-- **前置**：账本内至少有一个未归档账户。
+- **前置**：本账本里至少有一个对调用者**可用**的账户（§1.6.1：自己的未归档账户，或别人共享到本账本的未归档账户）（2026-09-16 按决策 §14.62 同步）。
 - **步骤**：
   1. 前端选 kind（expense / income）、账户、金额（**用户输入正数绝对值**）、币种、日期、一级分类（必选）、二级分类（可选，可选"不细分"）、商户、备注。表单的录入辅助（决策 §14.52 A19）：金额输入框旁的快捷加数与小计算器、最近用过的商户建议、分类按名称**和判据文字**搜索、"保存并再记一笔"、桌面快捷键。
   2. 日期默认"今天"，取**浏览器本地日期**而不是 UTC 日期（决策 §14.32）；`occurred_at` 最晚只能到今天 + 1 天（决策 §14.44，03-13）。
@@ -705,7 +743,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 ```
 
 - **服务端校验顺序**：
-  1. `source_id` 存在且属于本账本 → 否则 404 `not_found`；
+  1. `source_id` 存在且对调用者在本账本内可用（主人是调用者，或已共享到本账本）→ 否则 404 `not_found`（2026-09-16 按决策 §14.62 同步）；
   2. 账户未归档 → 否则 409 `source_archived`；
   3. `kind` 合法；
   4. 符号与 kind 匹配（expense 必须 < 0，income 必须 > 0；`amount = 0` 一律 400 `validation_error`）；
@@ -717,7 +755,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 - **状态变化**：交易入库；追加一条 `created` 事件；该账户余额变化；当月统计变化。前端在保存前用本地月度汇总做一次**统计影响预演**（"本月餐饮 1,240 → 1,282"），纯前端加减，不请求服务端（决策 §14.52 A9）。
 - **失败分支**：任一校验失败返回对应错误，无副作用。金额 0 被明确拒绝——现状是接受的 (backend/app/schemas/transaction.py:19-23 没有 `gt` 约束)。
 
-**编辑**：`PATCH /ledgers/{id}/transactions/{tid}`，请求体是部分更新 + `updated_at`。改 `kind` 按 §2.4 的矩阵重新校验。**改 `source_id` 是允许的**（现状 UI 做不到）；每次成功 PATCH 追加一条 `updated` 事件，`changes` 记本次真正变了的字段。
+**编辑**：`PATCH /ledgers/{id}/transactions/{tid}`，请求体是部分更新 + `updated_at`。改 `kind` 按 §2.4 的矩阵重新校验。**改 `source_id` 是允许的**（现状 UI 做不到），新账户同样必须对调用者在本账本内可用，否则 404 `not_found`（2026-09-16 按决策 §14.62 同步）；每次成功 PATCH 追加一条 `updated` 事件，`changes` 记本次真正变了的字段。
 
 **删除**：`DELETE /ledgers/{id}/transactions/{tid}` → 204。如果这条被别的 `refund` 行指向，那些行的 `refund_of` 被置空（§1.8）；这条交易自己的 `transaction_events` 随之级联删除。
 
@@ -764,7 +802,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 **创建**
 
 - **触发者**：任何成员。
-- **前置**：账本内至少两个未归档账户。
+- **前置**：本账本里至少两个对调用者**可用**的账户（§1.6.1）（2026-09-16 按决策 §14.62 同步）。
 - **表单三条规则**（决策 §14.52 A11）：
   1. `subtype='repayment'`（信用卡还款）时，**转入账户只能选 `type='credit'` 的账户**（服务端把关：否则 400 `repayment_target_not_credit`）；
   2. 单腿转账的币种**固定等于该账户的 `default_currency`**，不给币种选择器；
@@ -805,7 +843,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 ```
 
 - **服务端校验**：
-  1. `from_source_id` / `to_source_id` 都存在、属于本账本、都未归档 → 否则 404 `not_found` / 409 `source_archived`；
+  1. `from_source_id` / `to_source_id` 都存在、都对调用者在本账本内可用、都未归档 → 否则 404 `not_found` / 409 `source_archived`（两腿可以一腿是自己的、一腿是别人共享进来的）（2026-09-16 按决策 §14.62 同步）；
   2. 两个账户**必须不同** → 否则 400 `same_source`；
   3. `amount_out` / `amount_in` 都 > 0（服务端把转出腿存成负数）→ 否则 400 `validation_error`；
   4. `subtype ∈ {plain, repayment}`；`subtype='repayment'` 时转入账户 `type` 必须是 `credit` → 否则 400 `repayment_target_not_credit`（决策 §14.52 A11）；
@@ -820,7 +858,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 - `PATCH /ledgers/{id}/transactions/transfer/{pair_id}`，体是创建体的部分更新（同样扁平）：`from_source_id`、`to_source_id`、`amount_out`、`currency_out`、`amount_in`、`currency_in`、`occurred_at`、`subtype`、`note` 都可选，外加必填的 `updated_at`（取两腿中较新的那个）。`pair_id` 本身、`kind`、`transfer_role` 都不可改（[`./03-backend-api.md`](./03-backend-api.md) §5.34）。
 - `occurred_at` / `subtype` / `note` 是**两腿共有**的字段：传了就**同时写到两腿**（写完两腿必然一致，决策 §14.53a）；`from_source_id` / `amount_out` / `currency_out` 只落在 out 腿，`to_source_id` / `amount_in` / `currency_in` 只落在 in 腿。
 - **两腿的 `updated_at` 都要比对**（决策 §14.40，01-11）：服务端 `SELECT ... FOR UPDATE` 取两条腿，任一条的 `updated_at` 比请求里带的更新 → 409 `stale_update`。
-- 校验同创建；两腿在一个事务里一起改，两腿的 `updated_at` 一起刷新，各追加一条 `updated` 事件。
+- 校验同创建（改了 `from_source_id` / `to_source_id` 时，新账户同样必须对调用者可用，否则 404 `not_found`（2026-09-16 按决策 §14.62 同步））；两腿在一个事务里一起改，两腿的 `updated_at` 一起刷新，各追加一条 `updated` 事件。
 - 对单条腿调 `PATCH /transactions/{tid}` → 409 `use_transfer_endpoint`。
 
 **删除**
@@ -832,7 +870,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 - **触发者**：任何成员。
 - **场景**：对手账户不在应用里——老婆给我转账、我给别人转账、用没录入的工资卡还信用卡。
-- **前置**：目标账户未归档。
+- **前置**：目标账户对调用者在本账本内可用（§1.6.1，含未归档）（2026-09-16 按决策 §14.62 同步）。
 - **步骤**：走**普通交易接口** `POST /ledgers/{id}/transactions`；币种不给选，固定等于账户的 `default_currency`（决策 §14.52 A11）：
 
 ```json
@@ -879,7 +917,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 3. **同币种、同金额绝对值**；
 4. `transfer_role` **相反**；
 5. **仍是单腿**（`transfer_pair_id IS NULL`）；
-6. 所在账户未归档。
+6. 所在账户对上传人在本账本内可用（§1.6.1，含未归档）——配对的对腿账户必须可用，不可用的候选即使预填了提交时也会 404（2026-09-16 按决策 §14.62 同步）。
 
 **`transfer_subtype` 不是筛选条件**（决策 §14.53a）：同一笔还款在储蓄卡账单里常写成 `plain`、在信用卡账单里写成 `repayment`，按子类型筛会让这类配对永远触发不了。两腿的子类型在**配对时统一**（§1.9），不在这里卡。
 
@@ -890,7 +928,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 | 恰好 1 条 | 该行打 `transfer_candidate`，`matched_transaction_id` 预填这条，`counterpart_source_id` 预填它所在的账户；review 表格里"关联为一笔转账"**默认勾选** |
 | 多条 | 打 `transfer_candidate` + `needs_review`，**不预填**（`matched_transaction_id` / `counterpart_source_id` 都留空），`hint` 写"找到 N 条可以配对的转账，请选一条"；用户在 review 里点"选一条"，界面**复用交易列表接口**筛出候选（`kind=transfer`、单腿、方向相反、其他账户、±3 天、同币种同金额）挑一条写回 `matched_transaction_id`。**候选列表不落库、不单独建接口，也不新增任何字段**——`matched_transaction_id` 是唯一载体（决策 §14.53b） |
 | 0 条，且对方账户上已存在一条**已经是两腿一半**的同额反向转账 | 该行打 `duplicate`，提示"这笔可能已经从对方账户那边记过了"，默认建议跳过 |
-| 其它 0 条情形 | 不打标记；**不猜对手账户**——`counterpart_source_id` 留空（决策 §14.53c）。用户在 review 里有三条路：填 `counterparty` 文本或什么都不填（提交时按**单腿**建）、或显式选一个对手账户填进 `counterpart_source_id`（提交时按**两腿**建，对手账户必须是本账本的未归档账户） |
+| 其它 0 条情形 | 不打标记；**不猜对手账户**——`counterpart_source_id` 留空（决策 §14.53c）。用户在 review 里有三条路：填 `counterparty` 文本或什么都不填（提交时按**单腿**建）、或显式选一个对手账户填进 `counterpart_source_id`（提交时按**两腿**建，对手账户必须对调用者在本账本内可用（2026-09-16 按决策 §14.62 同步）） |
 
 提交批次时（§3.17 第 7 步），凡是勾选了配对的行：服务端生成一个**新的** `transfer_pair_id`，把**新建的这条**和 `matched_transaction_id` 指向的**已有那条**一起挂上去，把已有那条的 `counterparty` **清空**（CHECK 要求有对腿就不能有对方文本），并按 §1.9 **统一两腿的 `transfer_subtype`**（决策 §14.53a）。新建的那条只有自己的 `imported` 事件；库里已有那条追加一条 `paired` 事件，它的子类型被统一改动时再加一条 `updated` 事件（`changes` 记 `transfer_subtype` 的前后值；原值已等于统一值则不写，决策 §14.53a、§1.10）。
 
@@ -903,7 +941,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
   3. 两条都**仍是单腿**（都没有 `transfer_pair_id`）→ 已有 `transfer_pair_id` 的那条要先拆开再配，否则 400 `pair_invalid`；
   4. 两条 `transfer_role` 相反 → 否则 400 `pair_invalid`；
   5. 两条在**不同账户**上 → 否则 400 `same_source`；
-  6. 两个账户都未归档 → 否则 409 `source_archived`；
+  6. 两条所在的账户都对调用者在本账本内可用 → 否则 404 `not_found`；都未归档 → 否则 409 `source_archived`（2026-09-16 按决策 §14.62 同步）；
   7. 本行 `updated_at` 匹配 → 否则 409 `stale_update`。
 - **不校验**的：金额是否相等、币种是否相同、**日期是否相同或接近**、**两腿的 `transfer_subtype` 是否相同**。跨币种、金额不等本来就是合法的两腿转账（决策 §1.2）；±3 天同额只是**自动建议**的筛选条件，不是配对的硬约束——用户手动挑的就按用户的来；子类型不同不拦，配对时由服务端统一（决策 §14.53a）。
 - **两腿日期允许不同**（配对路径独有的情形）：两腿转账对象顶层的 `occurred_at` / `subtype` / `note` **取 `out` 腿的值**——`GET`、`PATCH`、列表合并显示都按这条渲染（§1.9、§3.13）；`PATCH .../transfer/{pair_id}` 传 `occurred_at` / `subtype` / `note` 时**同时写到两腿**。`subtype` 在配对的那个事务里已经被统一（决策 §14.53a），所以配对之后两腿任何时刻都相同。
@@ -954,7 +992,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 **这条流水线里没有任何大模型调用**（决策 §14.25）。读账单这一步发生在**用户自己的 ChatGPT / Claude 里**：用户安装我们发布的 skill（`skills/wallet-import/`），把 PDF / 图片 / Excel / CSV 账单丢给聊天工具，让它输出一份**标准导入 CSV**；应用只负责校验、review、入账。
 
-**前置**：目标账户未归档；该用户本小时导入次数 < 10（决策 §9）。**没有**"要先配好模型"这一条，也**没有**"同账本同时只能有一个批次在解析"这一条——校验是同步的，秒级完成。
+**前置**：目标账户对上传人在本账本内可用（§1.6.1，含未归档）（2026-09-16 按决策 §14.62 同步）；该用户本小时导入次数 < 10（决策 §9）。**没有**"要先配好模型"这一条，也**没有**"同账本同时只能有一个批次在解析"这一条——校验是同步的，秒级完成。
 
 **步骤**
 
@@ -964,7 +1002,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    - multipart：`file`（CSV 文件） + `source_id`；
    - JSON 体：`{"source_id": "...", "text": "date,amount,..."}`（在应用内的文本框里粘贴 CSV 文本）。
 
-   请求级校验：文本 ≤ 2 MB → 否则 413 `file_too_large`；上传的必须是**纯文本 CSV**——判定不看扩展名也不看 `Content-Type`，而是按 UTF-8（可带 BOM）解码，解不开（PDF、图片、xlsx 这类二进制）一律 400 `import_format_invalid`（**只接受 CSV**，决策 §14.47、§14.53d）；`source_id` 存在且未归档 → 404 `not_found` / 409 `source_archived`；超过每小时 10 批 → 429 `import_rate_limited`。
+   请求级校验：文本 ≤ 2 MB → 否则 413 `file_too_large`；上传的必须是**纯文本 CSV**——判定不看扩展名也不看 `Content-Type`，而是按 UTF-8（可带 BOM）解码，解不开（PDF、图片、xlsx 这类二进制）一律 400 `import_format_invalid`（**只接受 CSV**，决策 §14.47、§14.53d）；`source_id` 存在且对上传人在本账本内可用、未归档 → 404 `not_found` / 409 `source_archived`（2026-09-16 按决策 §14.62 同步）；超过每小时 10 批 → 429 `import_rate_limited`。
 
 3. **同步校验**（服务端当场做完，秒级，决策 §5）。分三层，**顺序是解码 → 结构 → 版本 → 行级**，前一层不过就不进下一层（决策 §14.53d）：
 
@@ -1030,7 +1068,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 6. **Review**：只有 `ready` 才能读写草稿行。
    - `GET .../rows` 列出草稿行（`limit` 上限 500）。
-   - `PATCH .../rows/{rid}` 改单行，可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`matched_transaction_id`（退款原单 / 转账对腿，也可置 `null` 取消建议）、`counterpart_source_id`（转账对手账户，**必须是本账本的未归档账户，否则 404 `not_found`**——不存在、不属于本账本、已归档不作区分，决策 §14.53c；等于批次的目标账户则是 400 `same_source`），以及把 `status` 改成 `skipped`。**普通行不能改账户**——整批只有一个目标账户（决策 §14.52 A5）；只有转账行能改对手账户。
+   - `PATCH .../rows/{rid}` 改单行，可改：`date`、`amount`、`currency`、`kind`、`merchant`、`note`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`matched_transaction_id`（退款原单 / 转账对腿，也可置 `null` 取消建议）、`counterpart_source_id`（转账对手账户，**必须对调用者在本账本内可用且未归档，否则 404 `not_found`**——不存在、对调用者不可用、已归档不作区分，决策 §14.53c、§14.62 e（2026-09-16 按决策 §14.62 同步）；等于批次的目标账户则是 400 `same_source`），以及把 `status` 改成 `skipped`。**普通行不能改账户**——整批只有一个目标账户（决策 §14.52 A5）；只有转账行能改对手账户。
    - `PATCH .../imports/{bid}/rows` **批量**改：体是行 id 数组 + 同一份改动，用于"批量设分类""批量跳过"（决策 §14.52 A4）。
    - review 表格内置筛选：**全部 / 待归类 / 有标记**（决策 §14.52 A4）。"待归类"= 非 transfer 行且 `category_l1` 为空；"有标记"= `flags` 非空。两者**互不排斥**，同一行可能同时出现在两个筛选里。
    - 任何一次 PATCH 把该行 `status` 从 `pending` 变成 `edited`（除非用户显式设成 `skipped`）。**没有"确认这行"动作，也没有"就绪"计数**（决策 §14.7、§14.52 B13）。
@@ -1042,6 +1080,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    - **退款**：行 `kind='refund'` 且 `matched_transaction_id` 非空（不论是服务端预填还是用户改选）→ 写入 `refund_of`；不引入"用户已确认"这类额外状态（决策 §14.7）。
    - **转账配对**：`matched_transaction_id` 非空的转账行按 §3.15 A 处理——生成新 `transfer_pair_id` 挂上新旧两条、清空已有那条的 `counterparty`、按 §1.9 **统一两腿的 `transfer_subtype`**（决策 §14.53a）、给库里已有那条追加 `paired` 事件（新建的那条由自己的 `imported` 事件覆盖，不另写 `paired`；子类型真的变了的腿再追加一条 `updated` 事件，`changes` 记 `transfer_subtype` 的前后值，原值已等于统一值的不写）。`matched_transaction_id` 为空但 `counterpart_source_id` 非空的行**一次建两腿**（对手账户上那腿金额取反）。两个都为空的行按**单腿**建，`counterparty` 取草稿行上的值。
    - 成功 → 批次 `status='committed'`，`committed_at` / `committed_transaction_count` 写入，返回建了多少条。
+   - **对手账户在 review 之后失效**：某行的 `counterpart_source_id` 在 review 之后被归档、删除或**取消共享**（对提交人不再可用）→ 404 `not_found`，整批回滚、批次留在 `ready`，用户改掉这一行的对手账户再提交（2026-09-16 按决策 §14.62 同步）。
    - 任一行建失败 → 整批回滚，批次留在 `ready`，返回 400 + 出错行号。
    - 非 `ready` 状态提交 → 409 `batch_not_ready`；已经是 `committed` 的批次重复提交 → 409 `batch_already_committed`（幂等保护，决策 §14.18）。
 
@@ -1136,7 +1175,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
              |  POST .../transactions/{tid}/pair                       |
              |  body: {counterpart_transaction_id, updated_at}         |
              +---------------------------------------------------------+
-                两条方向相反、仍为单腿、不同账户、账户未归档（子类型不作要求）
+                两条方向相反、仍为单腿、不同账户、账户对我可用且未归档（子类型不作要求）
                 -> 生成新 pair_id 写到两条上，counterparty 一起清空
                 -> 统一 transfer_subtype：任一腿 repayment 且转入腿账户是 credit
                    -> 整对 repayment，否则整对 plain（决策 §14.53a）
@@ -1149,7 +1188,8 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
      两条在同一个账户上                     -> 400 same_source
      任一账户已归档                         -> 409 source_archived
      updated_at 对不上                      -> 409 stale_update
-     对方不在本账本 / 不存在                -> 404 not_found
+     对方交易不在本账本 / 不存在            -> 404 not_found
+     任一腿的账户对我不可用 / 不存在        -> 404 not_found（§1.6.1）
 
    导入 review 里的自动建议（transfer_candidate）只是"预填 + 默认勾选"，
    提交时才真正生成 pair_id；不勾就按单腿建。多候选不预填，只打
@@ -1159,6 +1199,8 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
         （跨币种转账是设计特性；子类型在配对时由服务端统一，§1.9 / §3.15 B）；
         ±3 天 / 同额 / 同币种只是自动建议的筛选条件，手动配对不受此限。
 ```
+
+图中"账户对我可用"与"对我不可用 / 不存在 -> 404"两处按 §1.6.1 的可用账户定义（2026-09-16 按决策 §14.62 同步）。
 
 ### 4.3 导入批次（决策 §5、§14.22、§14.25）
 
@@ -1176,6 +1218,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
       | 版本行存在但与当前版本不一致         -> 400 skill_outdated         |
       | 数据行 > 2000                        -> 400 rows_exceed_limit      |
       | 文本 > 2 MB                          -> 413 file_too_large         |
+      | 目标账户对我不可用 / 不存在          -> 404 not_found              |
       | 目标账户已归档                       -> 409 source_archived        |
       | 每小时 > 10 批                       -> 429 import_rate_limited    |
       |                                                                    |
@@ -1207,11 +1250,17 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    commit 前置未过（有行没有一级分类）       -> 409 rows_uncategorized，留在 ready
    已 committed 再 commit                    -> 409 batch_already_committed
    已 committed 再 PATCH 草稿行              -> 409 batch_not_ready
+   PATCH 行的对手账户对我不可用 / 不存在     -> 404 not_found
+   commit 时对手账户已归档 / 删除 / 取消共享 -> 404 not_found，整批回滚，留在 ready
    DELETE ?dry_run=true                      -> 不删，返回交易数 +
                                                 orphaned_refunds / refunds_in_batch 两个计数
 ```
 
+图中三处"对我不可用"按 §1.6.1 的可用账户定义（2026-09-16 按决策 §14.62 同步）。
+
 ### 4.4 账本成员关系（决策 §2）
+
+账户不再归账本管：管账户是账户主人的个人操作，不出现在角色权限里；退出 / 被移除 / 删账本对账户的影响只是解除共享（决策 §14.62）（2026-09-16 按决策 §14.62 同步）。
 
 ```
                           +------------------+
@@ -1230,16 +1279,17 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
       +----------------+   POST .../transfer-ownership  +----------------+
       |     OWNER      |------------------------------->|     MEMBER     |
       | 唯一，1 本 1 个|<-------------------------------| 记账/改账/导入 |
-      | 全部权限       |   （原 owner 降为 member，     | 撤销导入/管账户|
+      | 全部权限       |   （原 owner 降为 member，     | 撤销导入       |
       +----------------+     同一事务内原子完成）       | 可自行退出     |
               |                                        +----------------+
-              | POST .../leave -> 409 owner_must_transfer      |
+              | POST .../leave -> 409 owner_must_transfer      | 退出 / 被移除：他共享进来的
+              |                                                | 账户自动取消共享，交易留下
               |                                                |
               | DELETE /ledgers/{id}（owner 删账本，先手打账本名确认）
               v                                                v
       +-----------------------------------------------------------------+
-      |  账本 GONE：成员关系、邀请码、账户、交易、操作记录、导入批次     |
-      |  全部级联删除，不可恢复                                          |
+      |  账本 GONE：成员关系、邀请码、共享关系、交易、操作记录、导入批次 |
+      |  全部级联删除，不可恢复；账户属于人，不删（只解除共享）          |
       +-----------------------------------------------------------------+
 ```
 
@@ -1284,7 +1334,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 ## 5. 统计口径的精确定义
 
-全部按**账本基准币种** `ledgers.base_currency` 折算（决策 §7）。折算规则见 §5.3（决策 §8）。
+统计（§5.1、§5.2、§5.6）全部按**账本基准币种** `ledgers.base_currency` 折算（决策 §7）；账户余额的折算值与资产 / 负债 / 净资产（§5.4、§5.5）是**个人**的，按账户主人的 `users.base_currency` 折算（决策 §14.62 d、f）（2026-09-16 按决策 §14.62 同步）。折算规则见 §5.3（决策 §8）。
 
 记号：设账本 L，基准币种 `B = L.base_currency`，月份 `M`（`YYYY-MM`）。对任意交易 `t`，记 `conv(t) = convert(t.amount, t.currency, B, t.occurred_at)`，即**按发生日汇率**折算后的带符号金额；`convB(x, ccy) = convert(x, ccy, B, today)`，即按**最新**汇率折算。
 
@@ -1362,27 +1412,30 @@ convert(amount, from_ccy, to_ccy, on_date):
 
 **日期规则**（决策 §14.32）：`occurred_at` 是 Postgres `DATE`——**不存时间、不带时区，用户换时区它也不会变**。接口一律用 `YYYY-MM-DD` 字符串传输；前端**把它当字符串显示和比较**，不得用 `new Date("YYYY-MM-DD")` 再格式化（那会按 UTC 零点换算，导致东八区少一天）；表单默认"今天"取**浏览器本地日期**而非 UTC 日期；导入文件里的 `date` 同样是无时区字符串；汇率按这个日历日期查。月份归属 `month(t.occurred_at)` 也直接取字符串前 7 位，不经过任何时区换算。
 
-### 5.4 账户余额（决策 §3、§14.2）
+### 5.4 账户余额（决策 §3、§14.2、§14.62 f）
 
 **余额以账户自己的 `default_currency` 计价**，不分币种桶、不返回按币种拆开的明细（决策 §14.2）。`opening_balance` 本来就是账户币种；每条交易按**它自己的发生日汇率**折算到账户币种后累加（同币种不换算，这是绝大多数情况）：
 
 ```
 账户余额(a) = a.opening_balance
             + Σ convert(t.amount, t.currency, a.default_currency, t.occurred_at)
-                t ∈ T(L)
+                t ∈ 所有账本的交易        ← 不限于某一本账
                 t.source_id = a.id
                 （所有 kind：expense / income / refund / transfer，
                   含单腿转账、含两腿转账的每一条腿）
 
 账户余额(a) 的计价币种 = a.default_currency
 
-账户余额折算(a) = convB(账户余额(a), a.default_currency)    ← 用最新汇率折到账本基准币种 B
+账户余额折算(a) = convert(账户余额(a), a.default_currency, O, today)
+                  O = 主人的 users.base_currency      ← 用最新汇率折到主人的默认币种
                   （接口字段 balance_base，配套回 balance_rate / balance_rate_date）
 ```
 
-两条日期规则要分清（决策 §8）：**账户内部把交易归到账户币种，用的是交易发生日的汇率**（一笔账发生时值多少就是多少，历史不再变）；**把账户余额折到账本基准币种，用的是最新汇率**（余额回答的是"现在值多少钱"）。这也是 `default_currency` 创建后不可改的原因（决策 §14.50）——改了它，所有历史折算的基准都会无声变脸。
+**跨账本、按主人折算**（决策 §14.62 f）：同一张卡在主账本和旅行账本里都记了账，余额就是两本账的交易加在一起；`balance_base` 不看任何账本的基准币种，只看主人自己的 `users.base_currency`——所以同一个账户在哪本账里看，折算值都一样。这四个数**只返回给主人**，别人（包括共享到的账本的其他成员）拿到的都是 `null`（决策 §14.62 c）（2026-09-16 按决策 §14.62 同步）。
 
-微算例：账户 `招行储蓄卡`（`default_currency=CNY`，`opening_balance=0`），账本基准币种 CNY。上面记了两笔——2026-05-08 一笔 `−200.0000 CNY` 的支出，和同一天一笔用这张卡付的 `−10.0000 USD` 的支出（发生日汇率 1 USD = 7.2000 CNY）：
+两条日期规则要分清（决策 §8）：**账户内部把交易归到账户币种，用的是交易发生日的汇率**（一笔账发生时值多少就是多少，历史不再变）；**把账户余额折到主人的默认币种，用的是最新汇率**（余额回答的是"现在值多少钱"）。这也是 `default_currency` 创建后不可改的原因（决策 §14.50）——改了它，所有历史折算的基准都会无声变脸。
+
+微算例：账户 `招行储蓄卡`（`default_currency=CNY`，`opening_balance=0`），主人的默认币种 CNY。上面记了两笔——2026-05-08 一笔 `−200.0000 CNY` 的支出，和同一天一笔用这张卡付的 `−10.0000 USD` 的支出（发生日汇率 1 USD = 7.2000 CNY）：
 
 ```
 账户余额 = 0 + (−200.0000) + convert(−10.0000, USD, CNY, 2026-05-08)
@@ -1393,19 +1446,23 @@ balance_base = convert(−272.0000, CNY, CNY, 最新) = −272.0000 CNY，balanc
 
 注意那笔外币支出即使明天汇率变到 7.1000，`balance` 仍然是 −272.0000 CNY——它在发生那天就已经折定了。
 
-接口形态见 [`./03-backend-api.md`](./03-backend-api.md) §5.23：`GET /ledgers/{id}/sources` 每行回 `balance`、`balance_base`、`balance_rate`、`balance_rate_date` 四个标量，没有按币种拆开的明细。
+接口形态见 [`./03-backend-api.md`](./03-backend-api.md) §5.20：`GET /sources` 每行回 `balance`、`balance_base`、`balance_rate`、`balance_rate_date` 四个标量，没有按币种拆开的明细；`GET /ledgers/{id}/sources`（§5.24c）里只有 `mine=true` 的行带这四个数（2026-09-16 按决策 §14.62 同步）。
 
 ### 5.5 资产、负债与净资产（决策 §7、§14.50）
 
-首页和账户页给**三个数**，全部按账本基准币种、用最新汇率折算，**归档账户一律不计入**（决策 §14.50）：
+首页和账户页给**三个数**，它们是**个人**的：按调用者本人的全部未归档账户算，不分账本，全部按本人的 `users.base_currency`、用最新汇率折算，**归档账户一律不计入**（决策 §14.50、§14.62 d）。在哪本账的首页看，都是同一组数；账本本身没有净资产（2026-09-16 按决策 §14.62 同步）。
 
 ```
-未归档账户集合 A(L) = { a ∈ 账本 L 的账户 : a.archived = false }
+未归档账户集合 A(U) = { a : a.owner_id = U，a.archived = false }   ← 本人的账户，不分账本
 
-资产(L)   = Σ 账户余额折算(a)      a ∈ A(L)，a.type ≠ 'credit'
-负债(L)   = Σ 账户余额折算(a)      a ∈ A(L)，a.type = 'credit'      ← 通常是负数
-净资产(L) = 资产(L) + 负债(L)
+资产(U)   = Σ 账户余额折算(a)      a ∈ A(U)，a.type ≠ 'credit'
+负债(U)   = Σ 账户余额折算(a)      a ∈ A(U)，a.type = 'credit'      ← 通常是负数
+净资产(U) = 资产(U) + 负债(U)
+
+任一 a ∈ A(U) 的账户余额折算为 null（拉不到汇率）→ 三个数都为 null
 ```
+
+别人共享到本账本的账户**不进**我的三个数——它们是别人的钱（决策 §14.62 d）。三个数由 `GET /sources` 一起返回（[`./03-backend-api.md`](./03-backend-api.md) §5.20）（2026-09-16 按决策 §14.62 同步）。
 
 - **负债是负数**，所以净资产用**加**不用减：信用卡欠 688 元时它的 `balance` 就是 `−688`，直接加进去。信用卡余额为正（多还了钱）也照实计入。
 - **归档账户既不进资产、也不进负债、也不进任何分组小计**；账户列表里把它们单列一组、显示 `archived_at`，并在组标题上写明"不计入净资产"。归档操作前的确认框提示"该账户余额将从净资产中移除"（决策 §14.50）。
@@ -1429,7 +1486,7 @@ balance_base = convert(−272.0000, CNY, CNY, 最新) = −272.0000 CNY，balanc
 
 ### 5.7 算例
 
-以下三个算例的账本 L 基准币种都是 **CNY**。汇率用到两个值：
+以下三个算例的账本 L 基准币种都是 **CNY**，账户主人的默认币种（`users.base_currency`，余额折算与净资产用它）也是 **CNY**，所有账户都属于同一个人（2026-09-16 按决策 §14.62 同步）。汇率用到两个值：
 
 | 行情日 | 汇率 |
 |---|---|
@@ -1480,7 +1537,7 @@ balance_base = convert(−272.0000, CNY, CNY, 最新) = −272.0000 CNY，balanc
 
 T3 和 T4 一分钱都没进统计——这就是"转账不计入"。交易列表里这两行会被前端**合并成一行**显示为"美元支票 → 招行储蓄卡"（决策 §14.52 B15、B16），但接口返回的仍是两条、`summary` 也不把它们算进净额。
 
-**余额与净资产**（§5.4、§5.5 的口径；两个账户上的交易币种都等于各自的 `default_currency`，所以第一步一次换算都不发生；第二步折到账本基准币种 CNY 用最新汇率 7.1000）：
+**余额与净资产**（§5.4、§5.5 的口径；两个账户上的交易币种都等于各自的 `default_currency`，所以第一步一次换算都不发生；第二步折到主人的默认币种 CNY 用最新汇率 7.1000（2026-09-16 按决策 §14.62 同步））：
 
 ```
 美元支票   balance      = 0 + (−100.0000) + (−5.0000) = −105.0000 USD   ← 账户币种 USD
@@ -1519,13 +1576,13 @@ T3 和 T4 一分钱都没进统计——这就是"转账不计入"。交易列�
 
 如果这笔 1,500 被误记成 `income`，6 月净值会变成 `+1312.00 CNY`，凭空多出一笔收入——这正是"信用卡还款必须是 transfer"的原因。反过来，如果一笔**真的**是别人给我的钱被误记成单腿 transfer，收入就凭空消失了——所以外部转入的**默认建议是 `income`**（决策 §1.2、§3.14）。
 
-**余额与净资产**（账户币种 CNY，两笔交易也都是 CNY，无换算；账本基准币种也是 CNY，`balance_rate = 1.00000000`）：
+**余额与净资产**（账户币种 CNY，两笔交易也都是 CNY，无换算；主人的默认币种也是 CNY，`balance_rate = 1.00000000`（2026-09-16 按决策 §14.62 同步））：
 
 ```
 招行信用卡 balance      = −2000.0000 + (−188.0000) + 1500.0000 = −688.0000 CNY
            balance_base = −688.0000 × 1                        = −688.0000 CNY
 
-资产   = 0.00 CNY        ← 假设账本里只有这一个账户
+资产   = 0.00 CNY        ← 假设主人只有这一个账户
 负债   = −688.00 CNY     ← type='credit'
 净资产 = −688.00 CNY     （仍欠 688 元）
 ```
@@ -1581,7 +1638,8 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 23 | 批次删除时草稿行随之删除 | 外键 `ON DELETE CASCADE` |
 | 24 | 交易删除时它的操作记录随之删除 | `transaction_events.transaction_id` 外键 `ON DELETE CASCADE`（决策 §14.51） |
 | 25 | 账本删除时邀请码随之删除 | `ledger_invites.ledger_id` 外键 `ON DELETE CASCADE` |
-| 26 | 交易必须引用存在的账户和账本 | 外键 `source_id` / `ledger_id` |
+| 26 | 交易必须引用存在的账户和账本；账户必须有主人 | 外键 `transactions.source_id` / `transactions.ledger_id`；`finance_sources.owner_id` 外键 `users`、NOT NULL。**`finance_sources` 上没有 `ledger_id`**——账户属于人，与账本的关系只在 `ledger_sources` 里（2026-09-16 按决策 §14.62 同步） |
+| 26a | 同一张卡在同一本账里最多共享一次；账本或账户删除时共享关系随之删除 | `ledger_sources` 主键 `(ledger_id, source_id)`，两个外键都 `ON DELETE CASCADE`（2026-09-16 按决策 §14.62 同步） |
 | 27 | 邮箱唯一 | `UNIQUE (email)` |
 | 28 | 同一天同一对币种只缓存一条行情 | `PRIMARY KEY (date, base, symbol)`（决策 §14.1） |
 
@@ -1596,7 +1654,7 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | # | 不变量 | 落点 |
 |---|---|---|
 | 1 | 每本账**恰有一个** owner | 建账本时写入；转让 owner 在一个事务内同时降级原 owner；owner 不能退出、不能被移除 |
-| 2 | 每次读写都限定在"调用者是成员的账本"内 | 每个业务路由的成员依赖；越权一律 404 `not_found` |
+| 2 | 每次读写都限定在"调用者是成员的账本"内；个人账户接口只对主人可见；交易、导入、review 引用的账户必须**对调用者在本账本内可用**（主人是他，或已共享到本账本，且未归档） | 每个业务路由的成员依赖；`/sources*` 只查 `owner_id = 调用者`；所有写入账户引用的路径共用一个可用性判断（§1.6.1）；越权与不可用一律 404 `not_found`（2026-09-16 按决策 §14.62 同步） |
 | 3 | 注册必定同时产出一本默认账本和一条 owner 记录 | 注册在一个事务里完成（§3.1） |
 | 4 | `category_l1` 在常量表里，且收支侧与 kind 匹配 | 创建/更新/导入提交时校验（决策 §1.3） |
 | 5 | `category_l2` 属于 `category_l1` | 同上 |
@@ -1610,15 +1668,15 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 13 | 拆开只把 `transfer_pair_id` 置 NULL，不动金额、账户、日期 | `POST .../transfer/{pair_id}/unpair`（决策 §14.34） |
 | 14 | `transaction_events` **只追加**：没有任何路径会 UPDATE 或单独 DELETE 一条事件，唯一的消失方式是随交易级联删除 | 事件写入只有 INSERT；表上不暴露改 / 删接口（决策 §14.51） |
 | 15 | **每一条改交易的路径都追加一条事件**（普通 CRUD、转账接口、配对 / 拆开、导入提交、退款关联变化） | §1.10 的路径表；服务层统一在事务内写入（决策 §14.51） |
-| 16 | 归档账户不能新建交易、不能作为导入目标、不能作为转账腿或配对对腿 | 四处入口各自校验（决策 §3、§14.34） |
-| 17 | **归档账户不计入资产 / 负债 / 净资产与首页合计** | 统计与账户列表按 `archived = false` 过滤（决策 §14.50，§5.5） |
-| 18 | 账户 `default_currency` 创建后不可改 | `PATCH .../sources/{sid}` 校验 → 400 `currency_locked`（决策 §14.50） |
-| 19 | 有交易的账户不能删除 | `DELETE .../sources/{sid}` 校验（决策 §3） |
-| 20 | 同一账本内账户**允许重名** | 不加唯一约束，只在界面提示（决策 §14.40，01-6） |
+| 16 | 归档账户不能新建交易、不能作为导入目标、不能作为转账腿或配对对腿；对调用者不可用的账户同样不能（404 `not_found`） | 四处入口各自校验，共用 §1.6.1 的可用性判断（决策 §3、§14.34、§14.62 e）（2026-09-16 按决策 §14.62 同步） |
+| 17 | **归档账户不计入资产 / 负债 / 净资产与首页合计**；三个数只算本人的账户 | 统计与账户列表按 `archived = false`、`owner_id = 调用者` 过滤（决策 §14.50、§14.62 d，§5.5）（2026-09-16 按决策 §14.62 同步） |
+| 18 | 账户 `default_currency` 创建后不可改 | `PATCH /sources/{sid}` 校验 → 400 `currency_locked`（决策 §14.50）（2026-09-16 按决策 §14.62 同步） |
+| 19 | 有交易的账户不能删除——**任何账本**里的交易或导入批次引用了它都算 | `DELETE /sources/{sid}` 跨账本检查 → 409 `source_has_transactions`（决策 §3、§14.62 f）（2026-09-16 按决策 §14.62 同步） |
+| 20 | 同一人名下的账户**允许重名** | 不加唯一约束，只在界面提示（决策 §14.40 01-6、§14.62 a）（2026-09-16 按决策 §14.62 同步） |
 | 21 | `transactions` / `finance_sources` / `ledgers` 的 PATCH 必须带匹配的 `updated_at`，否则 409 `stale_update`；两腿转账**两条腿都比对** | 决策 §2、§14.40（01-11） |
 | 22 | 邀请码一次性、10 分钟过期；**用掉即删、过期即删、作废即删**，表里只有有效的码 | 生成 / 加入 / 作废三个动作各自清理（决策 §14.29） |
 | 23 | `POST /ledgers/join` 端点级 1 QPS（突发 3），被限流的请求**不触碰邀请码** | 令牌桶中间件 → 429 `invite_rate_limited`（决策 §14.35） |
-| 24 | 每人 ≤ 10 本账、每本 ≤ 10 人 | 建账本 / 生成邀请码 / 加入时应用层 `COUNT(*)` 校验，不加触发器（决策 §2、§14.41） |
+| 24 | 每人 ≤ 10 本账、每本 ≤ 10 人、每人 ≤ 50 个账户（含已归档）；成员退出 / 被移除时他共享到该账本的账户自动取消共享 | 建账本 / 生成邀请码 / 加入 / 建账户时应用层 `COUNT(*)` 校验，不加触发器（决策 §2、§14.41、§14.62 a）；超出账户上限 → 409 `source_limit_reached`；`leave` / 移除成员在同一事务里删他的 `ledger_sources` 行（决策 §14.62 f）（2026-09-16 按决策 §14.62 同步） |
 | 25 | 导入文件**只接受 CSV**，且首行版本必须与应用当前分类表版本一致 | 上传时按**解码 → 结构 → 版本**的顺序校验：解码失败（非 CSV 的二进制文件在这一步被挡下）、缺 `# version:` 行、表头或列数不对 → 400 `import_format_invalid`；版本行存在但不一致 → 400 `skill_outdated`（决策 §14.30、§14.47、§14.53d） |
 | 26 | 结构错误不产生批次；行级问题不丢行、只打标记并写 `hint` | 同步校验的三层（§3.17 第 3 步，决策 §5、§14.52 B2） |
 | 27 | 自动标记**只有四种**：`duplicate` / `refund_candidate` / `transfer_candidate` / `needs_review`；批内重复行不合并 | 标记算法（决策 §14.31、§14.34） |
@@ -1666,7 +1724,7 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 3 | 模型设置表是否需要 `created_at` | **已由决策 §14.25 作废**：应用不接入大模型，这张表整个不存在 |
 | 4 | `ledger_invites` 是否需要 `created_at` | **已由决策 §14.6 裁定**：加。同时按 §14.29，表里不再有使用者 / 使用时间两列，`code` 也不建唯一索引 |
 | 5 | `exchange_rates` 的确切列 | **已由决策 §14.1 裁定**：新建 `(date, base, symbol, rate, fetched_at)`，主键 `(date, base, symbol)`，目标币种列叫 `symbol` 不叫 `quote`；upsert 保留历史、不整表刷新 |
-| 6 | 账本内账户重名是否允许 | **已由决策 §14.40 裁定**（01-6）：允许，按 id 区分，只在界面提示，不加唯一约束 |
+| 6 | 账户重名是否允许 | **已由决策 §14.40 裁定**（01-6）：允许，按 id 区分，只在界面提示，不加唯一约束。决策 §14.62 把账户改为归人之后，口径是"同一人名下允许同名"（不同人各有同名账户更不受限）（2026-09-16 按决策 §14.62 同步） |
 | 7 | 成员退出 / 被移除后，他 `created_by` 的历史数据怎么显示 | **已由决策 §14.40 裁定**（01-7）：显示 `display_name`，没填时显示邮箱 `@` 前的部分；退出后照旧显示，**不匿名化** |
 | 8 | 一个用户退到 0 本账本时的落地页 | **已由决策 §14.40 裁定**（01-8）：进"新建账本 / 输入邀请码"引导页，不是空首页（屏幕稿按 §14.52 B19 补画） |
 | 9 | 多币种账户余额的展示形态 | **已由决策 §14.2 裁定**：不分币种桶。余额以账户 `default_currency` 计价，另给 `balance_base` / `balance_rate` / `balance_rate_date`（§5.4） |
@@ -1674,7 +1732,7 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 11 | 两腿转账 PATCH 时用哪条腿的 `updated_at` 做乐观并发比较 | **已由决策 §14.40 裁定**（01-11）：**两条腿都比对**，任一条更新过就 409 `stale_update`；`unpair` 同理（§3.16） |
 | 12 | 归档账户上的历史交易是否允许 PATCH | **已由决策 §14.40 裁定**（01-12）：允许，只禁止新建（§3.10） |
 
-本章引用的错误 code **全部**取自 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的唯一注册表，本章不自造同义名（决策 §14.4、§14.53d）。其中与本章流程关系最紧的几个：`skill_outdated`（400，版本行存在但与当前分类表版本不一致，决策 §14.30）、`import_format_invalid`（400，结构错误——编码不可读、缺 `# version:` 行、表头或列数不对；只接受 CSV，别的文件都在解码这一步落到这个 code 上）、`rows_exceed_limit`（400，数据行超过 2000）、`currency_locked`（400，账户币种创建后不可改，决策 §14.50）、`pair_invalid`（400，配对校验任一条不过，决策 §14.34、§14.53a）。同时**作废**的 code：解析失败、解析中断、批次未失败不可重试这三类随两态状态机一并消失。
+本章引用的错误 code **全部**取自 [`./03-backend-api.md`](./03-backend-api.md) §4.2 的唯一注册表，本章不自造同义名（决策 §14.4、§14.53d）。其中与本章流程关系最紧的几个：`skill_outdated`（400，版本行存在但与当前分类表版本不一致，决策 §14.30）、`import_format_invalid`（400，结构错误——编码不可读、缺 `# version:` 行、表头或列数不对；只接受 CSV，别的文件都在解码这一步落到这个 code 上）、`rows_exceed_limit`（400，数据行超过 2000）、`currency_locked`（400，账户币种创建后不可改，决策 §14.50）、`pair_invalid`（400，配对校验任一条不过，决策 §14.34、§14.53a）、`source_limit_reached`（409，本人账户数含归档已达 50，决策 §14.62 a（2026-09-16 按决策 §14.62 同步））。同时**作废**的 code：解析失败、解析中断、批次未失败不可重试这三类随两态状态机一并消失。
 
 ---
 
