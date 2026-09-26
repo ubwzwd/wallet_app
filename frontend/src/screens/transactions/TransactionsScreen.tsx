@@ -40,7 +40,7 @@ import {
   useDeleteTransaction,
   useDeleteTransfer,
   useInfiniteTransactions,
-  useSources,
+  useLedgerSources,
   useTransactions,
 } from '@/queries';
 import { useLedgerContext } from '@/store';
@@ -76,7 +76,7 @@ export default function TransactionsScreen(): React.JSX.Element {
 
   // Archived accounts are included: they can't take new entries, but they still own old
   // ones, and a filter that couldn't name them would hide those rows' account (§4.8).
-  const sourcesQuery = useSources(ledgerId, { include_archived: true });
+  const sourcesQuery = useLedgerSources(ledgerId, { include_archived: true });
   const categories = useCategories();
 
   const listParams = { ...f.filters, limit: TX_PAGE_SIZE };

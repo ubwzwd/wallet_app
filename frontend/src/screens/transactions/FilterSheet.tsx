@@ -122,7 +122,7 @@ export function SourceField(props: FilterFieldProps & { inline?: boolean }): Rea
                 </Text>
               </View>
               <Text variant="caption" tone="secondary" mono numberOfLines={1}>
-                {money(source.balance, source.default_currency)}
+                {money(source.balance ?? '0', source.default_currency)}
               </Text>
             </Pressable>
           ))}

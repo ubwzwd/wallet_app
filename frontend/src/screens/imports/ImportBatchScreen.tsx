@@ -25,7 +25,7 @@ import {
   useDeleteImport,
   useImportBatch,
   useImportRows,
-  useSources,
+  useLedgerSources,
 } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
@@ -142,7 +142,7 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const currencies = useCurrencies();
   // 屏幕稿 03's 币种 picker reads 「CNY 人民币」, not the server's ISO English name.
   const currencyNames = useCurrencyNames(currencies.names);
-  const sources = useSources(ledgerId);
+  const sources = useLedgerSources(ledgerId);
 
   // The first page decides whether there is anything else to fetch: an upload seeds the
   // whole batch under this key, in which case `total` equals what is already here.

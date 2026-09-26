@@ -7,7 +7,7 @@ function source(overrides: Partial<FinanceSource>): FinanceSource {
   seq += 1;
   return {
     id: `src-${seq}`,
-    ledger_id: 'ledger-1',
+    owner_id: 'user-1',
     name: `Source ${seq}`,
     type: 'checking',
     default_currency: 'CNY',
@@ -22,6 +22,8 @@ function source(overrides: Partial<FinanceSource>): FinanceSource {
     balance_base: '0.0000',
     balance_rate: null,
     balance_rate_date: null,
+    shared_to: ['ledger-1'],
+    rate_missing_count: 0,
     ...overrides,
   };
 }

@@ -28,10 +28,29 @@ describe('top-level pages have no back button', () => {
     expect(backTargetFor(path, WIDE)).toBeNull();
   });
 
-  test('the account list is top-level on a wide screen only (the sidebar reaches it)', () => {
-    expect(backTargetFor(l.sources(), WIDE)).toBeNull();
-    // Narrow: screen 09 at 375 is 「‹ 账户」, and the tab bar has no accounts slot.
-    expect(backTargetFor(l.sources(), NARROW)).toEqual({ href: l.home(), parentKey: 'home' });
+  test('/accounts is top-level on a wide screen only (the sidebar reaches it)', () => {
+    expect(backTargetFor(routes.accounts(), WIDE)).toBeNull();
+    expect(backTargetFor(routes.accounts(true), WIDE)).toBeNull();
+  });
+
+  test('/accounts on a narrow screen leads home — the home of the ledger the chrome names', () => {
+    // Screen 09 at 375 is 「‹ 账户」, and the tab bar has no accounts slot. Accounts are
+    // not in any ledger (decision §14.62), so the parent is the chrome's ledger.
+    expect(backTargetFor(routes.accounts(), NARROW)).toEqual({
+      href: routes.l(RECENT).home(),
+      parentKey: 'home',
+    });
+    expect(backTargetFor(routes.accounts(true), NARROW)).toEqual({
+      href: routes.l(RECENT).home(),
+      parentKey: 'home',
+    });
+  });
+
+  test('/accounts has no back button while the chrome’s ledger is unknown', () => {
+    expect(backTargetFor(routes.accounts(), { ...NARROW, chromeLedgerId: null })).toBeNull();
+    expect(
+      backTargetFor(routes.accounts(), { wide: false, chromeLedgerId: null, hasLedgers: false }),
+    ).toBeNull();
   });
 
   test('a query string does not change the answer', () => {
@@ -47,8 +66,9 @@ describe('every sub-page leads to its parent (the table in §14.64 f)', () => {
     ['transaction edit', l.transactionEdit(TX), l.transaction(TX), 'transactions'],
     ['transfer edit', l.transferEdit(PAIR), l.transfer(PAIR), 'transactions'],
     ['new transaction', l.transactionNew(), l.transactions(), 'transactions'],
-    ['new account', l.sourceNew(), l.sources(), 'sources'],
-    ['edit account', l.sourceEdit(SOURCE), l.sources(), 'sources'],
+    ['new account', routes.accountNew(), routes.accounts(), 'sources'],
+    ['new account preset to a ledger', routes.accountNew(L), routes.accounts(), 'sources'],
+    ['edit account', routes.accountEdit(SOURCE), routes.accounts(), 'sources'],
     ['import upload', l.importsNew(), l.imports(), 'imports'],
     ['import format guide', l.importsGuide(), l.importsNew(), 'imports'],
     ['import batch', l.importBatch(BATCH), l.imports(), 'imports'],
@@ -126,7 +146,12 @@ describe('unknown paths', () => {
     '/nowhere',
     `/l/${L}/reports`,
     `/l/${L}/transactions/${TX}/history`,
-    `/l/${L}/sources/${SOURCE}`,
+    `/l/${L}/sources`,
+    `/l/${L}/sources/new`,
+    `/l/${L}/sources/${SOURCE}/edit`,
+    `/accounts/${SOURCE}`,
+    `/accounts/${SOURCE}/edit/more`,
+    '/accountsx',
     `/l/${L}/imports/${BATCH}/rows`,
     '/l/',
   ])('%s has no back target', (path) => {

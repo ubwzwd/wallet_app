@@ -43,9 +43,11 @@ describe('API modules (04 §3.4)', () => {
         ? api.mockGet
         : c.method === 'post'
           ? api.mockPost
-          : c.method === 'patch'
-            ? api.mockPatch
-            : api.mockDelete;
+          : c.method === 'put'
+            ? api.mockPut
+            : c.method === 'patch'
+              ? api.mockPatch
+              : api.mockDelete;
     replier(c.path, c.reply, c.status ?? 200);
 
     const result = await c.call();

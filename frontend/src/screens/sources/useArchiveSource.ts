@@ -28,14 +28,14 @@ export function useArchiveSource(ledgerId: Uuid, sourceId: Uuid): ArchiveSourceC
   const { t } = useTranslation();
   const lang = useLang();
   const { baseCurrency } = useLedgerContext();
-  const update = useUpdateSource(ledgerId, sourceId);
+  const update = useUpdateSource(sourceId);
 
   const setArchived = React.useCallback(
     async (source: FinanceSource, next: boolean): Promise<boolean> => {
       // The balance the user is about to add to / remove from net worth is the converted
       // one when there is a rate, and the account's own otherwise (decision §14.50).
       const balance = formatMoney(
-        source.balance_base ?? source.balance,
+        source.balance_base ?? source.balance ?? '0',
         source.balance_base === null ? source.default_currency : baseCurrency,
         lang,
       );

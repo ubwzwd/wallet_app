@@ -8,13 +8,13 @@
 import React from 'react';
 
 import type { FinanceSource, Uuid } from '@/api/types';
-import { useSources } from '@/queries';
+import { useLedgerSources } from '@/queries';
 
 import type { SourceMap } from './TransferLegs';
 
 /** Every account of the ledger, archived ones included — a detail page shows history. */
 export function useSourceMap(ledgerId: Uuid): SourceMap {
-  const sources = useSources(ledgerId, { include_archived: true });
+  const sources = useLedgerSources(ledgerId, { include_archived: true });
   const items = sources.data?.items;
   return React.useMemo(() => {
     const out: Record<Uuid, FinanceSource> = {};

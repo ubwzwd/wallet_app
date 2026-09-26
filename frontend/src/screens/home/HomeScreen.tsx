@@ -27,7 +27,7 @@ import { formatAmountPlain, formatMonthShort } from '@/i18n/format';
 import {
   TREND_MONTHS,
   useCategories,
-  useSources,
+  useMySources,
   useStatsSummary,
   useStatsTrend,
   useTransactions,
@@ -73,7 +73,7 @@ export default function HomeScreen(): React.JSX.Element {
 
   // Archived accounts are asked for: the header needs to say how many it is leaving out
   // (decision §14.50), and `sumSources` is the one that drops them from the totals.
-  const sources = useSources(ledgerId, { include_archived: true });
+  const sources = useMySources({ include_archived: true });
   const summary = useStatsSummary(ledgerId, month);
   const trend = useStatsTrend(ledgerId, TREND_MONTHS);
   const recent = useTransactions(ledgerId, { limit: RECENT_LIMIT });
@@ -99,11 +99,11 @@ export default function HomeScreen(): React.JSX.Element {
     sources.isRefetching || summary.isRefetching || trend.isRefetching || recent.isRefetching;
 
   const goSources = React.useCallback(
-    () => router.navigate(l.sources(true) as Href),
+    () => router.navigate(routes.accounts(true) as Href),
     [l, router],
   );
-  const goSourceList = React.useCallback(() => router.navigate(l.sources() as Href), [l, router]);
-  const goNewSource = React.useCallback(() => router.navigate(l.sourceNew() as Href), [l, router]);
+  const goSourceList = React.useCallback(() => router.navigate(routes.accounts() as Href), [router]);
+  const goNewSource = React.useCallback(() => router.navigate(routes.accountNew(ledgerId) as Href), [ledgerId, router]);
   const goSourceTransactions = React.useCallback(
     (sourceId: Uuid) => router.navigate(l.transactions({ source_id: [sourceId] }) as Href),
     [l, router],

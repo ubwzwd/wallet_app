@@ -35,7 +35,7 @@ import {
 const DROP_RING = 1.5;
 
 function sourceHint(source: FinanceSource, lang: Lang, typeLabel: string): string {
-  return [typeLabel, source.default_currency, formatMoney(source.balance, source.default_currency, lang)].join(
+  return [typeLabel, source.default_currency, formatMoney(source.balance ?? '0', source.default_currency, lang)].join(
     ' · ',
   );
 }

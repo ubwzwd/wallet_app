@@ -5,7 +5,7 @@
  *   narrow → a top bar above the content and a five-slot tab bar below it
  *
  * Decision §14.64: this is the one shell of every signed-in page — the ledger pages,
- * `/ledgers*` (in practice `/ledgers/new` and `/ledgers/join`: `/ledgers` itself only
+ * my accounts (`/accounts*`, decision §14.62), `/ledgers*` (in practice `/ledgers/new` and `/ledgers/join`: `/ledgers` itself only
  * redirects to a ledger, §14.65 c) and `/settings` alike. Outside a ledger route it aims at the ledger the user
  * last had open (`useChromeLedger`), so the column, the tab bar and the sheets behave the
  * same everywhere.
@@ -121,7 +121,9 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
 
   // `/ledgers*` is always a sub-page; new / join are one even while the ledger their
   // button returns to is still loading, so the bar keeps its shape through the cold load.
-  const subPage = back.show || onLedgerPages;
+  // `/accounts` is one on a narrow screen for the same reason (its parent is that home).
+  const onAccountPages = isActivePath(pathname, routes.accounts(), false);
+  const subPage = back.show || onLedgerPages || (onAccountPages && !noLedgers);
 
   return (
     <View

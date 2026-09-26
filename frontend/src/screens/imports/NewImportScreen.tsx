@@ -33,7 +33,7 @@ import { useBack, useTopBar } from '@/navigation';
 import {
   useImportFormat,
   useImports,
-  useSources,
+  useLedgerSources,
   useUploadImport,
   useUploadImportText,
 } from '@/queries';
@@ -89,7 +89,7 @@ export default function NewImportScreen(): React.JSX.Element {
   // Wide: the round back button and 「导入 · 上传账单」 over the title (§14.64 e).
   const back = useBack();
 
-  const sourcesQuery = useSources(ledgerId);
+  const sourcesQuery = useLedgerSources(ledgerId);
   const formatQuery = useImportFormat();
   const recentQuery = useImports(ledgerId, { limit: RECENT_LIMIT });
   // Both mutations render their own failure in the card below, so neither raises the

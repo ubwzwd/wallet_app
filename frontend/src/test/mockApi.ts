@@ -20,6 +20,7 @@ export interface MockApi {
   restore(): void;
   mockGet(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
   mockPost(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
+  mockPut(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
   mockPatch(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
   mockDelete(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
   mockNetworkError(path: string): void;
@@ -59,7 +60,7 @@ export function mockApi(): MockApi {
   uploadClient.defaults.adapter = apiClient.defaults.adapter as AxiosAdapter;
 
   const reply =
-    (verb: 'onGet' | 'onPost' | 'onPatch' | 'onDelete') =>
+    (verb: 'onGet' | 'onPost' | 'onPut' | 'onPatch' | 'onDelete') =>
     (path: string, body?: unknown, status = 200, headers?: Record<string, string>): void => {
       mock[verb](apiUrl(path)).reply(status, body, headers);
     };
@@ -76,6 +77,7 @@ export function mockApi(): MockApi {
     },
     mockGet: reply('onGet'),
     mockPost: reply('onPost'),
+    mockPut: reply('onPut'),
     mockPatch: reply('onPatch'),
     mockDelete: reply('onDelete'),
     mockNetworkError: (path: string) => {
@@ -90,6 +92,7 @@ export function mockApi(): MockApi {
 // Module-level conveniences bound to the most recently created harness.
 export const mockGet: MockApi['mockGet'] = (...args) => currentMock().mockGet(...args);
 export const mockPost: MockApi['mockPost'] = (...args) => currentMock().mockPost(...args);
+export const mockPut: MockApi['mockPut'] = (...args) => currentMock().mockPut(...args);
 export const mockPatch: MockApi['mockPatch'] = (...args) => currentMock().mockPatch(...args);
 export const mockDelete: MockApi['mockDelete'] = (...args) => currentMock().mockDelete(...args);
 export const mockNetworkError: MockApi['mockNetworkError'] = (...args) =>

@@ -16,6 +16,19 @@ describe('routes table matches 04 §1.2 verbatim', () => {
     expect(routes.settings()).toBe('/settings');
   });
 
+  test('accounts live outside any ledger (decision §14.62)', () => {
+    expect(routes.accounts()).toBe('/accounts');
+    expect(routes.accounts(true)).toBe('/accounts?include_archived=1');
+    expect(routes.accountNew()).toBe('/accounts/new');
+    expect(routes.accountNew(LID)).toBe(`/accounts/new?ledger=${LID}`);
+    expect(routes.accountEdit('s1')).toBe('/accounts/s1/edit');
+    // The ledger-scoped builders are gone, not kept as aliases (§14.42).
+    const l = routes.l(LID) as Record<string, unknown>;
+    expect(l.sources).toBeUndefined();
+    expect(l.sourceNew).toBeUndefined();
+    expect(l.sourceEdit).toBeUndefined();
+  });
+
   test('ledger-scoped routes', () => {
     const l = routes.l(LID);
     expect(l.home()).toBe(`/l/${LID}`);
@@ -41,10 +54,6 @@ describe('routes table matches 04 §1.2 verbatim', () => {
     expect(l.transactionEdit('tx1')).toBe(`/l/${LID}/transactions/tx1/edit`);
     expect(l.transfer('pair1')).toBe(`/l/${LID}/transfers/pair1`);
     expect(l.transferEdit('pair1')).toBe(`/l/${LID}/transfers/pair1/edit`);
-    expect(l.sources()).toBe(`/l/${LID}/sources`);
-    expect(l.sources(true)).toBe(`/l/${LID}/sources?include_archived=1`);
-    expect(l.sourceNew()).toBe(`/l/${LID}/sources/new`);
-    expect(l.sourceEdit('s1')).toBe(`/l/${LID}/sources/s1/edit`);
     expect(l.imports()).toBe(`/l/${LID}/imports`);
     expect(l.importsGuide()).toBe(`/l/${LID}/imports/guide`);
     expect(l.importsNew()).toBe(`/l/${LID}/imports/new`);
@@ -108,7 +117,8 @@ describe('withLedger (04 §2.2)', () => {
   test('drops a path-embedded resource id, falling back to that resource\'s list page', () => {
     expect(withLedger(`/l/${FROM}/transactions/tx1`, FROM, TO)).toBe(`/l/${TO}/transactions`);
     expect(withLedger(`/l/${FROM}/transactions/tx1/edit`, FROM, TO)).toBe(`/l/${TO}/transactions`);
-    expect(withLedger(`/l/${FROM}/sources/s1/edit`, FROM, TO)).toBe(`/l/${TO}/sources`);
+    // A stale account URL from before §14.62 has no page in the other ledger: its home.
+    expect(withLedger(`/l/${FROM}/sources/s1/edit`, FROM, TO)).toBe(`/l/${TO}`);
     expect(withLedger(`/l/${FROM}/imports/b1`, FROM, TO)).toBe(`/l/${TO}/imports`);
     expect(withLedger(`/l/${FROM}/transfers/p1`, FROM, TO)).toBe(`/l/${TO}/transactions`);
   });

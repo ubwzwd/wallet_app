@@ -17,6 +17,7 @@ import type {
   ImportRow,
   ImportUploadResult,
   Ledger,
+  LedgerSource,
   Money,
   StatsSummary,
   StatsTrend,
@@ -64,7 +65,7 @@ export function makeLedger(over: Partial<Ledger> = {}): Ledger {
 export function makeSource(over: Partial<FinanceSource> = {}): FinanceSource {
   return {
     id: SOURCE_ID,
-    ledger_id: LEDGER_ID,
+    owner_id: USER_ID,
     name: '招商 信用卡',
     type: 'credit',
     default_currency: 'CNY',
@@ -75,12 +76,22 @@ export function makeSource(over: Partial<FinanceSource> = {}): FinanceSource {
     updated_by: null,
     created_at: '2026-02-01T09:05:00.000000Z',
     updated_at: '2026-09-01T12:00:00.000000Z',
+    shared_to: [LEDGER_ID],
     balance: '-4120.5500',
     balance_base: '-4120.5500',
     balance_rate: '1.00000000',
     balance_rate_date: '2026-09-11',
+    rate_missing_count: 0,
     ...over,
   };
+}
+
+/** A `GET /ledgers/{id}/sources` row: mine by default; `mine: false` nulls owner-only fields. */
+export function makeLedgerSource(over: Partial<LedgerSource> = {}): LedgerSource {
+  const { mine = true, usable = true, ...rest } = over;
+  const ownerOnly = { opening_balance: null, balance: null, balance_base: null, shared_to: null };
+  const hidden = mine ? {} : { ...ownerOnly, balance_rate: null, balance_rate_date: null };
+  return { ...makeSource({ ...hidden, ...rest }), mine, usable };
 }
 
 export function makeTransaction(over: Partial<Transaction> = {}): Transaction {

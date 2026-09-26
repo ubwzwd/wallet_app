@@ -2,7 +2,9 @@
  * Decision §14.64: one shell on every signed-in page, a global tab bar, and a back button
  * on every sub-page that steps back through history or, without any, goes to the page's
  * fixed parent. Decision §14.65: `/ledgers/new` and `/ledgers/join` are sub-pages of the
- * recent ledger's home, the switcher ends with 账本设置, and the "me" sheet has three rows.
+ * recent ledger's home, and the switcher ends with 账本设置. Decision §14.62: the "me"
+ * sheet adds 账户, and `/accounts` is a sub-page of the recent ledger's home on a narrow
+ * screen.
  *
  * `/ledgers` is a probe here only for the no-ledger cases; with ledgers it redirects, which
  * `screens/ledgers/__tests__/ledgers.test.tsx` covers on the real screen.
@@ -83,12 +85,12 @@ const ROUTES = {
   '(app)/ledgers/new': page('新建账本'),
   '(app)/ledgers/join': page('加入账本'),
   '(app)/settings': page('个人设置'),
+  '(app)/accounts/index': page('账户'),
   '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': page('首页'),
   '(app)/l/[ledgerId]/transactions/index': page('交易'),
   '(app)/l/[ledgerId]/transactions/new': GuardedForm,
   '(app)/l/[ledgerId]/transactions/[txId]/index': page('交易详情'),
-  '(app)/l/[ledgerId]/sources/index': page('账户'),
   '(app)/l/[ledgerId]/imports/index': page('导入'),
   '(app)/l/[ledgerId]/settings': page('账本设置'),
 };
@@ -225,12 +227,12 @@ describe('narrow (<1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
   });
 
-  test('the account list is a sub-page on a narrow screen, leading home', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/sources` });
+  test('/accounts is a sub-page on a narrow screen, leading to the recent ledger’s home', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/accounts' });
 
     expect(await router.findByTestId('top-bar-back')).toBeTruthy();
     fireEvent.press(router.getByTestId('top-bar-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_A}`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}`));
   });
 
   test('the "me" sheet outside a ledger opens the recent ledger’s settings', async () => {
@@ -241,13 +243,22 @@ describe('narrow (<1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/settings`));
   });
 
-  test('the "me" sheet is 个人设置 / 账本设置 / 登出 and nothing else (§14.65 b)', async () => {
+  test('the "me" sheet is 个人设置 / 账本设置 / 账户 / 登出 and nothing else (§14.65 b, §14.62)', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
 
     fireEvent.press(await router.findByTestId('tab-me'));
     expect(await router.findByTestId('me-sheet-settings')).toBeTruthy();
-    expect(router.getByTestId('me-sheet-ledger-settings')).toBeTruthy();
-    expect(router.getByTestId('me-sheet-logout')).toBeTruthy();
+    // The rows in order — the sheet's own backdrop and close button aside.
+    const rows = router
+      .getAllByTestId(/^me-sheet-/)
+      .map((row) => row.props.testID as string)
+      .filter((id) => id !== 'me-sheet-backdrop' && id !== 'me-sheet-close');
+    expect(rows).toEqual([
+      'me-sheet-settings',
+      'me-sheet-ledger-settings',
+      'me-sheet-accounts',
+      'me-sheet-logout',
+    ]);
     // Switching ledger is the top bar's pill; the sheet no longer repeats it.
     expect(router.queryByTestId('me-sheet-switch-ledger')).toBeNull();
     expect(router.queryByText('切换账本')).toBeNull();
@@ -315,8 +326,8 @@ describe('narrow (<1024)', () => {
 describe('wide (>=1024)', () => {
   beforeEach(() => setWide(true));
 
-  test('the account list is top-level: 账户 lit, no back button', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}/sources` });
+  test('/accounts is top-level: 账户 lit, no back button', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/accounts' });
 
     expect(
       (await router.findByTestId('sidebar-sources')).props.accessibilityState.selected,

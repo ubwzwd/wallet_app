@@ -38,7 +38,7 @@ import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useTopBar } from '@/navigation';
-import { useCreateSource, useCurrencies, useSource, useSources, useUpdateSource } from '@/queries';
+import { useCreateSource, useCurrencies, useMySource, useMySources, useUpdateSource } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -68,7 +68,7 @@ function valuesOf(source: FinanceSource): SourceFormValues {
     type: source.type,
     default_currency: source.default_currency,
     opening_balance: trimTrailingZeros(
-      openingBalanceForDisplay(source.opening_balance, source.type),
+      openingBalanceForDisplay(source.opening_balance ?? ZERO, source.type),
     ),
   };
 }
@@ -102,10 +102,10 @@ export default function SourceFormScreen(): React.JSX.Element {
   const currencies = useCurrencies();
   // 屏幕稿 09 / 13 / 17 read 「CNY 人民币」, not the server's ISO English name.
   const currencyNames = useCurrencyNames(currencies.names);
-  const list = useSources(ledgerId, { include_archived: true });
-  const detail = useSource(ledgerId, isEdit ? sourceId : undefined);
-  const create = useCreateSource(ledgerId, { silent: true });
-  const update = useUpdateSource(ledgerId, isEdit ? sourceId : '', { silent: true });
+  const list = useMySources({ include_archived: true });
+  const detail = useMySource(isEdit ? sourceId : undefined);
+  const create = useCreateSource({ silent: true });
+  const update = useUpdateSource(isEdit ? sourceId : '', { silent: true });
   const archive = useArchiveSource(ledgerId, isEdit ? sourceId : '');
 
   const {
@@ -193,7 +193,7 @@ export default function SourceFormScreen(): React.JSX.Element {
   const netWorthPreview = React.useCallback(
     (source: FinanceSource, nextStored: Money): { from: string; to: string } => {
       const before = sumSources(list.data?.items ?? []).net;
-      const delta = toBase(subMoney(nextStored, source.opening_balance), source, baseCurrency);
+      const delta = toBase(subMoney(nextStored, source.opening_balance ?? ZERO), source, baseCurrency);
       return {
         from: formatMoney(before, baseCurrency, lang),
         to: formatMoney(addMoney(before, delta), baseCurrency, lang),
@@ -203,8 +203,8 @@ export default function SourceFormScreen(): React.JSX.Element {
   );
 
   const goBack = React.useCallback(
-    () => router.replace(routes.l(ledgerId).sources() as Href),
-    [ledgerId, router],
+    () => router.replace(routes.accounts() as Href),
+    [router],
   );
 
   // Half-typed changes are asked about on every way out (04 §4.6.5, decision §14.65 g):
@@ -252,7 +252,7 @@ export default function SourceFormScreen(): React.JSX.Element {
       const body: FinanceSourceUpdate = { updated_at: current.updated_at };
       if (values.name.trim() !== current.name) body.name = values.name.trim();
       if (values.type !== current.type) body.type = values.type;
-      const openingChanged = parseMoney(stored) !== parseMoney(current.opening_balance);
+      const openingChanged = parseMoney(stored) !== parseMoney(current.opening_balance ?? ZERO);
       if (openingChanged) body.opening_balance = stored;
 
       if (openingChanged) {

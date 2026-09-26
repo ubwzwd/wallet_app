@@ -100,7 +100,7 @@ export function AccountsSection({
             ? source.balance_base === null
               ? t('transaction:list.rate_missing')
               : formatConverted(
-                  source.balance,
+                  source.balance ?? '0',
                   source.default_currency,
                   source.balance_base,
                   baseCurrency,
@@ -118,10 +118,10 @@ export function AccountsSection({
               // there the number and the header disagree (§14.59a).
               amount={
                 foreign
-                  ? formatMoney(source.balance, source.default_currency, lang)
-                  : formatAmountPlain(source.balance, baseCurrency)
+                  ? formatMoney(source.balance ?? '0', source.default_currency, lang)
+                  : formatAmountPlain(source.balance ?? '0', baseCurrency)
               }
-              amountTone={parseMoney(source.balance) < 0n ? 'expense' : 'primary'}
+              amountTone={parseMoney(source.balance ?? '0') < 0n ? 'expense' : 'primary'}
               amountSub={converted}
               onPress={() => onPressSource(source.id)}
               testID={`home-balance-${source.id}`}

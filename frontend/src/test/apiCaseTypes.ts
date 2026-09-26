@@ -1,7 +1,7 @@
 /**
  * Shared shape of the `modules.test.ts` case tables (04 §3.4).
  */
-export type Method = 'get' | 'post' | 'patch' | 'delete';
+export type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 export interface Case {
   name: string;

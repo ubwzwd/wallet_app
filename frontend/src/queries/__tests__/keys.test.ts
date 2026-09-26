@@ -12,6 +12,15 @@ describe('query keys (04 §3.5)', () => {
     expect(qk.global.importFormat()).toEqual(['global', 'import-format']);
     expect(qk.global.currencies()).toEqual(['global', 'currencies']);
     expect(qk.global.ledgers()).toEqual(['global', 'ledgers']);
+    // Decision §14.62: accounts belong to users, so my own list and details are global.
+    expect(qk.global.sourcesRoot()).toEqual(['global', 'sources']);
+    expect(qk.global.sources()).toEqual(['global', 'sources', {}]);
+    expect(qk.global.sources({ include_archived: true })).toEqual([
+      'global',
+      'sources',
+      { include_archived: true },
+    ]);
+    expect(qk.global.source('s1')).toEqual(['global', 'sources', 'detail', 's1']);
   });
 
   test('ledger keys all start with ["l", ledgerId]', () => {
@@ -26,7 +35,6 @@ describe('query keys (04 §3.5)', () => {
       'sources',
       { include_archived: true },
     ]);
-    expect(k.source('s1')).toEqual(['l', L, 'sources', 'detail', 's1']);
     expect(k.tx('t1')).toEqual(['l', L, 'tx', 'detail', 't1']);
     expect(k.transfer('p1')).toEqual(['l', L, 'tx', 'transfer', 'p1']);
     expect(k.statsSum('2026-09')).toEqual(['l', L, 'stats', 'summary', '2026-09']);
@@ -43,7 +51,9 @@ describe('query keys (04 §3.5)', () => {
     expect(k.sourcesRoot()).toEqual(['l', L, 'sources']);
     expect(k.tx('t1').slice(0, 3)).toEqual([...k.txRoot()]);
     expect(k.statsSum('2026-09').slice(0, 3)).toEqual([...k.statsRoot()]);
-    expect(k.source('s1').slice(0, 3)).toEqual([...k.sourcesRoot()]);
+    expect(k.sources().slice(0, 3)).toEqual([...k.sourcesRoot()]);
+    expect(qk.global.source('s1').slice(0, 2)).toEqual([...qk.global.sourcesRoot()]);
+    expect(qk.global.sources().slice(0, 2)).toEqual([...qk.global.sourcesRoot()]);
   });
 
   test('txList: the same filter state gives a deeply equal key whatever the input order', () => {
