@@ -11,7 +11,8 @@
 | 5 前端 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 详情 / 账户 / 设置各页、PWA 与构建 | `v3/phase-5-frontend` → 已合回 `main`（d0b4044） | **完成（2026-09-15）** |
 | 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | `v3/phase-6-import` → 已合回 `main`（60bf8cb） | **完成（2026-09-15）** |
 | 7 视觉 | 逐屏对稿重做表现层：组件库、宽屏侧栏壳、14 屏与深色、`verify-contrast.mjs` WCAG 门禁、日期 ISO 化 | `v3/phase-7-visual` → 已合回 `main`（272b4ec） | **完成（2026-09-16）**，收尾轮亦已合回（06aa97b） |
-| 8 账户归人 | `finance_sources` 改归用户、`ledger_sources` 共享表、个人净资产、`/sources*` 与共享接口、全局账户页与选择器分组、迁移（决策 §14.62） | | 未开始（2026-09-16 立项） |
+| 7.5 导航统一 | 用户手测提出：所有登录后页面同一个壳、窄屏底栏全局、每个子页有返回（§14.64）；取消账本管理页、切换器末行「账本设置」、表单页无底栏、离开守卫覆盖所有出口（§14.65） | `v3/nav-shell`、`v3/nav-followup` → 已合回 `main`（b38c7bb、912406a） | **完成（2026-09-27）** |
+| 8 账户归人 | `finance_sources` 改归用户、`ledger_sources` 共享表、个人净资产、`/sources*` 与共享接口、全局账户页与选择器分组、空账本引导按交易判断（§14.62 k）、迁移（决策 §14.62） | `v3/phase-8-accounts` | 进行中（2026-09-27 启动） |
 | 9 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
 
 ## 环境备忘
@@ -29,6 +30,12 @@
 - **等后端补字段**：屏幕 11 页头「已入账 N 笔」、屏幕 02 页头「转账」段（见 2026-09-16 日志）。币种多选筛选已按 §14.60 做完（2026-09-16）。
 
 ## 日志
+
+- 2026-09-27：导航统一（插在第八阶段之前的两轮，都由用户手测驱动）合回 `main`（b38c7bb、912406a）。**§14.64**（wf_d7bacaf5-262，4 任务 / 3 波）：`src/navigation/` 新增 `backTarget.ts`（上级表纯函数）、`useBack.ts`、`useChromeLedger.ts`、`ledgerHistory.ts`（跨出账本再退回来时恢复账本内导航状态——`(app)` 是 `Slot`，离开账本时内层导航器被卸载，`router.back()` 只能重建首页，验收发现并修）；壳在 `/settings`、`/ledgers*` 也画；窄屏子页顶栏 = 圆 ‹ + 居中标题；宽屏子页 = `PageHeader` 的 `back` 面包屑；窄屏详情标题改「交易详情」（稿 07/08）。**§14.65**（wf_eb08f949-e68，4 任务 / 3 波）：`/ledgers` 有账本直接跳转、零账本引导；切换器末行「账本设置」；「我的」Sheet 三行；新建 / 加入是子页（加入宽屏不再是对话框）；404 / 账本不可用「回到首页」；`formRoute.ts`（表单页窄屏不画底栏）；`leaveGuard.tsx` 注册表（`useRegisterLeaveGuard` / `useGuardedNavigate` / `useBackOverride`）让壳里每个出口都先问脏表单——验收发现窄屏点底栏别的格会直接丢掉填了一半的表单；`EditStateHeader.tsx` 给编辑 / 批次的加载与错误态返回。审核抓到的真 bug：删除 / 退出当前账本后落地用了过期的账本列表（`LandingRedirect` 改为只在列表新鲜时决定）。前端 67 套件 1077 个测试，`CI=1 npm run verify` 全绿。
+  - **基础设施**：预览 :8081 改从 `.claude/preview-tree`（钉在 `main` 的独立 worktree，硬链接 node_modules）出代码——工作流预检会把主检出切到集成分支并在那里合并，CI 模式的 Metro 拿着过期文件清单就白屏；合回 `main` 后 `git -C .claude/preview-tree checkout -q --detach main` 再重启 expo 进程。
+  - **教训**：主会话按 Esc 会把后台工作流一起停掉，用 `resumeFromRunId` 续跑只重做被打断的那个 agent；kill 守护脚本时别在同一条命令里写它的名字（`pgrep -f` 会连自己的 shell 一起杀）。
+  - 留档未做（minor，不阻塞）：`useLeaveGuard.ts` 应搬到 `src/navigation/` 与 `leaveGuard.tsx` 同处（账户表单现在跨目录引用交易表单的 hook）；离开守卫的注册表是单槽（后注册覆盖前者）与 `pass()` 的 bypass 在导航未发生时靠下一次 `state` 事件解除，都只在极端时序下出问题；浏览器后退键对脏表单的确认只靠 `beforeRemove`，未在真实浏览器验证；`LandingRedirect` 在缓存过期时多等一次刷新；`/` 落地后 URL 带一个装饰性的 `?ledgerId=`（main 上本来就有）；RN-web 不输出 `aria-selected`，底栏与侧栏的「当前项」屏幕阅读器读不到。
+
 
 - 2026-09-11：文档终稿合回 `main`（47ea5d8），GSD 记录归档（6598d03），第一阶段启动。
 - 2026-09-12：第一阶段完成并合回 `main`。两轮工作流（8 个任务 + 4 个收尾任务），后端 189 个测试通过、13 个 Postgres 用例需 `TEST_POSTGRES_URL`（本机全绿 202）。要点：

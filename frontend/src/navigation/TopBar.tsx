@@ -67,9 +67,10 @@ export function useTopBarTitle(): string | null {
 }
 
 /**
- * Whether the calling page is the navigator's current screen. A stacked navigator
- * (a ledger's list → its detail) keeps the page underneath mounted, so "mounted" is not
- * enough to own the top bar. Outside any navigator (unit tests) a page is always current.
+ * Whether the calling page is the navigator's current screen. Today every navigator under
+ * `(app)` is a `Slot` that renders only its focused route, so this is defensive: a stacked
+ * navigator added later must not let a covered page own the top bar. Outside any navigator
+ * (unit tests) a page is always current.
  */
 function useScreenFocused(): boolean {
   const navigation = React.useContext(NavigationContext);
@@ -90,8 +91,8 @@ function useScreenFocused(): boolean {
 }
 
 /**
- * Publish this page's title while the calling page is the current screen. It publishes
- * again when a stacked page closes over it and it becomes current once more, and a page
+ * Publish this page's title while the calling page is the current screen. Should a page
+ * ever be covered by a stacked one, it publishes again when it becomes current, and a page
  * leaving only clears the title if nobody has published since.
  */
 export function useTopBar(title: string | null | undefined): void {
