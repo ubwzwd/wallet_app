@@ -14,9 +14,10 @@
 > - **新表 `transaction_events`**（决策 §14.51）：交易操作记录，只追加，随交易级联删除。
 > - **没有任何文件系统状态**：不保存上传的账单文件，上传目录、上传卷、目录清理全部取消（决策 §14.28）。
 > - **转账配对 / 拆开**（决策 §14.34）落在 `transactions` 的 `transfer_pair_id` 与 `counterparty` 两列上，**不加新列、不加新约束**：既有的 `UNIQUE (transfer_pair_id, transfer_role)` 挡住"两腿方向相同"、互斥 CHECK 挡住"忘了清 `counterparty`"，而"两腿必须都还是单腿"数据库管不到，只能由应用层加行锁后断言（§1.6.3、§3.2）。
+> - **账户归人，按账本共享**（决策 §14.62）：`finance_sources` 删 `ledger_id`、加 `owner_id → users`；新表 `ledger_sources(ledger_id, source_id, shared_by, shared_at)`；删账本不再级联删账户，只级联删共享关系；迁移链加第 7 步 `b1f3c2a10d47_sources_belong_to_users`（§1.5、§1.5.1、§1.6.2、§2、§3、§4、§5.7、§6.4、§6.7）（2026-09-16 按决策 §14.62 同步）。
 > - 02 章原有的待决七条（D-3 至 D-9）已由决策 §14.29、§14.40、§14.41 全部裁定或作废，本章不再有待决项。
 >
-> 关于篇幅：本文长于最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十张表的完整 DDL、六步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
+> 关于篇幅：本文长于最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十一张表的完整 DDL、七步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
 
 技术栈不变：SQLAlchemy 2.0 同步引擎 + Alembic + Postgres 15，测试用 SQLite 内存库（backend/pyproject.toml:13-14,21）。
 
@@ -24,7 +25,7 @@
 
 ## 0. 总览：目标表清单与对现状的差异
 
-目标 schema 共十张表：决策 §10 列出的九张，加上决策 §14.51 新增的 `transaction_events`（同时，决策 §14.25 取消了上一版的模型配置表，所以张数与上一版持平）。
+目标 schema 共十一张表：决策 §10 列出的九张，加上决策 §14.51 新增的 `transaction_events` 与决策 §14.62 新增的 `ledger_sources`（决策 §14.25 取消了上一版的模型配置表）（2026-09-16 按决策 §14.62 同步）。
 
 | # | 表 | 现状 | 说明 |
 |---|---|---|---|
@@ -32,12 +33,13 @@
 | 2 | `ledgers` | **新增** | 账本，基准币种的归属者（决策 §2） |
 | 3 | `ledger_members` | **新增** | 账本成员与角色（决策 §2） |
 | 4 | `ledger_invites` | **新增** | 6 位一次性邀请码；用掉即删、过期即删、作废即删，没有"已用"两列、`code` 不建唯一索引（决策 §2、§14.29） |
-| 5 | `finance_sources` | 已有 | 归属从用户改为账本，加 `opening_balance` / `archived_at` 等；`type` 四选一 `checking`/`credit`/`cash`/`other`（决策 §3、§14.48、§14.50） |
-| 6 | `transactions` | 已有 | 加 kind / 分类 / 转账 / 退款 / 导入等列（决策 §1、§10） |
-| 7 | `import_batches` | **新增** | 一次标准 CSV 导入（决策 §5）；只记文件名与大小，**不保存文件**（决策 §14.28） |
-| 8 | `import_rows` | **新增** | 导入草稿行（决策 §5）；含 `counterparty`（决策 §14.10），日期列叫 `occurred_at`（决策 §14.41） |
-| 9 | `transaction_events` | **新增** | 交易操作记录，只追加、随交易级联删除（决策 §14.51） |
-| 10 | `exchange_rates` | **新建（重建）** | Frankfurter 日汇率缓存。现状这张表已被迁移 `5ca7fe6e37db` 删除，目标态按决策 §14.1 用**新形状**重建，不是沿用现状（§1.10） |
+| 5 | `finance_sources` | 已有 | 归属从账本改回用户（`owner_id`），通过 `ledger_sources` 共享到账本；加 `opening_balance` / `archived_at` 等；`type` 四选一 `checking`/`credit`/`cash`/`other`（决策 §3、§14.48、§14.50、§14.62）（2026-09-16 按决策 §14.62 同步） |
+| 6 | `ledger_sources` | **新增** | 一行 = 账户主人把这张卡共享到这本账；主键 `(ledger_id, source_id)`，随账本 / 账户级联删除（决策 §14.62）（2026-09-16 按决策 §14.62 同步） |
+| 7 | `transactions` | 已有 | 加 kind / 分类 / 转账 / 退款 / 导入等列（决策 §1、§10） |
+| 8 | `import_batches` | **新增** | 一次标准 CSV 导入（决策 §5）；只记文件名与大小，**不保存文件**（决策 §14.28） |
+| 9 | `import_rows` | **新增** | 导入草稿行（决策 §5）；含 `counterparty`（决策 §14.10），日期列叫 `occurred_at`（决策 §14.41） |
+| 10 | `transaction_events` | **新增** | 交易操作记录，只追加、随交易级联删除（决策 §14.51） |
+| 11 | `exchange_rates` | **新建（重建）** | Frankfurter 日汇率缓存。现状这张表已被迁移 `5ca7fe6e37db` 删除，目标态按决策 §14.1 用**新形状**重建，不是沿用现状（§1.10） |
 
 删除的表：`transaction_tags`（决策 §1.3"现有 `transaction_tags` 表、`?tag=` 筛选、标签输入框全部移除"）。现状模型见 backend/app/models/transaction_tag.py:11-20。
 
@@ -45,7 +47,7 @@
 
 ### 0.1 列级差异
 
-**新增表**：`ledgers`、`ledger_members`、`ledger_invites`、`import_batches`、`import_rows`、`transaction_events`、`exchange_rates`。最后一张是**重建**：现状里它在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被 drop 掉了；目标态按决策 §14.1 重新定义列与主键（复合主键 `(date, base, symbol)`、没有自增 `id`、没有 `source` 列、新增 `fetched_at`），**不**把初始迁移里的旧形状原样搬回来。
+**新增表**：`ledgers`、`ledger_members`、`ledger_invites`、`ledger_sources`（决策 §14.62，迁移第 7 步建（2026-09-16 按决策 §14.62 同步））、`import_batches`、`import_rows`、`transaction_events`、`exchange_rates`。最后一张是**重建**：现状里它在 backend/migrations/versions/5ca7fe6e37db_remove_exchange_rates_table_use_real_.py:24-25 被 drop 掉了；目标态按决策 §14.1 重新定义列与主键（复合主键 `(date, base, symbol)`、没有自增 `id`、没有 `source` 列、新增 `fetched_at`），**不**把初始迁移里的旧形状原样搬回来。
 
 **删除表**：`transaction_tags`。
 
@@ -63,8 +65,8 @@
 
 | 表 | 列 | 现状证据 | 原因 |
 |---|---|---|---|
-| `users` | `default_source_id` | backend/app/models/user.py:20 | 决策 §14.6 明确删除：账户归属账本、一个用户可属于多本账（决策 §3、§2）之后这一列语义失效；决策 §11 的 `PATCH /me` 只剩默认币种与语言。默认账户改由前端本地记住上次使用的账户（决策 §14.6） |
-| `finance_sources` | `user_id` | backend/app/models/finance_source.py:17 | 由 `ledger_id` + `created_by` 取代（决策 §2 归属段） |
+| `users` | `default_source_id` | backend/app/models/user.py:20 | 决策 §14.6 明确删除：一个用户可属于多本账、同一张卡可共享到多本账（决策 §2、§14.62）之后这一列语义失效（2026-09-16 按决策 §14.62 同步）；决策 §11 的 `PATCH /me` 只剩默认币种与语言。默认账户改由前端本地记住上次使用的账户（决策 §14.6） |
+| `finance_sources` | `user_id` | backend/app/models/finance_source.py:17 | 由 `owner_id` + `created_by` 取代（决策 §14.62 a：账户仍属于人，列名改成 `owner_id` 以与 `created_by` 区分语义；第 3 步曾把它换成 `ledger_id`，第 7 步再换成 `owner_id`，§5.3、§5.7）（2026-09-16 按决策 §14.62 同步） |
 | `transactions` | `user_id` | backend/app/models/transaction.py:17 | 同上 |
 
 **新增列**：
@@ -72,7 +74,7 @@
 | 表 | 新增列 | 依据 |
 |---|---|---|
 | `users` | `display_name`、`language`、`updated_at` | `display_name VARCHAR(40) NULL` 由决策 §14.40 要求：`PATCH /me` 可改，没填时界面显示邮箱 `@` 前的部分，成员退出后照旧显示、不匿名化；`language VARCHAR(8) NULL` 由决策 §14.6 要求（`PATCH /me` 可改，NULL = 跟随系统），取值范围见决策 §0.4、§11；`updated_at` 是审计列 |
-| `finance_sources` | `ledger_id`、`opening_balance`、`archived_at`、`created_by`、`updated_by`、`updated_at`；`type` 收敛为四取值 `checking`/`credit`/`cash`/`other` | 决策 §3、§14.48、§14.50 |
+| `finance_sources` | `owner_id`、`opening_balance`、`archived_at`、`created_by`、`updated_by`、`updated_at`；`type` 收敛为四取值 `checking`/`credit`/`cash`/`other`。**没有 `ledger_id`**——账户与账本的关系在 `ledger_sources` 里（2026-09-16 按决策 §14.62 同步） | 决策 §3、§14.48、§14.50、§14.62 |
 | `transactions` | `ledger_id`、`kind`、`category_l1`、`category_l2`、`transfer_role`、`transfer_subtype`、`counterparty`、`refund_of`、`import_batch_id`、`created_by`、`updated_by`、`updated_at` | 决策 §1、§2、§5、§10 |
 | `ledger_invites` | `created_at` | 决策 §14.6（新表要有创建时间） |
 
@@ -86,7 +88,7 @@
 
 下面给出的是 **Postgres** DDL，也就是 Alembic 迁移在生产库上最终建出来的形状；同一份 schema 由 SQLAlchemy 模型描述，测试库（SQLite）由 `Base.metadata.create_all` 建出（§8）。约定：
 
-- 所有主键都是 `UUID`（`sa.Uuid()`，Python 侧 `uuid.uuid4` 默认值），两张例外：`ledger_members` 是复合主键 `(ledger_id, user_id)`、`exchange_rates` 是复合主键 `(date, base, symbol)`（决策 §14.1，没有代理键）。
+- 所有主键都是 `UUID`（`sa.Uuid()`，Python 侧 `uuid.uuid4` 默认值），三张例外：`ledger_members` 是复合主键 `(ledger_id, user_id)`、`ledger_sources` 是复合主键 `(ledger_id, source_id)`（决策 §14.62（2026-09-16 按决策 §14.62 同步））、`exchange_rates` 是复合主键 `(date, base, symbol)`（决策 §14.1，没有代理键）。
 - 所有枚举列都是 `VARCHAR(n) + CHECK`，不使用 Postgres ENUM（决策 §10）。
 - 所有金额 `NUMERIC(18,4)`、所有币种 `CHAR(3)`、所有时间戳 `TIMESTAMP WITHOUT TIME ZONE` 存 naive UTC（§7）。
 - 约束一律显式命名，命名规则见 §5.0；`create_all` 与 Alembic 用同一套 `naming_convention`，这样 `batch_alter_table` 才能按名字 drop 约束。
@@ -114,7 +116,7 @@ CREATE TABLE users (
 CREATE UNIQUE INDEX ix_users_email ON users (email);
 ```
 
-列语义：`email` 由应用层在写入前统一 `lower()`，唯一索引因此等价于大小写不敏感（现状不做归一化，是 `../current-design/06-known-issues.md` 记录的问题）。`base_currency` 没有 `DEFAULT`——初始迁移建这一列时就没给 `server_default`（backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:40），迁移第 6 步也不补，默认值由模型的 Python 侧 `default="USD"` 提供（与本节开头"应用层赋值"的约定一致）。它不再是"记账币种"，只是**新建账本时的默认基准币种**（决策 §13 第 6 步）；账本自己的 `ledgers.base_currency` 才是统计口径（决策 §2）。`display_name` 是决策 §14.40 新增的显示名（≤40 字符，`PATCH /me` 可改）：**为 `NULL` 表示没填**，这时所有显示记账人的地方（交易的 `created_by` / `updated_by`、成员列表、导入批次的上传人）都退回显示邮箱 `@` 前的部分；成员退出账本后历史记录里照旧显示他的名字，不做匿名化（决策 §14.40）。数据库只保证"要么为 NULL、要么去空白后非空"，唯一性不做要求——两个人可以叫同一个名字，界面靠邮箱区分。
+列语义：`email` 由应用层在写入前统一 `lower()`，唯一索引因此等价于大小写不敏感（现状不做归一化，是 `../current-design/06-known-issues.md` 记录的问题）。`base_currency` 没有 `DEFAULT`——初始迁移建这一列时就没给 `server_default`（backend/migrations/versions/e533c88884b7_initial_schema_users_accounts_.py:40），迁移第 6 步也不补，默认值由模型的 Python 侧 `default="USD"` 提供（与本节开头"应用层赋值"的约定一致）。它不再是"记账币种"，而是**新建账本时的默认基准币种**（决策 §13 第 6 步），同时是本人账户 `balance_base` 与个人资产 / 负债 / 净资产的折算币种（决策 §14.62 f）（2026-09-16 按决策 §14.62 同步）；账本自己的 `ledgers.base_currency` 才是交易与统计的口径（决策 §2）。`display_name` 是决策 §14.40 新增的显示名（≤40 字符，`PATCH /me` 可改）：**为 `NULL` 表示没填**，这时所有显示记账人的地方（交易的 `created_by` / `updated_by`、成员列表、导入批次的上传人）都退回显示邮箱 `@` 前的部分；成员退出账本后历史记录里照旧显示他的名字，不做匿名化（决策 §14.40）。数据库只保证"要么为 NULL、要么去空白后非空"，唯一性不做要求——两个人可以叫同一个名字，界面靠邮箱区分。
 
 `language` 为 `NULL` 表示"跟随系统"（决策 §0.4），只允许 `zh` / `en`；界面外观（跟随系统 / 浅色 / 深色）**不入库**，按决策 §14.52 存在浏览器本地。`updated_at` 仅作审计，`PATCH /me` 不做 409 乐观并发（决策 §2 只对 `transactions`、`finance_sources`、`ledgers` 要求）。
 
@@ -137,7 +139,7 @@ CREATE TABLE ledgers (
 CREATE INDEX ix_ledgers_created_by ON ledgers (created_by);
 ```
 
-列语义：`base_currency` 是这本账的统计与折算口径（决策 §2、§7）；owner 可以改（决策 §2 权限段），改了不动历史交易——折算是读取时算的（决策 §8）。`created_by` 只记录"谁建的"，**不等于当前 owner**（owner 可转让，见 `ledger_members.role`）；外键无 `ON DELETE` 动作（NO ACTION），因为用户不会被删。`updated_at` 参与 409 乐观并发（决策 §2）。
+列语义：`base_currency` 是这本账的统计与交易折算口径（决策 §2、§7）——账户余额的折算不看它，看账户主人的 `users.base_currency`（决策 §14.62 f）（2026-09-16 按决策 §14.62 同步）；owner 可以改（决策 §2 权限段），改了不动历史交易——折算是读取时算的（决策 §8）。`created_by` 只记录"谁建的"，**不等于当前 owner**（owner 可转让，见 `ledger_members.role`）；外键无 `ON DELETE` 动作（NO ACTION），因为用户不会被删。`updated_at` 参与 409 乐观并发（决策 §2）。
 
 ### 1.3 `ledger_members`
 
@@ -195,7 +197,7 @@ CREATE INDEX ix_ledger_invites_ledger_id ON ledger_invites (ledger_id);
 ```sql
 CREATE TABLE finance_sources (
     id                UUID          NOT NULL,
-    ledger_id         UUID          NOT NULL,
+    owner_id          UUID          NOT NULL,
     name              VARCHAR(100)  NOT NULL,
     type              VARCHAR(32)   NOT NULL,
     default_currency  CHAR(3)       NOT NULL,
@@ -207,8 +209,8 @@ CREATE TABLE finance_sources (
     created_at        TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     updated_at        TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     CONSTRAINT pk_finance_sources PRIMARY KEY (id),
-    CONSTRAINT fk_finance_sources_ledger_id_ledgers
-        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
+    CONSTRAINT fk_finance_sources_owner_id_users
+        FOREIGN KEY (owner_id) REFERENCES users (id),
     CONSTRAINT fk_finance_sources_created_by_users
         FOREIGN KEY (created_by) REFERENCES users (id),
     CONSTRAINT fk_finance_sources_updated_by_users
@@ -221,16 +223,49 @@ CREATE TABLE finance_sources (
     CONSTRAINT ck_finance_sources_archived_at
         CHECK (archived = (archived_at IS NOT NULL))
 );
-CREATE INDEX ix_finance_sources_ledger_id ON finance_sources (ledger_id);
+CREATE INDEX ix_finance_sources_owner_id ON finance_sources (owner_id);
 ```
 
-列语义：账户属于账本、账本内完全共享（决策 §2、§3）。`type` **四选一**——`checking` 储蓄卡 / `credit` 信用卡 / `cash` 现金 / `other` 其他（决策 §3、§14.48）：新加坡没有储蓄户口与活期户口的区分，界面上的"储蓄卡"就是 `checking`，所以第五种取值不存在，迁移把存量旧值一律改写成 `checking`（§5.3）。相对现状（backend/app/models/finance_source.py:19 只有注释、没有 CHECK），这里加上了真正的 CHECK。`opening_balance` 是账户建立时的初始余额，**以账户自己的 `default_currency` 计价**；账户余额 = `opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`，同币种交易不换算（决策 §3、§14.2）。因此**不存**余额列，也不按币种分桶；接口另给一个 `balance_base`＝按**最新**汇率把余额折算到 `ledgers.base_currency`（决策 §14.2，接口形状见 [`03-backend-api.md`](./03-backend-api.md)）。`default_currency` 建后不可改（应用层：`PATCH` 的请求体里没有这个字段）。`archived` 同样没有 `DEFAULT`（初始迁移 e533c88884b7:51 建列时就没给，第 3 步也不补），Python 侧 `default=False`；本表里唯一带 `server_default` 的列是 `opening_balance`，因为它是第 3 步给存量行加的非空列（§5.3）。`archived = TRUE` 的账户不能再记账、不能作为导入目标，历史保留（决策 §3）；有交易的账户不能删除，只能归档——这条由应用层保证，数据库侧 `transactions.source_id` 用 NO ACTION 兜底（§1.6 说明为什么不能用 RESTRICT）。
+列语义：**账户属于用户，通过 `ledger_sources` 共享到账本**（决策 §14.62 a、b）。`owner_id` 是账户主人，创建时等于调用者、之后不可改；外键无 `ON DELETE` 动作（NO ACTION），因为用户不会被删（§6.9）。主人在自己所在的任何账本里都能直接用自己的账户，别的成员只有在它被共享到那本账（`ledger_sources` 有对应行）时才能用——这条"可用"判断由应用层做（§3.2），数据库只存事实。表上**没有** `ledger_id`：删账本不会碰这张表（§6.7）（2026-09-16 按决策 §14.62 同步）。
+
+`type` **四选一**——`checking` 储蓄卡 / `credit` 信用卡 / `cash` 现金 / `other` 其他（决策 §3、§14.48）：新加坡没有储蓄户口与活期户口的区分，界面上的"储蓄卡"就是 `checking`，所以第五种取值不存在，迁移把存量旧值一律改写成 `checking`（§5.3）。相对现状（backend/app/models/finance_source.py:19 只有注释、没有 CHECK），这里加上了真正的 CHECK。`opening_balance` 是账户建立时的初始余额，**以账户自己的 `default_currency` 计价**；账户余额 = `opening_balance + Σ convert(t.amount, t.currency → default_currency, 按 t.occurred_at 当日汇率)`，同币种交易不换算（决策 §3、§14.2）。这里的交易是这张卡在**所有账本**里的交易（决策 §14.62 f），取数不带 `ledger_id` 条件（§4）。因此**不存**余额列，也不按币种分桶；接口另给一个 `balance_base`＝按**最新**汇率把余额折算到**主人的** `users.base_currency`（决策 §14.2、§14.62 f，接口形状见 [`03-backend-api.md`](./03-backend-api.md)）（2026-09-16 按决策 §14.62 同步）。`default_currency` 建后不可改（应用层：`PATCH` 的请求体里没有这个字段）。`archived` 同样没有 `DEFAULT`（初始迁移 e533c88884b7:51 建列时就没给，第 3 步也不补），Python 侧 `default=False`；本表里唯一带 `server_default` 的列是 `opening_balance`，因为它是第 3 步给存量行加的非空列（§5.3）。`archived = TRUE` 的账户不能再记账、不能作为导入目标，历史保留（决策 §3）；有交易的账户（任何账本里的交易或导入批次引用了它）不能删除，只能归档——这条由应用层保证，数据库侧 `transactions.source_id` 用 NO ACTION 兜底（§1.6.2）（2026-09-16 按决策 §14.62 同步）。
 
 `archived_at`（决策 §14.50）记归档发生的时刻（naive UTC），账户列表里的归档分组直接显示它（"2026-03-12 归档"）。它与 `archived` 由 `ck_finance_sources_archived_at` 绑死：`archived = TRUE` ⇔ `archived_at IS NOT NULL`。为什么不干脆用 `archived_at IS NULL` 一列代替布尔列：`archived` 是所有查询的过滤条件（`WHERE archived = FALSE`），保留布尔列让索引与代码都直白，多出来的那一列由 CHECK 保证不会说谎。取消归档（`PATCH {"archived": false}`）时把 `archived_at` 置回 NULL——不保留"上次归档时间"，因为界面上没有这个概念。**归档账户不计入净资产与首页合计**（决策 §14.50）：这是读取时的过滤（`WHERE archived = FALSE`），数据库不为此存任何东西。
 
 `default_currency` **创建后不可改**（决策 §14.50）：`PATCH` 的请求体里没有这个字段。理由是账户余额以它计价（决策 §14.2），改币种会让历史折算全部失去意义；要换币种就新建账户、把旧账户归档。
 
-**账本内账户允许同名**（决策 §14.40 关闭 02-D-5）：不加 `UNIQUE (ledger_id, name)`，也不加 `UNIQUE (ledger_id, lower(name))`——"招商银行"这类同名不同卡号的账户是真实场景，按 id 区分，只在界面上提示"已有同名账户"（[`01-domain-and-flows.md`](./01-domain-and-flows.md)）。
+**同一人下的账户允许同名**（决策 §14.40 关闭 02-D-5，§14.62 a 改成 owner 口径）：不加 `UNIQUE (owner_id, name)`，也不加 `UNIQUE (owner_id, lower(name))`——"招商银行"这类同名不同卡号的账户是真实场景，按 id 区分，只在界面上提示"已有同名账户"（[`01-domain-and-flows.md`](./01-domain-and-flows.md)）（2026-09-16 按决策 §14.62 同步）。
+
+**每人最多 50 个账户**（`MAX_SOURCES_PER_USER = 50`，含已归档，决策 §14.62 a）：与"每人 ≤10 本账"同一种软限制，只在应用层建账户前 `SELECT count(*) FROM finance_sources WHERE owner_id = ?`（走 `ix_finance_sources_owner_id`），超出 409 `source_limit_reached`，不加触发器（2026-09-16 按决策 §14.62 同步）。
+
+### 1.5.1 `ledger_sources`
+
+一行 = **账户主人把这张卡共享到这本账**（决策 §14.62 b）。（2026-09-16 按决策 §14.62 同步）
+
+```sql
+CREATE TABLE ledger_sources (
+    ledger_id  UUID NOT NULL,
+    source_id  UUID NOT NULL,
+    shared_by  UUID NOT NULL,
+    shared_at  TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT pk_ledger_sources PRIMARY KEY (ledger_id, source_id),
+    CONSTRAINT fk_ledger_sources_ledger_id_ledgers
+        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
+    CONSTRAINT fk_ledger_sources_source_id_finance_sources
+        FOREIGN KEY (source_id) REFERENCES finance_sources (id) ON DELETE CASCADE,
+    CONSTRAINT fk_ledger_sources_shared_by_users
+        FOREIGN KEY (shared_by) REFERENCES users (id)
+);
+CREATE INDEX ix_ledger_sources_source_id ON ledger_sources (source_id);
+```
+
+列语义：
+
+- 复合主键 `(ledger_id, source_id)`：同一张卡在同一本账里最多共享一次；`PUT /sources/{sid}/ledgers/{lid}` 幂等就是靠它——已存在就不再插入。主键前导列 `ledger_id` 同时服务"这本账里共享进来了哪些账户"（`WHERE ledger_id = ?`），另建 `ix_ledger_sources_source_id` 服务"这张卡共享到了哪些账本"（`WHERE source_id = ?`，个人账户列表的 `shared_to`）。
+- 两条 `ON DELETE CASCADE`：删账本时它的共享关系随之消失、账户本身不动（决策 §14.62 f）；删空账户时它的共享关系随之消失。
+- `shared_by` 是做共享的人，恒等于账户主人（只有主人能共享）；外键 NO ACTION，理由同其它 `created_by`。`shared_at` 是共享时刻（naive UTC），迁移第 7 步回填为账户的 `created_at`。
+- **没有** `role` / `permission` 之类的列：共享只有"能用 / 不能用"两态，余额永远只给主人看（决策 §14.62 c）。
+- 取消共享 = 删行（`DELETE /sources/{sid}/ledgers/{lid}`）；成员退出 / 被移除时删他共享到该账本的行（`DELETE FROM ledger_sources WHERE ledger_id = ? AND source_id IN (SELECT id FROM finance_sources WHERE owner_id = ?)`，§6.2）。已经记下的交易不受影响：`transactions.source_id` 直接指向 `finance_sources`，不经过这张表。
 
 ### 1.6 `transactions`
 
@@ -320,6 +355,7 @@ CREATE TABLE transactions (
 CREATE INDEX ix_transactions_ledger_occurred
     ON transactions (ledger_id, occurred_at DESC, created_at DESC);
 CREATE INDEX ix_transactions_ledger_source     ON transactions (ledger_id, source_id);
+CREATE INDEX ix_transactions_source_occurred   ON transactions (source_id, occurred_at);   -- 决策 §14.62：跨账本余额
 CREATE INDEX ix_transactions_ledger_kind_cat   ON transactions (ledger_id, kind, category_l1);
 CREATE INDEX ix_transactions_refund_of         ON transactions (refund_of) WHERE refund_of IS NOT NULL;
 CREATE INDEX ix_transactions_import_batch_id   ON transactions (import_batch_id) WHERE import_batch_id IS NOT NULL;
@@ -353,18 +389,20 @@ CHECK ((kind =  'transfer' AND transfer_role IS NOT NULL) OR
 
 | 外键 | 行为 | 依据 |
 |---|---|---|
-| `ledger_id → ledgers.id` | `ON DELETE CASCADE` | 决策 §2"owner 可删除账本（级联删除账户、交易、导入）" |
-| `source_id → finance_sources.id` | **NO ACTION**（不写 `ON DELETE`），有交易时禁止删账户由应用层保证 | 决策 §3"有交易的账户不能删除，只能归档" |
+| `ledger_id → ledgers.id` | `ON DELETE CASCADE` | 决策 §2"owner 可删除账本（级联删除交易、导入）"；账户不随账本删除（决策 §14.62 f） |
+| `source_id → finance_sources.id` | **NO ACTION**（不写 `ON DELETE`），有交易时禁止删账户由应用层保证 | 决策 §3"有交易的账户不能删除，只能归档"；§14.62 f 把"有交易"扩大到任何账本 |
 | `refund_of → transactions.id` | `ON DELETE SET NULL` | 决策 §1.1"原单被删除时退款行的 `refund_of` 置空" |
 | `import_batch_id → import_batches.id` | `ON DELETE SET NULL`（兜底），正常路径由应用层在同一事务内先删交易再删批次 | 决策 §5（撤销 = 删除这批建的所有交易）；见 §6.6 |
 | `created_by` / `updated_by → users.id` | NO ACTION | 本版本没有删用户的接口（决策 §11 的"我"分组里没有 `DELETE /me`） |
 | `transfer_pair_id` | **无外键**（它不指向任何表，是两腿共用的自由 UUID） | 决策 §1.2；沿用现状（backend/app/models/transaction.py:24 也没有外键） |
 
-**为什么 `source_id` 用 NO ACTION 而不是 RESTRICT**：删除账本时 `ledgers → finance_sources` 和 `ledgers → transactions` 两条 CASCADE 在同一条 `DELETE FROM ledgers` 语句里触发。RESTRICT 在被引用行删除的**当下**立即检查，此时交易行还没删完，会直接报错；NO ACTION 的检查推迟到语句结束，那时交易行已随 CASCADE 消失，检查通过。所以要让"账本级联删除"和"有交易的账户禁止删除"同时成立，`source_id` 必须是 NO ACTION，"禁止删账户"落在应用层（§3）。
+**删账本只级联删 `ledger_sources` / 交易 / 批次**（以及成员、邀请码、操作记录），**不碰 `finance_sources`**（决策 §14.62 f）：账户属于人，表上没有 `ledger_id`，`DELETE FROM ledgers` 的级联链里根本没有它。删账本之后，这本账里的交易消失，账户余额随之少掉这本账的那部分，账户本身留在主人名下。
+
+**为什么 `transactions.source_id` 仍是 NO ACTION**：它守的是"有交易的账户不能删"——账户现在可能被好几本账的交易引用，删账户时只要还有一条交易指着它，数据库就该拒绝，而不是级联删掉别的账本里的交易（CASCADE）或把交易变成没有账户的孤儿（SET NULL，而且列是 NOT NULL）。应用层先查一遍（`DELETE /sources/{sid}` 跨账本 `EXISTS`，§6.4）给出 409 `source_has_transactions`，外键只在应用层漏判时兜底报错。NO ACTION 与 RESTRICT 在这里效果相同；保留 NO ACTION 是沿用第 3 步的写法（那时删账本会在同一条语句里先后级联删账户与交易，RESTRICT 的即时检查会误报，NO ACTION 推迟到语句结束），第 7 步起删账本已不经过 `finance_sources`，没有理由再改它（2026-09-16 按决策 §14.62 同步）。
 
 #### 1.6.3 列语义
 
-`ledger_id` 冗余于 `source_id → finance_sources.ledger_id`，但所有列表查询都按账本过滤，直接带上它可以省掉一次 join，代价是应用层必须保证两者一致（§3）。`kind` 是唯一的方向来源，符号只是它的推论（决策 §1）。`note` 即原 `description`，≤500 字（决策 §1.4）；`merchant` ≤200 字，搜索、退款匹配、导入去重都靠它。`category_l1` / `category_l2` 存的是 `backend/app/core/categories.py` 常量表里的 code，取值合法性、二级归属一级、一级收支方向与 kind 匹配，全部由应用层校验（决策 §1.3）——**数据库不存分类表，也就没有外键**。`counterparty` 是单腿转账的对方文本（"老婆""工资卡"，决策 §1.2）。`import_batch_id` 非空表示这条交易由某批导入生成（决策 §5）。
+`ledger_id` 是这笔交易所属的账本；它与 `source_id` 之间**没有**冗余关系——账户属于人、可以被多本账的交易引用（决策 §14.62），所以不存在"交易的账本必须等于账户的账本"这条一致性。写入时应用层要保证的是：`source_id` 对写入人在 `ledger_id` 这本账里**可用**（主人是他，或存在 `ledger_sources(ledger_id, source_id)`，且未归档，§3.2）（2026-09-16 按决策 §14.62 同步）。`kind` 是唯一的方向来源，符号只是它的推论（决策 §1）。`note` 即原 `description`，≤500 字（决策 §1.4）；`merchant` ≤200 字，搜索、退款匹配、导入去重都靠它。`category_l1` / `category_l2` 存的是 `backend/app/core/categories.py` 常量表里的 code，取值合法性、二级归属一级、一级收支方向与 kind 匹配，全部由应用层校验（决策 §1.3）——**数据库不存分类表，也就没有外键**。`counterparty` 是单腿转账的对方文本（"老婆""工资卡"，决策 §1.2）。`import_batch_id` 非空表示这条交易由某批导入生成（决策 §5）。
 
 **配对与拆开怎么落到这两列上**（决策 §14.34）。两条各自独立的单腿转账（`transfer_pair_id IS NULL`，方向相反、`kind='transfer'`）可以事后配成一笔转账，配好的一对也可以再拆开；两个动作都不动金额、日期、账户，也不新建或删除行：配对改 `transfer_pair_id`、`counterparty` 与 `transfer_subtype`（决策 §14.53a：配对时统一子类型），拆开只改 `transfer_pair_id`：
 
@@ -404,7 +442,7 @@ SELECT id, kind, ledger_id, source_id, transfer_role, transfer_pair_id
    FOR UPDATE;          -- 两行都必须取到，且两行的 transfer_pair_id IS NULL，否则 409
 ```
 
-行锁是必需的：没有它，两个并发请求可以各自读到"还是单腿"再各自配对，同样造出孤儿腿。断言通过后才执行上面那条 `UPDATE`。除此之外应用层还要校验数据库看不见的其余部分：两行同账本、`kind='transfer'`、账户不同、方向相反（决策 §1.2、§14.34）。
+行锁是必需的：没有它，两个并发请求可以各自读到"还是单腿"再各自配对，同样造出孤儿腿。断言通过后才执行上面那条 `UPDATE`。除此之外应用层还要校验数据库看不见的其余部分：两行同账本、`kind='transfer'`、账户不同、方向相反（决策 §1.2、§14.34），以及两行所在的账户都对调用者在本账本内可用（决策 §14.62 e（2026-09-16 按决策 §14.62 同步））。
 
 **两腿 `transfer_subtype` 在配对时统一**（决策 §14.53a）。配对**不**要求两腿原来的子类型相同，也不因为不同就拒绝；由服务端在同一事务内算出一个值再写给两腿：
 
@@ -469,7 +507,7 @@ CREATE INDEX ix_import_batches_ledger_created
 - `status` **只有两个值**：`ready`（校验通过、草稿已落库、等着 review）和 `committed`（已提交建账）。决策 §5 的状态机就是 `ready → committed` 两态：校验是同步完成的（秒级），不通过就返回 400 且**不产生批次**，因此没有 `uploaded` / `parsing` / `failed`，也没有进度、轮询、重试、僵尸批次。相应地，上一版为"同一账本同时只有一个批次在解析"准备的那个部分唯一索引一并删除。
 - `warnings` 是整批级别的警告数组（JSON，列类型见 §1.11），例如"第 1 行是表头之外的注释行，已忽略"这类不针对某一行的提示。**行级**的校验说明不进这里，写在各行的 `hint` 上（决策 §5"每一处校验改动都写进该行的 `hint`"）。
 - `committed_at` 与 `status` 由 `ck_import_batches_committed_at` 绑死。`created_at` 是上传时刻，`updated_at` 随草稿行编辑刷新（用于导入历史排序与调试），批次本身不参与 409 乐观并发（决策 §2 只对交易、账户、账本要求）。
-- `source_id` 是用户上传时选定的目标账户（决策 §5"一份文件对应一个目标账户"，文件里不含账户信息）；外键 NO ACTION，配合"有导入记录的账户不能删除"的应用层规则（§6.4）。
+- `source_id` 是用户上传时选定的目标账户（决策 §5"一份文件对应一个目标账户"，文件里不含账户信息）；上传时必须对上传人在本账本内可用（决策 §14.62 e，§3.2）（2026-09-16 按决策 §14.62 同步）；外键 NO ACTION，配合"有导入记录的账户不能删除"的应用层规则（§6.4）。
 
 **相对上一版删掉的列**，逐条对应决策：
 
@@ -544,7 +582,7 @@ CREATE INDEX ix_import_rows_transaction_id
 - `hint` 是服务端写给 review 界面的一句话，**只读、不进** `transactions.note`。它有两个来源：一是校验时每一处自动改动（"币种 XX 无效，已改为账户币种 SGD""kind 无法识别，已按金额符号推断为支出"，决策 §5"不另存原始值"）；二是批内重复行的提示（"本批内有相同的行（第 N 行）"，决策 §14.31）。多处改动拼在一句里，所以放宽到 `VARCHAR(500)`。
 - `flags` 是服务端自动标记的字符串数组（JSON，列类型见 §1.11），取值**只有四种**（决策 §5、§14.31、§14.34）：`duplicate`（同账户同日同金额的交易已存在，或对方已是两腿转账的一半）、`refund_candidate`（按决策 §1.1 找到唯一候选原单）、`transfer_candidate`（按决策 §1.2、§14.34 找到可配对的单腿转账）、`needs_review`（校验有过自动改动，或批内有相同行）。上一版还有的"批内重复已合并"标记随决策 §14.31 删除——完全相同的行**全部保留**、都打 `needs_review`，由用户在 review 里取舍。
 - `matched_transaction_id` 一列服务两种候选：`refund_candidate` 时指向原支出（提交时写进 `transactions.refund_of`，条件见决策 §14.7），`transfer_candidate` 时指向要配对的那条单腿转账（提交时两行共用一个新的 `transfer_pair_id`，见 §1.6.3 与决策 §14.34）。两种候选互斥（一行的 `kind` 要么是 `refund` 要么是 `transfer`），所以一列够用；候选唯一时才预填，多候选留空、由用户在 review 里选（决策 §5、§14.34）。
-- `counterpart_source_id` 是转账行的对手账户（用户在 review 里选，只有转账行可选，决策 §14.52 A5）；提交两腿转账时它决定另一腿建在哪个账户上。
+- `counterpart_source_id` 是转账行的对手账户（用户在 review 里选，只有转账行可选，决策 §14.52 A5）；提交两腿转账时它决定另一腿建在哪个账户上。写入（review）与提交时都要求它对调用者在本账本内可用；review 之后被取消共享的，提交时 404 `not_found`（决策 §14.62 e，§3.2）（2026-09-16 按决策 §14.62 同步）。
 - `counterparty` 是单腿转账的对手文本（"老婆""工资卡"，决策 §14.10）：**校验阶段恒为 NULL**（skill 不猜对手账户，标准 CSV 里没有这个字段，决策 §14.16），由用户在 review 里 `PATCH .../rows/{rid}` 填写（≤100 字），提交时原样写进 `transactions.counterparty`。
 - `transaction_id` 在 commit 之后回填，指向这行生成的正式交易（两腿转账回填的是本账户那一腿）。
 
@@ -673,9 +711,10 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
    |                     / created_at / updated_at
    |      （已无 default_source_id，决策 §14.6；display_name 见决策 §14.40）
    |
-   | created_by / updated_by / actor_id  (NO ACTION, 出现在 ledgers, ledger_invites,
-   |                                      finance_sources, transactions, import_batches,
-   |                                      transaction_events)
+   | created_by / updated_by / actor_id / shared_by  (NO ACTION, 出现在 ledgers,
+   |        ledger_invites, finance_sources, ledger_sources, transactions,
+   |        import_batches, transaction_events)
+   | finance_sources.owner_id -> users.id（NO ACTION，账户主人，决策 §14.62）
    v
  +-------------------------+          N +----------------------------------+
  | ledgers                 |<-----------| ledger_members                   |
@@ -699,19 +738,30 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
    | ledger_id (CASCADE)|  ledger_id (CASCADE)
    v N                  v N
  +---------------------------+     +--------------------------------------+
- | finance_sources           |     | import_batches                       |
+ | ledger_sources            |     | import_batches                       |
  |---------------------------|     |--------------------------------------|
- | PK id              UUID   |     | PK id           UUID                 |
- | FK ledger_id       UUID NN|     | FK ledger_id    UUID NN (CASCADE)    |
- |    name            VC(100)|     | FK source_id ---> finance_sources    |
- |    type VC(32) checking|  |<----| FK created_by ---> users             |
- |         credit|cash|other | src |    source   VC(8)  csv|paste         |
- |    default_currency CHR(3)|     |    filename VC(255) / size_bytes INT |
- |    open_balance  NUM(18,4)|     |    skill_version VC(16)              |
- |    archived        BOOL   |     |    status   VC(16) ready|committed   |
- |    archived_at     TS     |     |    row_count INT / warnings JSON     |
- | FK created_by/updated_by  |     |    created_at/updated_at/committed_at|
- |    created_at/updated_at  |     +--------------------------------------+
+ | PK,FK ledger_id    UUID   |     | PK id           UUID                 |
+ | PK,FK source_id    UUID   |     | FK ledger_id    UUID NN (CASCADE)    |
+ | FK shared_by ---> users   |     | FK source_id ---> finance_sources    |
+ |    shared_at       TS NN  |     | FK created_by ---> users             |
+ +---------------------------+     |    source   VC(8)  csv|paste         |
+   | N                             |    filename VC(255) / size_bytes INT |
+   | source_id (CASCADE)           |    skill_version VC(16)              |
+   v 1                             |    status   VC(16) ready|committed   |
+ +---------------------------+     |    row_count INT / warnings JSON     |
+ | finance_sources           |     |    created_at/updated_at/committed_at|
+ |---------------------------|     +--------------------------------------+
+ | PK id              UUID   |           |                     |
+ | FK owner_id ---> users NN |           |                     |
+ |    name            VC(100)|           |                     |
+ |    type VC(32) checking|  |           |                     |
+ |         credit|cash|other |           |                     |
+ |    default_currency CHR(3)|           |                     |
+ |    open_balance  NUM(18,4)|           |                     |
+ |    archived        BOOL   |           |                     |
+ |    archived_at     TS     |           |                     |
+ | FK created_by/updated_by  |           |                     |
+ |    created_at/updated_at  |           |                     |
  +---------------------------+           |1                    |1
    |1                    ^               | batch_id (CASCADE)  | import_batch_id
    | source_id           | counterpart_  |                     | (SET NULL)
@@ -775,12 +825,15 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
       transfer_pair_id 没有外键，是两条转账腿共用的自由 UUID（决策 §1.2）；
       配对 = 两腿写同一个值并清空 counterparty，拆开 = 两腿写回 NULL（§1.6.3、决策 §14.34）。
       唯一 / 主键约束：transactions(transfer_pair_id, transfer_role)（唯一）、
-      import_rows(batch_id, row_no)（唯一）、exchange_rates(date, base, symbol)（主键，决策 §14.1）。
+      import_rows(batch_id, row_no)（唯一）、exchange_rates(date, base, symbol)（主键，决策 §14.1）、
+      ledger_sources(ledger_id, source_id)（主键，决策 §14.62）。
+      finance_sources 不挂在 ledgers 下面：它只经 owner_id 指向 users，与账本的关系全在
+      ledger_sources 里，所以删账本的级联链里没有它（决策 §14.62，2026-09-16 同步）。
       ledger_invites.code **不建唯一索引**（决策 §14.29），import_batches 也不再有
       "同一账本只允许一个批次在解析"的部分唯一索引（没有解析阶段，决策 §5）。
 ```
 
-注意：目标 schema 里 `users` 与 `finance_sources` 之间**不再有环**（现状的环来自 `users.default_source_id`，backend/app/models/user.py:20）。环消失的直接好处是 `Base.metadata.drop_all` 不再抛 `CircularDependencyError`，测试 teardown 干净（现状问题见 `../current-design/02-database.md` §2.5、§7）。
+注意：目标 schema 里 `users` 与 `finance_sources` 之间**不再有环**（现状的环来自 `users.default_source_id`，backend/app/models/user.py:20）；第 7 步加的 `finance_sources.owner_id → users` 是单向的，不会把环带回来（2026-09-16 按决策 §14.62 同步）。环消失的直接好处是 `Base.metadata.drop_all` 不再抛 `CircularDependencyError`，测试 teardown 干净（现状问题见 `../current-design/02-database.md` §2.5、§7）。
 
 ---
 
@@ -808,7 +861,9 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 只有 refund 能有 `refund_of`，且不能指向自己 | `ck_transactions_refund_of`、`ck_transactions_not_self_refund` | 决策 §1.1、§10 |
 | 一个 `transfer_pair_id` 最多一条 out、一条 in | `uq_transactions_transfer_pair_role` | 决策 §10 |
 | 有对腿就不填 `counterparty` | `ck_transactions_counterparty` | 决策 §10 |
-| 删账本级联删账户、交易、导入批次、成员、邀请码、操作记录 | 六条 `ON DELETE CASCADE` | 决策 §2、§14.51 |
+| 删账本级联删共享关系、交易、导入批次、成员、邀请码、操作记录；**不删账户** | 六条 `ON DELETE CASCADE`（`ledger_sources` / `transactions` / `import_batches` / `ledger_members` / `ledger_invites` / `transaction_events` 的 `ledger_id`）；`finance_sources` 上没有 `ledger_id`（2026-09-16 按决策 §14.62 同步） | 决策 §2、§14.51、§14.62 f |
+| 账户必有主人 | `finance_sources.owner_id NOT NULL` + `fk_finance_sources_owner_id_users`（2026-09-16 按决策 §14.62 同步） | 决策 §14.62 a |
+| 同一张卡在同一本账里最多共享一次；删账户时它的共享关系随之删除 | `pk_ledger_sources (ledger_id, source_id)`；`fk_ledger_sources_source_id_finance_sources ON DELETE CASCADE`（2026-09-16 按决策 §14.62 同步） | 决策 §14.62 b |
 | 删批次级联删草稿行 | `import_rows.batch_id ON DELETE CASCADE` | 决策 §5 |
 | 原单删除后退款行 `refund_of` 置空 | `ON DELETE SET NULL` | 决策 §1.1 |
 | 批次内行号唯一 | `uq_import_rows_batch_row` | 决策 §5 |
@@ -828,13 +883,16 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 |---|---|---|
 | 每本账恰有一个 owner | 建账本时写入 owner 行；`POST /transfer-ownership` 在一个事务内降旧升新；`POST /leave` 拒绝 owner | 决策 §2 |
 | 当前用户是该账本成员才能访问 | 所有 `/ledgers/{id}/...` 路由的公共依赖先查 `ledger_members` | 决策 §2 |
-| `transactions.ledger_id` 与 `finance_sources.ledger_id` 一致 | 创建 / 改交易时按 `(source_id, ledger_id)` 查账户，查不到就 404 | 决策 §2 |
-| 归档账户不能记账、不能作为导入目标 | 创建交易 / 上传导入前检查 `archived = FALSE` | 决策 §3 |
-| 有交易或有导入批次的账户不能删除 | `DELETE /sources/{sid}` 先 `COUNT(*)`，非零返回 409 | 决策 §3 |
+| 交易、导入批次、review 行引用的账户**对写入人在本账本内可用** | 所有写账户引用的路径（记一笔、改交易、两腿转账含改账户、导入上传的目标账户、review 行的 `counterpart_source_id`、配对对腿、导入提交时的对手账户）共用一个可用性判断：`source.owner_id = 调用者` 或 `EXISTS ledger_sources(ledger_id, source_id)`，且 `archived = FALSE`；不可用 404 `not_found`，归档 409 `source_archived`。交易列表 `?source_id=` 的值须是 `GET /ledgers/{id}/sources` 会列出的账户，否则 404（2026-09-16 按决策 §14.62 同步） | 决策 §14.62 b、e |
+| 归档账户不能记账、不能作为导入目标 | 同上的可用性判断里检查 `archived = FALSE` | 决策 §3 |
+| 有交易或有导入批次的账户不能删除——**任何账本**的都算 | `DELETE /sources/{sid}` 先查 `EXISTS (SELECT 1 FROM transactions WHERE source_id = ?)` 与 `EXISTS (SELECT 1 FROM import_batches WHERE source_id = ?)`，不带 `ledger_id` 条件，任一为真返回 409 `source_has_transactions`（2026-09-16 按决策 §14.62 同步） | 决策 §3、§14.62 f |
+| 个人账户接口只对主人可见；只有主人能共享 / 取消共享，且两者都要求主人是该账本成员 | `/sources*` 一律 `WHERE owner_id = 调用者`，别人的 id 404；`PUT` / `DELETE /sources/{sid}/ledgers/{lid}` 另查 `ledger_members(lid, 调用者)`，不是成员 404（2026-09-16 按决策 §14.62 同步） | 决策 §14.62 b、g |
+| 每人 ≤ 50 个账户（含已归档） | 建账户前 `COUNT(*) WHERE owner_id = ?`，超出 409 `source_limit_reached`（2026-09-16 按决策 §14.62 同步） | 决策 §14.62 a |
+| 成员退出 / 被移除时，他共享到该账本的账户自动取消共享 | `leave` / 移除成员与删 `ledger_members` 行同一事务 `DELETE FROM ledger_sources WHERE ledger_id = ? AND source_id IN (SELECT id FROM finance_sources WHERE owner_id = ?)`；他记的交易不动（2026-09-16 按决策 §14.62 同步） | 决策 §14.62 f |
 | 分类 code 合法、二级属于一级、一级收支方向与 kind 匹配 | 校验函数读 `backend/app/core/categories.py` 常量 | 决策 §1.3 |
 | `refund_of` 指向同账本、`kind='expense'` 的交易 | 关联时按 `(id, ledger_id, kind)` 查 | 决策 §1.1 |
 | 有 `transfer_pair_id` 的两腿只能一起增删改 | 只开放 `/transactions/transfer` 系列接口写这类交易，普通接口拒绝带 pair 的行 | 决策 §1.2 |
-| 两腿属于同一账本、账户不同 | transfer 接口内校验 | 决策 §1.2 |
+| 两腿属于同一账本、账户不同；两个账户都对调用者在本账本内可用 | transfer 接口内校验（可用性判断同上）（2026-09-16 按决策 §14.62 同步） | 决策 §1.2、§14.62 e |
 | 乐观并发：`updated_at` 不匹配返回 409 `stale_update` | `UPDATE ... WHERE id = ? AND updated_at = ?`，影响 0 行则 409 | 决策 §2 |
 | 每人 ≤10 本账、每本 ≤10 人 | 建账本 / 加入前 `COUNT(*)` | 决策 §2（软限制，见 §待决 D-7） |
 | 邀请码存在、未过期、非本人已在成员 | 加入时 `SELECT ... WHERE code = ? AND expires_at > now()` 后逐条判断 | 决策 §2、§14.29 |
@@ -871,13 +929,16 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 索引 | 服务的查询 | 说明 |
 |---|---|---|
 | `ix_transactions_ledger_occurred (ledger_id, occurred_at DESC, created_at DESC)` | 交易列表主查询：`WHERE ledger_id=? [AND occurred_at BETWEEN ? AND ?] ORDER BY occurred_at DESC, created_at DESC LIMIT ? OFFSET ?`；统计按月汇总 | 决策 §4 的 `from`/`to` 与默认排序都命中它；`created_at` 作为第二排序键保证同一天内顺序稳定、分页不跳行 |
-| `ix_transactions_ledger_source (ledger_id, source_id)` | `source_id` 筛选（决策 §4，可多值 → `IN`）；账户余额的取数 `SELECT amount, currency, occurred_at FROM transactions WHERE ledger_id=? AND source_id=?`（决策 §3、§14.2） | 余额是每次读账户列表都要算的，是最热的聚合查询。注意**不能**直接 `SUM(amount)`：决策 §14.2 要求把每笔按 `occurred_at` 当日汇率折算成账户 `default_currency` 再累加，同币种才免折算，所以 SQL 只负责取行，折算与求和在服务层做（同币种账户可以退化成一条 `SUM`） |
+| `ix_transactions_ledger_source (ledger_id, source_id)` | 账本内按账户筛选：交易列表 `?source_id=`（决策 §4，可多值 → `IN`）；`GET /ledgers/{id}/sources` 第 ③ 类"本账本交易引用到的账户"：`SELECT DISTINCT source_id FROM transactions WHERE ledger_id = ?` | 前导列 `ledger_id` 等值，第二列直接给出去重后的账户 id（2026-09-16 按决策 §14.62 同步） |
+| `ix_transactions_source_occurred (source_id, occurred_at)` | **账户余额的取数**（跨账本，决策 §14.62 f）：`SELECT source_id, currency, occurred_at, SUM(amount), COUNT(*) FROM transactions WHERE source_id IN (...) GROUP BY source_id, currency, occurred_at`——**不带 `ledger_id`**；删账户前的 `EXISTS (SELECT 1 FROM transactions WHERE source_id = ?)`；删 `finance_sources` 行时 `fk_transactions_source_id_finance_sources`（NO ACTION）的反查 | 余额是每次读账户列表都要算的，是最热的聚合查询；账户可以被多本账的交易引用，`ix_transactions_ledger_source` 的前导列是 `ledger_id`，按 `source_id` 单独查用不上它，所以另建以 `source_id` 开头的索引，`occurred_at` 让按发生日分组折算时顺序读取。注意**不能**直接 `SUM(amount)` 了事：决策 §14.2 要求把每笔按 `occurred_at` 当日汇率折算成账户 `default_currency` 再累加，同币种才免折算，所以 SQL 按 `(source_id, currency, occurred_at)` 分组取小计，折算与求和在服务层做（2026-09-16 按决策 §14.62 同步）。**备注**：这条索引不在第八阶段接口契约里，是本章同步 §14.62 时为跨账本取数补的；已在交付说明里转给后端任务（模型 `Index("ix_transactions_source_occurred", Transaction.source_id, Transaction.occurred_at)` + 第 7 步迁移里 `op.create_index`，§5.7 第 ⑤ 步），两边未同时落地前 `test_schema_matches_the_models` 会报漂移 |
 | `ix_transactions_ledger_kind_cat (ledger_id, kind, category_l1)` | `kind` / `category_l1` 筛选（决策 §4）；首页按一级分类汇总（决策 §7） | `category_l2` 的筛选量小，落在这个索引取回的行上再过滤 |
 | `ix_transactions_refund_of (refund_of) WHERE refund_of IS NOT NULL` | "这张原单已退多少"：`SELECT SUM(amount) WHERE refund_of = ?`（决策 §1.1 要求每条候选显示已退/可退金额）；原单删除时 `ON DELETE SET NULL` 的反查 | 部分索引：绝大多数行 `refund_of` 为空，只索引退款行 |
 | `uq_transactions_transfer_pair_role (transfer_pair_id, transfer_role)` | 既是约束也是索引：`WHERE transfer_pair_id = ?` 取两腿（`PATCH/DELETE /transactions/transfer/{pair_id}`，决策 §1.2） | 前导列就是 `transfer_pair_id`，**不需要**再单独建 `ix_transactions_transfer_pair_id`（现状那个独立索引 backend/migrations/versions/8a4f4d66d893_add_transfer_pair_id_to_transactions.py:30-34 在目标态被它取代） |
 | `ix_transactions_import_batch_id (import_batch_id) WHERE import_batch_id IS NOT NULL` | 撤销导入：`DELETE FROM transactions WHERE import_batch_id = ?`（决策 §5） | 部分索引，同上 |
 | 无索引：`merchant` / `note` 的 `ILIKE '%q%'` | 决策 §4"ILIKE 足够，不做全文索引" | 前导通配的 `ILIKE` 用不上 B-tree。查询一定带 `ledger_id`，规划器先用 `ix_transactions_ledger_occurred` 收窄到单账本再逐行匹配；一本账几万行的量级下是毫秒级。将来若真的慢，加 `pg_trgm` 的 GIN 索引即可，但那会让 SQLite 测试路径分叉 |
-| `ix_finance_sources_ledger_id` | 账户列表 `WHERE ledger_id = ? [AND archived = FALSE]` | 决策 §3 |
+| `ix_finance_sources_owner_id` | 个人账户列表 `GET /sources`：`WHERE owner_id = ? [AND archived = FALSE]`；建账户前的上限计数 `COUNT(*) WHERE owner_id = ?`；可用性判断的"是不是我的"一半 | 决策 §3、§14.62 a（2026-09-16 按决策 §14.62 同步） |
+| `pk_ledger_sources (ledger_id, source_id)`（主键） | "别人共享到本账本的账户"：`WHERE ledger_id = ?`（`GET /ledgers/{id}/sources` 第 ② 类、`GET /ledgers/{id}` 的 `counts.sources`）；可用性判断的"共享过没有"一半：`WHERE ledger_id = ? AND source_id = ?`；共享的幂等插入 | 决策 §14.62 b（2026-09-16 按决策 §14.62 同步） |
+| `ix_ledger_sources_source_id (source_id)` | "这张卡共享到了哪些账本"：`WHERE source_id IN (...)`（`GET /sources` 每行的 `shared_to`）；删账户时 `ON DELETE CASCADE` 的反查 | 决策 §14.62 b、g（2026-09-16 按决策 §14.62 同步） |
 | `ix_ledger_members_user_id` | "我有哪些账本"：`SELECT ... FROM ledger_members WHERE user_id = ?` 再 join `ledgers`（决策 §11 `GET /ledgers`）；每个请求的成员鉴权走主键 `(ledger_id, user_id)` | 决策 §2 |
 | `ix_ledger_invites_ledger_id` | 账本设置页列出本账本的有效码、生成新码前的惰性清理（`WHERE ledger_id = ? AND expires_at < now()`）、owner 作废某个码（`WHERE ledger_id = ? AND code = ?`） | 决策 §2、§14.29、§14.52 A2 |
 | 无索引：`ledger_invites.code` | 加入账本：`WHERE code = ? AND expires_at > now()`（决策 §2）；生成时的冲突检测 | **有意不建**（决策 §14.29 不要求全表唯一，§1.4）。这张表在任一时刻只有几十行——每个账本至多攥着一两个 10 分钟内的有效码——全表扫描比索引维护还便宜；`POST /ledgers/join` 又是全局 1 QPS 的端点（决策 §14.35），根本压不出热点。将来若真的需要，加一个非唯一的 `ix_ledger_invites_code` 即可，**不要**加 `UNIQUE` |
@@ -895,10 +956,10 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 
 ### 5.0 前置约定
 
-- 起点是当前 head `8a4f4d66d893`（backend/migrations/versions/8a4f4d66d893_add_transfer_pair_id_to_transactions.py:16）。下面六步是决策 §13 的六个步骤，一步一个 revision，链式串联。
+- 起点是当前 head `8a4f4d66d893`（backend/migrations/versions/8a4f4d66d893_add_transfer_pair_id_to_transactions.py:16）。前六步是决策 §13 的六个步骤，第 7 步是决策 §14.62（账户归人）追加的一步，一步一个 revision，链式串联（2026-09-16 按决策 §14.62 同步）。
 - 下面的 revision id 是**占位**（真实 id 由 `alembic revision` 随机生成），有意义的是文件 slug 与顺序。
 - **迁移里不 import 任何 `app.*` 模块**。需要的表结构在迁移文件内用 `sa.table(...)` / `sa.column(...)` 现场声明，需要的常量（默认账本名、分类 code）直接写字面量。允许 import 标准库（`uuid`、`datetime`、`logging`）与 `sqlalchemy`。理由：迁移必须能在任意历史版本的应用代码下重放，一旦 import 应用模型，模型的后续演进会让旧迁移报错。
-- 回填里凡是**删行**的地方都不静默执行：先 `SELECT count(*)`，非零就打一条 warning 日志再删。下面第 3、4 步用到的 `delete_and_warn` 就是写在各自迁移文件顶部的这么一段（复制两份，不做成共享模块——迁移之间不互相 import）：
+- 回填里凡是**删行**的地方都不静默执行：先 `SELECT count(*)`，非零就打一条 warning 日志再删。下面第 3、4 步与第 7 步的 downgrade 用到的 `delete_and_warn` 就是写在各自迁移文件顶部的这么一段（每个用到的迁移文件各复制一份，共三份，不做成共享模块——迁移之间不互相 import）（2026-09-16 按决策 §14.62 同步）：
 
 ```python
 def delete_and_warn(table: str, where: str, why: str) -> None:
@@ -1105,6 +1166,8 @@ def upgrade() -> None:
 ### 5.3 第 3 步：账户与交易归属账本
 
 **revision** `b1f3c2a10d43_scope_sources_and_transactions_to_ledger`。
+
+> 这一步保留的是**当年实际执行的历史**：它把账户挂到了账本（`finance_sources.ledger_id`）。决策 §14.62 之后账户改归用户，`ledger_id` 由第 7 步（§5.7）删掉、换成 `owner_id` + `ledger_sources`。已经发布的迁移不改写，所以本节代码照旧（2026-09-16 按决策 §14.62 同步）。
 
 （同步 2026-09-12）这一步顺带解决 `accounts → finance_sources` 改名遗留的两处历史包袱
 （`026ee0aecb66` 只改了表名和列名，没跟着改约束名）：`finance_sources.name` 从初始迁移建的
@@ -1468,11 +1531,129 @@ with op.batch_alter_table("users", copy_from=users_tbl) as b:
 
 写法 A 更短，代价是分支代码；写法 B 没有分支，代价是要把 `users` 在第 6 步之前的形状抄一遍（抄错会静默丢约束）。本文按写法 A 书写，上面代码块里的 `b.drop_constraint(...)` 应理解为"仅 Postgres 分支"。同一条注意事项适用于任何"删一个由 `op.create_foreign_key` 显式命名、而模型侧无名"的约束。
 
-决策 §13 第 6 步只要求"把 `users.base_currency` 保留为新建账本默认币种"——语义上的保留，schema 上只加一句注释。同一步顺带做完 `users` 的其余收尾：`display_name`（决策 §14.40，全部回填为 NULL——现状没有这个信息，界面在它为空时显示邮箱前缀，所以不需要拿邮箱去填）、`language`（决策 §11 的 `PATCH /me` 要改语言）、`updated_at`，以及删掉 `default_source_id`（决策 §14.6 明确要求；决策 §3 之后账户归账本，这个列已无处安放，默认账户改由前端本地记住上次使用的账户）。删掉它同时消除了 `users ↔ finance_sources` 的外键环（§2）。注意语句顺序：`upper()` 归一化必须在 `create_check_constraint("base_currency_upper", ...)`（落库名 `ck_users_base_currency_upper`）之前执行，否则存量小写币种会让加约束失败。第 3 步与第 4 步在加 `ck_finance_sources_currency_upper` / `ck_transactions_currency_upper` 之前也各跑了一条同样的 `upper()` 语句，三步保持对称。这两列在 API 层其实已被 `CurrencyCode`（`^[A-Z]{3}$`，backend/app/schemas/currency.py:9）挡住、存量值大概率已是大写，而 `users.base_currency` 用的是没有 pattern 的裸 `str`（backend/app/schemas/user.py:12,35）——但迁移不应依赖这种非对称的假设，三条语句在空库上都是 no-op。
+决策 §13 第 6 步只要求"把 `users.base_currency` 保留为新建账本默认币种"——语义上的保留，schema 上只加一句注释。同一步顺带做完 `users` 的其余收尾：`display_name`（决策 §14.40，全部回填为 NULL——现状没有这个信息，界面在它为空时显示邮箱前缀，所以不需要拿邮箱去填）、`language`（决策 §11 的 `PATCH /me` 要改语言）、`updated_at`，以及删掉 `default_source_id`（决策 §14.6 明确要求；多账本之后一个人在不同账本里常用的卡不同，这个列已无处安放，默认账户改由前端本地记住上次使用的账户（2026-09-16 按决策 §14.62 同步））。删掉它同时消除了 `users ↔ finance_sources` 的外键环（§2）。注意语句顺序：`upper()` 归一化必须在 `create_check_constraint("base_currency_upper", ...)`（落库名 `ck_users_base_currency_upper`）之前执行，否则存量小写币种会让加约束失败。第 3 步与第 4 步在加 `ck_finance_sources_currency_upper` / `ck_transactions_currency_upper` 之前也各跑了一条同样的 `upper()` 语句，三步保持对称。这两列在 API 层其实已被 `CurrencyCode`（`^[A-Z]{3}$`，backend/app/schemas/currency.py:9）挡住、存量值大概率已是大写，而 `users.base_currency` 用的是没有 pattern 的裸 `str`（backend/app/schemas/user.py:12,35）——但迁移不应依赖这种非对称的假设，三条语句在空库上都是 no-op。
 
 **空库可运行**：是。
 
-### 5.7 迁移链总览
+### 5.7 第 7 步：账户归人（决策 §14.62）
+
+**revision** `b1f3c2a10d47_sources_belong_to_users`，`down_revision = 'b1f3c2a10d46'`。（2026-09-16 按决策 §14.62 同步）
+
+把 `finance_sources` 从"属于账本"改成"属于用户、按账本共享"。数据一比一：每个账户的主人取它的 `created_by`（迁移前谁建的就是谁的），并为它原来所在的账本写一行共享——迁移前"账本里人人可用"，迁移后照样人人可用，行为不变（决策 §14.62 i）。不做同名账户合并。
+
+`upgrade()` 五步（顺序不能换：② 要读 ④ 删掉的 `ledger_id`）：
+
+1. **建 `ledger_sources`**，DDL 按 §1.5.1，外加 `ix_ledger_sources_source_id`。
+2. **回填共享行**：`INSERT INTO ledger_sources (ledger_id, source_id, shared_by, shared_at) SELECT ledger_id, id, created_by, created_at FROM finance_sources`——每个账户一行，`shared_by` = 原创建人（即新主人），`shared_at` = 账户创建时刻。
+3. **加 `owner_id`**：先加成可空，`UPDATE finance_sources SET owner_id = created_by`，再改 NOT NULL、加外键 `fk_finance_sources_owner_id_users` 与索引 `ix_finance_sources_owner_id`。
+4. **删 `ledger_id`**：先删索引 `ix_finance_sources_ledger_id`，再删外键 `fk_finance_sources_ledger_id_ledgers`，最后删列（SQLite 走 `batch_alter_table`）。
+5. **建 `ix_transactions_source_occurred`**（`transactions (source_id, occurred_at)`，服务跨账本余额取数，§4）。这一步不在阶段契约的 ①–④ 里，是本章补的，见 §4 该行的备注。
+
+```python
+def upgrade() -> None:
+    # ① ledger_sources（§1.5.1）
+    op.create_table(
+        "ledger_sources",
+        sa.Column("ledger_id", sa.Uuid(), nullable=False),
+        sa.Column("source_id", sa.Uuid(), nullable=False),
+        sa.Column("shared_by", sa.Uuid(), nullable=False),
+        sa.Column("shared_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("ledger_id", "source_id", name="pk_ledger_sources"),
+        sa.ForeignKeyConstraint(["ledger_id"], ["ledgers.id"], ondelete="CASCADE",
+                                name="fk_ledger_sources_ledger_id_ledgers"),
+        sa.ForeignKeyConstraint(["source_id"], ["finance_sources.id"], ondelete="CASCADE",
+                                name="fk_ledger_sources_source_id_finance_sources"),
+        sa.ForeignKeyConstraint(["shared_by"], ["users.id"],
+                                name="fk_ledger_sources_shared_by_users"),
+    )
+    op.create_index("ix_ledger_sources_source_id", "ledger_sources", ["source_id"])
+
+    # ② 一个账户一行共享：迁移前"账本里人人可用" -> 迁移后行为不变（决策 §14.62 i）
+    op.execute(
+        "INSERT INTO ledger_sources (ledger_id, source_id, shared_by, shared_at) "
+        "SELECT ledger_id, id, created_by, created_at FROM finance_sources"
+    )
+
+    # ③ owner_id：先可空、回填、再收紧
+    with op.batch_alter_table("finance_sources") as b:
+        b.add_column(sa.Column("owner_id", sa.Uuid(), nullable=True))
+    op.execute("UPDATE finance_sources SET owner_id = created_by")
+    with op.batch_alter_table("finance_sources") as b:
+        b.alter_column("owner_id", existing_type=sa.Uuid(), nullable=False)
+        b.create_foreign_key("fk_finance_sources_owner_id_users", "users",
+                             ["owner_id"], ["id"])
+    op.create_index("ix_finance_sources_owner_id", "finance_sources", ["owner_id"])
+
+    # ④ 删 ledger_id：索引必须在 batch 块之前显式删（§5.3 同一个坑：batch 重建会按
+    #    反射到的旧索引清单重建 ix_finance_sources_ledger_id，而新表已没有这一列）
+    op.drop_index("ix_finance_sources_ledger_id", table_name="finance_sources")
+    with op.batch_alter_table("finance_sources") as b:
+        b.drop_constraint("fk_finance_sources_ledger_id_ledgers", type_="foreignkey")
+        b.drop_column("ledger_id")
+
+    # ⑤ 跨账本余额取数（§4；契约外补充，见 §4 备注）
+    op.create_index("ix_transactions_source_occurred", "transactions",
+                    ["source_id", "occurred_at"])
+```
+
+**`downgrade()`**（开发环境用；把账户放回某一本账）：
+
+1. 删 `ix_transactions_source_occurred`。
+2. 加回 `ledger_id`（先可空）并回填：每个账户取它在 `ledger_sources` 里 `shared_at` **最早**的那一行的账本；没有任何共享行的账户（迁移之后新建、从没共享过的），取主人**是成员**的账本里 `created_at` **最早**的那一本（经 `ledger_members` 解析，而不是 `ledgers.created_by`：`created_by` 在转让 owner、退出账本之后仍指向原创建人，按它取可能把账户放进主人早已不在的账本；反过来，自己建的账本都删了、但仍是别人账本成员的主人，按它取会落空而被误删）。（2026-09-16 按决策 §14.62 同步）
+3. 收紧：`ledger_id` NOT NULL，加回 `fk_finance_sources_ledger_id_ledgers`（`ON DELETE CASCADE`）与 `ix_finance_sources_ledger_id`。
+4. 删 `owner_id`：先删 `ix_finance_sources_owner_id`，再删外键 `fk_finance_sources_owner_id_users`，最后删列。
+5. 删 `ledger_sources`（`ix_ledger_sources_source_id` 随表消失）。
+
+```python
+def downgrade() -> None:
+    op.drop_index("ix_transactions_source_occurred", table_name="transactions")
+
+    with op.batch_alter_table("finance_sources") as b:
+        b.add_column(sa.Column("ledger_id", sa.Uuid(), nullable=True))
+    # 优先：最早的一行共享
+    op.execute("""
+        UPDATE finance_sources
+           SET ledger_id = (SELECT ls.ledger_id FROM ledger_sources ls
+                             WHERE ls.source_id = finance_sources.id
+                             ORDER BY ls.shared_at, ls.ledger_id LIMIT 1)
+    """)
+    # 兜底：主人是成员的、创建最早的账本（按成员关系，不按 created_by）
+    op.execute("""
+        UPDATE finance_sources
+           SET ledger_id = (SELECT l.id FROM ledgers l
+                              JOIN ledger_members m ON m.ledger_id = l.id
+                             WHERE m.user_id = finance_sources.owner_id
+                             ORDER BY l.created_at, l.id LIMIT 1)
+         WHERE ledger_id IS NULL
+    """)
+    # 两条都取不到（从没共享过、主人也不是任何账本的成员）的账户在旧模型里无处安放
+    delete_and_warn("finance_sources", "ledger_id IS NULL", "no ledger to scope the source to")
+    with op.batch_alter_table("finance_sources") as b:
+        b.alter_column("ledger_id", existing_type=sa.Uuid(), nullable=False)
+        b.create_foreign_key("fk_finance_sources_ledger_id_ledgers", "ledgers",
+                             ["ledger_id"], ["id"], ondelete="CASCADE")
+    op.create_index("ix_finance_sources_ledger_id", "finance_sources", ["ledger_id"])
+
+    op.drop_index("ix_finance_sources_owner_id", table_name="finance_sources")
+    with op.batch_alter_table("finance_sources") as b:
+        b.drop_constraint("fk_finance_sources_owner_id_users", type_="foreignkey")
+        b.drop_column("owner_id")
+
+    op.drop_table("ledger_sources")
+```
+
+要点：
+
+- **两种数据库都要正反通过**：Postgres 上 `batch_alter_table` 退化成普通 `ALTER TABLE`；SQLite 上走建新表—拷数据—改名。回填全用相关子查询（不用 `UPDATE ... FROM`），两边语法一致（§5.3 同一条理由）。
+- **索引先删再进 batch**：`ix_finance_sources_ledger_id`（upgrade）与 `ix_finance_sources_owner_id`（downgrade）都在 `with op.batch_alter_table` 之前显式 `drop_index`，理由见 §5.3 末段。
+- **外键名按全名删**：`fk_*` 规则不含 `%(constraint_name)s`，建与删都写全名（§5.0）。
+- **downgrade 的兜底 `delete_and_warn`**：只可能命中"从没共享过、主人也不是任何账本的成员"的账户（开发库里的极端数据）——旧模型里它没有账本可挂。若这种账户上还有交易，删除会被 `transactions.source_id` 的 NO ACTION 外键挡住、downgrade 整体失败，手工处理即可；downgrade 只用于开发环境，不为它写更多回退逻辑。
+- **SQLite 上依赖迁移连接关着外键**：upgrade ③ ④ 在 `ledger_sources` 已回填之后用 batch 重建 `finance_sources`（建新表—拷数据—`DROP TABLE` 旧表—改名）。这只在 Alembic 连接 `PRAGMA foreign_keys` 为 OFF 时安全——`backend/migrations/env.py` 用 `engine_from_config` 自建引擎，不挂应用的 `PRAGMA foreign_keys=ON` 监听器（`backend/app/core/database.py`）。若哪天迁移连接也开了外键，`DROP TABLE finance_sources` 隐含的删除会沿 `fk_ledger_sources_source_id_finance_sources` 的 `ON DELETE CASCADE` 把刚回填的 `ledger_sources` 清空；届时要在第 7 步前后包一层 `PRAGMA foreign_keys=OFF` / `ON`。（2026-09-16 按决策 §14.62 同步）
+- **空库可运行**：是。② 与 ③ 的回填作用于 0 行；downgrade 的两条 `UPDATE` 与 `delete_and_warn` 同样是 no-op。
+- **有数据可运行**：是。第 3 步之后每个账户都有非空的 `ledger_id` 与 `created_by`，② 的 `INSERT ... SELECT` 与 ③ 的 `UPDATE` 必然取到值；`(ledger_id, id)` 在 `finance_sources` 里本来就唯一，② 不会撞 `pk_ledger_sources`。
+- **测试**（`backend/tests/test_migrations.py`）：`HEAD_REVISION` 改为 `b1f3c2a10d47`；`TARGET_TABLES` 加 `ledger_sources`；在第 7 步之前灌账户的 INSERT（`_SOURCE_INSERT`）仍带 `ledger_id`，之后的改带 `owner_id`；`test_legacy_indexes_are_dropped` 改为断言 `ix_finance_sources_ledger_id` **不在**、`ix_finance_sources_owner_id` 在；新增"升级后每个账户恰有一行 `ledger_sources` 且等于原 `ledger_id`、`owner_id = created_by`"与"downgrade 后 `ledger_id` 回到原账本"两条（§8.2）。
+
+### 5.8 迁移链总览
 
 | 步 | revision（占位 id）| slug | 关键动作 | 空库可跑 | 有数据可跑 |
 |---|---|---|---|---|---|
@@ -1482,6 +1663,7 @@ with op.batch_alter_table("users", copy_from=users_tbl) as b:
 | 4 | `b1f3c2a10d44` | transactions_kind_category_refund | `description→note`；kind / 转账 / 分类 / 退款 / 导入列 + 全部 CHECK | 是 | 是（含三条清洗语句） |
 | 5 | `b1f3c2a10d45` | drop_transaction_tags | 删 `transaction_tags` | 是 | 是 |
 | 6 | `b1f3c2a10d46` | users_base_currency_as_ledger_default | `display_name`（决策 §14.40）/ `language`（决策 §14.6）/ `updated_at`；删 `default_source_id`（决策 §14.6，外键名有分叉，见 §5.6）| 是 | 是 |
+| 7 | `b1f3c2a10d47` | sources_belong_to_users | 建 `ledger_sources` 并按原 `ledger_id` 一比一回填共享行；`finance_sources` 加 `owner_id`（= `created_by`）、删 `ledger_id`（索引、外键、列）；建 `ix_transactions_source_occurred`（决策 §14.62，§5.7）（2026-09-16 按决策 §14.62 同步） | 是 | 是 |
 
 每步的 `downgrade()` 策略（**只用于开发环境**；生产回退靠恢复备份）：
 
@@ -1493,6 +1675,7 @@ with op.batch_alter_table("users", copy_from=users_tbl) as b:
 | 4 | 按 §1.6 的**全名** drop 全部新 CHECK / UNIQUE / FK / 索引与新列（§5.0），`note` 改回 `description`，`op.create_index("idx_transactions_transfer_pair", ...)` | 有损：`amount = 0` 的行与被打散的 `transfer_pair_id` 不可恢复 |
 | 5 | `op.create_table("transaction_tags", ...)` 重建空表 | 有损：标签数据不可恢复（这正是决策 §13 允许删表的前提） |
 | 6 | 加回 `default_source_id`（值全为 NULL）与外键 `fk_users_default_source`（只在 Postgres 分支上按名字建，与 upgrade 的写法 A 对称），删掉 `display_name` / `language` / `updated_at` 与三条 CHECK | 有损：`default_source_id` 与 `display_name` 的值不可恢复 |
+| 7 | 删 `ix_transactions_source_occurred`；加回 `ledger_id`（取 `shared_at` 最早的共享行，没有共享行的取主人是成员的账本里 `created_at` 最早的一本），NOT NULL + 原外键 / 索引；删 `owner_id`；删 `ledger_sources` | 有损：多本账的共享关系只留下一本；主人已不在任何账本、又从没共享过的账户被 `delete_and_warn` 删掉（2026-09-16 按决策 §14.62 同步） |
 
 ---
 
@@ -1502,11 +1685,11 @@ with op.batch_alter_table("users", copy_from=users_tbl) as b:
 
 ### 6.1 注册
 
-`POST /auth/register`（受 `REGISTRATION_OPEN` 控制，决策 §9）→ 一个事务内：`INSERT users` → `INSERT ledgers`（name `"我的账本"`、`base_currency = users.base_currency`）→ `INSERT ledger_members (role='owner')`（决策 §2）。不再自动建账户，也不再有 `default_source_id` 的自动赋值（现状 backend/app/api/finance_sources.py:43-49 的那段逻辑消失）。用户随后必须先建一个资金账户才能记账。
+`POST /auth/register`（受 `REGISTRATION_OPEN` 控制，决策 §9）→ 一个事务内：`INSERT users` → `INSERT ledgers`（name `"我的账本"`、`base_currency = users.base_currency`）→ `INSERT ledger_members (role='owner')`（决策 §2）。不再自动建账户，也不再有 `default_source_id` 的自动赋值（现状 backend/app/api/finance_sources.py:43-49 的那段逻辑消失）。用户随后必须先建一个资金账户才能记账；账户属于他本人，建一次就能在他所在的每本账里用（决策 §14.62 b、k）（2026-09-16 按决策 §14.62 同步）。
 
 ### 6.2 建账本 / 加入 / 退出 / 转让
 
-账本的成员集合只由四个写入点改变：`POST /ledgers` 建账本（同一事务写 `ledgers` 一行 + `ledger_members` 一行 `role='owner'`）；`POST /ledgers/join` 凭邀请码加入（写 `ledger_members` 一行 `role='member'`）；`DELETE /{id}/members/{uid}`（owner 踢人）与 `POST /{id}/leave`（member 自己退出，owner 被拒）各删一行；`POST /{id}/transfer-ownership` 不增减行数，只在同一事务里把旧 owner 降为 member、新 member 升为 owner。`POST /{id}/invites` 只写 `ledger_invites`（10 分钟有效），不改成员表。
+账本的成员集合只由四个写入点改变：`POST /ledgers` 建账本（同一事务写 `ledgers` 一行 + `ledger_members` 一行 `role='owner'`）；`POST /ledgers/join` 凭邀请码加入（写 `ledger_members` 一行 `role='member'`）；`DELETE /{id}/members/{uid}`（owner 踢人）与 `POST /{id}/leave`（member 自己退出，owner 被拒）各删一行，并在同一事务里删掉**这个人共享到这本账**的 `ledger_sources` 行（`DELETE FROM ledger_sources WHERE ledger_id = :lid AND source_id IN (SELECT id FROM finance_sources WHERE owner_id = :uid)`）——他记的交易留在账本里，账户仍归他（决策 §14.62 f）（2026-09-16 按决策 §14.62 同步）；`POST /{id}/transfer-ownership` 不增减行数，只在同一事务里把旧 owner 降为 member、新 member 升为 owner。`POST /{id}/invites` 只写 `ledger_invites`（10 分钟有效），不改成员表。
 
 加入的写入序列（决策 §2、§14.29），全在一个事务里：
 
@@ -1540,11 +1723,13 @@ COMMIT;
 
 删账本时这张表随 `ON DELETE CASCADE` 清空（§6.7）。
 
-### 6.4 账户归档 / 删除
+### 6.4 账户归档 / 删除 / 共享
 
-账户只有两个状态，由 `archived` 布尔列表示：`POST /{lid}/sources` 建出的是 `archived = false, archived_at = NULL`，`PATCH {"archived": true/false}` 在两个状态间双向切换（归档可撤销），**同一次写入必须同步 `archived_at`**（`true` 写 `now()`、`false` 写 `NULL`，否则 `ck_finance_sources_archived_at` 直接拒绝，§1.5）。`DELETE /{lid}/sources/{sid}` 是第三条路径，只在 `COUNT(transactions WHERE source_id = ?) = 0` **且** `COUNT(import_batches WHERE source_id = ?) = 0` 时真的删一行，否则返回 `409 source_has_transactions`。
+账户只有两个状态，由 `archived` 布尔列表示：`POST /sources` 建出的是 `archived = false, archived_at = NULL`（`owner_id = created_by =` 调用者），`PATCH /sources/{sid} {"archived": true/false}` 在两个状态间双向切换（归档可撤销），**同一次写入必须同步 `archived_at`**（`true` 写 `now()`、`false` 写 `NULL`，否则 `ck_finance_sources_archived_at` 直接拒绝，§1.5）。`DELETE /sources/{sid}` 是第三条路径，只在 `EXISTS (SELECT 1 FROM transactions WHERE source_id = ?)` 与 `EXISTS (SELECT 1 FROM import_batches WHERE source_id = ?)` **都为假**时真的删一行——两条都**不带 `ledger_id`**，任何账本里的交易或导入批次都算——否则返回 `409 source_has_transactions`；删掉的账户的 `ledger_sources` 行随 `ON DELETE CASCADE` 消失（2026-09-16 按决策 §14.62 同步）。
 
-归档后：不能作为新交易的 `source_id`、不能作为导入目标（决策 §3），历史交易照常显示、账户余额照常算，但**不计入净资产与首页合计**（决策 §14.50，读取时按 `WHERE archived = FALSE` 过滤；归档前界面提示"该账户余额将从净资产中移除"）。归档账户上的历史交易仍然允许修改，只禁止新建（决策 §14.40 的 01-12）。删除只在账户干净时允许（决策 §3）；数据库侧 `transactions.source_id` 是 NO ACTION，会在应用层漏判时报外键错误兜底（§1.6.2）。
+归档后：不能作为新交易的 `source_id`、不能作为导入目标（决策 §3），在所有账本、对所有人都一样；历史交易照常显示、账户余额照常算，但**不计入净资产与首页合计**（决策 §14.50，读取时按 `WHERE archived = FALSE` 过滤；归档前界面提示"该账户余额将从净资产中移除"）。归档账户上的历史交易仍然允许修改，只禁止新建（决策 §14.40 的 01-12）。删除只在账户干净时允许（决策 §3）；数据库侧 `transactions.source_id` 是 NO ACTION，会在应用层漏判时报外键错误兜底（§1.6.2）。
+
+共享与取消共享只动 `ledger_sources`（决策 §14.62 b）：`PUT /sources/{sid}/ledgers/{lid}` 在主人是 `lid` 成员时插入一行（已存在则不动，幂等）；`DELETE /sources/{sid}/ledgers/{lid}` 同样要求主人是 `lid` 成员（否则 404），删那一行（本来没有也算成功）。取消共享**不碰任何交易**：已记下的交易的 `source_id` 照旧指向这张卡，只是其他成员不能再用它记新账（2026-09-16 按决策 §14.62 同步）。
 
 ### 6.5 交易删除
 
@@ -1630,20 +1815,22 @@ COMMIT;
 
 ### 6.7 账本删除
 
-owner 调用 `DELETE /ledgers/{id}`（决策 §2）。数据库侧六条 CASCADE 会自动清理 `ledger_members`、`ledger_invites`、`finance_sources`、`transactions`（进而 `transaction_events`）、`import_batches`（进而 `import_rows`）、以及直接挂在账本上的 `transaction_events`，但应用层仍在同一事务内按依赖顺序显式删除，保证在 SQLite 上（外键默认不生效，见 `../current-design/02-database.md` §1.2）行为一致：
+owner 调用 `DELETE /ledgers/{id}`（决策 §2）。数据库侧六条 CASCADE 会自动清理 `ledger_members`、`ledger_invites`、`ledger_sources`、`transactions`（进而 `transaction_events`）、`import_batches`（进而 `import_rows`）、以及直接挂在账本上的 `transaction_events`；**`finance_sources` 不在其中**——账户属于人，删账本只解除这本账上的共享，账户留在主人名下，余额里少掉这本账的交易（决策 §14.62 f）。应用层仍在同一事务内按依赖顺序显式删除，保证在 SQLite 上（外键默认不生效，见 `../current-design/02-database.md` §1.2）行为一致（2026-09-16 按决策 §14.62 同步）：
 
 ```
 transaction_events -> import_rows -> transactions -> import_batches
-                   -> finance_sources -> ledger_invites -> ledger_members -> ledgers
+                   -> ledger_sources -> ledger_invites -> ledger_members -> ledgers
 ```
+
+上一版的删除顺序里有 `finance_sources`（必须排在 `transactions` 之后，否则撞 `transactions.source_id` 的外键）；删账本不再删账户之后，这一环连同那条顺序约束一起消失。
 
 **磁盘侧：什么都不用做**——服务端没有任何文件系统状态（决策 §14.28）。
 
-删除前要求二次确认：先 `GET /ledgers/{id}` 拿到 counts（交易数、账户数、导入批次数，决策 §14.52 A22），显示"将删除 N 笔交易、M 个账户、K 批导入"，并要求用户**手打账本名**才放行。
+删除前要求二次确认：先 `GET /ledgers/{id}` 拿到 counts（交易数、共享到本账本的账户数、导入批次数，决策 §14.52 A22），显示"将删除 N 笔交易、K 批导入；共享账户 M 个只解除共享，不删账户"，并要求用户**手打账本名**才放行（2026-09-16 按决策 §14.62 同步）。
 
 ### 6.8 汇率缓存（`exchange_rates`）
 
-这张表不属于任何账本、任何用户，生命周期与其它九张表完全独立（决策 §14.1）：
+这张表不属于任何账本、任何用户，生命周期与其它十张表完全独立（决策 §14.1）：
 
 | 事件 | 动作 |
 |---|---|
@@ -1658,7 +1845,7 @@ transaction_events -> import_rows -> transactions -> import_batches
 
 ### 6.9 用户删除
 
-**本版本不提供接口**（决策 §11 的"我"分组只有 `GET /me` 与 `PATCH /me` 两个端点，没有 `DELETE /me`）。因此 `created_by` / `updated_by` / `ledgers.created_by` / `transaction_events.actor_id` 上的外键都是 NO ACTION，不会产生悬垂引用。若运维必须删除某个用户，正确顺序是：先把该用户 owner 的账本转让或删除 → 删 `ledger_members` 行 → 最后删 `users`；只要该用户在任何账本里创建过交易或留下过操作记录，最后一步就会因 `fk_transactions_created_by_users` / `fk_transaction_events_actor_id_users` 失败——这是有意的，防止把别人账本里的历史记录删出空洞。成员退出账本时**不删任何历史**、也不匿名化，交易上照旧显示他的 `display_name`（决策 §14.40）。
+**本版本不提供接口**（决策 §11 的"我"分组只有 `GET /me` 与 `PATCH /me` 两个端点，没有 `DELETE /me`）。因此 `created_by` / `updated_by` / `ledgers.created_by` / `transaction_events.actor_id` / `finance_sources.owner_id` / `ledger_sources.shared_by` 上的外键都是 NO ACTION，不会产生悬垂引用（2026-09-16 按决策 §14.62 同步）。若运维必须删除某个用户，正确顺序是：先把该用户 owner 的账本转让或删除 → 删 `ledger_members` 行 → 最后删 `users`；只要该用户在任何账本里创建过交易或留下过操作记录，最后一步就会因 `fk_transactions_created_by_users` / `fk_transaction_events_actor_id_users` 失败——这是有意的，防止把别人账本里的历史记录删出空洞。成员退出账本时**不删任何历史**、也不匿名化，交易上照旧显示他的 `display_name`（决策 §14.40）。
 
 ### 6.10 交易操作记录（`transaction_events`）
 
@@ -1736,7 +1923,7 @@ UPDATE transactions
 
 ### 7.4 容量
 
-一本账本预期 10 人以内、每年数千笔交易（决策 §2 软限制）。所有列表接口都带 `ledger_id` 前缀过滤 + offset 分页；`import_rows` 单批 ≤2000 行（决策 §5）。`transaction_events` 是交易数的几倍（一条交易一生的事件是个位数），量级上仍然微不足道，不做归档（§6.10）。`exchange_rates` 每天每个货币对一行，永久保留也只是每年几万行。没有分区、没有归档策略。
+一本账本预期 10 人以内、每年数千笔交易（决策 §2 软限制）；每人至多 50 个账户（决策 §14.62 a）。账本内的列表接口都带 `ledger_id` 前缀过滤 + offset 分页，个人账户列表按 `owner_id` 过滤、一次取完（至多 50 行）（2026-09-16 按决策 §14.62 同步）；`import_rows` 单批 ≤2000 行（决策 §5）。`transaction_events` 是交易数的几倍（一条交易一生的事件是个位数），量级上仍然微不足道，不做归档（§6.10）。`exchange_rates` 每天每个货币对一行，永久保留也只是每年几万行。没有分区、没有归档策略。
 
 ---
 
@@ -1746,7 +1933,7 @@ UPDATE transactions
 
 沿用现状：`backend/tests/conftest.py:10` 在导入任何 `app` 模块前把 `DATABASE_URL` 设成 `sqlite:///:memory:`，`conftest.py:47-50` 建专用引擎，`conftest.py:58-69` 的 session 级 fixture 调 `Base.metadata.create_all` / `drop_all`。目标态对这条路径的要求：
 
-1. **`create_all` 必须能建出全部十张表和全部 CHECK**（十张表含 `transaction_events` 与 `exchange_rates`，模型里必须有它们，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致（`ck_finance_sources_archived_at` 的 `archived = (archived_at IS NOT NULL)` 与 `ck_transactions_transfer_role` 属于同一类布尔等价写法，两边都成立）。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 §1 里没有任何一条 CHECK 用裸 `LIKE`；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.4）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
+1. **`create_all` 必须能建出全部十一张表和全部 CHECK**（十一张表含 `transaction_events`、`ledger_sources` 与 `exchange_rates`（2026-09-16 按决策 §14.62 同步），模型里必须有它们，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致（`ck_finance_sources_archived_at` 的 `archived = (archived_at IS NOT NULL)` 与 `ck_transactions_transfer_role` 属于同一类布尔等价写法，两边都成立）。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 §1 里没有任何一条 CHECK 用裸 `LIKE`；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.4）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
 2. **CHECK 在 SQLite 上是真的生效的**，所以约束测试可以全部跑在内存库上：插入 `kind='expense', amount=100` 必须抛 `IntegrityError`。这是把不变量写进数据库而不是只写在 pydantic 里的最大回报——现状的 `finance_sources.type` 只有注释没有 CHECK（backend/app/models/finance_source.py:19），SQLite 上根本测不到。
 3. **外键在 SQLite 上默认不生效**，现状没有任何 `PRAGMA foreign_keys=ON`（`../current-design/02-database.md` §1.2）。目标态在测试引擎上挂一个连接事件把它打开，否则 `ON DELETE CASCADE` / `SET NULL` 的行为在测试里完全测不到：
 
@@ -1794,9 +1981,9 @@ fixture 思路（`backend/tests/conftest.py`，三个 fixture；前两个是 Pos
 
 | 用例 | 断言 |
 |---|---|
-| 空库 `upgrade head` | 六步全部执行，`alembic_version` = 最后一个 revision |
+| 空库 `upgrade head` | 七步全部执行，`alembic_version` = 最后一个 revision（`b1f3c2a10d47`）（2026-09-16 按决策 §14.62 同步） |
 | 空库 `upgrade head` 后再 `downgrade base` | 不报错，表全部消失（验证每个 `downgrade` 都写对了） |
-| 有数据的库升级 | 先在 head `8a4f4d66d893` 上灌入：2 个用户、每人 2 个账户（一个归档、一个用旧的账户类型取值）、若干交易（含一对正确的转账、一对同号的错误转账、一条 `amount = 0`、一条 `source_id` 指向已删账户的孤儿行）、若干 `transaction_tags`；升级后断言：每人恰好一本账本且是 owner、`finance_sources.ledger_id` / `transactions.ledger_id` 全部非空且一致、`type` 全在四种之内、归档账户的 `archived_at` 非空而未归档账户为空、`users.display_name` 全为 NULL、`kind` 回填正确、同号 pair 被打散成单腿、零金额行被删、`transaction_tags` 不存在 |
+| 有数据的库升级 | 先在 head `8a4f4d66d893` 上灌入：2 个用户、每人 2 个账户（一个归档、一个用旧的账户类型取值）、若干交易（含一对正确的转账、一对同号的错误转账、一条 `amount = 0`、一条 `source_id` 指向已删账户的孤儿行）、若干 `transaction_tags`；升级后断言：每人恰好一本账本且是 owner、`transactions.ledger_id` 全部非空、`finance_sources` 已无 `ledger_id` 而 `owner_id = created_by`、每个账户在 `ledger_sources` 里恰有一行且指向它的交易所在的那本账（2026-09-16 按决策 §14.62 同步）、`type` 全在四种之内、归档账户的 `archived_at` 非空而未归档账户为空、`users.display_name` 全为 NULL、`kind` 回填正确、同号 pair 被打散成单腿、零金额行被删、`transaction_tags` 不存在 |
 | schema 与模型一致 | 升级后用 `alembic revision --autogenerate` 的比较 API（`compare_metadata`）断言 diff 为空——防止迁移与模型漂移，这是现状最大的隐患（现状模型改过而没有对应迁移，`../current-design/02-database.md` §6）。迁移第 1 步和模型都必须有 `exchange_rates`（决策 §14.1），少一边这条断言就会失败 |
 | 约束真的生效 | 逐条插入违反 §1.6.1 八个约束的行，断言 `IntegrityError`；插入合法行断言成功 |
 | 账户类型与归档时刻 | 升级后插入 `type` 为四种之外的账户断言 `IntegrityError`；插入 `archived = TRUE, archived_at = NULL` 或 `archived = FALSE, archived_at = <ts>` 都断言 `IntegrityError`（决策 §14.48、§14.50）|
@@ -1804,6 +1991,7 @@ fixture 思路（`backend/tests/conftest.py`，三个 fixture；前两个是 Pos
 | 邀请码没有唯一索引 | 升级后往同一账本插入两行 `code` 相同、`expires_at` 不同的邀请码，断言**都能插入成功**（决策 §14.29：唯一性由生成时的重试保证，不由数据库保证）；再断言 `ledger_invites` 上除主键外只有 `ix_ledger_invites_ledger_id` 一个索引 |
 | 操作记录随交易级联 | 升级后建一条交易 + 三条 `transaction_events`，删掉交易，断言事件行数归零；插入 `event` 为七种之外的值断言 `IntegrityError`（决策 §14.51）|
 | 索引被正确 drop（Postgres） | 在 head `8a4f4d66d893` 上灌数据后升级，断言 `ix_transactions_user_id`、`ix_accounts_user_id`、`ix_transactions_account_id`、`idx_transactions_transfer_pair` 都已不在 `SELECT indexname FROM pg_indexes WHERE tablename IN ('transactions','finance_sources')` 的结果里（对应 §5.3 / §5.4 那几段 `DROP INDEX IF EXISTS`） |
+| 第 7 步正反都能走（两种数据库） | 在 `b1f3c2a10d46` 上灌两个账本各两个账户（含一个归档）后升到 head：断言 `ledger_sources` 行数 = 账户数且 `(ledger_id, source_id)` 等于原来的 `(finance_sources.ledger_id, id)`、`shared_by = created_by`、`shared_at = created_at`、`owner_id = created_by`、`ix_finance_sources_ledger_id` 与 `fk_finance_sources_ledger_id_ledgers` 都不在；再 `downgrade` 到 `b1f3c2a10d46`，断言每个账户的 `ledger_id` 回到原账本、`ledger_sources` 不存在。SQLite 路径在默认回路里跑同一条（`sqlite_migrated_db`）（2026-09-16 按决策 §14.62 同步） |
 | `exchange_rates` 可用 | 升级后 upsert 同一 `(date, base, symbol)` 两次，断言只有一行且 `rate` / `fetched_at` 被刷新；插入 `rate = 0` 或 `base = symbol` 断言 `IntegrityError`（决策 §14.1、§1.10）|
 
 另有一条**不带** `@pytest.mark.postgres` 的用例，跑在上面的 `sqlite_migrated_db` 上——`pg_indexes` 在 SQLite 上不存在，所以断言换一套写法，但要盯的是同一件事（§5.3 那几段 `DROP INDEX IF EXISTS` 少一条，batch 重建就会失败）：
@@ -1851,7 +2039,7 @@ CI 里用一个 `postgres:15-alpine` service 提供 `TEST_POSTGRES_URL`；本地
 | D-2 | `users.default_source_id` 删除后默认账户从哪来 | **已由决策 §14.6 裁定**：删除该列，默认账户由前端本地记住上次使用的账户，不入库、不加 `ledger_members.default_source_id`（§5.6） |
 | D-3 | `import_rows` 的日期列叫 `date` 还是 `occurred_at` | **已由决策 §14.41 裁定**：数据库列与交易表一致叫 `occurred_at`（`DATE`），导入文件的固定表头与接口字段仍叫 `date`，映射在服务层（§1.8） |
 | D-4 | 模型配置表的密钥列名 | **已由决策 §14.25 作废**：应用不接入 LLM，这张表整个不存在，也就没有密钥列（§0） |
-| D-5 | 同一账本内账户是否允许重名 | **已由决策 §14.40 裁定**：允许，不加任何唯一约束，按 id 区分、只在界面提示（§1.5） |
+| D-5 | 账户是否允许重名 | **已由决策 §14.40 裁定**：允许，不加任何唯一约束，按 id 区分、只在界面提示（§1.5）；决策 §14.62 之后口径是"同一人下允许同名"（2026-09-16 按决策 §14.62 同步） |
 | D-6 | 已用 / 已过期邀请码何时删 | **已由决策 §14.29 裁定**：用掉即删、过期即删（生成或校验时惰性清理）、owner 作废也是删行；不做定时清理，`code` 不建唯一索引（§1.4、§6.3） |
 | D-7 | "每人 ≤10 本账、每本 ≤10 人"是否需要数据库约束 | **已由决策 §14.41 裁定**：只在应用层 `COUNT(*)` 校验，不加触发器（§3.2） |
 | D-8 | 视觉解析路径的页面缩略图存哪里 | **已由决策 §14.25 作废**：没有解析、没有缩略图、没有上传目录，`import_rows` 的页码列一并删除（§1.8、§6.6） |
