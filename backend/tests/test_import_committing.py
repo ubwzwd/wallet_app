@@ -498,6 +498,46 @@ def test_counterpart_unshared_after_review_is_not_found(db, world, source_factor
     assert db.query(Transaction).filter_by(import_batch_id=batch.id).count() == 0
 
 
+def _pair_row_onto(db, world, transaction_factory, source):
+    """A credit-card batch whose one row pairs with an out leg on ``source``."""
+    leg = transaction_factory(
+        world.ledger, source, kind="transfer", amount=Decimal("-3000.0000"),
+        occurred_at=DAY, transfer_role="out", transfer_subtype="plain",
+    )
+    batch = make_batch(db, world)
+    add_row(db, batch, kind="transfer", amount=Decimal("3000.0000"), category_l1=None,
+            merchant=None, transfer_role="in", transfer_subtype="repayment",
+            matched_transaction_id=leg.id)
+    return batch, leg
+
+
+def test_pair_target_on_an_unshared_account_is_not_found(
+    db, world, source_factory, transaction_factory
+):
+    """§5.33 1a / §14.62 e: pairing touches the far leg, so its account must be usable."""
+    theirs = source_factory(world.ledger, name="她的卡", created_by=world.member.id)
+    batch, leg = _pair_row_onto(db, world, transaction_factory, theirs)
+    unshare(db, world.ledger, theirs)
+
+    error = commit_error(db, batch, world.user.id)
+    assert (error.status_code, error.code) == (404, "not_found")
+    assert leg.transfer_pair_id is None
+    assert db.query(Transaction).filter_by(import_batch_id=batch.id).count() == 0
+
+
+def test_pair_target_on_an_archived_account_is_refused(
+    db, world, source_factory, transaction_factory
+):
+    old = source_factory(world.ledger, name="旧储蓄卡")
+    batch, leg = _pair_row_onto(db, world, transaction_factory, old)
+    old.archived, old.archived_at = True, utcnow()
+    db.flush()
+
+    error = commit_error(db, batch, world.user.id)
+    assert (error.status_code, error.code) == (409, "source_archived")
+    assert leg.transfer_pair_id is None
+
+
 def test_counterpart_is_judged_for_the_uploader_not_the_committer(
     db, world, owned_source_factory
 ):

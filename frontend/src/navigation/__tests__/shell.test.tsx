@@ -3,7 +3,7 @@
  * chrome's copy — every label comes from the language pack.
  */
 import React from 'react';
-import { router as expoRouter } from 'expo-router';
+import { router as expoRouter, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 import { act, fireEvent, renderHook, renderRouter, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
@@ -34,6 +34,12 @@ import { useSwUpdateToast } from '../useSwUpdateToast';
 const LEDGER_A = 'ledger-a';
 const LEDGER_B = 'ledger-b';
 
+/** The list page names its `source_id` filter, so a test can see the query arrived. */
+function TransactionsPage(): React.JSX.Element {
+  const { source_id: sourceId } = useLocalSearchParams<{ source_id?: string }>();
+  return <Text>{sourceId ? `transactions-page ${sourceId}` : 'transactions-page'}</Text>;
+}
+
 const ROUTES = {
   _layout: RootLayout,
   index: () => <Text>landing</Text>,
@@ -45,7 +51,7 @@ const ROUTES = {
   '(app)/settings': () => <Text>settings-page</Text>,
   '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': () => <Text>ledger-home</Text>,
-  '(app)/l/[ledgerId]/transactions/index': () => <Text>transactions-page</Text>,
+  '(app)/l/[ledgerId]/transactions/index': TransactionsPage,
   '(app)/l/[ledgerId]/transactions/new': () => <Text>new-transaction-page</Text>,
   '(app)/l/[ledgerId]/settings': () => <Text>ledger-settings-page</Text>,
   '(app)/l/[ledgerId]/imports/index': () => <Text>imports-page</Text>,
@@ -442,6 +448,28 @@ describe('wide (>=1024)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/imports`));
     expect(await router.findByText('imports-page')).toBeTruthy();
     expect(router.queryByText('ledger-home')).toBeNull();
+
+    act(() => {
+      expoRouter.back();
+    });
+    await waitFor(() => expect(router.getPathname()).toBe('/settings'));
+  });
+
+  test('entering a ledger page from outside keeps the query the navigation carried', async () => {
+    // The correction replaces the misplaced page with the one the URL names — query and
+    // all: `/accounts` → an account's entries is `/l/:id/transactions?source_id=…`, and
+    // dropping the filter would open the unfiltered list.
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockGet(`/ledgers/${LEDGER_B}/members`, { items: [], total: 4 });
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+    expect(await router.findByText('settings-page')).toBeTruthy();
+
+    act(() => {
+      expoRouter.navigate(`/l/${LEDGER_B}/transactions?source_id=src-1`);
+    });
+    expect(await router.findByText('transactions-page src-1')).toBeTruthy();
+    expect(router.queryByText('ledger-home')).toBeNull();
+    expect(router.getPathnameWithParams()).toBe(`/l/${LEDGER_B}/transactions?source_id=src-1`);
 
     act(() => {
       expoRouter.back();

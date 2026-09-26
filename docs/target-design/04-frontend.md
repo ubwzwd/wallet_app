@@ -690,16 +690,16 @@ export interface TransferPair {
 }
 // 配对 / 拆开（决策 §14.34）
 // POST /ledgers/{id}/transactions/{tid}/pair：把两条单腿转账合成一笔
-export interface TransactionPairRequest { counterpart_transaction_id: Uuid; }
-// 响应是合成后的 TransferPair；unpair 无请求体，响应是拆开后的两条 Transaction
-// （同步 2026-09-15）unpair 的响应是 03 §5.34 的 `{pair_id, unpaired}`，两条腿是**精简**形态
-// （id / source_id / kind / transfer_role / transfer_subtype / amount / currency /
-// transfer_pair_id / counterparty / updated_at），不是完整的 Transaction
+export interface TransactionPairRequest { other_transaction_id: Uuid; }   // 03 §5.33 的字段名
+// 配对的响应是合成后的 TransferPair；unpair 无请求体，响应是 03 §5.34 的
+// `{pair_id, unpaired}`——两条腿的**精简**形态（id / source_id / kind / transfer_role /
+// transfer_subtype / amount / currency / transfer_pair_id / counterparty / updated_at），
+// 不是完整的 Transaction（同步 2026-09-15）
 export interface UnpairedLeg {
   id: Uuid; source_id: Uuid; kind: 'transfer';
   transfer_role: TransferRole; transfer_subtype: TransferSubtype;
   amount: Money; currency: string;
-  transfer_pair_id: Uuid | null;
+  transfer_pair_id: Uuid | null;      // 拆开之后恒为 null
   counterparty: string | null;
   updated_at: IsoDateTime;
 }
@@ -707,7 +707,7 @@ export interface UnpairResult { pair_id: Uuid; unpaired: UnpairedLeg[]; }
 
 export interface TransactionListParams {
   q?: string; kind?: TxKind[]; category_l1?: string; category_l2?: string;
-  source_id?: Uuid[]; from?: IsoDate; to?: IsoDate; currency?: string;
+  source_id?: Uuid[]; from?: IsoDate; to?: IsoDate; currency?: string[]; // 可重复，IN（决策 §14.60）
   min_amount?: number; max_amount?: number;   // 按基准币种折算后的绝对值比较（决策 §14.49）
   import_batch_id?: Uuid;                     // 决策 §14.46 的 04-D-7
   limit?: number; offset?: number;            // limit 上限 200（决策 §14.44 的 03-14）
@@ -839,7 +839,7 @@ export interface ImportRow {
   transaction_id: Uuid | null;              // 提交后回填
 }
 export interface ImportRowListParams {
-  status?: ImportRowStatus[]; flag?: ImportFlag[]; uncategorized?: boolean;
+  status?: ImportRowStatus[]; flag?: ImportFlag[]; flagged?: boolean; uncategorized?: boolean;
   limit?: number;   // 上限 500（决策 §14.44 的 03-14）
   offset?: number;
 }
@@ -851,7 +851,12 @@ export type ImportRowPatch = Partial<Pick<ImportRow,
 // PATCH .../imports/{bid}/rows（批量，决策 §14.52 A4）。
 // **要么全成要么全不成**（03 §5.42）：整批在一个事务里跑，任何一行校验不过就 400 并全部回滚，
 // 没有「部分成功」这种响应，因此响应里也没有「被跳过的行」这一项。
-export interface ImportRowsBulkPatch { row_ids: Uuid[]; patch: ImportRowPatch; }
+// 批量体不收 matched_transaction_id / counterpart_source_id / counterparty 三个逐行关联字段
+// （05 §4.1；03 §5.42 那句「与 §5.41 的可改字段完全相同」与之冲突，取 05，见 00-decisions §14.55）。
+// 服务端 ImportRowsBulkRowPatch 多带一个就 422。
+export type ImportRowsBulkRowPatch = Omit<ImportRowPatch,
+  'matched_transaction_id' | 'counterpart_source_id' | 'counterparty'>;
+export interface ImportRowsBulkPatch { row_ids: Uuid[]; patch: ImportRowsBulkRowPatch; }
 export interface ImportRowsBulkResult {
   updated: number;              // 改掉的行数
   rows: ImportRow[];            // 这些行改完之后的完整形态，字段同 ImportRow
@@ -1221,7 +1226,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
   - **何时显示**：**本账本交易数为 0** 时显示「这本账还是空的」引导，代替四块区块；判断用首页已经取到的数据（最近交易列表的 `total`，或月度统计里现成的计数），**不加请求**；数据还没到时不显示引导（不闪一下）。有交易后照旧显示四块。原来「本账本没有未归档账户」就显示引导的判断删除——账户归人后，主人的账户在他所在的任何账本里直接可用（§14.62 b），新账本一开就能记，不需要再建账户。
   - **「建一个账户」这一步**、页头的「建第一个账户」按钮、净资产区的「先建一个账户」提示，**只在对我在本账本内可用的账户为 0 时出现**——`useLedgerSources(ledgerId)` 里 `usable` 为真的一个都没有（自己没有未归档账户，也没有成员共享进来的）。此时是三步：建一个账户 → 记一笔或导入账单 → 邀请成员；「去建」与「建第一个账户」都进 `routes.accountNew(ledgerId)`（`/accounts/new?ledger=<本账本>`，共享到本账本默认勾上）。
   - 否则引导**只剩两步**「记一笔或导入账单 → 邀请成员」，页头主按钮改为「**记一笔**」（→ `routes.l(id).transactionNew()`），说明文字用两步版本的新 key（`stats:home.empty.body` 之外另加一条，zh / en 同步）；净资产区照常显示个人的三个数。
-  - 这时的净资产与账户卡显示的是个人的数（d），不是灰色的 0。（2026-09-16 按决策 §14.62 同步）
+  - 这时页头的净资产显示的是个人的数（d），不是灰色的 0。引导代替的是四块区块（含「账户」卡），所以空账本上看不到账户卡；灰色的 0 只出现在三步版——那时我在本账本一个可用账户都没有，个人净资产本来就是 0（`HomeScreen` 的 `mutedNetWorth = 空账本 && 没有可用账户`）。（2026-09-16 按决策 §14.62 同步；2026-09-27 第八阶段验收按代码补正）
 - **交互**：下拉刷新与页头的刷新按钮两个入口都给，不按平台分叉；`refetchOnWindowFocus` 保证切回标签页即最新（§2.4）。
 
 ### 4.5 交易列表 `/l/:ledgerId/transactions`

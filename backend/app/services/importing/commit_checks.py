@@ -169,7 +169,7 @@ def _validate_row(
         return
 
     if matched is not None:  # ① pairing wins; the other column is left alone
-        assert_pairable(db.get(Transaction, matched), row, batch)
+        assert_pair_target(db, db.get(Transaction, matched), row, batch)
     elif row.counterpart_source_id is not None:  # ②
         far = load_counterpart(db, batch, row)
         # 03 §5.43: this landing builds a pair, it does not tie two existing
@@ -209,6 +209,35 @@ def assert_pairable(
         reason = "The two legs must be on different accounts"
     if reason is not None or far is None:
         raise CommitRejected(400, ErrorCode.PAIR_INVALID, str(reason), [row.row_no])
+    return far
+
+
+def assert_pair_target(
+    db: Session, far: Transaction | None, row: ImportRow, batch: ImportBatch
+) -> Transaction:
+    """§4.5 ①'s checks at commit: :func:`assert_pairable`, then §5.33 check 1a.
+
+    Pairing touches the existing leg too, so both legs' accounts must be
+    usable by the uploader in this ledger and live — the same rule as
+    ``POST .../pair`` (decision §14.62 e). The near leg is the batch's own
+    account, already judged by :func:`validate_batch`; this judges the far
+    one: someone else's account unshared from here is 404, archived is 409.
+    """
+    far = assert_pairable(far, row, batch)
+    source = db.get(FinanceSource, far.source_id)
+    if source is None or not source_access.is_usable(
+        db, batch.created_by, batch.ledger_id, source
+    ):
+        raise CommitRejected(
+            404, ErrorCode.NOT_FOUND, "Pair target's account not found", [row.row_no]
+        )
+    if source.archived:
+        raise CommitRejected(
+            409,
+            ErrorCode.SOURCE_ARCHIVED,
+            f"Account {source.name!r} is archived",
+            [row.row_no],
+        )
     return far
 
 

@@ -9,7 +9,9 @@
  * that mismatch — a route whose `params.screen` matches the URL but whose child navigator
  * focuses a different route — and replaces the misplaced page with the one the URL names.
  * `replace`, not `navigate`: the history must read `/settings → /l/:id/imports`, so a back
- * step still returns to where the user came from (§14.64 f).
+ * step still returns to where the user came from (§14.64 f). The replacement keeps the
+ * query the navigation carried (`/accounts/new?ledger=…`, `/l/:id/transactions?source_id=…`):
+ * `usePathname()` has none, so it is read back from the entry's own nested params.
  *
  * A stale `params.screen` is normal after in-ledger navigation (it keeps the value from the
  * last entry), so the URL has to agree with it before anything is done.
@@ -19,7 +21,7 @@ import { type Href, useNavigationContainerRef, usePathname, useRouter } from 'ex
 
 interface RouteLike {
   name: string;
-  params?: { screen?: unknown };
+  params?: { screen?: unknown; params?: unknown };
   state?: StateLike;
 }
 interface StateLike {
@@ -44,17 +46,46 @@ export function screenMatchesTail(screen: string, tail: string[]): boolean {
   return pattern.every((seg, i) => seg.startsWith('[') || seg === tail[i]);
 }
 
+/** The `[name]` / `[...name]` keys a route pattern fills from the path. */
+function pathKeys(routeSegments: string[]): Set<string> {
+  const keys = new Set<string>();
+  for (const seg of routeSegments) {
+    const m = /^\[(?:\.\.\.)?([^\]]+)\]$/.exec(seg);
+    if (m) keys.add(m[1]);
+  }
+  return keys;
+}
+
+/** `?a=1&b=2&b=3` from the entry's nested params, minus the ones the path already holds. */
+function queryOf(params: unknown, skip: Set<string>): string {
+  if (!params || typeof params !== 'object') return '';
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params as Record<string, unknown>)) {
+    if (skip.has(key) || key === 'screen' || key === 'params') continue;
+    const values: unknown[] = Array.isArray(value) ? value : [value];
+    for (const v of values) {
+      if (typeof v === 'string' || typeof v === 'number') usp.append(key, String(v));
+    }
+  }
+  const qs = usp.toString();
+  return qs ? `?${qs}` : '';
+}
+
 /**
- * Walks the focused path; returns `true` when some route on it carries a `params.screen`
- * that the URL agrees with while its child navigator focuses another route.
+ * Walks the focused path; when some route on it carries a `params.screen` that the URL
+ * agrees with while its child navigator focuses another route, returns the href that puts
+ * the named page in place — `pathname` plus the query the entry carried. `null` otherwise.
  */
-export function hasMisplacedEntry(root: StateLike | undefined, pathname: string): boolean {
+export function misplacedEntryTarget(
+  root: StateLike | undefined,
+  pathname: string,
+): string | null {
   const pathSegments = pathname.split('/').filter(Boolean);
   let state: StateLike | undefined = root;
   let consumed: string[] = [];
   while (state) {
     const route: RouteLike | undefined = state.routes[state.index ?? state.routes.length - 1];
-    if (!route) return false;
+    if (!route) return null;
     // Group and root segments (`(app)`, `__root`) take no URL space.
     const own = route.name.split('/').filter((s) => s !== '' && s !== 'index' && !s.startsWith('('));
     const routeSegments = route.name === '__root' ? [] : own;
@@ -65,13 +96,19 @@ export function hasMisplacedEntry(root: StateLike | undefined, pathname: string)
       const tail = tailAfter(pathSegments, nextConsumed);
       const focused = inner.routes[inner.index ?? inner.routes.length - 1];
       if (tail && screenMatchesTail(screen, tail) && focused && focused.name !== screen) {
-        return true;
+        const keys = pathKeys([...nextConsumed, ...screen.split('/')]);
+        return pathname + queryOf(route.params?.params, keys);
       }
     }
     consumed = nextConsumed;
     state = inner;
   }
-  return false;
+  return null;
+}
+
+/** Whether the focused path shows a page other than the one the URL names (see above). */
+export function hasMisplacedEntry(root: StateLike | undefined, pathname: string): boolean {
+  return misplacedEntryTarget(root, pathname) !== null;
 }
 
 export function useNestedEntrySync(): void {
@@ -88,9 +125,8 @@ export function useNestedEntrySync(): void {
     // never act on a newer one (an in-ledger step must not be "corrected" backwards).
     const check = (): void => {
       if (cancelled || !ref.isReady()) return;
-      if (hasMisplacedEntry(ref.getRootState() as StateLike | undefined, pathname)) {
-        router.replace(pathname as Href);
-      }
+      const target = misplacedEntryTarget(ref.getRootState() as StateLike | undefined, pathname);
+      if (target !== null) router.replace(target as Href);
     };
     check();
     const timer = setTimeout(check, 0);

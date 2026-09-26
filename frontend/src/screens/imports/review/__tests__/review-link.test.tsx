@@ -252,6 +252,12 @@ test('a member-shared account splits the counterpart list into 我的/成员共�
   expect(screen.getByTestId('review-3-link-counterpart-option-__group-shared')).toHaveTextContent(
     '成员共享的',
   );
+  // The titles are headers over their accounts, not greyed-out rows to press.
+  for (const key of ['mine', 'shared']) {
+    const title = screen.getByTestId(`review-3-link-counterpart-option-__group-${key}`);
+    expect(title.props.accessibilityRole).toBe('header');
+    expect(title.props.onPress).toBeUndefined();
+  }
   // Mine still carries its currency and balance.
   const mine = screen.getByTestId('review-3-link-counterpart-option-src-savings');
   expect(mine).toHaveTextContent(/CNY/);
