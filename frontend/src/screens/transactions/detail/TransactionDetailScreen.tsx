@@ -29,7 +29,7 @@ import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { formatDateShort } from '@/i18n/format';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useTopBar } from '@/navigation';
+import { useBack, useTopBar } from '@/navigation';
 import {
   useCategories,
   useDeleteTransaction,
@@ -104,11 +104,8 @@ export default function TransactionDetailScreen(): React.JSX.Element {
     router.replace(l.transactions() as Href);
   }, [l, router]);
 
-  /** Back where the reader came from; a deep link has nowhere to go back to. */
-  const goBack = React.useCallback((): void => {
-    if (router.canGoBack()) router.back();
-    else goList();
-  }, [goList, router]);
+  /** Back where the reader came from; a deep link goes to the list (`useBack`, §14.64 f). */
+  const goBack = useBack().goBack;
 
   const onDelete = React.useCallback((): void => {
     void confirm({

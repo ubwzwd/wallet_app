@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import type { User } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { applyLanguage, useLang, type Lang } from '@/i18n';
-import { pickLandingLedger, useLastLedgerId, useTopBar } from '@/navigation';
+import { pickLandingLedger, useBack, useLastLedgerId, useTopBar } from '@/navigation';
 import { useCurrencyNames } from '@/i18n/currencyNames';
 import { useCurrencies, useLedgers, useMe, useUpdateMe } from '@/queries';
 import { useAuth, useOptionalLedgerContext } from '@/store';
@@ -81,6 +81,9 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   // 04 §1.4: the narrow shell's top bar is the title (`AppShell` renders it for a page
   // outside any ledger too), so the page only prints one on a wide layout.
   useTopBar(t('settings:title'));
+  // Only a user with no ledger at all reaches this page as a sub-page (§14.64 f): back to
+  // `/ledgers`. Everyone else sees it as a top-level page with no back button.
+  const back = useBack();
 
   const user: User | undefined = me.data;
   const serverName = user?.display_name ?? '';
@@ -280,7 +283,21 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
 
   // No subtitle and no header action (user's call 2026-09-16, §14.61): 「保存」 belongs to
   // the one field that needs it, so it sits inside the 显示名 box.
-  const header = <PageHeader testID="personal-settings" title={t('settings:title')} />;
+  const header = (
+    <PageHeader
+      testID="personal-settings"
+      title={t('settings:title')}
+      back={
+        back.show
+          ? {
+              crumb: `${back.parentLabel} · ${t('settings:title')}`,
+              onPress: back.goBack,
+              label: t('common:button.back'),
+            }
+          : undefined
+      }
+    />
+  );
 
   if (!wide) {
     return (

@@ -99,6 +99,9 @@ const ROUTES = {
 
 function seed(rows: ImportRow[]): void {
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
+  // The back button asks which ledger the chrome names; inside the app `RequireLedger`
+  // has already cached this list.
+  mockGet('/ledgers', { items: [LEDGER], total: 1 });
   mockGet('/categories', makeCategoryTree());
   mockGet('/rates/currencies', makeCurrencyList());
   mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE, SAVINGS, ARCHIVED], total: 3 });

@@ -17,6 +17,7 @@ import type { IsoDateTime, TransferPair } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
+import { useBack } from '@/navigation';
 import { qk, useTransfer, useUpdateTransfer } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { EmptyState, Page, Skeleton, toast } from '@/ui';
@@ -97,10 +98,20 @@ export default function EditTransferScreen(): React.JSX.Element {
     ctrl.form.reset({ ...ctrl.form.getValues(), ...valuesFromPair(pair) });
   }, [ctrl.form, pair]);
 
+  // A save has a destination of its own: `?next=`, or the detail showing the result.
   const goBack = React.useCallback((): void => {
     if (next) router.replace(next as Href);
     else router.replace(routes.l(ledgerId).transfer(pairId) as Href);
   }, [ledgerId, next, pairId, router]);
+
+  // Leaving without saving: `?next=` first, then history, then the parent `useBack`
+  // names — this entry's detail.
+  const back = useBack();
+  const stepBack = back.goBack;
+  const leaveForm = React.useCallback((): void => {
+    if (next) router.replace(next as Href);
+    else stepBack();
+  }, [next, router, stepBack]);
 
   const onSubmit = React.useCallback(
     (values: TxFormValues): void => {
@@ -141,9 +152,9 @@ export default function EditTransferScreen(): React.JSX.Element {
       // The guard has just asked; the navigation it is about to make is the answer, not a
       // new exit to challenge — without this the `beforeRemove` listener asks again.
       leave.allowLeave();
-      goBack();
+      leaveForm();
     });
-  }, [goBack, leave]);
+  }, [leave, leaveForm]);
 
   if (query.isError) {
     // The pair may be gone (someone deleted it, this session cannot read the ledger) —
