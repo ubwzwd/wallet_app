@@ -12,7 +12,7 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
-import type { ImportRow, Transaction } from '@/api/types';
+import type { ImportRow, LedgerSource, Transaction } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { AuthProvider, LedgerProvider } from '@/store';
@@ -97,14 +97,14 @@ const ROUTES = {
   'l/[ledgerId]/imports/[batchId]': ImportBatchScreen,
 };
 
-function seed(rows: ImportRow[]): void {
+function seed(rows: ImportRow[], sources: LedgerSource[] = [SOURCE, SAVINGS, ARCHIVED]): void {
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
   // The back button asks which ledger the chrome names; inside the app `RequireLedger`
   // has already cached this list.
   mockGet('/ledgers', { items: [LEDGER], total: 1 });
   mockGet('/categories', makeCategoryTree());
   mockGet('/rates/currencies', makeCurrencyList());
-  mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: [SOURCE, SAVINGS, ARCHIVED], total: 3 });
+  mockGet(`/ledgers/${LEDGER_ID}/sources`, { items: sources, total: sources.length });
   mockGet(BATCH_PATH, makeImportBatch({ status: 'ready', row_count: rows.length }));
   mockGet(ROWS_PATH, { items: rows, total: rows.length });
 }
@@ -232,6 +232,51 @@ test('with no candidate nothing is preselected and the two counterparty controls
   // Picking an account clears the free text in the same request.
   // `counterparty` was already null, so only the account is in the body.
   expect(patchBodies()[0]).toEqual({ counterpart_source_id: 'src-savings' });
+});
+
+test('a member-shared account splits the counterpart list into 我的/成员共享的, without its balance', async () => {
+  const shared = makeLedgerSource({ id: 'src-shared', name: '媳妇的招行卡', mine: false });
+  const transfer = row({
+    id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
+    merchant: null, amount: '1000.0000', transfer_role: 'out', date: '2026-08-05',
+    flags: [], matched_transaction_id: null, counterpart_source_id: null, counterparty: null,
+  });
+  seed([transfer], [SOURCE, SAVINGS, shared]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-3-link-counterpart-trigger'));
+
+  expect(
+    await screen.findByTestId('review-3-link-counterpart-option-__group-mine'),
+  ).toHaveTextContent('我的');
+  expect(screen.getByTestId('review-3-link-counterpart-option-__group-shared')).toHaveTextContent(
+    '成员共享的',
+  );
+  // Mine still carries its currency and balance.
+  const mine = screen.getByTestId('review-3-link-counterpart-option-src-savings');
+  expect(mine).toHaveTextContent(/CNY/);
+  expect(mine).toHaveTextContent(/\d/);
+  // Someone else's account sits in the shared group and shows no balance at all — the
+  // server sends none (decision §14.62).
+  const sharedOption = screen.getByTestId('review-3-link-counterpart-option-src-shared');
+  expect(sharedOption).toHaveTextContent(/媳妇的招行卡/);
+  expect(sharedOption).not.toHaveTextContent(/\d/);
+});
+
+test('with only my own accounts, the counterpart list carries no group titles', async () => {
+  const transfer = row({
+    id: 'row-3', row_no: 3, kind: 'transfer', category_l1: null, category_l2: null,
+    merchant: null, amount: '1000.0000', transfer_role: 'out', date: '2026-08-05',
+    flags: [], matched_transaction_id: null, counterpart_source_id: null, counterparty: null,
+  });
+  seed([transfer], [SOURCE, SAVINGS]);
+  renderRouter(ROUTES, { initialUrl: REVIEW_URL, wrapper: Wrapper });
+
+  fireEvent.press(await screen.findByTestId('review-3-link-counterpart-trigger'));
+
+  expect(await screen.findByTestId('review-3-link-counterpart-option-src-savings')).toBeTruthy();
+  expect(screen.queryByTestId('review-3-link-counterpart-option-__group-mine')).toBeNull();
+  expect(screen.queryByTestId('review-3-link-counterpart-option-__group-shared')).toBeNull();
 });
 
 test('typing a counterparty greys out the account picker', async () => {

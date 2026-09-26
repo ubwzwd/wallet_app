@@ -23,10 +23,10 @@ import React from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportRow, Transaction } from '@/api/types';
+import type { ImportRow, LedgerSource, Transaction } from '@/api/types';
 import { formatMoney, parseLocalDate } from '@/i18n/format';
 import { space } from '@/theme/tokens';
-import { Text, selectableSources } from '@/ui';
+import { Text, groupSources, selectableSources, showsSourceGroups, sourceGroupOptions } from '@/ui';
 
 import { CellTextInput, CellSelect } from './CellControls';
 import type { CellProps } from './ReviewRow';
@@ -106,6 +106,21 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
   const sourceDisabled = text.trim() !== '';
   const textDisabled = row.counterpart_source_id !== null;
 
+  // The batch's own account is this row's account; the counterparty is another one, split
+  // into 「我的」 and 「成员共享的」 the same way `SourceField` does (decision §14.62). Someone
+  // else's account shows no balance — the server sends none.
+  const groups = groupSources(selectableSources(env.sources, (s) => s.id !== env.batch.source_id));
+  const titled = showsSourceGroups(groups);
+  const toOption = (s: LedgerSource): { value: string; label: string; hint: string } => {
+    const parts = [s.default_currency];
+    if (s.balance !== null) parts.push(formatMoney(s.balance, s.default_currency, env.lang));
+    return { value: s.id, label: s.name, hint: parts.join(' · ') };
+  };
+  const counterpartOptions = [
+    ...sourceGroupOptions(groups, titled, toOption, (key) => t(`transaction:picker.group_${key}`)),
+    { value: NO_SOURCE, label: t('common:status.none') },
+  ];
+
   function commitText(next: string): void {
     // Mutually exclusive (decision §14.53c): typing a counterparty clears the account.
     env.ctrl.patch(row, {
@@ -119,15 +134,7 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
       <CellSelect
         testID={`${testID}-counterpart`}
         value={row.counterpart_source_id}
-        // The batch's own account is this row's account; the counterparty is another one.
-        options={[
-          ...selectableSources(env.sources, (s) => s.id !== env.batch.source_id).map((s) => ({
-            value: s.id,
-            label: s.name,
-            hint: s.default_currency,
-          })),
-          { value: NO_SOURCE, label: t('common:status.none') },
-        ]}
+        options={counterpartOptions}
         placeholder={t('import:review.linked.counterpart_source_label')}
         label={t('import:review.linked.counterpart_source_label')}
         closeLabel={t('common:button.close')}
