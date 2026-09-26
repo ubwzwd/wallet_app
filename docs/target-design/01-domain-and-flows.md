@@ -917,7 +917,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 3. **同币种、同金额绝对值**；
 4. `transfer_role` **相反**；
 5. **仍是单腿**（`transfer_pair_id IS NULL`）；
-6. 所在账户对上传人在本账本内可用（§1.6.1，含未归档）——配对的对腿账户必须可用，不可用的候选即使预填了提交时也会 404（2026-09-16 按决策 §14.62 同步）。
+6. 所在账户对上传人在本账本内可用（§1.6.1）且未归档——配对要改那条已有交易，两腿账户都得可用；不满足的**不算候选**（不打 `transfer_candidate`、不预填），否则提交时会 404 / 409（2026-09-16 按决策 §14.62 同步；2026-09-27 第八阶段验收按代码补正）。
 
 **`transfer_subtype` 不是筛选条件**（决策 §14.53a）：同一笔还款在储蓄卡账单里常写成 `plain`、在信用卡账单里写成 `repayment`，按子类型筛会让这类配对永远触发不了。两腿的子类型在**配对时统一**（§1.9），不在这里卡。
 
@@ -934,15 +934,15 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 **B. 详情页手动配对**
 
-- **步骤**：`POST /ledgers/{id}/transactions/{tid}/pair`，体 `{"counterpart_transaction_id": "...", "updated_at": "..."}`（`updated_at` 是本行的，用于乐观并发）。
+- **步骤**：`POST /ledgers/{id}/transactions/{tid}/pair`，体 `{"other_transaction_id": "..."}`（[`./03-backend-api.md`](./03-backend-api.md) §5.33）。**不做乐观并发**：配对只改 `transfer_pair_id` / `transfer_subtype` / `counterparty`，两人同时配同一条时，第二个会因第 3 条（对方已非单腿）得到 400 `pair_invalid`。
 - **服务端校验**（顺序）：
   1. 两条都存在、属于本账本 → 否则 404 `not_found`；
   2. 两条 `kind` 都是 `transfer` → 否则 400 `pair_invalid`；
   3. 两条都**仍是单腿**（都没有 `transfer_pair_id`）→ 已有 `transfer_pair_id` 的那条要先拆开再配，否则 400 `pair_invalid`；
   4. 两条 `transfer_role` 相反 → 否则 400 `pair_invalid`；
-  5. 两条在**不同账户**上 → 否则 400 `same_source`；
+  5. 两条在**不同账户**上 → 否则 400 `pair_invalid`（与 03 §5.33 一致；`same_source` 留给两腿转账的建 / 改与 review 的对手账户）；
   6. 两条所在的账户都对调用者在本账本内可用 → 否则 404 `not_found`；都未归档 → 否则 409 `source_archived`（2026-09-16 按决策 §14.62 同步）；
-  7. 本行 `updated_at` 匹配 → 否则 409 `stale_update`。
+  7. 不能和自己配对（`other_transaction_id != tid`）→ 否则 400 `pair_invalid`。
 - **不校验**的：金额是否相等、币种是否相同、**日期是否相同或接近**、**两腿的 `transfer_subtype` 是否相同**。跨币种、金额不等本来就是合法的两腿转账（决策 §1.2）；±3 天同额只是**自动建议**的筛选条件，不是配对的硬约束——用户手动挑的就按用户的来；子类型不同不拦，配对时由服务端统一（决策 §14.53a）。
 - **两腿日期允许不同**（配对路径独有的情形）：两腿转账对象顶层的 `occurred_at` / `subtype` / `note` **取 `out` 腿的值**——`GET`、`PATCH`、列表合并显示都按这条渲染（§1.9、§3.13）；`PATCH .../transfer/{pair_id}` 传 `occurred_at` / `subtype` / `note` 时**同时写到两腿**。`subtype` 在配对的那个事务里已经被统一（决策 §14.53a），所以配对之后两腿任何时刻都相同。
 - **服务端动作**（一个事务）：生成新的 `transfer_pair_id` 写到两条上；**统一 `transfer_subtype`**——任一腿是 `repayment` 且 `transfer_role='in'` 的那条所在账户 `type = 'credit'` → 两腿都写 `repayment`，否则两腿都写 `plain`（决策 §14.53a）；两条的 `counterparty` 都置 NULL；两条 `updated_at` / `updated_by` 刷新；各追加一条 `paired` 事件，`changes` 记 `transfer_pair_id` 和 `counterparty` 的前后值；**子类型真的变了的那一腿再追加一条 `updated` 事件**，`changes` 记 `transfer_subtype` 的前后值（原值已等于统一值的那腿不写，决策 §14.53a）。
@@ -951,8 +951,8 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 
 **C. 拆开**
 
-- **步骤**：`POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair`，体 `{"updated_at": "..."}`（两腿中较新的那个）。
-- **服务端校验**：pair 存在且属于本账本 → 否则 404 `not_found`；两腿 `updated_at` 都要比对 → 否则 409 `stale_update`。对一条**单腿**转账调这个端点没有 `pair_id` 可传，路径本身就匹配不到 → 404 `not_found`。
+- **步骤**：`POST /ledgers/{id}/transactions/transfer/{pair_id}/unpair`，无请求体（[`./03-backend-api.md`](./03-backend-api.md) §5.34）。
+- **服务端校验**：pair 存在且属于本账本 → 否则 404 `not_found`；两腿不是一进一出 → 409 `unpair_invalid`。**不做乐观并发**（拆开只动 `transfer_pair_id`）。对一条**单腿**转账调这个端点没有 `pair_id` 可传，路径本身就匹配不到 → 404 `not_found`。
 - **服务端动作**（一个事务）：两腿 `transfer_pair_id` 置 NULL，各自变回单腿；`counterparty` 保持 NULL（用户可以随后各自填上"老婆""工资卡"）；两腿 `updated_at` / `updated_by` 刷新；各追加一条 `unpaired` 事件。
 - **状态变化**：交易条数不变（还是两条），余额不变，统计不变——变的只是这两条之间的关系。
 - **失败分支**：事务回滚，两腿仍是一对。
@@ -962,7 +962,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
 ### 3.16 乐观并发冲突（409 `stale_update`）（决策 §2）
 
 - **触发者**：任意成员，多人同时改同一条记录时发生。
-- **适用对象**：`transactions`、`finance_sources`、`ledgers` 的 PATCH（三张表都带 `updated_at`），以及 §3.15 的 pair / unpair。
+- **适用对象**：`transactions`、`finance_sources`、`ledgers` 的 PATCH（三张表都带 `updated_at`），（§3.15 的 pair / unpair **不**适用，见那一节）。
 - **步骤**：
   1. 客户端 GET 到对象，记住响应里的 `updated_at`。
   2. PATCH 时请求体里**必须**带这个 `updated_at`：
@@ -1173,7 +1173,7 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
              |             各追加一条 unpaired 事件                    |
              |                                                         |
              |  POST .../transactions/{tid}/pair                       |
-             |  body: {counterpart_transaction_id, updated_at}         |
+             |  body: {other_transaction_id}                           |
              +---------------------------------------------------------+
                 两条方向相反、仍为单腿、不同账户、账户对我可用且未归档（子类型不作要求）
                 -> 生成新 pair_id 写到两条上，counterparty 一起清空
@@ -1185,9 +1185,8 @@ CHECK 约束把符号、分类、角色的一致性钉死在数据库里，完�
    配对的失败分支（事务回滚，两条都不动）：
      对方或本行已有 transfer_pair_id        -> 400 pair_invalid
      对方不是转账 / 方向相同                -> 400 pair_invalid
-     两条在同一个账户上                     -> 400 same_source
+     两条在同一个账户上                     -> 400 pair_invalid
      任一账户已归档                         -> 409 source_archived
-     updated_at 对不上                      -> 409 stale_update
      对方交易不在本账本 / 不存在            -> 404 not_found
      任一腿的账户对我不可用 / 不存在        -> 404 not_found（§1.6.1）
 
@@ -1593,7 +1592,7 @@ T3 和 T4 一分钱都没进统计——这就是"转账不计入"。交易列�
 
 ```
 POST /ledgers/{id}/transactions/{T7}/pair
-{"counterpart_transaction_id": "{T8}", "updated_at": "..."}
+{"other_transaction_id": "{T8}"}
 
 校验：都是 transfer ✓ / 都还是单腿 ✓ / role 一进一出 ✓ / 不同账户 ✓ / 都未归档 ✓
       （transfer_subtype 不参与校验，决策 §14.53a）
@@ -1661,7 +1660,7 @@ POST /ledgers/{id}/transactions/{T7}/pair
 | 6 | 分类表与说明文字只能改代码发版，用户改不了 | 没有分类管理接口；`GET /categories` 只读，带 `version`（决策 §1.3、§14.21） |
 | 7 | `refund_of` 指向同账本的 `kind='expense'` | 创建/更新时校验（决策 §1.1） |
 | 8 | 两腿转账原子创建、原子修改、原子删除；**配对后两腿 `transfer_subtype` 始终一致**（配对时按决策 §14.53a 统一：任一腿是 `repayment` 且转入腿账户 `type='credit'` → 整对 `repayment`，否则整对 `plain`）；`occurred_at` 只在 `transfer` 接口建 / 改时同写两腿，配对出来的一对允许两腿日期不同 | 专用 transfer 接口，单请求单事务；`POST .../{tid}/pair` 与导入提交在同一个事务里把两腿写成同一子类型并**只给子类型真的变了的那一腿写一条 `updated` 事件**（原值已等于统一值的那腿不写）；`PATCH .../transfer/{pair_id}` 的 `occurred_at` / `subtype` / `note` 同写两腿（决策 §1.2、§14.34、§14.53a） |
-| 9 | 两腿转账的两个账户不同 | `POST .../transfer` 与 `POST .../{tid}/pair` 都校验 `same_source` |
+| 9 | 两腿转账的两个账户不同 | `POST .../transfer` 校验 `same_source`；`POST .../{tid}/pair` 同样校验，报 `pair_invalid`（03 §5.33） |
 | 10 | 两腿转账的任一腿不能被单独 PATCH / DELETE | 普通交易接口检测 `transfer_pair_id` 非空 → 409 `use_transfer_endpoint` |
 | 11 | `transfer_pair_id` 永远由服务端生成，客户端不能自带 | `POST /transactions` 拒绝该字段；只有两腿接口和 `pair` 端点会生成 |
 | 12 | **配对只能发生在两条仍为单腿、方向相反、不同账户、账户未归档的转账之间**——**子类型不作要求**（配对时统一，决策 §14.53a）；配对成功时两条的 `counterparty` 一起清空 | `POST .../{tid}/pair` 的七步校验（§3.15 B），一个事务（决策 §14.34、§14.53a） |

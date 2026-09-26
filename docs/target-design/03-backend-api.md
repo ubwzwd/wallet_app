@@ -1564,7 +1564,8 @@ POST /api/v1/sources
 |---|---|---|
 | 404 | `not_found` | `share_to` 里有一本账不存在或调用者不是其成员 |
 | 409 | `source_limit_reached` | 调用者名下账户数（**含已归档**）已达 `MAX_SOURCES_PER_USER`（50） |
-| 400 | `validation_error` | 币种不在支持列表；`type` 不在四个值里 |
+| 400 | `validation_error` | 币种不在支持列表 |
+| 422 | `validation_error` | `type` 不在四个值里；`name` 空或超过 100；币种不是三个字母；带了未知字段（请求模型 `extra=forbid`）——形状不对，§4.2（2026-09-27 第八阶段验收按代码补正） |
 
 副作用（一个事务）：`INSERT finance_sources`（`owner_id = created_by = updated_by = 当前用户`）；`share_to` 的每本账各 `INSERT ledger_sources(ledger_id, source_id, shared_by = 当前用户, shared_at = now())`。**不再**有"第一个账户自动设为用户默认账户"的行为（现状 `backend/app/api/finance_sources.py:44-49`），因为 `users.default_source_id` 已经去掉了（决策 §14.42）。同一人名下账户名不要求唯一（决策 §14.40 的 01-6：允许同名，按 id 区分，只在界面提示）。
 
@@ -1632,7 +1633,7 @@ PATCH /api/v1/sources/1022fd24-78a1-4c09-9de9-1cd7fbb0877f
 | 404 | `not_found` | 账户不存在或不是调用者的 |
 | 409 | `stale_update` | 版本戳不一致 |
 | 400 | `currency_locked` | 请求体里出现了 `default_currency`（决策 §14.50） |
-| 400 | `validation_error` | `type` 不在四个值里；`name` 空 |
+| 422 | `validation_error` | `type` 不在四个值里；`name` 空；字段给了显式 `null`；带了 `owner_id` / `share_to` 等未知字段——形状不对，§4.2（2026-09-27 第八阶段验收按代码补正） |
 
 副作用：`UPDATE finance_sources`（含 `updated_by`、`updated_at`；`archived` 从 `false` 变 `true` 时同时写 `archived_at = now()`，反向变化时置 `null`）。不动 `ledger_sources`：归档不解除共享，取消归档后共享照旧生效。
 
@@ -3237,6 +3238,10 @@ X-Client: web
         但 counterpart_source_id 这一路是新建两腿、不是配对，
         转入腿账户不是 credit 而行的子类型是 repayment 时照样 400）
       对手账户对提交人已不可用（被取消共享 / 删除）或已归档     -> 404 not_found（§14.53c、§14.62 e）
+      配对的已有那条所在账户对提交人不可用                     -> 404 not_found（§5.33 第 1a 条）
+      配对的已有那条所在账户已归档                             -> 409 source_archived（同上）
+      （「提交人」在这几条里一律按批次的 created_by 判，与 05 §4.3 一致；
+        2026-09-27 第八阶段验收按代码补正）
 5. 全部通过后开事务
 ```
 
@@ -3259,12 +3264,12 @@ X-Client: web
 
 | 状态码 | code | 条件 |
 |---|---|---|
-| 404 | `not_found` | 账本 / 批次不可见；某行的 `counterpart_source_id` 对提交人已不可用——在 review 之后被归档、删除或**取消共享**（决策 §14.53c、§14.62 e（2026-09-16 按决策 §14.62 同步）） |
+| 404 | `not_found` | 账本 / 批次不可见；某行的 `counterpart_source_id` 对提交人已不可用——在 review 之后被归档、删除或**取消共享**（决策 §14.53c、§14.62 e（2026-09-16 按决策 §14.62 同步））；某行 `matched_transaction_id` 指向的那条转账所在账户对提交人不可用（§5.33 第 1a 条，2026-09-27 补正） |
 | 409 | `batch_not_ready` | 批次不是 `ready`；或有行缺 date / amount / currency / kind |
 | 409 | `batch_already_committed` | 重复提交（决策 §14.18） |
 | 409 | `rows_uncategorized` | 有非 transfer 行缺 `category_l1` |
 | 409 | `rows_all_skipped` | 所有行都被标 `skipped`，一条交易也建不出来 |
-| 409 | `source_archived` | 批次的目标账户在校验之后被归档了 |
+| 409 | `source_archived` | 批次的目标账户在校验之后被归档了；或某行要配对的那条已有转账所在账户已归档（§5.33 第 1a 条，2026-09-27 补正） |
 | 400 | `category_invalid` / `category_kind_mismatch` / `refund_target_invalid` / `pair_invalid` / `repayment_target_not_credit` / `validation_error` | 行内容非法（正常情况下 §5.41 已经拦住了，这里是最后一道） |
 
 副作用：N 条 `INSERT transactions` + N 条 `INSERT transaction_events` + N 条 `UPDATE import_rows` + 最多几条 `UPDATE transactions`（配对已有单腿）+ 1 条 `UPDATE import_batches`。不调汇率、不调任何外部服务。

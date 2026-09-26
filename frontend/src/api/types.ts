@@ -9,6 +9,7 @@ export type Uuid = string;
 export type IsoDate = string;      // 'YYYY-MM-DD'（无时区日历日，决策 §14.32）
 export type IsoDateTime = string;  // '2026-09-01T12:00:00.000000Z'（UTC，带 Z，03 §4.5）
 export type Money = string;        // Decimal 的 JSON 形态，如 '-42.5000'
+export type Rate = string;         // 汇率，8 位小数的 Decimal 字符串（账户余额折算用，决策 §14.62）
 export interface Paged<T> { items: T[]; total: number; }
 export interface ApiError { detail: string; code: string; }   // 决策 §9
 
@@ -59,6 +60,7 @@ export interface Ledger {
 // GET /ledgers/{id} 比列表多一组计数，删除账本的确认框要显示它（决策 §14.52 A22）
 export interface LedgerDetail extends Ledger {
   counts: { transactions: number; sources: number; import_batches: number };
+  // counts.sources = 共享到本账本的账户数（ledger_sources 行数），不是「本账本的账户数」（2026-09-16 按决策 §14.62 同步）
 }
 export interface LedgerCreate { name: string; base_currency?: string; }
 export interface LedgerUpdate { name?: string; base_currency?: string; updated_at: IsoDateTime; }
@@ -76,41 +78,46 @@ export interface LedgerInvite {
 export interface JoinLedgerRequest { code: string; }
 export interface TransferOwnershipRequest { to_user_id: Uuid; }
 
-// ---------- 资金账户（决策 §3、§14.48、§14.50）----------
+// ---------- 资金账户（决策 §3、§14.48、§14.50、§14.62）----------
+// 账户归人、按账本共享（决策 §14.62）：没有 ledger_id，改为 owner_id；
+// 余额只对主人返回——别人的账户（只会出现在 LedgerSource 里）余额相关字段一律 null。
+// （2026-09-16 按决策 §14.62 同步）
 // 四种类型，没有 savings（新加坡没有这个区分，「储蓄」就是 checking，决策 §14.48）
 export type SourceType = 'checking' | 'credit' | 'cash' | 'other';
-// 账户归用户、按账本共享（决策 §14.62）。本人视角（GET /sources）下 opening_balance、余额四件套、
-// shared_to 都有值；账本内列表（GET /ledgers/{id}/sources）里别人的账户（mine=false）这些字段全为 null。
 export interface FinanceSource {
   id: Uuid; owner_id: Uuid; name: string; type: SourceType;
   default_currency: string;          // 创建后不可改（决策 §14.50）
-  opening_balance: Money | null;     // 信用卡填欠款，存为负数（决策 §14.52 A13）；非本人为 null
+  opening_balance: Money | null;     // 信用卡填欠款，存为负数（决策 §14.52 A13）；非本人 = null
   archived: boolean;
   archived_at: IsoDateTime | null;   // 决策 §14.50；归档账户不计入净资产
   created_by: Uuid; updated_by: Uuid | null;
   created_at: IsoDateTime; updated_at: IsoDateTime;
-  shared_to: Uuid[] | null;          // 共享到的账本（只列调用者仍是成员的）；非本人为 null
-  // 余额四件套（口径见决策 §14.2、§14.62）——这张卡在所有账本里的交易之和；非本人全为 null：
-  balance: Money | null;             // 以账户 default_currency 计价；异币种交易按发生日汇率折进来
-  balance_base: Money | null;        // 按最新汇率折到主人的 base_currency
-  balance_rate: Money | null;        // 这次用的汇率，8 位小数
+  shared_to: Uuid[] | null;          // 共享到了哪些账本（只列我仍是成员的账本）；非本人 = null
+  // 余额四件套（口径见决策 §14.2、§14.62 f）——跨所有账本；非本人全为 null：
+  balance: Money | null;             // 以账户 default_currency 计价；期初 + 这张卡在所有账本里的交易
+  balance_base: Money | null;        // 按最新汇率折到**主人**的 users.base_currency（不再按账本基准币种）
+  balance_rate: Rate | null;         // 这次用的汇率，8 位小数
   balance_rate_date: IsoDate | null; // 该汇率的行情日
-  rate_missing_count: number;        // 折不出来被跳过的交易数；非本人为 0
+  rate_missing_count: number;        // 因取不到汇率没折进 balance 的交易笔数；非本人 = 0
 }
-// GET /ledgers/{id}/sources 的一行：本人的、成员共享进来的、以及本账本交易引用到的（usable=false）
-export type LedgerSource = FinanceSource & { mine: boolean; usable: boolean };
-// GET /sources：本人全部账户 + 个人净资产三个数（任一未归档账户折不出来则三个都为 null）
+// GET /ledgers/{id}/sources 的元素：本账本里「我能看到名字」的账户（决策 §14.62 b / c / h）
+// items = 我的账户 ∪ 别人共享到本账本的账户 ∪ 本账本交易 / 导入批次引用到的其余账户（usable=false，只供解析名字）
+export type LedgerSource = FinanceSource & {
+  mine: boolean;                     // owner_id === 我；false 时余额相关字段全为 null、shared_to 为 null
+  usable: boolean;                   // not archived and (mine or 已共享到本账本)——选择器只列 usable 的
+};
+// GET /sources：本人全部账户 + 个人的三个合计（决策 §14.62 d）；任一未归档账户折不出来，三个合计都为 null
 export interface SourceListResponse extends Paged<FinanceSource> {
-  base_currency: string;
+  base_currency: string;             // 主人的 users.base_currency
   assets: Money | null;
   liabilities: Money | null;
   net_worth: Money | null;
 }
 export interface FinanceSourceCreate {
   name: string; type: SourceType; default_currency: string; opening_balance?: Money;
-  share_to?: Uuid[];                 // 建好即共享到这些账本（都必须是我所在的）
+  share_to?: Uuid[];                 // 建好即共享到这些账本（都必须是我所在的账本，否则整单 404）
 }
-// default_currency 不在可改字段里（决策 §14.50）
+// default_currency 不在可改字段里（决策 §14.50）；共享不走 PATCH，走 share / unshare
 export interface FinanceSourceUpdate {
   name?: string; type?: SourceType; opening_balance?: Money; archived?: boolean;
   updated_at: IsoDateTime;      // 乐观并发（决策 §2）
@@ -228,7 +235,9 @@ export interface TransferPair {
 // POST /ledgers/{id}/transactions/{tid}/pair：把两条单腿转账合成一笔
 export interface TransactionPairRequest { other_transaction_id: Uuid; }   // 03 §5.33 的字段名
 // 配对的响应是合成后的 TransferPair；unpair 无请求体，响应是 03 §5.34 的
-// `{pair_id, unpaired}`——两条腿的**精简**形态，不是完整的 Transaction（同步 2026-09-15）
+// `{pair_id, unpaired}`——两条腿的**精简**形态（id / source_id / kind / transfer_role /
+// transfer_subtype / amount / currency / transfer_pair_id / counterparty / updated_at），
+// 不是完整的 Transaction（同步 2026-09-15）
 export interface UnpairedLeg {
   id: Uuid; source_id: Uuid; kind: 'transfer';
   transfer_role: TransferRole; transfer_subtype: TransferSubtype;
@@ -247,6 +256,7 @@ export interface TransactionListParams {
   limit?: number; offset?: number;            // limit 上限 200（决策 §14.44 的 03-14）
 }
 // 交易列表：信封外多一个 summary（决策 §14.52 A14），底部汇总条与「筛空提示」都用它
+// （同步 2026-09-12）字段名与 03 §5.25 的 summary 一致：base_currency / expense / income / net / count / rate_missing_count
 export interface TransactionSummary {
   base_currency: string;
   expense: Money;         // 正数

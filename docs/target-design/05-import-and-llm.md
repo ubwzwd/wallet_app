@@ -816,7 +816,10 @@ def flag_transfer_candidates(db, ctx, rows):
         # 只有"唯一单腿候选"那支才重新写这个字段。
         r.matched_transaction_id = None
         legs = db.execute(_PAIR_STMT, {..., "opp": opp}).all()
-        single = [x for x in legs if x.transfer_pair_id is None]
+        # 单腿候选只收「所在账户对上传人在本账本内可用且未归档」的（01 §3.15 A 条件 6、
+        # 决策 §14.62 e）：配对要改那条已有交易，§4.3 会拒绝其余的，预选它只会让提交必败
+        # （2026-09-27 第八阶段验收按代码补正）
+        single = [x for x in legs if x.transfer_pair_id is None and usable_live(x.source_id)]
         paired = [x for x in legs if x.transfer_pair_id is not None]
 
         if len(single) == 1:
@@ -945,6 +948,8 @@ def flag_transfer_candidates(db, ctx, rows):
 | `category_l2` 属于该 `category_l1`；transfer 行两级都为 NULL | 400 | `category_invalid` |
 | `kind='refund'` 且 `matched_transaction_id` 非空时，该目标仍是同账本的 `kind='expense'` 交易 | 400 | `refund_target_invalid` |
 | `kind='transfer'` 且 `matched_transaction_id` 非空时，该目标仍是同账本、方向相反的转账，且在此刻仍是**单腿**（`transfer_pair_id IS NULL`） | 400 | `pair_invalid` |
+| `kind='transfer'` 且 `matched_transaction_id` 非空时，那条已有交易所在的账户**对批次创建者在本账本内可用**（同上一条 `counterpart_source_id` 的口径）——配对要改那一条，两腿账户都得可用，与 03 §5.33 第 1a 条同一条规则 | 404 | `not_found`（决策 §14.62 e）（2026-09-27 第八阶段验收按代码补正） |
+| 同上，那条已有交易所在的账户未归档 | 409 | `source_archived`（03 §5.33 第 1a 条）（2026-09-27 第八阶段验收按代码补正） |
 | `counterpart_source_id` 非空时，它必须**对批次创建者在本账本内可用**：`owner_id = batch.created_by` 或存在 `ledger_sources(batch.ledger_id, source_id)`；且未归档。review 之后被主人取消共享（`ledger_sources` 行没了）、归档或删除的，都落在这一条 | 404 | `not_found`（决策 §14.53c、§14.62 e）（2026-09-16 按决策 §14.62 同步） |
 | `counterpart_source_id` 非空时，它**不得等于** `batch.source_id` | 400 | `same_source`（[`01-domain-and-flows.md`](./01-domain-and-flows.md) §6 不变量 9：两腿转账的两个账户不同） |
 | 落成**单腿**（`matched_transaction_id` 与 `counterpart_source_id` 都为空）的 `kind='transfer'` + `transfer_role='in'` + `transfer_subtype='repayment'` 行，批次目标账户必须是 `credit` | 400 | `repayment_target_not_credit`（[`03-backend-api.md`](./03-backend-api.md) §4.2、§5.43，决策 §14.52 A11） |
@@ -1031,8 +1036,8 @@ def commit_transfer(db, row, batch, ctx, events, actor_id, client) -> list[Trans
     # ① 与库里已有的单腿配对
     if row.matched_transaction_id is not None:
         far = db.get(Transaction, row.matched_transaction_id, with_for_update=True)
-        _assert_pairable(far, near)                      # §4.3 的 pair_invalid 条件
-                                                         # （含"仍是单腿"）在这里再确认一次
+        _assert_pair_target(far, near)                   # §4.3 的 pair_invalid 条件（含"仍是单腿"）
+                                                         # 与对腿账户可用 / 未归档，在这里再确认一次
         old_cp, old_sub = far.counterparty, far.transfer_subtype   # 先存原值，事件要记 before
         pair_id = uuid4()
         # 统一子类型（决策 §14.53a）：转入腿是哪一条决定看哪个账户的 type
