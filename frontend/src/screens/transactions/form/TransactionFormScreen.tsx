@@ -15,7 +15,7 @@ import { KINDS } from '@/domain/kinds';
 import { safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
 import { todayLocalIso } from '@/i18n/format';
-import { useBack, useBackOverride } from '@/navigation';
+import { useBack, useBackOverride, useLeaveGuard } from '@/navigation';
 import { useCreateTransaction, useCreateTransfer, useTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { toast } from '@/ui';
@@ -23,7 +23,6 @@ import { toast } from '@/ui';
 import { TransactionForm } from './TransactionForm';
 import { applyFieldErrors } from './conflicts';
 import type { TxFormValues } from './schemas';
-import { useLeaveGuard } from './useLeaveGuard';
 import {
   toTransactionCreate,
   toTransferCreate,

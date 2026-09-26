@@ -34,13 +34,12 @@ import { convertOpeningBalanceOnTypeChange, openingBalanceForDisplay } from '@/d
 import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useCurrencyNames } from '@/i18n/currencyNames';
-import { useTopBar } from '@/navigation';
+import { useLeaveGuard, useTopBar } from '@/navigation';
 import { useCurrencies, useLedgers, useMySource, useMySources } from '@/queries';
 import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, EmptyState, Page, Skeleton, Switch, toast } from '@/ui';
-import { useLeaveGuard } from '@/screens/transactions/form/useLeaveGuard';
 
 import { FormDialog } from './FormDialog';
 import SourcesScreen from './SourcesScreen';

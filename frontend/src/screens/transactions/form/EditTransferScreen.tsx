@@ -17,7 +17,7 @@ import type { IsoDateTime, TransferPair } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
-import { useBack, useBackOverride } from '@/navigation';
+import { useBack, useBackOverride, useLeaveGuard } from '@/navigation';
 import { qk, useTransfer, useUpdateTransfer } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { EmptyState, Page, Skeleton, toast } from '@/ui';
@@ -31,7 +31,6 @@ import {
 } from './TransactionFormScreen';
 import { EditStateHeader } from './EditStateHeader';
 import type { TxFormValues } from './schemas';
-import { useLeaveGuard } from './useLeaveGuard';
 import { toTransferUpdate, useTransactionForm } from './useTransactionForm';
 
 /** Both legs' fields a 409 can disagree about, in the order they are shown (04 §3.8). */

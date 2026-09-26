@@ -24,7 +24,7 @@ import LedgerLayout from '../../../app/(app)/l/[ledgerId]/_layout';
 import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
-import { useLeaveGuard } from '@/screens/transactions/form/useLeaveGuard';
+import { useLeaveGuard } from '@/navigation';
 import { makeLedger, makeUser } from '@/test/fixtures';
 import { mockApi, mockGet, type MockApi } from '@/test/mockApi';
 import * as breakpoint from '@/theme/useBreakpoint';

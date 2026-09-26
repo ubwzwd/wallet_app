@@ -42,6 +42,7 @@ export {
   type LeaveGuardHandle,
 } from './leaveGuard';
 export { useLastLedgerId } from './useLastLedgerId';
+export { useLeaveGuard, type LeaveGuard } from './useLeaveGuard';
 export {
   SubPageTopBar,
   TopBar,
