@@ -24,6 +24,7 @@ class ErrorCode:
     STALE_UPDATE = "stale_update"
     USE_TRANSFER_ENDPOINT = "use_transfer_endpoint"
     LEDGER_LIMIT_REACHED = "ledger_limit_reached"
+    SOURCE_LIMIT_REACHED = "source_limit_reached"
     MEMBER_LIMIT_REACHED = "member_limit_reached"
     ALREADY_MEMBER = "already_member"
     OWNER_MUST_TRANSFER = "owner_must_transfer"

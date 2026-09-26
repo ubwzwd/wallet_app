@@ -1,6 +1,7 @@
 """Ledger, membership and invite models (02-database.md §1.2-§1.4)."""
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CHAR,
@@ -15,6 +16,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.ledger_source import LedgerSource
 
 # 6-digit check without regex: strip every digit and require an empty rest,
 # because `~` is Postgres-only and a string range would pass '12a456' (§1.4).
@@ -46,6 +50,11 @@ class Ledger(Base):
         back_populates="ledger", passive_deletes=True
     )
     invites: Mapped[list["LedgerInvite"]] = relationship(
+        back_populates="ledger", passive_deletes=True
+    )
+    # Accounts shared into this ledger (§14.62); the rows die with the ledger
+    # through the database cascade, the accounts themselves never do.
+    source_shares: Mapped[list["LedgerSource"]] = relationship(
         back_populates="ledger", passive_deletes=True
     )
 

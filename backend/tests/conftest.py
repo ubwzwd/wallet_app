@@ -252,9 +252,64 @@ def ledger_factory(db):
     return make
 
 
+def _insert_source(
+    db,
+    owner_id,
+    *,
+    name: str,
+    type: str,
+    currency: str,
+    opening_balance: Decimal,
+    archived: bool,
+):
+    """Insert one ``FinanceSource`` owned by ``owner_id`` (02-database.md §1.5)."""
+    from app.models.finance_source import FinanceSource
+
+    now = utcnow()
+    source = FinanceSource(
+        owner_id=owner_id,
+        name=name,
+        type=type,
+        default_currency=currency.upper(),
+        opening_balance=opening_balance,
+        archived=archived,
+        archived_at=now if archived else None,
+        created_by=owner_id,
+        updated_by=owner_id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(source)
+    db.flush()
+    return source
+
+
+def _insert_share(db, ledger, source, shared_by=None):
+    """Insert the ``ledger_sources`` row sharing ``source`` into ``ledger``."""
+    from app.models.ledger_source import LedgerSource
+
+    share = LedgerSource(
+        ledger_id=ledger.id,
+        source_id=source.id,
+        shared_by=shared_by if shared_by is not None else source.owner_id,
+        shared_at=utcnow(),
+    )
+    db.add(share)
+    db.flush()
+    return share
+
+
 @pytest.fixture()
 def source_factory(db):
-    """Insert a ``FinanceSource`` row directly (02-database.md §1.5)."""
+    """An account that behaves like a pre-§14.62 "account of this ledger".
+
+    ``source_factory(ledger, ...)`` inserts a ``FinanceSource`` owned by
+    ``created_by`` (default: the ledger's creator) **and** shares it into
+    ``ledger`` with a ``ledger_sources`` row, so every member of that ledger can
+    use it — the same situation the migration leaves behind (b1f3c2a10d47).
+    Cases about ownership and sharing themselves use ``owned_source_factory``
+    (no share) plus ``share_source`` instead.
+    """
     from app.models.finance_source import FinanceSource
 
     def make(
@@ -267,24 +322,62 @@ def source_factory(db):
         archived: bool = False,
         created_by=None,
     ) -> FinanceSource:
-        now = utcnow()
         owner_id = created_by if created_by is not None else ledger.created_by
-        source = FinanceSource(
-            ledger_id=ledger.id,
+        source = _insert_source(
+            db,
+            owner_id,
             name=name,
             type=type,
-            default_currency=currency.upper(),
+            currency=currency,
             opening_balance=opening_balance,
             archived=archived,
-            archived_at=now if archived else None,
-            created_by=owner_id,
-            updated_by=owner_id,
-            created_at=now,
-            updated_at=now,
         )
-        db.add(source)
-        db.flush()
+        _insert_share(db, ledger, source, shared_by=owner_id)
         return source
+
+    return make
+
+
+@pytest.fixture()
+def owned_source_factory(db):
+    """A personal account of ``owner``, shared nowhere (decision §14.62).
+
+    ``owned_source_factory(owner, ...)`` takes a ``User``; the owner can use it
+    in every ledger they belong to, nobody else can until ``share_source``.
+    """
+    from app.models.finance_source import FinanceSource
+
+    def make(
+        owner,
+        *,
+        name: str = "招行储蓄卡",
+        type: str = "checking",
+        currency: str = "CNY",
+        opening_balance: Decimal = Decimal("0"),
+        archived: bool = False,
+    ) -> FinanceSource:
+        return _insert_source(
+            db,
+            owner.id,
+            name=name,
+            type=type,
+            currency=currency,
+            opening_balance=opening_balance,
+            archived=archived,
+        )
+
+    return make
+
+
+@pytest.fixture()
+def share_source(db):
+    """Share an existing account into a ledger: ``share_source(ledger, source)``.
+
+    ``shared_by`` defaults to the account's owner.
+    """
+
+    def make(ledger, source, shared_by=None):
+        return _insert_share(db, ledger, source, shared_by=shared_by)
 
     return make
 

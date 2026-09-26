@@ -2,6 +2,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CHAR,
@@ -15,24 +16,29 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
+if TYPE_CHECKING:
+    from app.models.ledger_source import LedgerSource
+
 
 class FinanceSource(Base):
-    """An account inside a ledger; fully shared with every ledger member."""
+    """An account that belongs to one user and is shared into ledgers (§14.62).
+
+    ``owner_id`` is the person the card belongs to. The owner can use it in any
+    ledger they are a member of; a ``ledger_sources`` row shares it into one
+    ledger so that the other members there can use it too. Deleting a ledger
+    only drops those share rows — the account itself survives.
+    """
 
     __tablename__ = "finance_sources"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
-    ledger_id: Mapped[uuid.UUID] = mapped_column(
+    owner_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(),
-        ForeignKey(
-            "ledgers.id",
-            ondelete="CASCADE",
-            name="fk_finance_sources_ledger_id_ledgers",
-        ),
+        ForeignKey("users.id", name="fk_finance_sources_owner_id_users"),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -56,6 +62,11 @@ class FinanceSource(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
+    # Share rows only; the database cascades them away (passive_deletes).
+    shares: Mapped[list["LedgerSource"]] = relationship(
+        back_populates="source", passive_deletes=True
+    )
+
     __table_args__ = (
         CheckConstraint("type IN ('checking', 'credit', 'cash', 'other')", name="type"),
         CheckConstraint("default_currency = upper(default_currency)", name="currency_upper"),
@@ -67,4 +78,4 @@ class FinanceSource(Base):
         return f"<FinanceSource(id={self.id}, name={self.name}, type={self.type})>"
 
 
-Index("ix_finance_sources_ledger_id", FinanceSource.ledger_id)
+Index("ix_finance_sources_owner_id", FinanceSource.owner_id)

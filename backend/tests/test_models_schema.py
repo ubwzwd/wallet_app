@@ -10,6 +10,7 @@ EXPECTED_TABLES = {
     "ledger_members",
     "ledger_invites",
     "finance_sources",
+    "ledger_sources",
     "transactions",
     "transaction_events",
     "import_batches",
@@ -34,7 +35,7 @@ EXPECTED_COLUMNS = {
     "ledger_invites": ["id", "ledger_id", "code", "created_by", "created_at", "expires_at"],
     "finance_sources": [
         "id",
-        "ledger_id",
+        "owner_id",
         "name",
         "type",
         "default_currency",
@@ -46,6 +47,7 @@ EXPECTED_COLUMNS = {
         "created_at",
         "updated_at",
     ],
+    "ledger_sources": ["ledger_id", "source_id", "shared_by", "shared_at"],
     "transactions": [
         "id",
         "ledger_id",
@@ -142,6 +144,7 @@ EXPECTED_CHECKS = {
         "ck_finance_sources_name_not_blank",
         "ck_finance_sources_archived_at",
     },
+    "ledger_sources": set(),
     "transactions": {
         "ck_transactions_kind",
         "ck_transactions_amount_sign",
@@ -185,7 +188,8 @@ EXPECTED_INDEXES = {
     "ledgers": {"ix_ledgers_created_by"},
     "ledger_members": {"ix_ledger_members_user_id"},
     "ledger_invites": {"ix_ledger_invites_ledger_id"},
-    "finance_sources": {"ix_finance_sources_ledger_id"},
+    "finance_sources": {"ix_finance_sources_owner_id"},
+    "ledger_sources": {"ix_ledger_sources_source_id"},
     "transactions": {
         "ix_transactions_ledger_occurred",
         "ix_transactions_ledger_source",
@@ -212,9 +216,14 @@ EXPECTED_FOREIGN_KEYS = {
         "fk_ledger_invites_created_by_users": None,
     },
     "finance_sources": {
-        "fk_finance_sources_ledger_id_ledgers": "CASCADE",
+        "fk_finance_sources_owner_id_users": None,
         "fk_finance_sources_created_by_users": None,
         "fk_finance_sources_updated_by_users": None,
+    },
+    "ledger_sources": {
+        "fk_ledger_sources_ledger_id_ledgers": "CASCADE",
+        "fk_ledger_sources_source_id_finance_sources": "CASCADE",
+        "fk_ledger_sources_shared_by_users": None,
     },
     "transactions": {
         "fk_transactions_ledger_id_ledgers": "CASCADE",
@@ -245,7 +254,7 @@ EXPECTED_FOREIGN_KEYS = {
 }
 
 
-def test_create_all_builds_exactly_the_ten_tables(db):
+def test_create_all_builds_exactly_the_eleven_tables(db):
     assert set(inspect(db.get_bind()).get_table_names()) == EXPECTED_TABLES
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
@@ -300,6 +309,13 @@ def test_ledger_invites_code_has_no_unique_index_or_constraint(db):
     assert [i["name"] for i in indexes] == ["ix_ledger_invites_ledger_id"]
     assert not any(i["unique"] for i in indexes)
     assert not inspector.get_unique_constraints("ledger_invites")
+
+
+def test_ledger_sources_key_is_the_ledger_account_pair():
+    """One share per (ledger, account): sharing twice is the same row (§14.62)."""
+    table = Base.metadata.tables["ledger_sources"]
+    assert [c.name for c in table.primary_key.columns] == ["ledger_id", "source_id"]
+    assert all(not c.nullable for c in table.columns)
 
 
 def test_transactions_has_the_transfer_pair_unique_constraint():
