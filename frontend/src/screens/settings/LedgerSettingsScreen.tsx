@@ -22,6 +22,7 @@ import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Page } from '@/ui';
 
+import { BackCrumb } from './BackCrumb';
 import { BaseCurrencyCard } from './BaseCurrencyCard';
 import { DangerZone } from './DangerZone';
 import { InviteCard } from './InviteCard';
@@ -37,8 +38,10 @@ export default function LedgerSettingsScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const wide = useIsWide();
   const { ledgerId, ledger, myRole } = useLedgerContext();
-  // 04 §1.4: on a narrow layout the top bar is the title; the page must not repeat it.
-  useTopBar(t('ledger:settings.title'));
+  // 04 §1.4: on a narrow layout the top bar is the title (and the ‹); the page must not
+  // repeat it. Wide, the page draws its own back row above the ledger head (§14.64 e).
+  const title = t('ledger:settings.title');
+  useTopBar(title);
   const detail = useLedger(ledgerId);
   const membersQuery = useMembers(ledgerId);
 
@@ -85,6 +88,7 @@ export default function LedgerSettingsScreen(): React.JSX.Element {
 
   return (
     <Page testID="ledger-settings-screen">
+      <BackCrumb title={title} testID="ledger-settings-crumb" />
       <LedgerHeader
         ledgerId={ledgerId}
         detail={detail.data}

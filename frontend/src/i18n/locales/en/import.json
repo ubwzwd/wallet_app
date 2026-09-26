@@ -23,6 +23,7 @@
   },
   "upload": {
     "title": "Import",
+    "crumb_page": "Upload",
     "subtitle": "This app never calls a model · your statement is tidied up inside your own ChatGPT / Claude",
     "steps_title": "Three steps",
     "step1_title": "Install the skill",

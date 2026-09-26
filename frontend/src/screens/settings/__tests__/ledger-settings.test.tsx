@@ -27,7 +27,13 @@ import { toast } from '@/ui';
 
 import LedgerSettingsScreen from '../LedgerSettingsScreen';
 
-const mockRouter = { push: jest.fn(), replace: jest.fn(), navigate: jest.fn(), back: jest.fn() };
+const mockRouter = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  navigate: jest.fn(),
+  back: jest.fn(),
+  canGoBack: jest.fn(() => false),
+};
 
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
@@ -85,6 +91,8 @@ beforeEach(() => {
   toast.clear();
   mockRouter.push.mockClear();
   mockRouter.replace.mockClear();
+  mockRouter.back.mockClear();
+  mockRouter.canGoBack.mockReturnValue(false);
   mockGet('/rates/currencies', { currencies: { CNY: 'Chinese Yuan', SGD: 'Singapore Dollar' } });
 });
 
@@ -455,4 +463,33 @@ test('the wide layout has no top bar, so the page heads itself with the ledger',
   expect(await screen.findByTestId('ledger-name')).toHaveTextContent('家庭账本');
   expect(screen.getByTestId('ledger-header-meta')).toHaveTextContent(/328/);
   expect(screen.getByTestId('ledger-header-meta')).toHaveTextContent(/CNY/);
+});
+
+// ------------------------------------------------------------ the way back (§14.64)
+
+test('wide: 「首页 · 账本设置」 above the ledger head, and cold its back goes home', async () => {
+  await renderSettings('owner', [makeMember()], makeDetail(), true);
+
+  expect(await screen.findByTestId('ledger-settings-crumb-back')).toBeTruthy();
+  expect(screen.getByText('首页 · 账本设置')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('ledger-settings-crumb-back'));
+  expect(mockRouter.replace).toHaveBeenCalledWith(`/l/${LEDGER_ID}`);
+  expect(mockRouter.back).not.toHaveBeenCalled();
+});
+
+test('wide, with history: the back button steps back instead', async () => {
+  mockRouter.canGoBack.mockReturnValue(true);
+  await renderSettings('owner', [makeMember()], makeDetail(), true);
+
+  fireEvent.press(await screen.findByTestId('ledger-settings-crumb-back'));
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+test('narrow: the page draws no back of its own — the shell’s top bar has it', async () => {
+  await renderSettings('owner', [makeMember()], makeDetail(), false);
+
+  expect(await screen.findByTestId('ledger-settings-screen')).toBeTruthy();
+  expect(screen.queryByTestId('ledger-settings-crumb')).toBeNull();
+  expect(screen.queryByTestId('ledger-settings-crumb-back')).toBeNull();
 });

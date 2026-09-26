@@ -29,7 +29,7 @@ import type { Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { formatBytes } from '@/i18n/format';
 import { useLang } from '@/i18n';
-import { useTopBar } from '@/navigation';
+import { useBack, useTopBar } from '@/navigation';
 import {
   useImportFormat,
   useImports,
@@ -86,6 +86,8 @@ export default function NewImportScreen(): React.JSX.Element {
   const router = useRouter();
   const { ledgerId } = useLedgerContext();
   useTopBar(t('import:upload.title'));
+  // Wide: the round back button and 「导入 · 上传账单」 over the title (§14.64 e).
+  const back = useBack();
 
   const sourcesQuery = useSources(ledgerId);
   const formatQuery = useImportFormat();
@@ -297,6 +299,15 @@ export default function NewImportScreen(): React.JSX.Element {
     <Page testID="import-new-screen">
       <PageHeader
         title={t('import:upload.title')}
+        back={
+          back.show
+            ? {
+                crumb: `${back.parentLabel} · ${t('import:upload.crumb_page')}`,
+                onPress: back.goBack,
+                label: t('common:button.back'),
+              }
+            : undefined
+        }
         // 屏幕稿 10 keeps the explainer on the title's own baseline, in sans, not mono.
         meta={
           <Text variant="caption" tone="muted" style={styles.subtitle} testID="import-new-subtitle">

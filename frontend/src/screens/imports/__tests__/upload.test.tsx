@@ -93,6 +93,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
+  'l/[ledgerId]/imports/index': () => <RNText>import history</RNText>,
   'l/[ledgerId]/imports/new': NewImportScreen,
   'l/[ledgerId]/imports/guide': () => <RNText>guide page</RNText>,
   'l/[ledgerId]/imports/[batchId]': () => <RNText>review table</RNText>,
@@ -513,4 +514,23 @@ test('the recent imports list names the last batches and opens one', async () =>
 
   fireEvent.press(screen.getByTestId(`upload-recent-${BATCH_ID}`));
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${BATCH_ID}`));
+});
+
+// ------------------------------------------------------------ the way back (§14.64)
+
+test('wide: the header carries 「导入 · 上传账单」, and cold its back goes to the history', async () => {
+  const router = renderUpload();
+
+  expect(await screen.findByTestId('import-new-header-back')).toBeTruthy();
+  expect(screen.getByText('导入 · 上传账单')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('import-new-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+});
+
+test('narrow: the page leaves the ‹ to the shell’s top bar', async () => {
+  setWide(false);
+  renderUpload();
+
+  expect(await screen.findByTestId('upload-source-picker-trigger')).toBeTruthy();
+  expect(screen.queryByTestId('import-new-header-back')).toBeNull();
 });

@@ -11,7 +11,8 @@
  * confirm naming the file, then `DELETE`. Afterwards the batch is gone and this URL 404s
  * (decision §14.22), so the caller leaves for the history.
  *
- * Narrow keeps the app's top bar, which already carries the title, so only the row count
+ * Wide, the round back button and 「导入 · 逐行确认」 sit above it all (§14.64 e). Narrow
+ * keeps the app's top bar, which already carries the title and the ‹, so only the row count
  * survives here (decision §14.56); 屏幕稿 03 · 375 draws no buttons on this line either.
  */
 import React from 'react';
@@ -21,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import type { ImportBatch, ImportFlag, Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { type Lang } from '@/i18n';
+import { useBack } from '@/navigation';
 import { useDeleteImport } from '@/queries';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, PageHeader, Text, confirm, toast } from '@/ui';
@@ -50,6 +52,8 @@ export function ReviewHeader({
   const wide = useIsWide();
   const id = testID ?? 'import-batch-header';
   const discard = useDeleteImport(ledgerId, batch.id);
+  const title = t('import:review.page_title');
+  const back = useBack();
 
   const onDiscard = React.useCallback((): void => {
     void (async () => {
@@ -85,7 +89,16 @@ export function ReviewHeader({
   return (
     <PageHeader
       testID={id}
-      title={t('import:review.page_title')}
+      title={title}
+      back={
+        back.show
+          ? {
+              crumb: `${back.parentLabel} · ${title}`,
+              onPress: back.goBack,
+              label: t('common:button.back'),
+            }
+          : undefined
+      }
       meta={
         <Text variant="body" tone="secondary" mono weight={500} testID="import-batch-summary">
           {stats}

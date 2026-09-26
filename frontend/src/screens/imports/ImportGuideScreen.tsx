@@ -14,15 +14,12 @@
  */
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportFormat } from '@/api/types';
-import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
-import { useTopBar } from '@/navigation';
+import { useBack, useTopBar } from '@/navigation';
 import { useImportFormat } from '@/queries';
-import { useLedgerContext } from '@/store';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -170,17 +167,11 @@ function SampleTable({ format }: { format: ImportFormat }): React.JSX.Element {
 
 export default function ImportGuideScreen(): React.JSX.Element {
   const { t } = useTranslation();
-  const router = useRouter();
-  const { ledgerId } = useLedgerContext();
   const { copy, download } = useCopyText();
   useTopBar(t('import:guide.title'));
+  const back = useBack();
 
   const query = useImportFormat();
-
-  const goImport = React.useCallback(
-    () => router.push(routes.l(ledgerId).importsNew() as Href),
-    [ledgerId, router],
-  );
 
   const onCopy = React.useCallback(
     (text: string): void => {
@@ -197,7 +188,8 @@ export default function ImportGuideScreen(): React.JSX.Element {
       back={{
         crumb: t('import:guide.crumb'),
         label: t('import:guide.back'),
-        onPress: goImport,
+        // History first; a deep link goes to the upload page (`useBack`, §14.64 f).
+        onPress: back.goBack,
       }}
       testID="guide-header"
     />

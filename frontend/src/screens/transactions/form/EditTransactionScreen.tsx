@@ -20,6 +20,7 @@ import type { Transaction, TxKind } from '@/api/types';
 import { absMoney } from '@/domain/money';
 import { routes, safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
+import { useBack } from '@/navigation';
 import { qk, useTransaction, useUpdateTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
@@ -93,10 +94,20 @@ export default function EditTransactionScreen(): React.JSX.Element {
     ctrl.form.reset({ ...ctrl.form.getValues(), ...valuesFromTransaction(tx) });
   }, [ctrl.form, tx]);
 
+  // A save has a destination of its own: `?next=`, or the detail showing the result.
   const goBack = React.useCallback((): void => {
     if (next) router.replace(next as Href);
     else router.replace(routes.l(ledgerId).transaction(txId) as Href);
   }, [ledgerId, next, router, txId]);
+
+  // Leaving without saving: `?next=` first, then history, then the parent `useBack`
+  // names — this entry's detail.
+  const back = useBack();
+  const stepBack = back.goBack;
+  const leaveForm = React.useCallback((): void => {
+    if (next) router.replace(next as Href);
+    else stepBack();
+  }, [next, router, stepBack]);
 
   // A leg of a two-leg transfer is never edited on its own (04 §4.7, decision §1.2): the
   // pair screen owns both sides and the single PATCH that keeps them consistent.
@@ -146,9 +157,9 @@ export default function EditTransactionScreen(): React.JSX.Element {
       // The guard has just asked; the navigation it is about to make is the answer, not a
       // new exit to challenge — without this the `beforeRemove` listener asks again.
       leave.allowLeave();
-      goBack();
+      leaveForm();
     });
-  }, [goBack, leave]);
+  }, [leave, leaveForm]);
 
   if (query.isError) {
     // Deleted while the link sat in someone's chat, a ledger this session may not read, a

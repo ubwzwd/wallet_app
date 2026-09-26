@@ -18,7 +18,7 @@ import type { ImportBatch, ImportCommitResult, ImportRow, Uuid } from '@/api/typ
 import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { useCurrencyNames } from '@/i18n/currencyNames';
-import { useTopBar } from '@/navigation';
+import { useBack, useTopBar } from '@/navigation';
 import {
   useCategories,
   useCurrencies,
@@ -116,6 +116,8 @@ export default function ImportBatchScreen(): React.JSX.Element {
   const bid =
     typeof params.batchId === 'string' && params.batchId !== '' ? params.batchId : undefined;
 
+  // The committed panel's wide back (§14.64 e); the review header asks for its own.
+  const back = useBack();
   const batchQuery = useImportBatch(ledgerId, bid);
   const rowsQuery = useImportRows(ledgerId, bid);
   const categories = useCategories();
@@ -246,6 +248,15 @@ export default function ImportBatchScreen(): React.JSX.Element {
           testID="import-batch-header"
           title={batch.source_name}
           subtitle={reviewSubtitle(batch, t)}
+          back={
+            back.show
+              ? {
+                  crumb: `${back.parentLabel} · ${batch.source_name}`,
+                  onPress: back.goBack,
+                  label: t('common:button.back'),
+                }
+              : undefined
+          }
         />
         <CommittedView ledgerId={ledgerId} batch={batch} result={committed} />
       </Page>

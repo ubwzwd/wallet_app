@@ -999,3 +999,36 @@ test('undoing from the committed panel dry-runs, double-taps and leaves for the 
   // This screen's own URL 404s once the batch is gone, so it leaves for the list (§14.22).
   await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
 });
+
+// ------------------------------------------------------------ the way back (§14.64)
+
+test('wide review: 「导入 · 逐行确认」 over the title, and cold its back goes to the history', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  mockGet('/ledgers', { items: [LEDGER], total: 1 });
+  const router = renderReview();
+
+  expect(await screen.findByTestId('import-batch-header-back')).toBeTruthy();
+  expect(screen.getByText('导入 · 逐行确认')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('import-batch-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+});
+
+test('wide committed batch: the trail names the account, and cold its back goes to the history', async () => {
+  seed([row({ id: 'row-1', row_no: 1 })], { status: 'committed', source_name: '招行信用卡' });
+  mockGet('/ledgers', { items: [LEDGER], total: 1 });
+  const router = renderReview();
+
+  expect(await screen.findByTestId('import-committed')).toBeTruthy();
+  expect(screen.getByText('导入 · 招行信用卡')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('import-batch-header-back'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+});
+
+test('narrow review: no back of the page’s own — the shell’s top bar has it', async () => {
+  jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(false);
+  seed([row({ id: 'row-1', row_no: 1 })]);
+  renderReview();
+
+  expect(await screen.findByTestId('import-batch-header')).toBeTruthy();
+  expect(screen.queryByTestId('import-batch-header-back')).toBeNull();
+});

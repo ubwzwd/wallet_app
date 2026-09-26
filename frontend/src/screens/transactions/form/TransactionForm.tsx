@@ -18,6 +18,7 @@ import type { Money, TxKind } from '@/api/types';
 import { evaluateExpression, isExpression } from '@/domain/calc';
 import { KINDS } from '@/domain/kinds';
 import { routes } from '@/domain/routes';
+import { useBack, useTopBar } from '@/navigation';
 import { useLedgerContext, useAuth } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -99,6 +100,12 @@ export function TransactionForm({
   const { ledgerId, ledger, baseCurrency } = useLedgerContext();
   const { user } = useAuth();
   const { form, kind, setKind, sources, sourcesLoading, values } = ctrl;
+  const title = pageTitle ?? t('transaction:form.page_title');
+  // Narrow: the shell's sub-page top bar carries the title beside its round ‹.
+  useTopBar(title);
+  // Wide: the header's round back button and 「交易 · 记一笔」 trail (§14.64 e). It leaves
+  // the way 取消 does — through the leave guard, honouring the page's own `?next=`.
+  const back = useBack();
   const refund = useRefundOrigin(ctrl);
   const [helpOpen, setHelpOpen] = React.useState(false);
   // An overlay owns the keyboard while it is up. Every overlay this form puts up reports
@@ -301,7 +308,17 @@ export function TransactionForm({
       <Page testID={testID ?? 'tx-form'}>
         {banner}
         <PageHeader
-          title={pageTitle ?? t('transaction:form.page_title')}
+          testID="tx-form-header"
+          title={title}
+          back={
+            back.show
+              ? {
+                  crumb: `${back.parentLabel} · ${title}`,
+                  onPress: onCancel,
+                  label: t('common:button.back'),
+                }
+              : undefined
+          }
           actions={
             <Text variant="caption" tone="muted" testID="tx-form-ledger-meta">
               {ledgerMeta}

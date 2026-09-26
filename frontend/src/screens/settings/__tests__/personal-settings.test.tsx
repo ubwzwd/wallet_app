@@ -10,6 +10,7 @@ import i18next from 'i18next';
 import { AppShell } from '@/navigation';
 import { PREF_NAMES, getPref, setPref } from '@/utils/prefs';
 import {
+  makeLedger,
   makeUser,
   mockApi,
   mockGet,
@@ -21,7 +22,13 @@ import { toast } from '@/ui';
 
 import PersonalSettingsScreen from '../PersonalSettingsScreen';
 
-const mockRouter = { push: jest.fn(), replace: jest.fn(), navigate: jest.fn(), back: jest.fn() };
+const mockRouter = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  navigate: jest.fn(),
+  back: jest.fn(),
+  canGoBack: jest.fn(() => false),
+};
 
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
@@ -214,4 +221,33 @@ test('the wide layout has no top bar, so the page carries the title itself', asy
   });
 
   expect(await screen.findByTestId('personal-settings-title')).toHaveTextContent('我的');
+});
+
+// ------------------------------------------------------------ the way back (§14.64 f)
+
+test('with a ledger, 我的 is a top-level page: no back button', async () => {
+  mockGet('/me', makeUser());
+  mockGet('/ledgers', { items: [makeLedger()], total: 1 });
+  await renderWithProviders(<PersonalSettingsScreen />, {
+    auth: { status: 'authenticated', user: makeUser() },
+    wide: true,
+  });
+
+  expect(await screen.findByTestId('personal-settings-title')).toBeTruthy();
+  expect(screen.queryByTestId('personal-settings-back')).toBeNull();
+});
+
+test('with no ledger at all, the wide header leads back to 账本管理', async () => {
+  const user = makeUser({ ledger_count: 0 });
+  mockGet('/me', user);
+  mockGet('/ledgers', { items: [], total: 0 });
+  await renderWithProviders(<PersonalSettingsScreen />, {
+    auth: { status: 'authenticated', user },
+    wide: true,
+  });
+
+  expect(await screen.findByTestId('personal-settings-back')).toBeTruthy();
+  expect(screen.getByText('账本管理 · 我的')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('personal-settings-back'));
+  expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers');
 });

@@ -23,6 +23,7 @@
   },
   "upload": {
     "title": "导入",
+    "crumb_page": "上传账单",
     "subtitle": "应用本身不调用大模型 · 账单在你自己的 ChatGPT / Claude 里整理",
     "steps_title": "三步",
     "step1_title": "安装 skill",

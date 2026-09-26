@@ -12,9 +12,10 @@ import { useTranslation } from 'react-i18next';
 
 import type { Transaction, TxKind } from '@/api/types';
 import { KINDS } from '@/domain/kinds';
-import { routes, safeNext } from '@/domain/routes';
+import { safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
 import { todayLocalIso } from '@/i18n/format';
+import { useBack } from '@/navigation';
 import { useCreateTransaction, useCreateTransfer, useTransaction } from '@/queries';
 import { useLedgerContext } from '@/store';
 import { toast } from '@/ui';
@@ -123,16 +124,14 @@ export default function TransactionFormScreen(): React.JSX.Element {
     setFocusKey((n) => n + 1);
   }, [copyData, ctrl.form, router, t]);
 
+  // `?next=` first; otherwise back through history, or — deep-linked straight into the
+  // form (a shared link, a PWA cold start) — to the parent `useBack` names: the list.
+  const back = useBack();
+  const stepBack = back.goBack;
   const goBack = React.useCallback((): void => {
-    if (next) {
-      router.replace(next as Href);
-      return;
-    }
-    // Deep-linked straight into the form (a shared link, a PWA cold start): there is no
-    // history to pop, so the list is the sensible landing place.
-    if (router.canGoBack()) router.back();
-    else router.replace(routes.l(ledgerId).transactions() as Href);
-  }, [ledgerId, next, router]);
+    if (next) router.replace(next as Href);
+    else stepBack();
+  }, [next, router, stepBack]);
 
   const onSuccess = React.useCallback(
     (values: TxFormValues, again: boolean): void => {
