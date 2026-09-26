@@ -437,7 +437,7 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
 | `categories` | `/categories` | Categories |
 | `config` | `/config`、`/import-format` | Public Config |
 | `ledgers` | `/ledgers` | Ledgers |
-| `sources` | `/sources` | Sources（决策 §14.62（2026-09-16 按决策 §14.62 同步）） |
+| `sources` | `/sources` | `sources`（小写，与 `app/api/sources.py` 的 `tags=["sources"]` 一致；决策 §14.62（2026-09-16 按决策 §14.62 同步）（2026-09-27 第八阶段收口时补正）） |
 | `finance_sources` | `/ledgers/{id}/sources` | Finance Sources |
 | `transactions` | `/ledgers/{id}/transactions` | Transactions |
 | `stats` | `/ledgers/{id}/stats` | Stats |
