@@ -1,7 +1,9 @@
 /**
  * The narrow layout's headline card (屏幕稿 09 · 账户列表 375): 「净资产 · 折算 CNY」, the
  * number itself, and 资产 / 负债 under it — the three sums of 04 §4.8, with archived
- * accounts left out of every one of them (decision §14.50).
+ * accounts left out of every one of them (decision §14.50). They are mine, not a ledger's
+ * (decision §14.62), and come straight from `GET /sources`; when any active account cannot
+ * be converted the server sends all three as `null` and the card shows 「—」.
  *
  * The wide layout has no such card: its three numbers live inline in the page header and
  * in the table's foot strip. The 「＋」 button rides in this card's corner, because the
@@ -15,27 +17,35 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import type { Money } from '@/api/types';
 import { absMoney } from '@/domain/money';
-import type { NetWorthSummary } from '@/domain/networth';
 import type { Lang } from '@/i18n';
 import { formatAmountPlain, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { Button, ListCard, Text } from '@/ui';
 
 export interface NetWorthCardProps {
-  summary: NetWorthSummary;
+  assets: Money | null;
+  /** Signed (≤ 0): the sum of the credit balances. */
+  liabilities: Money | null;
+  netWorth: Money | null;
+  archivedCount: number;
   baseCurrency: string;
   lang: Lang;
   onNew(): void;
 }
 
 export function NetWorthCard({
-  summary,
+  assets,
+  liabilities,
+  netWorth,
+  archivedCount,
   baseCurrency,
   lang,
   onNew,
 }: NetWorthCardProps): React.JSX.Element {
   const { t } = useTranslation();
+  const none = t('source:list.total_unavailable');
 
   return (
     <ListCard style={styles.card} testID="sources-summary">
@@ -46,7 +56,7 @@ export function NetWorthCard({
               {t('source:list.net_worth_caption', { currency: baseCurrency })}
             </Text>
             <Text variant="title" mono weight={450} numberOfLines={1} testID="sources-net-worth">
-              {formatMoney(summary.net, baseCurrency, lang)}
+              {netWorth === null ? none : formatMoney(netWorth, baseCurrency, lang)}
             </Text>
           </View>
           <Button
@@ -62,21 +72,24 @@ export function NetWorthCard({
           <Text variant="caption" tone="muted" mono testID="sources-assets">
             {/* 屏幕稿 09 · 375: 「资产 37,842.10 · 负债 3,215.00」 — the caption above the
                 big number already names the currency (§14.59a). */}
-            {`${t('source:list.assets')} ${formatAmountPlain(summary.assets, baseCurrency)}`}
+            {`${t('source:list.assets')} ${
+              assets === null ? none : formatAmountPlain(assets, baseCurrency)
+            }`}
           </Text>
           {/* 屏幕稿 09 keeps both sums in the same muted grey: the labels carry the
               difference, not colour (04 §6.2 rule 7). */}
           <Text variant="caption" tone="muted" mono testID="sources-liabilities">
-            {`${t('source:list.liabilities')} ${formatAmountPlain(
-              absMoney(summary.liabilities),
-              baseCurrency,
-            )}`}
+            {`${t('source:list.liabilities')} ${
+              liabilities === null
+                ? none
+                : formatAmountPlain(absMoney(liabilities), baseCurrency)
+            }`}
           </Text>
         </View>
 
-        {summary.archivedCount > 0 ? (
+        {archivedCount > 0 ? (
           <Text variant="caption" tone="muted" testID="sources-excluded-archived">
-            {t('source:list.excluded_archived', { count: summary.archivedCount })}
+            {t('source:list.excluded_archived', { count: archivedCount })}
           </Text>
         ) : null}
       </View>

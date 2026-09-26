@@ -1,5 +1,10 @@
 /**
- * `/l/:ledgerId/sources` (04 §4.8), rebuilt against 屏幕稿 09.
+ * `/accounts` (04 §4.8, decision §14.62), drawn against 屏幕稿 09.
+ *
+ * My own accounts: an account belongs to its owner and is shared into ledgers, so this page
+ * lives outside any ledger. The three numbers — assets, liabilities, net worth — are the
+ * server's (`GET /sources`, in my base currency), never summed here; each active account
+ * carries a 「共享到」 chip per ledger I belong to.
  *
  * Wide: a page header — 「账户」 + 「4 个在用 · 2 个已归档 · 净资产 ¥34,627.10」 + 「＋ 新建账户」
  * — over one white table whose foot strip carries 「合计 · 在用」. Narrow: the net-worth card
@@ -7,7 +12,7 @@
  * (decision §14.50). Both end with the folded 「已归档账户」 block.
  *
  * The list is always fetched with `include_archived=1`: the folded section has to name how
- * many archived accounts there are before it is opened, and `sumSources` leaves archived
+ * many archived accounts there are before it is opened, and the server leaves archived
  * accounts out of the three numbers regardless of whether they were fetched. The
  * `?include_archived=1` **URL** parameter therefore only decides whether the section is
  * open, and is kept in sync so the state survives a reload or a shared link.
@@ -19,13 +24,13 @@ import { useTranslation } from 'react-i18next';
 
 import { isApiClientError } from '@/api/errors';
 import type { FinanceSource } from '@/api/types';
-import { SOURCE_TYPE_ORDER, sumSources } from '@/domain/networth';
+import { SOURCE_TYPE_ORDER } from '@/domain/networth';
 import { routes } from '@/domain/routes';
 import { formatAmountPlain, formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
-import { useDeleteSource, useMySources } from '@/queries';
-import { useLedgerContext } from '@/store';
+import { useDeleteSource, useLedgers, useMySources } from '@/queries';
+import { useOptionalLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, EmptyState, Page, PageHeader, Skeleton, Text, confirm, toast } from '@/ui';
@@ -34,9 +39,10 @@ import { ArchivedPanel } from './ArchivedPanel';
 import { NetWorthCard } from './NetWorthCard';
 import { SourceGroup } from './SourceGroup';
 import { SourcesTable } from './SourcesTable';
-import { currencyCount } from './sourceFormat';
+import { currencyCount, groupSubtotal } from './sourceFormat';
+import { useShareToggle } from './useShareToggle';
 
-/** Skeleton cards while `GET /ledgers/{id}/sources` is in flight. */
+/** Skeleton cards while `GET /sources` is in flight. */
 const SKELETON_CARDS = 3;
 
 /** The server's refusal when an account still has transactions (decision §3). */
@@ -56,7 +62,8 @@ export default function SourcesScreen(): React.JSX.Element {
   const lang = useLang();
   const router = useRouter();
   const wide = useIsWide();
-  const { ledgerId, baseCurrency } = useLedgerContext();
+  // Only a default: a new account opened from inside a ledger starts shared into it.
+  const ledgerId = useOptionalLedgerContext()?.ledgerId;
   // The narrow layout carries the page title in the top bar (04 §1.4); the wide one has no
   // top bar, so there the `PageHeader` below is the only place it is written.
   useTopBar(t('source:list.title'));
@@ -67,6 +74,8 @@ export default function SourcesScreen(): React.JSX.Element {
   const showArchived = rawFlag === '1';
 
   const query = useMySources({ include_archived: true });
+  const ledgers = useLedgers();
+  const share = useShareToggle(ledgers.data?.items ?? []);
   const remove = useDeleteSource();
   const [deleteBlockedId, setDeleteBlockedId] = React.useState<string | null>(null);
 
@@ -76,11 +85,11 @@ export default function SourcesScreen(): React.JSX.Element {
   );
   const openSource = React.useCallback(
     (source: FinanceSource) => router.push(routes.accountEdit(source.id) as Href),
-    [ledgerId, router],
+    [router],
   );
   const toggleArchived = React.useCallback(
     () => router.replace(routes.accounts(!showArchived) as Href),
-    [ledgerId, router, showArchived],
+    [router, showArchived],
   );
 
   const onDelete = React.useCallback(
@@ -108,20 +117,25 @@ export default function SourcesScreen(): React.JSX.Element {
   );
 
   const items = query.data?.items ?? [];
-  const summary = sumSources(items);
+  // My base currency — the one the server converted every balance and total into.
+  const baseCurrency = query.data?.base_currency ?? '';
+  const netWorth = query.data?.net_worth ?? null;
   const active = byType(items.filter((s) => !s.archived));
   const archived = byType(items.filter((s) => s.archived));
+  const unconvertible = active.filter((s) => s.balance_base === null).length;
+  const totalText = (amount: string | null, format: (m: string) => string): string =>
+    amount === null ? t('source:list.total_unavailable') : format(amount);
 
   /** 屏幕稿 09: 「4 个在用 · 2 个已归档 · 净资产 ¥34,627.10」 on the title's baseline. */
   const meta = [
     t('source:list.meta_active', { count: active.length }),
     archived.length > 0 ? t('source:list.meta_archived', { count: archived.length }) : null,
-    // 「净资产 SGD 0.00」 on a ledger with no accounts is noise, not information — the same
-    // rule 屏幕稿 15 applies to the empty transaction list's stat line.
+    // 「净资产 SGD 0.00」 with no accounts is noise, not information — the same rule
+    // 屏幕稿 15 applies to the empty transaction list's stat line.
     items.length === 0
       ? null
       : t('source:list.meta_net_worth', {
-          amount: formatMoney(summary.net, baseCurrency, lang),
+          amount: totalText(netWorth, (m) => formatMoney(m, baseCurrency, lang)),
         }),
   ]
     .filter((part): part is string => part !== null)
@@ -199,16 +213,19 @@ export default function SourcesScreen(): React.JSX.Element {
       {header}
       {wide ? null : (
         <NetWorthCard
-          summary={summary}
+          assets={query.data.assets}
+          liabilities={query.data.liabilities}
+          netWorth={netWorth}
+          archivedCount={archived.length}
           baseCurrency={baseCurrency}
           lang={lang}
           onNew={goNew}
         />
       )}
 
-      {summary.unconvertibleCount > 0 ? (
+      {unconvertible > 0 ? (
         <Text variant="caption" tone="warning" testID="sources-no-rate">
-          {t('source:list.no_rate_hint', { count: summary.unconvertibleCount })}
+          {t('source:list.no_rate_hint', { count: unconvertible })}
         </Text>
       ) : null}
 
@@ -217,8 +234,9 @@ export default function SourcesScreen(): React.JSX.Element {
           sources={active}
           // Bare digits, like every other number in the table's two money columns
           // (屏幕稿 09: 「34,627.10」); the page header's meta keeps its ¥.
-          total={formatAmountPlain(summary.net, baseCurrency)}
+          total={totalText(netWorth, (m) => formatAmountPlain(m, baseCurrency))}
           mixed={currencyCount(active) > 1}
+          share={share}
           {...rowProps}
         />
       ) : (
@@ -228,7 +246,8 @@ export default function SourcesScreen(): React.JSX.Element {
               key={type}
               type={type}
               sources={active.filter((s) => s.type === type)}
-              subtotal={summary.byType[type].subtotal}
+              subtotal={groupSubtotal(active.filter((s) => s.type === type))}
+              share={share}
               {...rowProps}
             />
           ))}

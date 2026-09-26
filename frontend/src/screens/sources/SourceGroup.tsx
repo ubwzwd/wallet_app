@@ -4,7 +4,9 @@
  * One block per type — a small mono caption with the group's converted subtotal on the
  * right (决策 §14.50), over a white card of 56-tall rows: type well, name over
  * 「储蓄卡 · CNY」, the balance in the account's own currency, the converted value under it
- * for a foreign account, and the 「···」 menu at the end (04 §4.8).
+ * for a foreign account, and the 「···」 menu at the end (04 §4.8). Under an active row sits
+ * a line of 「共享到」 chips — one per ledger I belong to (decision §14.62); the mockup
+ * predates sharing, so the line is indented to the name column and kept to caption size.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -17,8 +19,13 @@ import { formatConverted, formatDate, formatMoney } from '@/i18n/format';
 import { space } from '@/theme/tokens';
 import { ListCard, ListRow, SourceTypeIcon, Text, sourceTypeLabelKey } from '@/ui';
 
+import { ShareChips } from './ShareChips';
 import { SourceRowMenu } from './SourceRowMenu';
 import { balanceText, balanceTone, isForeign } from './sourceFormat';
+import type { ShareController } from './useShareToggle';
+
+/** Row padding (ListRow, narrow) + the 34 icon well + the row's gap: the name column. */
+const NAME_INSET = space['3'] + 2 + 34 + space['3'];
 
 export interface SourceListRowProps {
   source: FinanceSource;
@@ -27,6 +34,8 @@ export interface SourceListRowProps {
   onOpen(source: FinanceSource): void;
   onDelete(source: FinanceSource): void;
   deleteBlocked?: boolean;
+  /** The 共享到 chip line; absent on archived rows. */
+  share?: ShareController;
 }
 
 /** The right-hand second line: the converted value, or — for an archived row — when it was
@@ -61,6 +70,7 @@ export function SourceListRow({
   onOpen,
   onDelete,
   deleteBlocked = false,
+  share,
 }: SourceListRowProps): React.JSX.Element {
   const { t } = useTranslation();
   const muted = source.archived;
@@ -82,9 +92,29 @@ export function SourceListRow({
           testID={`source-row-${source.id}`}
         />
         <View style={styles.menu}>
-          <SourceRowMenu source={source} onOpen={onOpen} onDelete={onDelete} />
+          <SourceRowMenu
+            source={source}
+            baseCurrency={baseCurrency}
+            onOpen={onOpen}
+            onDelete={onDelete}
+          />
         </View>
       </View>
+      {share && !muted && share.ledgers.length > 0 ? (
+        <View style={styles.share}>
+          <Text variant="caption" tone="muted" style={styles.shareLabel}>
+            {t('source:share.column')}
+          </Text>
+          <ShareChips
+            ledgers={share.ledgers}
+            isShared={(lid) => share.isShared(source, lid)}
+            isPending={(lid) => share.isPending(source, lid)}
+            onToggle={(ledger) => share.toggle(source, ledger)}
+            testID={`source-share-${source.id}`}
+            style={styles.shareChips}
+          />
+        </View>
+      ) : null}
       {deleteBlocked ? (
         <Text
           variant="caption"
@@ -102,13 +132,14 @@ export function SourceListRow({
 export interface SourceGroupProps {
   type: SourceType;
   sources: readonly FinanceSource[];
-  /** Already converted to the base currency by `sumSources` (decision §14.50). */
+  /** Already converted to my base currency (decision §14.50). */
   subtotal: Money;
   baseCurrency: string;
   lang: Lang;
   onOpen(source: FinanceSource): void;
   onDelete(source: FinanceSource): void;
   deleteBlockedId: string | null;
+  share?: ShareController;
 }
 
 export function SourceGroup({
@@ -120,6 +151,7 @@ export function SourceGroup({
   onOpen,
   onDelete,
   deleteBlockedId,
+  share,
 }: SourceGroupProps): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -152,6 +184,7 @@ export function SourceGroup({
             onOpen={onOpen}
             onDelete={onDelete}
             deleteBlocked={deleteBlockedId === source.id}
+            share={share}
           />
         ))}
       </ListCard>
@@ -173,4 +206,14 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, minWidth: 0, paddingRight: 0 },
   menu: { paddingRight: 0 },
   blocked: { paddingHorizontal: space['4'], paddingBottom: space['2'] },
+  share: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['2'],
+    paddingLeft: NAME_INSET,
+    paddingRight: space['3'] + 2,
+    paddingBottom: space['3'],
+  },
+  shareLabel: { flexShrink: 0 },
+  shareChips: { flex: 1, minWidth: 0 },
 });

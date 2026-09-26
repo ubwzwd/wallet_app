@@ -2,6 +2,7 @@
  * The four fields of the account form, laid out the way 屏幕稿 09 draws them: 名称, the 类型
  * blocks, 币种 (with the quick chips and the "locked once saved" note) and 期初余额 in the
  * mockup's tinted amount well. Wide puts 币种 and 期初余额 side by side; narrow stacks them.
+ * Under them, 「共享到」 (decision §14.62): a chip per ledger I belong to, multi-select.
  *
  * Presentation only — every rule behind these fields (the locked currency of decision
  * §14.50, the positive-debt entry of §14.52 A13, the duplicate-name hint) is decided by
@@ -12,12 +13,13 @@ import { View } from 'react-native';
 import { Controller, type Control, type FieldErrors } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 
-import type { SourceType } from '@/api/types';
+import type { Ledger, SourceType } from '@/api/types';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { AmountField, Chip, CurrencyPicker, Text, TextField } from '@/ui';
 
 import { SOURCE_NAME_MAX_LENGTH, sourceValidationMessage, type SourceFormValues } from './schemas';
+import { ShareChips } from './ShareChips';
 import { TypePicker } from './TypePicker';
 
 export interface SourceFormFieldsProps {
@@ -36,6 +38,8 @@ export interface SourceFormFieldsProps {
   currency: string;
   /** Shortcut chips over the full picker (屏幕稿 09: CNY / SGD / USD). */
   quickCurrencies: readonly string[];
+  /** Every ledger I belong to — the 「共享到」 chips. */
+  ledgers: readonly Ledger[];
   /** The 已归档 switch, rendered by the screen because it mutates on its own. */
   archivedSwitch?: React.ReactNode;
 }
@@ -120,6 +124,42 @@ export function SourceFormFields(props: SourceFormFieldsProps): React.JSX.Elemen
     />
   );
 
+  const shareField = (
+    <Controller
+      control={control}
+      name="share_to"
+      render={({ field }) => (
+        <View style={{ gap: space['2'] }} testID="source-share-field">
+          <Text variant="caption" tone="secondary">
+            {t('source:share.column')}
+          </Text>
+          {props.ledgers.length === 0 ? (
+            <Text variant="caption" tone="muted" testID="source-share-none">
+              {t('source:share.no_ledgers')}
+            </Text>
+          ) : (
+            <ShareChips
+              ledgers={props.ledgers}
+              isShared={(lid) => field.value.includes(lid)}
+              onToggle={(ledger) =>
+                field.onChange(
+                  field.value.includes(ledger.id)
+                    ? field.value.filter((id) => id !== ledger.id)
+                    : [...field.value, ledger.id],
+                )
+              }
+              disabled={busy}
+              testID="source-share"
+            />
+          )}
+          <Text variant="caption" tone="muted" testID="source-share-hint">
+            {t('source:share.hint')}
+          </Text>
+        </View>
+      )}
+    />
+  );
+
   return (
     <View style={{ gap: space['5'], alignSelf: 'stretch' }}>
       <Controller
@@ -170,6 +210,8 @@ export function SourceFormFields(props: SourceFormFieldsProps): React.JSX.Elemen
           {openingField}
         </>
       )}
+
+      {shareField}
 
       {props.archivedSwitch}
 

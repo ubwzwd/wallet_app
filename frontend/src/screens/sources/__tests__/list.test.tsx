@@ -1,9 +1,11 @@
 /**
- * `/l/:ledgerId/sources` — the account list (04 §4.8, §8.3; decisions §3, §14.48, §14.50).
+ * `/accounts` — my account list (04 §4.8, §8.3; decisions §3, §14.48, §14.50, §14.62).
  *
  * The screen has two shapes since 屏幕稿 09 (决策 §14.45): narrow keeps one white card per
  * account type with its converted subtotal, wide draws a single table with a
- * 「合计 · 在用」 foot strip. Every rule below holds in both.
+ * 「合计 · 在用」 foot strip. Every rule below holds in both. Since §14.62 the accounts are
+ * mine rather than a ledger's: the three numbers are the server's, and every active account
+ * carries a 「共享到」 chip per ledger I belong to.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -12,18 +14,19 @@ import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testi
 import { within } from '@testing-library/react-native';
 import i18next from 'i18next';
 
-import type { FinanceSource } from '@/api/types';
+import type { FinanceSource, Money } from '@/api/types';
 import { setAuthToken } from '@/api';
 import { initI18n } from '@/i18n';
 import { formatAmountPlain, formatDate, formatMoney } from '@/i18n/format';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
 import { lightColors } from '@/theme/tokens';
 import * as breakpoint from '@/theme/useBreakpoint';
-import { AuthProvider, LedgerProvider } from '@/store';
+import { AuthProvider } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
 import {
   LEDGER_ID,
+  apiUrl,
   makeLedger,
   makeSource,
   makeTestHandlers,
@@ -33,6 +36,7 @@ import {
   mockDelete,
   mockGet,
   mockPatch,
+  mockPut,
   type MockApi,
   type TestQueryHandlers,
 } from '@/test';
@@ -43,22 +47,22 @@ let queryClient: QueryClient;
 let handlers: TestQueryHandlers;
 let api: MockApi;
 
+const TRIP_ID = '9a1b2c3d-4444-4555-8666-777788889999';
 const LEDGER = makeLedger({ base_currency: 'CNY' });
-const SOURCES_PATH = `/ledgers/${LEDGER_ID}/sources`;
+const TRIP = makeLedger({ id: TRIP_ID, name: '旅行账本', base_currency: 'SGD' });
 
+/** `/accounts` lives outside every ledger (decision §14.62): no `LedgerProvider` here. */
 function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider initialPref="light">
         <AuthProvider queryClient={queryClient}>
-          <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
-            {/* The real narrow chrome: the page title is published to it, not printed
-                on the page (04 §1.4). */}
-            <TopBarProvider>
-              <TopBarSurface onPressLedger={() => {}} />
-              {children}
-            </TopBarProvider>
-          </LedgerProvider>
+          {/* The real narrow chrome: the page title is published to it, not printed
+              on the page (04 §1.4). */}
+          <TopBarProvider>
+            <TopBarSurface onPressLedger={() => {}} />
+            {children}
+          </TopBarProvider>
           <ToastHost />
           <ConfirmHost
             labels={{
@@ -75,9 +79,9 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/sources/index': SourcesScreen,
-  'l/[ledgerId]/sources/new': () => <RNText>new account form</RNText>,
-  'l/[ledgerId]/sources/[sourceId]/edit': () => <RNText>edit account form</RNText>,
+  'accounts/index': SourcesScreen,
+  'accounts/new': () => <RNText>new account form</RNText>,
+  'accounts/[sourceId]/edit': () => <RNText>edit account form</RNText>,
 };
 
 const checking = makeSource({
@@ -88,6 +92,7 @@ const checking = makeSource({
   opening_balance: '0.0000',
   balance: '10000.0000',
   balance_base: '10000.0000',
+  shared_to: [LEDGER_ID],
   updated_at: '2026-09-01T12:00:00.000000Z',
 });
 const credit = makeSource({
@@ -98,6 +103,7 @@ const credit = makeSource({
   opening_balance: '-3204.0000',
   balance: '-3204.0000',
   balance_base: '-3204.0000',
+  shared_to: [],
 });
 const cash = makeSource({
   id: 'src-cash',
@@ -126,15 +132,30 @@ const archived = makeSource({
   balance_base: '700.0000',
   archived: true,
   archived_at: '2026-08-20T03:00:00.000000Z',
+  shared_to: [LEDGER_ID],
 });
 
 const ALL: FinanceSource[] = [checking, credit, cash, other, archived];
 
-function seedList(items: FinanceSource[] = ALL): void {
-  mockGet(SOURCES_PATH, { items, total: items.length });
+interface Totals {
+  assets: Money | null;
+  liabilities: Money | null;
+  net_worth: Money | null;
 }
 
-function renderList(url = `/l/${LEDGER_ID}/sources`): ReturnType<typeof renderRouter> {
+/** What the server says for ALL: 10000 + 500 + 1000 (SGD converted), −3204, and the sum. */
+const ALL_TOTALS: Totals = {
+  assets: '11500.0000',
+  liabilities: '-3204.0000',
+  net_worth: '8296.0000',
+};
+const NO_TOTALS: Totals = { assets: '0.0000', liabilities: '0.0000', net_worth: '0.0000' };
+
+function seedList(items: FinanceSource[] = ALL, totals: Totals = ALL_TOTALS): void {
+  mockGet('/sources', { items, total: items.length, base_currency: 'CNY', ...totals });
+}
+
+function renderList(url = '/accounts'): ReturnType<typeof renderRouter> {
   return renderRouter(ROUTES, { initialUrl: url, wrapper: Wrapper });
 }
 
@@ -153,6 +174,15 @@ function textOf(testID: string): string {
   return String(screen.getByTestId(testID).props.children);
 }
 
+/** Whether a 「共享到」 chip reads as shared (solid, `selected`). */
+function chipShared(sid: string, lid: string): boolean {
+  return screen.getByTestId(`source-share-${sid}-${lid}`).props.accessibilityState.selected;
+}
+
+function chipDisabled(sid: string, lid: string): boolean {
+  return screen.getByTestId(`source-share-${sid}-${lid}`).props.accessibilityState.disabled;
+}
+
 beforeEach(async () => {
   api = mockApi();
   await setAuthToken('test-token');
@@ -162,6 +192,7 @@ beforeEach(async () => {
   await initI18n();
   await i18next.changeLanguage('zh');
   mockGet('/me', makeUser({ base_currency: 'CNY' }));
+  mockGet('/ledgers', { items: [LEDGER, TRIP], total: 2 });
   mockGet('/rates/currencies', { currencies: { CNY: 'Chinese Yuan', SGD: 'Singapore Dollar' } });
 });
 
@@ -171,6 +202,19 @@ afterEach(() => {
   toast.clear();
   // A `useIsWide` spy from a layout test must not decide the next test's branch.
   jest.restoreAllMocks();
+});
+
+test('it lists my accounts from GET /sources, not a ledger’s', async () => {
+  seedList();
+  renderList();
+
+  expect(await screen.findByTestId('source-row-src-checking')).toBeTruthy();
+  const gets = api.mock.history.get.map((r) => r.url);
+  expect(gets).toContain('/sources');
+  expect(gets.some((url) => url?.includes('/ledgers/') && url.endsWith('/sources'))).toBe(false);
+  expect(api.mock.history.get.find((r) => r.url === '/sources')?.params).toEqual({
+    include_archived: true,
+  });
 });
 
 test('accounts are grouped into the four types, each with its converted subtotal', async () => {
@@ -232,6 +276,8 @@ test('the wide table gives every account a row, and the foot strip the total of 
   // 合计 · 在用 = 10000 − 3204 + 500 + 1000, and the currencies are mixed.
   expect(textOf('sources-net-worth')).toBe(formatAmountPlain('8296.0000', 'CNY'));
   expect(screen.getByTestId('sources-table-mixed')).toBeTruthy();
+  // The one column the mockup predates sits between 折算 and 「···」.
+  expect(screen.getByTestId('sources-table-head-shared')).toHaveTextContent('共享到');
 });
 
 test('the wide page header carries the counts and net worth inline', async () => {
@@ -250,7 +296,6 @@ test('archived accounts stay out of the three numbers and are folded away by def
   renderList();
 
   expect(await screen.findByTestId('sources-assets')).toBeTruthy();
-  // assets = 10000 + 500 + 1000 (SGD converted); the archived 700 is excluded.
   // 屏幕稿 09 · 375: 「资产 37,842.10 · 负债 3,215.00」 — bare; only the net worth keeps 「¥」.
   expect(textOf('sources-assets')).toContain(formatAmountPlain('11500.0000', 'CNY'));
   expect(textOf('sources-liabilities')).toContain(formatAmountPlain('3204.0000', 'CNY'));
@@ -263,9 +308,50 @@ test('archived accounts stay out of the three numbers and are folded away by def
   expect(screen.queryByTestId('source-row-src-archived')).toBeNull();
 });
 
+// ------------------------------------------- the three numbers are the server's (§14.62)
+
+test('the three numbers are the server’s totals, not a sum of the rows', async () => {
+  // Deliberately not what the rows add up to: the server counts every ledger's entries in
+  // my own base currency, and the page must print what it said.
+  seedList(ALL, { assets: '20000.0000', liabilities: '-5000.0000', net_worth: '15000.0000' });
+  renderList();
+
+  expect(await screen.findByTestId('sources-assets')).toBeTruthy();
+  expect(textOf('sources-assets')).toContain(formatAmountPlain('20000.0000', 'CNY'));
+  expect(textOf('sources-liabilities')).toContain(formatAmountPlain('5000.0000', 'CNY'));
+  expect(textOf('sources-net-worth')).toContain(formatMoney('15000.0000', 'CNY', 'zh'));
+  expect(textOf('sources-net-worth')).not.toContain('8,296');
+});
+
+test('the wide foot strip and header print the server’s net worth too', async () => {
+  goWide();
+  seedList(ALL, { assets: '20000.0000', liabilities: '-5000.0000', net_worth: '15000.0000' });
+  renderList();
+
+  expect(await screen.findByTestId('sources-table')).toBeTruthy();
+  expect(textOf('sources-net-worth')).toBe(formatAmountPlain('15000.0000', 'CNY'));
+  expect(textOf('sources-meta')).toContain(formatMoney('15000.0000', 'CNY', 'zh'));
+});
+
+test('when the server cannot total my accounts, all three read 「—」 and the page says why', async () => {
+  const noRate = { ...other, balance_base: null, balance_rate: null, balance_rate_date: null };
+  seedList([checking, credit, cash, noRate, archived], {
+    assets: null,
+    liabilities: null,
+    net_worth: null,
+  });
+  renderList();
+
+  expect(await screen.findByTestId('sources-assets')).toBeTruthy();
+  expect(textOf('sources-net-worth')).toBe('—');
+  expect(textOf('sources-assets')).toContain('—');
+  expect(textOf('sources-liabilities')).toContain('—');
+  expect(textOf('sources-no-rate')).toContain('1');
+});
+
 test('?include_archived=1 expands the section, greying each row with its archive date', async () => {
   seedList();
-  renderList(`/l/${LEDGER_ID}/sources?include_archived=1`);
+  renderList('/accounts?include_archived=1');
 
   expect(await screen.findByTestId('source-row-src-archived')).toBeTruthy();
   expect(
@@ -275,12 +361,14 @@ test('?include_archived=1 expands the section, greying each row with its archive
   expect(textOf('sources-archived-hint')).toContain('不计入净资产');
   // Still out of the three numbers while expanded.
   expect(textOf('sources-net-worth')).toContain(formatMoney('8296.0000', 'CNY', 'zh'));
+  // Sharing an account nobody can record with means nothing: no chips on archived rows.
+  expect(screen.queryByTestId(`source-share-src-archived-${LEDGER_ID}`)).toBeNull();
 });
 
 test('the expanded archived block keeps the table columns and stamps each row', async () => {
   goWide();
   seedList();
-  renderList(`/l/${LEDGER_ID}/sources?include_archived=1`);
+  renderList('/accounts?include_archived=1');
 
   // The head strip names what archiving costs and how many accounts are folded in.
   expect(await screen.findByTestId('sources-archived-section')).toBeTruthy();
@@ -291,6 +379,7 @@ test('the expanded archived block keeps the table columns and stamps each row', 
   expect(textOf('source-archived-at-src-archived')).toContain(formatDate('2026-08-20'));
   // Both cards sit in the same horizontal scroller, so their columns stay lined up.
   expect(screen.getByTestId('sources-archived-hscroll')).toBeTruthy();
+  expect(screen.queryByTestId(`source-share-src-archived-${LEDGER_ID}`)).toBeNull();
 });
 
 test('both layouts list accounts in the frozen §14.48 type order', async () => {
@@ -319,12 +408,13 @@ test('toggling the archived section writes include_archived into the URL', async
 });
 
 test('the empty state offers the create action', async () => {
-  seedList([]);
-  renderList();
+  seedList([], NO_TOTALS);
+  const router = renderList();
 
-  expect(await screen.findByText('还没有账户，添加一个开始记账')).toBeTruthy();
+  expect(await screen.findByText('你还没有账户')).toBeTruthy();
   fireEvent.press(screen.getByTestId('sources-empty-primary'));
   await waitFor(() => expect(screen.getByText('new account form')).toBeTruthy());
+  expect(router.getPathname()).toBe('/accounts/new');
 });
 
 /**
@@ -333,7 +423,7 @@ test('the empty state offers the create action', async () => {
  */
 test('the wide empty page offers exactly one 新建账户 button', async () => {
   goWide();
-  seedList([]);
+  seedList([], NO_TOTALS);
   renderList();
 
   expect(await screen.findByTestId('sources-empty')).toBeTruthy();
@@ -348,9 +438,7 @@ test('pressing a row opens that account for editing', async () => {
   const router = renderList();
 
   fireEvent.press(await screen.findByTestId('source-row-src-cash'));
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources/src-cash/edit`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts/src-cash/edit'));
 });
 
 test('the row menu opens the edit form as well', async () => {
@@ -359,14 +447,12 @@ test('the row menu opens the edit form as well', async () => {
 
   await openRowMenu('src-cash');
   fireEvent.press(await screen.findByTestId('source-edit-src-cash'));
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/sources/src-cash/edit`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts/src-cash/edit'));
 });
 
 test('archiving confirms with the balance leaving net worth, then PATCHes archived + updated_at', async () => {
   seedList();
-  mockPatch(`${SOURCES_PATH}/src-checking`, { ...checking, archived: true });
+  mockPatch('/sources/src-checking', { ...checking, archived: true });
   renderList();
 
   await openRowMenu('src-checking');
@@ -382,7 +468,7 @@ test('archiving confirms with the balance leaving net worth, then PATCHes archiv
 
   await waitFor(() => expect(api.mock.history.patch.length).toBe(1));
   const sent = api.mock.history.patch[0];
-  expect(sent.url).toContain('/sources/src-checking');
+  expect(sent.url).toBe('/sources/src-checking');
   expect(JSON.parse(sent.data as string)).toEqual({
     archived: true,
     updated_at: checking.updated_at,
@@ -405,7 +491,7 @@ test('cancelling the archive confirmation sends nothing', async () => {
 test('a delete refused with source_has_transactions explains that archiving is the way out', async () => {
   seedList();
   mockDelete(
-    `${SOURCES_PATH}/src-checking`,
+    '/sources/src-checking',
     { detail: 'has transactions', code: 'source_has_transactions' },
     409,
   );
@@ -424,10 +510,89 @@ test('a delete refused with source_has_transactions explains that archiving is t
   expect(
     (await screen.findByTestId('source-delete-blocked-src-checking')).props.children,
   ).toBe('这个账户下有交易，只能归档');
+  expect(api.mock.history.delete[0].url).toBe('/sources/src-checking');
   // The global error toast carried the server's copy as well (04 §3.9).
   await waitFor(() =>
     expect(handlers.notify).toHaveBeenCalledWith('error', expect.any(String), expect.anything()),
   );
+});
+
+// ------------------------------------------------------------ 共享到 (decision §14.62)
+
+test('every active account has a chip per ledger I belong to, solid where it is shared', async () => {
+  seedList();
+  renderList();
+
+  expect(await screen.findByTestId(`source-share-src-checking-${LEDGER_ID}`)).toBeTruthy();
+  expect(chipShared('src-checking', LEDGER_ID)).toBe(true);
+  expect(chipShared('src-checking', TRIP_ID)).toBe(false);
+  expect(screen.getByTestId(`source-share-src-checking-${TRIP_ID}`)).toHaveTextContent('旅行账本');
+  expect(chipShared('src-credit', LEDGER_ID)).toBe(false);
+});
+
+test('the wide table carries the same chips in its 共享到 column', async () => {
+  goWide();
+  seedList();
+  renderList();
+
+  expect(await screen.findByTestId('sources-table')).toBeTruthy();
+  expect(await screen.findByTestId(`source-share-src-credit-${TRIP_ID}`)).toBeTruthy();
+  expect(chipShared('src-checking', LEDGER_ID)).toBe(true);
+});
+
+test('pressing an unshared chip PUTs the share, disabled until the answer lands', async () => {
+  seedList();
+  let answer: (value: [number]) => void = () => undefined;
+  api.mock
+    .onPut(apiUrl(`/sources/src-credit/ledgers/${TRIP_ID}`))
+    .reply(() => new Promise<[number]>((resolve) => (answer = resolve)));
+  renderList();
+
+  fireEvent.press(await screen.findByTestId(`source-share-src-credit-${TRIP_ID}`));
+
+  await waitFor(() => expect(api.mock.history.put.length).toBe(1));
+  expect(api.mock.history.put[0].url).toBe(`/sources/src-credit/ledgers/${TRIP_ID}`);
+  // Flipped at once, and not pressable again while the request is in flight.
+  expect(chipShared('src-credit', TRIP_ID)).toBe(true);
+  expect(chipDisabled('src-credit', TRIP_ID)).toBe(true);
+
+  seedList([checking, { ...credit, shared_to: [TRIP_ID] }, cash, other, archived]);
+  await act(async () => {
+    answer([204]);
+  });
+  await waitFor(() => expect(chipDisabled('src-credit', TRIP_ID)).toBe(false));
+  expect(chipShared('src-credit', TRIP_ID)).toBe(true);
+  expect(await screen.findByText('已把「招行信用卡」共享到「旅行账本」')).toBeTruthy();
+});
+
+test('pressing a shared chip DELETEs the share', async () => {
+  seedList();
+  mockDelete(`/sources/src-checking/ledgers/${LEDGER_ID}`, undefined, 204);
+  renderList();
+
+  fireEvent.press(await screen.findByTestId(`source-share-src-checking-${LEDGER_ID}`));
+  // What the invalidation refetch will find once the DELETE has gone through.
+  seedList([{ ...checking, shared_to: [] }, credit, cash, other, archived]);
+
+  await waitFor(() => expect(api.mock.history.delete.length).toBe(1));
+  expect(api.mock.history.delete[0].url).toBe(`/sources/src-checking/ledgers/${LEDGER_ID}`);
+  expect(api.mock.history.put.length).toBe(0);
+  expect(await screen.findByText(/已取消共享「招行储蓄卡」到「家庭账本」/)).toBeTruthy();
+  expect(chipShared('src-checking', LEDGER_ID)).toBe(false);
+});
+
+test('a failed share rolls the chip back and says which ledger it was about', async () => {
+  seedList();
+  mockPut(`/sources/src-credit/ledgers/${TRIP_ID}`, { detail: 'nope', code: 'not_found' }, 404);
+  renderList();
+
+  fireEvent.press(await screen.findByTestId(`source-share-src-credit-${TRIP_ID}`));
+
+  expect(await screen.findByText('「招行信用卡」在「旅行账本」的共享设置没有改成')).toBeTruthy();
+  await waitFor(() => expect(chipShared('src-credit', TRIP_ID)).toBe(false));
+  expect(chipDisabled('src-credit', TRIP_ID)).toBe(false);
+  // The screen's own toast replaces the global one — the failure is said once.
+  expect(handlers.notify).not.toHaveBeenCalledWith('error', expect.anything(), expect.anything());
 });
 
 // ----------------------------------------------------------- the title (04 §1.4)

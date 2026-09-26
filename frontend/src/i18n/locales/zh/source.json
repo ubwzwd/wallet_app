@@ -34,7 +34,7 @@
     "archived_collapse": "收起已归档账户",
     "archived_at": "归档于 {{date}}",
     "empty": {
-      "title": "还没有账户，添加一个开始记账",
+      "title": "你还没有账户",
       "button": "新建账户"
     },
     "menu_label": "「{{name}}」的更多操作",
@@ -52,7 +52,8 @@
     "delete_confirm": "删除后不可恢复。只有没有交易的账户才能删除。",
     "deleted_toast": "已删除「{{name}}」",
     "delete_disabled_hint": "这个账户下有交易，只能归档",
-    "no_rate_hint": "有 {{count}} 个账户暂时无法折算"
+    "no_rate_hint": "有 {{count}} 个账户暂时无法折算",
+    "total_unavailable": "—"
   },
   "form": {
     "new_title": "新建账户",
@@ -61,7 +62,7 @@
     "load_error": "加载失败，请重试",
     "name_label": "名称",
     "name_placeholder": "如「招行储蓄卡」",
-    "name_hint": "家里两个人都看得到，写得具体点",
+    "name_hint": "共享到的账本里，其他成员也会看到这个名字，写得具体点",
     "name_duplicate_hint": "已有同名账户，仍会按账户区分",
     "type_label": "类型",
     "currency_label": "币种",
@@ -80,5 +81,14 @@
     "submit_save": "保存",
     "created_toast": "已创建「{{name}}」",
     "saved_toast": "已保存「{{name}}」"
+  },
+  "share": {
+    "column": "共享到",
+    "hint": "共享后该账本的其他成员也能用这张卡记账；你自己在哪本账都能用",
+    "no_ledgers": "你还没有加入任何账本；加入或新建账本后再回来共享",
+    "shared_toast": "已把「{{account}}」共享到「{{ledger}}」",
+    "unshared_toast": "已取消共享「{{account}}」到「{{ledger}}」，其他成员不能再用它记新账，已记的保留",
+    "failed_toast": "「{{account}}」在「{{ledger}}」的共享设置没有改成",
+    "save_failed_toast": "账户已保存，但共享设置没有全部改成，请重试"
   }
 }

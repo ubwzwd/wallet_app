@@ -15,7 +15,6 @@ import type { FinanceSource, Uuid } from '@/api/types';
 import { formatMoney } from '@/i18n/format';
 import { useLang } from '@/i18n';
 import { useUpdateSource } from '@/queries';
-import { useLedgerContext } from '@/store';
 import { confirm, toast } from '@/ui';
 
 export interface ArchiveSourceController {
@@ -24,10 +23,13 @@ export interface ArchiveSourceController {
   pending: boolean;
 }
 
-export function useArchiveSource(ledgerId: Uuid, sourceId: Uuid): ArchiveSourceController {
+/**
+ * `baseCurrency` is the owner's (`GET /sources`'s `base_currency`): an account belongs to a
+ * person, not a ledger, so its converted balance is in my currency (decision §14.62).
+ */
+export function useArchiveSource(sourceId: Uuid, baseCurrency: string): ArchiveSourceController {
   const { t } = useTranslation();
   const lang = useLang();
-  const { baseCurrency } = useLedgerContext();
   const update = useUpdateSource(sourceId);
 
   const setArchived = React.useCallback(

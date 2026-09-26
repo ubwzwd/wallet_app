@@ -34,6 +34,9 @@ export const sourceFormSchema = z.object({
       (raw) => raw.trim() === '' || normalizeAmountInput(raw) !== null,
       OPENING_BALANCE_INVALID,
     ),
+  // The ledgers this account is shared into (decision §14.62). Not validated: the chips
+  // only ever offer ledgers I belong to, and the server re-checks every id.
+  share_to: z.array(z.string()),
 });
 
 export type SourceFormValues = z.infer<typeof sourceFormSchema>;
