@@ -234,6 +234,8 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 
 为什么要另做：`useLeaveGuard` 原来只挂在 `beforeRemove` 上，而 `(app)` 与 `l/[ledgerId]` 两层是 `Slot`——壳里用 `router.navigate` 换页时表单被直接卸载，不触发 `beforeRemove`，窄屏填了一半点底栏别的格就把内容丢了（§14.64 验收发现）。做法：导航层一个很小的「离开拦截」注册表（context）——表单用 `useRegisterLeaveGuard(confirmLeave)` 注册（`useLeaveGuard` 内部顺手注册，现有调用方不用改），壳里所有换页的点击都经 `useGuardedNavigate()` 返回的包装：先 `await` 已注册的守卫，拿到「放行」才真正导航。账户表单（`SourceFormScreen`）原来没有守卫，按同样方式接上（有改动时才拦）。（2026-09-26 按决策 §14.65 同步）
 
+**从外面进账本落在首页的修正**：expo-router 6 从账本外（`/settings`、`/accounts*`）进入 `/l/:id/<子页>`（或从账本里进 `/accounts/new`）时，目标页只记在路由参数里，内层导航器却按首个路由初始化——地址是子页、内容是首页。登录后的顶层布局挂 `useNestedEntrySync()`（`src/navigation/nestedEntry.ts`）：地址变化后读导航容器的当前状态，发现某层的 `params.screen` 与地址一致而它的内层焦点不是这一页时，`router.replace(pathname)` 原地换成地址指向的页，历史仍是「来处 → 目标页」。（2026-09-27 第八阶段收口时发现并修正；§14.64 验收里「底栏交易」那张截图其实显示的是首页）
+
 **表单自己的去向优先**（决策 §14.65 h）：同一张注册表还允许页面注册「返回覆盖」`useBackOverride(fn)`。壳的子页顶栏 ‹（`TopBar.tsx` 的 `useRunBackOverride`）有覆盖就调覆盖、没有才走 `useBack().goBack` 的「有历史退一步、没有去上级」；宽屏面包屑不读注册表——表单把同一个离开函数直接作为 `PageHeader` 的 `back.onPress` 传进去，所以两个出口是同一个函数。记一笔（`TransactionFormScreen`）、交易编辑（`EditTransactionScreen`）、转账编辑（`EditTransferScreen`）把各自现有的 `leaveForm` / `goBack` 注册进去——先 `?next=`、再历史、再上级，且已经问过守卫——所以带 `?next=` 打开的表单，窄屏 ‹ 与宽屏面包屑走**同一个出口**，不再宽窄两样。（2026-09-26 按决策 §14.65 同步）
 
 （2026-09-26 按决策 §14.64 同步）

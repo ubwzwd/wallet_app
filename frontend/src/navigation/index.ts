@@ -61,3 +61,4 @@ export {
 export { useBack, type BackControl } from './useBack';
 export { useChromeLedger, useHasNoLedgers, type ChromeLedger } from './useChromeLedger';
 export { useSwUpdateToast } from './useSwUpdateToast';
+export { useNestedEntrySync } from './nestedEntry';

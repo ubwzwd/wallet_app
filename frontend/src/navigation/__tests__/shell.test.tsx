@@ -3,6 +3,7 @@
  * chrome's copy — every label comes from the language pack.
  */
 import React from 'react';
+import { router as expoRouter } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 import { act, fireEvent, renderHook, renderRouter, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
@@ -47,6 +48,7 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transactions/index': () => <Text>transactions-page</Text>,
   '(app)/l/[ledgerId]/transactions/new': () => <Text>new-transaction-page</Text>,
   '(app)/l/[ledgerId]/settings': () => <Text>ledger-settings-page</Text>,
+  '(app)/l/[ledgerId]/imports/index': () => <Text>imports-page</Text>,
 };
 
 let api: MockApi;
@@ -425,6 +427,26 @@ describe('wide (>=1024)', () => {
 
     fireEvent.press(router.getByTestId('sidebar-transactions'));
     await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/transactions`));
+  });
+
+  test('entering a ledger from /settings shows the page the URL names, not the ledger home', async () => {
+    // expo-router 6 mounts an unmounted nested navigator at its first route even when the
+    // navigation named a deeper one; `useNestedEntrySync` puts the named page in place and
+    // keeps the history at `/settings → /l/:id/imports` (§14.64 f).
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    mockGet(`/ledgers/${LEDGER_B}/members`, { items: [], total: 4 });
+    const router = renderRouter(ROUTES, { initialUrl: '/settings' });
+    expect(await router.findByText('settings-page')).toBeTruthy();
+
+    fireEvent.press(await router.findByTestId('sidebar-imports'));
+    await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_B}/imports`));
+    expect(await router.findByText('imports-page')).toBeTruthy();
+    expect(router.queryByText('ledger-home')).toBeNull();
+
+    act(() => {
+      expoRouter.back();
+    });
+    await waitFor(() => expect(router.getPathname()).toBe('/settings'));
   });
 
   test('a cold /settings holds the card slot rather than flashing 「账本管理」', async () => {

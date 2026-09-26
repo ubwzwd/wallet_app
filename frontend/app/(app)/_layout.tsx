@@ -17,13 +17,22 @@ import React from 'react';
 import { Slot, usePathname } from 'expo-router';
 
 import { routes } from '@/domain/routes';
-import { AppShell, RequireAuth, isActivePath, useRememberLedgerHistory } from '@/navigation';
+import {
+  AppShell,
+  RequireAuth,
+  isActivePath,
+  useNestedEntrySync,
+  useRememberLedgerHistory,
+} from '@/navigation';
 
 export default function AppLayout(): React.JSX.Element {
   const pathname = usePathname();
   // So a back step from `/ledgers*` returns to the ledger page the user left, not to that
   // ledger's first page (§14.64 f; see `ledgerHistory.ts`).
   useRememberLedgerHistory();
+  // Entering a ledger (or `/accounts*`) from outside lands on its first page in expo-router 6
+  // even when the URL names a deeper one; this puts the named page in place (`nestedEntry.ts`).
+  useNestedEntrySync();
   const withShell =
     pathname === routes.settings() ||
     isActivePath(pathname, routes.accounts(), false) ||
