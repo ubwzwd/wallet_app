@@ -28,6 +28,7 @@ from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch, ImportRow
 from app.models.transaction import Transaction
 from app.schemas.importing import ImportRowsBulkRowPatch
+from app.services import source_access
 from app.services.importing import flagging
 from app.services.importing.commit_checks import assert_pairable, load_counterpart
 from app.services.importing.drafts import ImportContext, RowDraft
@@ -353,10 +354,12 @@ def _check_refund_target(db: Session, ctx: LedgerContext, matched: uuid.UUID) ->
 
 
 def load_source(db: Session, ctx: LedgerContext, source_id: uuid.UUID) -> FinanceSource:
-    """§5.37 step 3: the target account of this file, or 404 / 409."""
-    source = db.get(FinanceSource, source_id)
-    if source is None or source.ledger_id != ctx.ledger.id:
-        raise ApiError(404, ErrorCode.NOT_FOUND, "Account not found")
+    """§5.37 step 3: the target account of this file, or 404 / 409.
+
+    It has to be usable by the uploader in this ledger — theirs, or shared into
+    it (§3.2, §14.62); anything else is a 404, an archived one a 409.
+    """
+    source = source_access.load_usable_source(db, ctx.user.id, ctx.ledger, source_id)
     if source.archived:
         raise ApiError(409, ErrorCode.SOURCE_ARCHIVED, f"Account {source.name!r} is archived")
     return source

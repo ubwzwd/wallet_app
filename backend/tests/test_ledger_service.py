@@ -22,6 +22,7 @@ from app.models import (
     Transaction,
     User,
 )
+from app.models.ledger_source import LedgerSource
 from app.services import ledger_service
 from app.services.ledger_service import (
     DEFAULT_LEDGER_NAME,
@@ -82,6 +83,65 @@ def codes(db, ledger_id=None) -> set[str]:
     if ledger_id is not None:
         stmt = stmt.where(LedgerInvite.ledger_id == ledger_id)
     return set(db.execute(stmt).scalars())
+
+
+def add_account(db, owner: User, name: str = "招行") -> FinanceSource:
+    """An account ``owner`` owns (decision §14.62), shared nowhere yet."""
+    source = FinanceSource(
+        owner_id=owner.id,
+        name=name,
+        type="checking",
+        default_currency="CNY",
+        opening_balance=Decimal("0"),
+        archived=False,
+        created_by=owner.id,
+        updated_by=owner.id,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    db.add(source)
+    db.flush()
+    return source
+
+
+def share(db, ledger: Ledger, source: FinanceSource) -> None:
+    db.add(
+        LedgerSource(
+            ledger_id=ledger.id,
+            source_id=source.id,
+            shared_by=source.owner_id,
+            shared_at=NOW,
+        )
+    )
+    db.flush()
+
+
+def add_expense(db, ledger: Ledger, source: FinanceSource, actor: User) -> Transaction:
+    tx = Transaction(
+        ledger_id=ledger.id,
+        source_id=source.id,
+        amount=Decimal("-10.0000"),
+        currency="CNY",
+        occurred_at=NOW.date(),
+        kind="expense",
+        category_l1="food",
+        created_by=actor.id,
+        updated_by=actor.id,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    db.add(tx)
+    db.flush()
+    return tx
+
+
+def shares_of(db, ledger: Ledger) -> set:
+    """The account ids shared into ``ledger`` (its ``ledger_sources`` rows)."""
+    return set(
+        db.execute(
+            select(LedgerSource.source_id).where(LedgerSource.ledger_id == ledger.id)
+        ).scalars()
+    )
 
 
 def role_of(db, ledger: Ledger, user: User) -> str | None:
@@ -602,6 +662,48 @@ def test_remove_member_drops_the_membership_row(db):
     assert member_count(db, ledger.id) == 1
 
 
+def test_removing_a_member_unshares_their_accounts_and_keeps_their_entries(db):
+    """§14.62 f: their cards leave this ledger with them; nothing else moves."""
+    owner = make_user(db, "owner@example.com")
+    joiner = make_user(db, "joiner@example.com")
+    ledger = create_ledger(db, owner, "家庭账本", "CNY")
+    elsewhere = create_ledger(db, joiner, "自己的", "CNY")
+    redeem_invite(db, joiner, issue_invite(db, ledger, owner).code)
+    theirs = add_account(db, joiner, "他的卡")
+    ours = add_account(db, owner, "家用卡")
+    for source in (theirs, ours):
+        share(db, ledger, source)
+    share(db, elsewhere, theirs)
+    booked = add_expense(db, ledger, theirs, joiner)
+
+    remove_member(db, ledger, joiner.id)
+
+    assert shares_of(db, ledger) == {ours.id}
+    assert shares_of(db, elsewhere) == {theirs.id}
+    assert db.get(Transaction, booked.id) is not None
+    assert db.get(FinanceSource, theirs.id) is not None
+    assert ledger_counts(db, ledger.id)["sources"] == 1
+
+
+def test_leaving_unshares_ones_accounts_and_keeps_ones_entries(db):
+    owner = make_user(db, "owner@example.com")
+    joiner = make_user(db, "joiner@example.com")
+    ledger = create_ledger(db, owner, "家庭账本", "CNY")
+    redeem_invite(db, joiner, issue_invite(db, ledger, owner).code)
+    theirs = add_account(db, joiner, "他的卡")
+    ours = add_account(db, owner, "家用卡")
+    for source in (theirs, ours):
+        share(db, ledger, source)
+    booked = add_expense(db, ledger, theirs, joiner)
+
+    leave(db, ledger, joiner)
+
+    assert role_of(db, ledger, joiner) is None
+    assert shares_of(db, ledger) == {ours.id}
+    assert db.get(Transaction, booked.id) is not None
+    assert db.get(FinanceSource, theirs.id) is not None
+
+
 def test_remove_member_rejects_the_owner(db):
     owner = make_user(db, "owner@example.com")
     ledger = create_ledger(db, owner, "家庭账本", "CNY")
@@ -686,27 +788,19 @@ def test_ledger_counts_only_counts_this_ledger(db):
     other = create_ledger(db, user, "另一本", "CNY")
 
     def add_source(target: Ledger, name: str) -> FinanceSource:
-        source = FinanceSource(
-            ledger_id=target.id,
-            name=name,
-            type="checking",
-            default_currency="CNY",
-            opening_balance=Decimal("0"),
-            archived=False,
-            created_by=user.id,
-            updated_by=user.id,
-            created_at=NOW,
-            updated_at=NOW,
-        )
-        db.add(source)
-        db.flush()
+        source = add_account(db, user, name)
+        share(db, target, source)
         return source
 
-    source = add_source(ledger, "招行")
+    # §14.62 f: ``sources`` counts the shares into the ledger; an account the
+    # owner never shared is not counted, however many entries sit on it.
+    source = add_account(db, user, "招行")
     add_source(ledger, "现金")
     other_source = add_source(other, "别的")
+    share(db, ledger, other_source)
 
     for target, src, count in ((ledger, source, 3), (other, other_source, 1)):
+        # ``source`` is not shared anywhere; its owner books on it all the same.
         for _ in range(count):
             db.add(
                 Transaction(

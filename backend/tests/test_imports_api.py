@@ -12,6 +12,7 @@ import pytest
 
 from app.core.categories import CATEGORY_VERSION
 from app.models.import_batch import ImportBatch, ImportRow
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 
 FIXTURES = Path(__file__).parent / "fixtures" / "import"
@@ -248,14 +249,50 @@ def test_archived_target_account_is_409(ledger_setup, client, source_factory):
     assert response.json()["code"] == "source_archived"
 
 
-def test_source_of_another_ledger_is_404(ledger_setup, client, ledger_factory, source_factory):
+def unshare(db, ledger, source) -> None:
+    db.execute(
+        LedgerSource.__table__.delete().where(
+            LedgerSource.ledger_id == ledger.id, LedgerSource.source_id == source.id
+        )
+    )
+    db.flush()
+
+
+def test_someone_elses_unshared_account_is_404(
+    ledger_setup, client, db, user_factory, ledger_factory, owned_source_factory,
+    share_source,
+):
+    """§14.62: a member's card is a target only while it is shared here."""
+    user, headers, _ledger, _source = ledger_setup
+    partner = user_factory()
+    ledger = ledger_factory(user, name="家庭", members=[partner])
+    theirs = owned_source_factory(partner, name="她的信用卡", type="credit")
+
+    hidden = upload(client, headers, ledger, theirs)
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(ledger, theirs)
+    assert upload(client, headers, ledger, theirs).status_code == 201
+
+    unshare(db, ledger, theirs)
+    again = upload(client, headers, ledger, theirs)
+    assert again.status_code == 404
+    assert again.json()["code"] == "not_found"
+
+
+def test_own_account_is_a_target_in_any_of_ones_ledgers(
+    ledger_setup, client, ledger_factory, owned_source_factory
+):
+    """§14.62 b: an owner needs no share to import into their own card."""
     user, headers, ledger, _source = ledger_setup
-    other = source_factory(ledger_factory(user, name="别的账本"))
+    mine = owned_source_factory(user, name="私人信用卡", type="credit")
+    second = ledger_factory(user, name="旅行")
 
-    response = upload(client, headers, ledger, other)
-
-    assert response.status_code == 404
-    assert response.json()["code"] == "not_found"
+    for target in (ledger, second):
+        response = upload(client, headers, target, mine)
+        assert response.status_code == 201, response.text
+        assert response.json()["batch"]["source_id"] == str(mine.id)
 
 
 def test_non_member_cannot_upload(ledger_setup, client, user_factory, auth_headers):

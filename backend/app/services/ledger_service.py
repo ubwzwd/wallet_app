@@ -30,12 +30,13 @@ from sqlalchemy.orm import Session
 from app.core.clock import utcnow
 from app.core.config import settings
 from app.core.errors import ApiError, ErrorCode
-from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch
 from app.models.ledger import Ledger, LedgerInvite, LedgerMember
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.common import CURRENCY_PATTERN
+from app.services import source_access
 
 # Name of the ledger created for every new account (§5.1, decision §2).
 DEFAULT_LEDGER_NAME = "我的账本"
@@ -84,10 +85,14 @@ def user_ledger_count(db: Session, user_id: uuid.UUID) -> int:
 def ledger_counts(db: Session, ledger_id: uuid.UUID) -> dict[str, int]:
     """The three counts shown before deleting a ledger (§5.10, §14.52 A22).
 
-    Three plain ``count(*)`` queries: transactions, finance sources and import
-    batches belonging to this ledger.
+    Three plain ``count(*)`` queries by ``ledger_id``: this ledger's
+    transactions and import batches, and the accounts shared into it — its
+    ``ledger_sources`` rows (decision §14.62 f). Deleting the ledger only
+    withdraws those shares; the accounts themselves survive.
     """
-    def count_of(model: type[Transaction] | type[FinanceSource] | type[ImportBatch]) -> int:
+    def count_of(
+        model: type[Transaction] | type[LedgerSource] | type[ImportBatch],
+    ) -> int:
         return int(
             db.execute(
                 select(func.count()).select_from(model).where(model.ledger_id == ledger_id)
@@ -96,7 +101,7 @@ def ledger_counts(db: Session, ledger_id: uuid.UUID) -> dict[str, int]:
 
     return {
         "transactions": count_of(Transaction),
-        "sources": count_of(FinanceSource),
+        "sources": count_of(LedgerSource),
         "import_batches": count_of(ImportBatch),
     }
 
@@ -377,7 +382,8 @@ def remove_member(db: Session, ledger: Ledger, user_id: uuid.UUID) -> None:
     404 ``member_not_found`` when the target is not in this ledger, 409
     ``cannot_remove_owner`` when the target is the owner (including the caller
     themselves — they have to transfer first). What the removed member created
-    stays in the ledger (decision §2).
+    stays in the ledger (decision §2); the accounts they shared into it stop
+    being shared there, so nobody else can book new entries on them (§14.62 f).
     """
     member = _get_member(db, ledger.id, user_id)
     if member is None:
@@ -389,6 +395,7 @@ def remove_member(db: Session, ledger: Ledger, user_id: uuid.UUID) -> None:
             "The owner cannot be removed; transfer ownership first",
         )
     db.delete(member)
+    source_access.unshare_all_of_member(db, ledger.id, user_id)
     db.flush()
 
 
@@ -397,7 +404,8 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
 
     An owner must transfer ownership first: 409 ``owner_must_transfer``
     (decision §2). Someone who is no longer a member gets 404 ``not_found``,
-    the same answer as an invisible ledger (§3.3).
+    the same answer as an invisible ledger (§3.3). The accounts the leaver
+    shared into this ledger are unshared; what they recorded stays (§14.62 f).
     """
     member = _get_member(db, ledger.id, user.id)
     if member is None:
@@ -409,4 +417,5 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
             "Transfer ownership before leaving this ledger",
         )
     db.delete(member)
+    source_access.unshare_all_of_member(db, ledger.id, user.id)
     db.flush()

@@ -53,10 +53,11 @@ def make_ledger(db, owner: User) -> Ledger:
     return ledger
 
 
-def make_source(db, ledger: Ledger, owner: User) -> FinanceSource:
+def make_source(db, owner: User) -> FinanceSource:
+    """An account of ``owner``'s (§14.62); the owner may book on it anywhere."""
     now = utcnow()
     source = FinanceSource(
-        ledger_id=ledger.id,
+        owner_id=owner.id,
         name="招行储蓄卡",
         type="checking",
         default_currency="CNY",
@@ -98,7 +99,7 @@ def world(db):
     """A user, a ledger, an account and one expense to hang events on."""
     user = make_user(db)
     ledger = make_ledger(db, user)
-    source = make_source(db, ledger, user)
+    source = make_source(db, user)
     tx = make_transaction(db, ledger, source, user)
     return {"user": user, "ledger": ledger, "source": source, "tx": tx}
 

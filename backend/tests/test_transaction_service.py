@@ -16,6 +16,7 @@ from app.core.errors import ApiError
 from app.core.security import get_password_hash
 from app.models.finance_source import FinanceSource
 from app.models.ledger import Ledger, LedgerMember
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 from app.models.transaction_event import TransactionEvent
 from app.models.user import User
@@ -72,10 +73,16 @@ def make_source(
     type: str = "checking",
     currency: str = "CNY",
     archived: bool = False,
+    share: bool = True,
 ) -> FinanceSource:
+    """An account ``owner`` owns, shared into ``ledger`` unless ``share=False``.
+
+    Shared, it behaves like a pre-§14.62 "account of this ledger": every member
+    of the ledger may book on it.
+    """
     now = utcnow()
     source = FinanceSource(
-        ledger_id=ledger.id,
+        owner_id=owner.id,
         name=name,
         type=type,
         default_currency=currency,
@@ -89,7 +96,37 @@ def make_source(
     )
     db.add(source)
     db.flush()
+    if share:
+        share_into(db, ledger, source)
     return source
+
+
+def share_into(db, ledger: Ledger, source: FinanceSource) -> None:
+    db.add(
+        LedgerSource(
+            ledger_id=ledger.id,
+            source_id=source.id,
+            shared_by=source.owner_id,
+            shared_at=utcnow(),
+        )
+    )
+    db.flush()
+
+
+def unshare_from(db, ledger: Ledger, source: FinanceSource) -> None:
+    db.execute(
+        LedgerSource.__table__.delete().where(
+            LedgerSource.ledger_id == ledger.id, LedgerSource.source_id == source.id
+        )
+    )
+    db.flush()
+
+
+def add_member(db, ledger: Ledger, user: User) -> None:
+    db.add(
+        LedgerMember(ledger_id=ledger.id, user_id=user.id, role="member", joined_at=utcnow())
+    )
+    db.flush()
 
 
 @pytest.fixture()
@@ -455,6 +492,39 @@ def test_create_on_another_ledgers_account_is_not_found(world, db):
     assert (exc.value.status_code, exc.value.code) == (404, "not_found")
 
 
+def test_create_needs_the_account_to_be_usable_by_the_caller(world, db):
+    """§14.62: someone else's card only once it is shared into this ledger."""
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    card = make_source(db, world["ledger"], partner, name="她的卡", share=False)
+
+    with pytest.raises(ApiError) as exc:
+        create(world, source_id=card.id)
+    assert (exc.value.status_code, exc.value.code) == (404, "not_found")
+
+    share_into(db, world["ledger"], card)
+    booked = create(world, source_id=card.id)
+    assert booked.source_id == card.id
+
+    unshare_from(db, world["ledger"], card)
+    with pytest.raises(ApiError) as exc:
+        create(world, source_id=card.id)
+    assert (exc.value.status_code, exc.value.code) == (404, "not_found")
+    # What was booked while it was shared stays.
+    assert db.get(Transaction, booked.id) is not None
+
+
+def test_an_owner_books_on_an_unshared_account_in_any_of_their_ledgers(world, db):
+    """§14.62 b: sharing is for the others; the owner never needs it."""
+    mine = make_source(db, world["ledger"], world["user"], name="私房卡", share=False)
+    second = make_ledger(db, world["user"])
+    tx = svc.create_single(
+        db, second, world["user"].id, single(world, source_id=mine.id), "web"
+    )
+    assert (tx.ledger_id, tx.source_id) == (second.id, mine.id)
+    assert create(world, source_id=mine.id).source_id == mine.id
+
+
 def test_create_rejects_a_date_too_far_in_the_future(world):
     with pytest.raises(ApiError) as exc:
         create(world, occurred_at=utcnow().date() + dt.timedelta(days=2))
@@ -696,6 +766,34 @@ def test_an_amount_out_of_the_decimal_context_is_rejected_too(world):
     assert (exc.value.status_code, exc.value.code) == (400, "validation_error")
 
 
+def test_update_can_move_a_row_only_onto_a_usable_account(world, db):
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的卡", share=False)
+    tx = create(world)
+
+    with pytest.raises(ApiError) as exc:
+        update(world, tx, {"source_id": theirs.id})
+    assert (exc.value.status_code, exc.value.code) == (404, "not_found")
+    assert tx.source_id == world["checking"].id
+
+    share_into(db, world["ledger"], theirs)
+    update(world, tx, {"source_id": theirs.id})
+    assert tx.source_id == theirs.id
+
+
+def test_a_row_on_an_account_unshared_since_stays_editable(world, db):
+    """Unsharing stops new bookings; the rows already there stay untouched."""
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的卡")
+    tx = create(world, source_id=theirs.id)
+    unshare_from(db, world["ledger"], theirs)
+
+    update(world, tx, {"note": "补一句备注"})
+    assert (tx.note, tx.source_id) == ("补一句备注", theirs.id)
+
+
 def test_update_can_move_a_row_but_not_onto_an_archived_account(world):
     tx = create(world)
     with pytest.raises(ApiError) as exc:
@@ -864,6 +962,24 @@ def test_transfer_with_an_unknown_account_is_not_found(world):
     assert (exc.value.status_code, exc.value.code) == (404, "not_found")
 
 
+@pytest.mark.parametrize("leg", ["from_source_id", "to_source_id"])
+def test_transfer_needs_both_legs_usable_by_the_caller(world, db, leg):
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的卡", share=False)
+    other = "to_source_id" if leg == "from_source_id" else "from_source_id"
+    body = {leg: theirs.id, other: world["credit"].id, "currency_in": "CNY",
+            "amount_in": None}
+
+    with pytest.raises(ApiError) as exc:
+        create_transfer(world, **body)
+    assert (exc.value.status_code, exc.value.code) == (404, "not_found")
+
+    share_into(db, world["ledger"], theirs)
+    out_leg, in_leg = create_transfer(world, **body)
+    assert theirs.id in (out_leg.source_id, in_leg.source_id)
+
+
 @pytest.mark.parametrize("field", ["amount_out", "amount_in"])
 def test_transfer_amounts_must_be_positive(world, field):
     with pytest.raises(ApiError) as exc:
@@ -1011,6 +1127,39 @@ def test_patch_transfer_can_move_a_leg_to_another_account(world, db):
     assert out_leg.source_id == other.id
 
 
+def test_patch_transfer_moves_a_leg_only_onto_a_usable_account(world, db):
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的卡", share=False)
+    out_leg, in_leg = create_transfer(world)
+
+    with pytest.raises(ApiError) as exc:
+        patch_pair(
+            world,
+            out_leg.transfer_pair_id,
+            {"from_source_id": theirs.id},
+            max(out_leg.updated_at, in_leg.updated_at),
+        )
+    assert (exc.value.status_code, exc.value.code) == (404, "not_found")
+    assert out_leg.source_id == world["checking"].id
+
+
+def test_patch_transfer_keeps_a_leg_on_an_account_unshared_since(world, db):
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的卡", currency="USD")
+    out_leg, in_leg = create_transfer(world, to_source_id=theirs.id)
+    unshare_from(db, world["ledger"], theirs)
+
+    out_leg, in_leg = patch_pair(
+        world,
+        out_leg.transfer_pair_id,
+        {"note": "改备注"},
+        max(out_leg.updated_at, in_leg.updated_at),
+    )
+    assert (in_leg.source_id, in_leg.note) == (theirs.id, "改备注")
+
+
 def test_patch_transfer_rejects_a_stale_stamp_from_either_leg(world):
     out_leg, in_leg = create_transfer(world)
     newest = max(out_leg.updated_at, in_leg.updated_at)
@@ -1148,6 +1297,50 @@ def test_pair_ties_two_single_legs_together(world):
         "after": str(out_leg.transfer_pair_id),
     }
     assert changes["counterparty"] == {"before": "工资卡", "after": None}
+
+
+def test_pairing_a_leg_on_a_card_unshared_since_is_not_found(world, db):
+    """§5.33 check 1a: someone else's card no longer shared here is a 404."""
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的信用卡", type="credit")
+    out_leg = make_leg(world, world["checking"], "out", Decimal("-500"))
+    in_leg = make_leg(world, theirs, "in", Decimal("500"), subtype="repayment")
+    unshare_from(db, world["ledger"], theirs)
+
+    with pytest.raises(ApiError) as exc:
+        do_pair(world, out_leg, in_leg)
+    assert exc.value.status_code == 404
+    assert exc.value.code == "not_found"
+    assert out_leg.transfer_pair_id is None and in_leg.transfer_pair_id is None
+    assert "paired" not in names(world, out_leg) + names(world, in_leg)
+
+
+def test_pairing_a_leg_on_an_archived_account_is_rejected(world):
+    """§5.33 check 1a: a usable but archived account is a 409."""
+    out_leg = make_leg(world, world["checking"], "out", Decimal("-500"))
+    in_leg = make_leg(world, world["archived"], "in", Decimal("500"))
+
+    with pytest.raises(ApiError) as exc:
+        do_pair(world, out_leg, in_leg)
+    assert exc.value.status_code == 409
+    assert exc.value.code == "source_archived"
+    assert out_leg.transfer_pair_id is None and in_leg.transfer_pair_id is None
+
+
+def test_pairing_works_across_the_callers_own_and_a_shared_account(world, db):
+    """One leg on the caller's unshared card, the other on a member's shared one."""
+    partner = make_user(db)
+    add_member(db, world["ledger"], partner)
+    theirs = make_source(db, world["ledger"], partner, name="她的信用卡", type="credit")
+    mine = make_source(db, world["ledger"], world["user"], name="私房卡", share=False)
+    out_leg = make_leg(world, mine, "out", Decimal("-500"))
+    in_leg = make_leg(world, theirs, "in", Decimal("500"), subtype="repayment")
+
+    paired_out, paired_in = do_pair(world, in_leg, out_leg)
+    assert (paired_out.id, paired_in.id) == (out_leg.id, in_leg.id)
+    assert paired_out.transfer_pair_id == paired_in.transfer_pair_id is not None
+    assert paired_in.transfer_subtype == "repayment"
 
 
 def test_paired_event_records_counterparty_even_when_it_was_empty(world):

@@ -17,6 +17,7 @@ from app.core.clock import utcnow
 from app.core.errors import ApiError
 from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch, ImportRow
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 from app.models.transaction_event import TransactionEvent
 from app.services.importing.committing import commit_batch, delete_batch
@@ -474,6 +475,44 @@ def test_counterpart_account_of_another_ledger(db, world, user_factory,
     assert (error.status_code, error.code) == (404, "not_found")
 
 
+def unshare(db, ledger, source) -> None:
+    db.execute(
+        LedgerSource.__table__.delete().where(
+            LedgerSource.ledger_id == ledger.id, LedgerSource.source_id == source.id
+        )
+    )
+    db.flush()
+
+
+def test_counterpart_unshared_after_review_is_not_found(db, world, source_factory):
+    """§14.62: a member withdraws their card between review and commit."""
+    theirs = source_factory(world.ledger, name="她的卡", created_by=world.member.id)
+    batch = make_batch(db, world, source=world.checking)
+    add_row(db, batch, kind="transfer", amount=Decimal("-40.0000"), category_l1=None,
+            merchant=None, transfer_role="out", transfer_subtype="plain",
+            counterpart_source_id=theirs.id)
+    unshare(db, world.ledger, theirs)
+
+    error = commit_error(db, batch, world.user.id)
+    assert (error.status_code, error.code) == (404, "not_found")
+    assert db.query(Transaction).filter_by(import_batch_id=batch.id).count() == 0
+
+
+def test_counterpart_is_judged_for_the_uploader_not_the_committer(
+    db, world, owned_source_factory
+):
+    """The uploader's own unshared card stays a valid counterpart whoever commits."""
+    private = owned_source_factory(world.user, name="私房卡")
+    batch = make_batch(db, world, source=world.checking)
+    add_row(db, batch, kind="transfer", amount=Decimal("-40.0000"), category_l1=None,
+            merchant=None, transfer_role="out", transfer_subtype="plain",
+            counterpart_source_id=private.id)
+
+    result = commit_batch(db, batch.id, world.member.id, "web")
+    assert result.created_transfer_pairs == 1
+    assert {tx.source_id for tx in imported(db, batch.id)} == {world.checking.id, private.id}
+
+
 def test_archived_counterpart_account(db, world, source_factory):
     archived = source_factory(world.ledger, name="旧卡", archived=True)
     batch = make_batch(db, world, source=world.checking)
@@ -527,6 +566,20 @@ def test_archived_target_account(db, world):
     db.flush()
     error = commit_error(db, batch, world.user.id)
     assert (error.status_code, error.code) == (409, "source_archived")
+
+
+def test_target_account_unshared_after_upload_is_not_found(db, world, source_factory):
+    """Same error path as an archived or deleted counterpart (§14.62)."""
+    theirs = source_factory(
+        world.ledger, name="她的信用卡", type="credit", created_by=world.member.id
+    )
+    batch = make_batch(db, world, source=theirs)
+    add_row(db, batch)
+    unshare(db, world.ledger, theirs)
+
+    error = commit_error(db, batch, world.user.id)
+    assert (error.status_code, error.code) == (404, "not_found")
+    assert db.query(Transaction).filter_by(import_batch_id=batch.id).count() == 0
 
 
 def test_unknown_batch_is_not_found(db, world):

@@ -12,7 +12,8 @@ import pytest
 from app.core.categories import CATEGORY_VERSION
 from app.core.clock import utcnow
 from app.models.import_batch import ImportRow
-from tests.test_imports_api import paste, read_fixture, upload
+from app.models.ledger import LedgerMember
+from tests.test_imports_api import paste, read_fixture, unshare, upload
 
 
 @pytest.fixture()
@@ -272,7 +273,18 @@ def test_a_transfer_row_may_not_carry_a_merchant(setup, client):
     assert response.json()["code"] == "validation_error"
 
 
-def test_counterpart_account_rules(setup, client, ledger_factory, source_factory, db):
+def join(db, ledger, user) -> None:
+    """Make ``user`` a plain member of ``ledger``."""
+    db.add(
+        LedgerMember(ledger_id=ledger.id, user_id=user.id, role="member", joined_at=utcnow())
+    )
+    db.flush()
+
+
+def test_counterpart_account_rules(
+    setup, client, ledger_factory, source_factory, user_factory, owned_source_factory,
+    share_source, db,
+):
     _user, headers, ledger, card, bank = setup
     bid, rows = imported(client, headers, ledger, card)
     transfer, expense = rows[5], rows[0]
@@ -289,12 +301,42 @@ def test_counterpart_account_rules(setup, client, ledger_factory, source_factory
     assert same.status_code == 400
     assert same.json()["code"] == "same_source"
 
-    elsewhere = source_factory(ledger_factory(_user, name="别的账本"))
+    # §14.62: someone else's card that is not shared here is invisible ...
+    stranger = user_factory()
+    foreign_card = source_factory(ledger_factory(stranger, name="别人的账本"))
     foreign = patch_row(
-        client, headers, ledger, bid, transfer["id"], {"counterpart_source_id": str(elsewhere.id)}
+        client, headers, ledger, bid, transfer["id"],
+        {"counterpart_source_id": str(foreign_card.id)},
     )
     assert foreign.status_code == 404
     assert foreign.json()["code"] == "not_found"
+
+    # ... while the uploader's own card needs no share here.
+    mine = owned_source_factory(_user, name="私房卡")
+    own = patch_row(
+        client, headers, ledger, bid, transfer["id"], {"counterpart_source_id": str(mine.id)}
+    )
+    assert own.status_code == 200, own.text
+
+    # A member's card is usable only while it is shared into this ledger.
+    partner = user_factory()
+    join(db, ledger, partner)
+    theirs = owned_source_factory(partner, name="她的卡")
+    hidden = patch_row(
+        client, headers, ledger, bid, transfer["id"], {"counterpart_source_id": str(theirs.id)}
+    )
+    assert hidden.status_code == 404
+    share_source(ledger, theirs)
+    shared = patch_row(
+        client, headers, ledger, bid, transfer["id"], {"counterpart_source_id": str(theirs.id)}
+    )
+    assert shared.status_code == 200, shared.text
+    unshare(db, ledger, theirs)
+    withdrawn = patch_row(
+        client, headers, ledger, bid, transfer["id"], {"counterpart_source_id": str(theirs.id)}
+    )
+    assert withdrawn.status_code == 404
+    assert withdrawn.json()["code"] == "not_found"
 
     archived = source_factory(ledger, name="旧卡", archived=True)
     gone = patch_row(
@@ -308,9 +350,9 @@ def test_counterpart_account_rules(setup, client, ledger_factory, source_factory
     assert on_expense.status_code == 400
     assert on_expense.json()["code"] == "validation_error"
 
-    # None of the refusals stuck; the one accepted value did.
+    # None of the refusals stuck; the last accepted value did.
     stored = db.get(ImportRow, uuid.UUID(transfer["id"]))
-    assert stored.counterpart_source_id == bank.id
+    assert stored.counterpart_source_id == theirs.id
 
 
 def test_refund_target_must_be_an_expense_of_this_ledger(setup, client, transaction_factory):
