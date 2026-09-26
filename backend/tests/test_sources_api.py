@@ -1,4 +1,9 @@
-"""Finance source endpoints (03-backend-api.md §5.20-§5.24, test plan §10.2).
+"""Personal account endpoints ``/sources*`` (03-backend-api.md §5.20-§5.24, §10.2).
+
+Accounts belong to people (decision §14.62): every case here talks to
+``/api/v1/sources`` as the owner, and somebody else's account is a 404 even
+when it is shared into a ledger the caller belongs to. Sharing itself and the
+per-ledger list live in ``test_source_sharing_api.py``.
 
 Everything goes through HTTP: the ``client`` fixture hands the app the very
 session the case reads from, so an assertion right after a request sees what
@@ -20,6 +25,8 @@ from sqlalchemy import select
 
 from app.core.clock import utcnow
 from app.models.finance_source import FinanceSource
+from app.models.import_batch import ImportBatch
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 from tests.conftest import FAKE_RATE_DAY
 
@@ -41,20 +48,27 @@ def in_cny(amount: str) -> Decimal:
     )
 
 
+URL = "/api/v1/sources"
+
+
 @pytest.fixture()
 def world(user_factory, ledger_factory, auth_headers):
-    """An owner, a member and a CNY ledger the two of them share."""
+    """An owner (CNY), a member and a CNY ledger the two of them share.
+
+    ``source_factory(world.ledger, ...)`` makes an account owned by
+    ``world.owner`` and shared into ``world.ledger``.
+    """
 
     class World:
         pass
 
     world = World()
-    world.owner = user_factory()
+    world.owner = user_factory(base_currency="CNY")
     world.member = user_factory()
     world.ledger = ledger_factory(world.owner, base_currency="CNY", members=[world.member])
     world.headers = auth_headers(world.owner)
     world.member_headers = auth_headers(world.member)
-    world.url = f"/api/v1/ledgers/{world.ledger.id}/sources"
+    world.url = URL
     return world
 
 
@@ -270,22 +284,93 @@ def test_a_currency_with_no_rate_at_all_is_excluded_and_counted_once(
     assert other_row["rate_missing_count"] == 0
 
 
-def test_accounts_of_another_ledger_are_not_listed(
+def test_only_the_callers_own_accounts_are_listed(
     client, world, user_factory, ledger_factory, source_factory
 ):
+    """Somebody else's card is not in my list, even shared into my ledger (§5.20)."""
     other_ledger = ledger_factory(user_factory(), name="别人的账本")
     source_factory(other_ledger, name="别人的卡")
+    source_factory(world.ledger, name="成员共享的卡", created_by=world.member.id)
     source_factory(world.ledger, name="我的卡")
 
     payload = client.get(world.url, headers=world.headers).json()
     assert [item["name"] for item in payload["items"]] == ["我的卡"]
+    assert payload["items"][0]["owner_id"] == str(world.owner.id)
 
 
-def test_a_non_member_cannot_see_the_list(client, world, user_factory, auth_headers):
-    stranger = user_factory()
-    response = client.get(world.url, headers=auth_headers(stranger))
-    assert response.status_code == 404
-    assert response.json()["code"] == "not_found"
+def test_a_user_without_accounts_gets_an_empty_list_in_their_currency(
+    client, user_factory, auth_headers
+):
+    """No ledger needed: the list and totals are personal (§14.62 d)."""
+    loner = user_factory(base_currency="EUR")
+    response = client.get(URL, headers=auth_headers(loner))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "items": [],
+        "total": 0,
+        "base_currency": "EUR",
+        "assets": "0.0000",
+        "liabilities": "0.0000",
+        "net_worth": "0.0000",
+    }
+
+
+def test_the_balance_adds_up_the_account_in_every_ledger(
+    client, world, ledger_factory, source_factory, transaction_factory
+):
+    """Decision §14.62 f: one card in two ledgers has one balance, the sum."""
+    trip = ledger_factory(world.owner, name="旅行账本", base_currency="CNY")
+    card = source_factory(world.ledger, name="招商 储蓄卡", opening_balance=Decimal("1000"))
+    transaction_factory(world.ledger, card, amount=Decimal("-120.0000"))
+    transaction_factory(trip, card, amount=Decimal("-80.0000"))
+
+    payload = client.get(world.url, headers=world.headers).json()
+
+    row = item_by_name(payload, "招商 储蓄卡")
+    assert row["balance"] == money(Decimal("800"))
+    assert payload["net_worth"] == money(Decimal("800"))
+
+    one = client.get(f"{world.url}/{card.id}", headers=world.headers).json()
+    assert one["balance"] == money(Decimal("800"))
+
+
+def test_balance_base_is_in_the_owners_currency_not_the_ledgers(
+    client, user_factory, ledger_factory, auth_headers, source_factory, transaction_factory
+):
+    """A EUR owner of a CNY card in a CNY ledger: base figures are in EUR (§14.62 f)."""
+    owner = user_factory(base_currency="EUR")
+    ledger = ledger_factory(owner, base_currency="CNY")
+    card = source_factory(ledger, name="人民币卡", opening_balance=Decimal("720"))
+    transaction_factory(ledger, card, amount=Decimal("-72.0000"))
+
+    payload = client.get(URL, headers=auth_headers(owner)).json()
+
+    cny_to_eur = (Decimal("0.92") / Decimal("7.2")).quantize(
+        Decimal("0.00000001"), rounding=ROUND_HALF_UP
+    )
+    expected_base = (Decimal("648") * cny_to_eur).quantize(
+        Decimal("0.0001"), rounding=ROUND_HALF_UP
+    )
+    row = item_by_name(payload, "人民币卡")
+    assert payload["base_currency"] == "EUR"
+    assert row["balance"] == money(Decimal("648"))              # still in CNY
+    assert row["balance_rate"] == str(cny_to_eur)
+    assert row["balance_base"] == money(expected_base)
+    assert payload["assets"] == money(expected_base)
+    assert payload["net_worth"] == money(expected_base)
+
+
+def test_shared_to_lists_only_ledgers_the_owner_still_belongs_to(
+    client, world, user_factory, ledger_factory, source_factory, share_source
+):
+    """§5.20: a share into a ledger the owner is not in is not reported."""
+    card = source_factory(world.ledger, name="储蓄卡")
+    elsewhere = ledger_factory(user_factory(), name="别人的账本")
+    share_source(elsewhere, card)    # a leftover row: the owner is no member there
+
+    row = item_by_name(client.get(world.url, headers=world.headers).json(), "储蓄卡")
+    assert row["shared_to"] == [str(world.ledger.id)]
 
 
 def test_the_list_needs_a_token(client, world):
@@ -322,10 +407,14 @@ def test_create_returns_201_and_writes_the_row(client, world, db):
     assert body["rate_missing_count"] == 0
     assert body["created_by"] == str(world.owner.id)
     assert body["updated_by"] == str(world.owner.id)
-    assert body["ledger_id"] == str(world.ledger.id)
+    assert body["owner_id"] == str(world.owner.id)
+    assert body["shared_to"] == []
+    assert "ledger_id" not in body
 
     row = db.get(FinanceSource, uuid.UUID(body["id"]))
-    assert row is not None and row.ledger_id == world.ledger.id
+    assert row is not None and row.owner_id == world.owner.id
+    # Without share_to nothing is shared: the owner can use it everywhere anyway.
+    assert db.execute(select(LedgerSource)).scalars().all() == []
     assert row.opening_balance == Decimal("-2300.0000")
     # The opening balance is a column, never a transaction (decision §14.52 B5).
     assert db.execute(select(Transaction)).scalars().all() == []
@@ -389,14 +478,116 @@ def test_an_unsupported_currency_is_400(client, world):
     assert response.json()["code"] == "validation_error"
 
 
-def test_a_non_member_cannot_create(client, world, user_factory, auth_headers, db):
+def test_create_needs_a_token(client, db):
+    response = client.post(
+        URL, json={"name": "现金", "type": "cash", "default_currency": "CNY"}
+    )
+    assert response.status_code == 401
+    assert db.execute(select(FinanceSource)).scalars().all() == []
+
+
+def test_share_to_shares_the_new_account_and_counts_duplicates_once(
+    client, world, db, ledger_factory
+):
+    trip = ledger_factory(world.member, name="旅行账本", members=[world.owner])
     response = client.post(
         world.url,
-        json={"name": "偷偷建", "type": "cash", "default_currency": "CNY"},
-        headers=auth_headers(user_factory()),
+        json={
+            "name": "中信 信用卡",
+            "type": "credit",
+            "default_currency": "CNY",
+            "share_to": [str(world.ledger.id), str(trip.id), str(world.ledger.id)],
+        },
+        headers=world.headers,
     )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert sorted(body["shared_to"]) == sorted([str(world.ledger.id), str(trip.id)])
+    shares = db.execute(select(LedgerSource)).scalars().all()
+    assert {(share.ledger_id, share.shared_by) for share in shares} == {
+        (world.ledger.id, world.owner.id),
+        (trip.id, world.owner.id),
+    }
+
+
+@pytest.mark.parametrize("which", ["not_a_member", "no_such_ledger"])
+def test_share_to_a_ledger_the_caller_is_not_in_is_404_and_creates_nothing(
+    client, world, db, user_factory, ledger_factory, which
+):
+    """§5.21: one bad ledger fails the whole request — no half-shared account."""
+    bad = (
+        ledger_factory(user_factory(), name="别人的账本").id
+        if which == "not_a_member"
+        else uuid.uuid4()
+    )
+    response = client.post(
+        world.url,
+        json={
+            "name": "偷偷共享",
+            "type": "cash",
+            "default_currency": "CNY",
+            "share_to": [str(world.ledger.id), str(bad)],
+        },
+        headers=world.headers,
+    )
+
     assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
     assert db.execute(select(FinanceSource)).scalars().all() == []
+    assert db.execute(select(LedgerSource)).scalars().all() == []
+
+
+def test_the_limit_counts_archived_accounts_and_only_the_callers(
+    client, world, db, owned_source_factory, monkeypatch
+):
+    """``MAX_SOURCES_PER_USER`` counts archived accounts too (§5.21)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "MAX_SOURCES_PER_USER", 3)
+    owned_source_factory(world.owner, name="一")
+    owned_source_factory(world.owner, name="二")
+    owned_source_factory(world.owner, name="旧", archived=True)
+    # Somebody else's accounts do not count against the owner.
+    owned_source_factory(world.member, name="成员的")
+
+    response = client.post(
+        world.url,
+        json={"name": "第四个", "type": "cash", "default_currency": "CNY"},
+        headers=world.headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "source_limit_reached"
+    assert db.execute(
+        select(FinanceSource).where(FinanceSource.name == "第四个")
+    ).scalar_one_or_none() is None
+
+    member_ok = client.post(
+        world.url,
+        json={"name": "成员第二个", "type": "cash", "default_currency": "CNY"},
+        headers=world.member_headers,
+    )
+    assert member_ok.status_code == 201
+
+
+def test_the_default_limit_is_fifty(client, world, owned_source_factory):
+    for index in range(49):
+        owned_source_factory(world.owner, name=f"账户 {index}")
+    fiftieth = client.post(
+        world.url,
+        json={"name": "第五十个", "type": "cash", "default_currency": "CNY"},
+        headers=world.headers,
+    )
+    assert fiftieth.status_code == 201, fiftieth.text
+
+    response = client.post(
+        world.url,
+        json={"name": "第五十一个", "type": "cash", "default_currency": "CNY"},
+        headers=world.headers,
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "source_limit_reached"
 
 
 # ---------------------------------------------------------------------------
@@ -421,11 +612,12 @@ def test_get_one_account_has_the_balance_fields_and_no_ledger_totals(
     assert "assets" not in body and "liabilities" not in body and "net_worth" not in body
 
 
-def test_an_account_of_another_ledger_is_404(
-    client, world, user_factory, ledger_factory, source_factory
+def test_somebody_elses_account_is_404_even_when_shared_into_my_ledger(
+    client, world, source_factory
 ):
-    foreign = source_factory(ledger_factory(user_factory()), name="别人的卡")
-    response = client.get(f"{world.url}/{foreign.id}", headers=world.headers)
+    """§5.22: the personal endpoints are the owner's only (§3.3)."""
+    theirs = source_factory(world.ledger, name="成员的卡", created_by=world.member.id)
+    response = client.get(f"{world.url}/{theirs.id}", headers=world.headers)
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
 
@@ -435,7 +627,7 @@ def test_an_unknown_account_is_404(client, world):
     assert response.status_code == 404
 
 
-def test_a_non_member_cannot_read_one_account(
+def test_a_stranger_cannot_read_one_account(
     client, world, source_factory, user_factory, auth_headers
 ):
     source = source_factory(world.ledger)
@@ -462,14 +654,15 @@ def test_patch_renames_and_retypes(client, world, source_factory, db):
     response = client.patch(
         f"{world.url}/{source.id}",
         json={"name": "新名", "type": "checking", "updated_at": stamp(source)},
-        headers=world.member_headers,
+        headers=world.headers,
     )
 
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["name"] == "新名"
     assert body["type"] == "checking"
-    assert body["updated_by"] == str(world.member.id)
+    assert body["updated_by"] == str(world.owner.id)
+    assert body["shared_to"] == [str(world.ledger.id)]     # sharing is untouched
     db.refresh(source)
     assert source.name == "新名"
     assert source.updated_at > before
@@ -584,7 +777,7 @@ def test_a_stale_version_stamp_is_409(client, world, source_factory, db):
     client.patch(
         f"{world.url}/{source.id}",
         json={"name": "别人改的", "updated_at": old},
-        headers=world.member_headers,
+        headers=world.headers,
     )
     response = client.patch(
         f"{world.url}/{source.id}",
@@ -607,6 +800,18 @@ def test_the_version_stamp_is_required(client, world, source_factory):
     assert response.json()["code"] == "validation_error"
 
 
+def test_patch_refuses_share_to_and_owner_id(client, world, source_factory):
+    """§5.23: sharing has its own endpoints; ``extra=forbid`` answers 422."""
+    source = source_factory(world.ledger)
+    for extra in ({"share_to": []}, {"owner_id": str(world.member.id)}):
+        response = client.patch(
+            f"{world.url}/{source.id}",
+            json={**extra, "updated_at": stamp(source)},
+            headers=world.headers,
+        )
+        assert response.status_code == 422
+
+
 def test_patch_refuses_an_explicit_null_name(client, world, source_factory):
     source = source_factory(world.ledger)
     response = client.patch(
@@ -617,16 +822,20 @@ def test_patch_refuses_an_explicit_null_name(client, world, source_factory):
     assert response.status_code == 422
 
 
-def test_patching_an_account_of_another_ledger_is_404(
-    client, world, user_factory, ledger_factory, source_factory
+def test_a_member_cannot_patch_an_account_shared_with_them(
+    client, world, source_factory, db
 ):
-    foreign = source_factory(ledger_factory(user_factory()))
+    """Shared means usable, not editable: only the owner changes it (§5.23)."""
+    source = source_factory(world.ledger, name="原名")
     response = client.patch(
-        f"{world.url}/{foreign.id}",
-        json={"name": "改别人的", "updated_at": stamp(foreign)},
-        headers=world.headers,
+        f"{world.url}/{source.id}",
+        json={"name": "改别人的", "updated_at": stamp(source)},
+        headers=world.member_headers,
     )
     assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+    db.refresh(source)
+    assert source.name == "原名"
 
 
 def test_a_non_member_cannot_patch(
@@ -648,7 +857,9 @@ def test_a_non_member_cannot_patch(
 # ---------------------------------------------------------------------------
 
 
-def test_delete_without_transactions_is_204(client, world, source_factory, db):
+def test_delete_without_transactions_is_204_and_takes_the_shares_along(
+    client, world, source_factory, db
+):
     source = source_factory(world.ledger)
     source_id = source.id
 
@@ -656,7 +867,57 @@ def test_delete_without_transactions_is_204(client, world, source_factory, db):
 
     assert response.status_code == 204
     assert response.content == b""
+    db.expire_all()
     assert db.get(FinanceSource, source_id) is None
+    assert db.execute(select(LedgerSource)).scalars().all() == []
+
+
+def test_a_transaction_in_a_ledger_the_owner_cannot_see_blocks_the_delete(
+    client, world, db, user_factory, ledger_factory, owned_source_factory,
+    transaction_factory,
+):
+    """§5.24: the reference check has no ledger condition.
+
+    The owner left (or never joined) the ledger the card was used in; its
+    transaction still keeps the account alive.
+    """
+    card = owned_source_factory(world.owner, name="旧卡")
+    elsewhere = ledger_factory(user_factory(), name="别人的账本")
+    transaction_factory(elsewhere, card, amount=Decimal("-10.0000"))
+
+    response = client.delete(f"{world.url}/{card.id}", headers=world.headers)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "source_has_transactions"
+    assert db.get(FinanceSource, card.id) is not None
+
+
+def test_an_import_batch_blocks_the_delete(client, world, db, source_factory):
+    """An import targeting the account refers to it too (§5.24)."""
+    card = source_factory(world.ledger, name="导入过的卡")
+    now = utcnow()
+    db.add(
+        ImportBatch(
+            ledger_id=world.ledger.id,
+            source_id=card.id,
+            created_by=world.owner.id,
+            source="csv",
+            filename="cmb.csv",
+            size_bytes=1024,
+            skill_version="2026-09-10",
+            status="ready",
+            row_count=0,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.flush()
+
+    response = client.delete(f"{world.url}/{card.id}", headers=world.headers)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "source_has_transactions"
+    assert db.get(FinanceSource, card.id) is not None
 
 
 def test_delete_with_transactions_is_409_and_says_how_many(
@@ -702,13 +963,14 @@ def test_deleting_twice_is_404(client, world, source_factory):
     assert second.json()["code"] == "not_found"
 
 
-def test_deleting_an_account_of_another_ledger_is_404(
-    client, world, user_factory, ledger_factory, source_factory, db
+def test_a_member_cannot_delete_an_account_shared_with_them(
+    client, world, source_factory, db
 ):
-    foreign = source_factory(ledger_factory(user_factory()))
-    response = client.delete(f"{world.url}/{foreign.id}", headers=world.headers)
+    shared = source_factory(world.ledger)
+    response = client.delete(f"{world.url}/{shared.id}", headers=world.member_headers)
     assert response.status_code == 404
-    assert db.get(FinanceSource, foreign.id) is not None
+    assert response.json()["code"] == "not_found"
+    assert db.get(FinanceSource, shared.id) is not None
 
 
 def test_a_non_member_cannot_delete(

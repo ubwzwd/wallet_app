@@ -1,4 +1,9 @@
-"""Finance source (account) schemas (03-backend-api.md §5.20-§5.24).
+"""Finance source (account) schemas (03-backend-api.md §5.20-§5.24c).
+
+Accounts belong to a person and are shared into ledgers (decision §14.62):
+``SourceResponse`` / ``SourceListResponse`` are the owner's own view under
+``/sources``; ``LedgerSourceResponse`` / ``LedgerSourceListResponse`` are the
+per-ledger list, where another member's account carries no balance figures.
 
 Money fields are ``Decimal`` quantized to 4 decimal places, exchange rates to
 8 (§4.5) — the ``Amount`` / ``Rate`` annotated types (imported from
@@ -42,6 +47,9 @@ class SourceCreate(ApiRequestModel):
     type: SourceType
     default_currency: str = Field(..., pattern=CURRENCY_PATTERN)
     opening_balance: Amount = Decimal("0.0000")
+    # Ledgers to share the new account into at once (§5.21); every one must be
+    # a ledger the caller is a member of, or nothing is created (404).
+    share_to: list[uuid.UUID] = Field(default_factory=list)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -106,33 +114,43 @@ class SourcePatch(ApiRequestModel):
 
 
 class SourceResponse(ApiModel):
-    """§5.20 (list item) / §5.22 (single) response body — the same shape."""
+    """§5.20 (list item) / §5.22 (single) response body — the same shape.
+
+    Under ``/sources`` every field is filled in: the caller owns the account.
+    ``LedgerSourceResponse`` reuses the shape for other members' accounts, and
+    there ``opening_balance``, the four balance fields and ``shared_to`` are
+    ``null`` (§5.24c) — which is why they are nullable here.
+    """
 
     id: uuid.UUID
-    ledger_id: uuid.UUID
+    owner_id: uuid.UUID
     name: str
     type: SourceType
     default_currency: str
-    opening_balance: Amount
+    opening_balance: Amount | None
     archived: bool
     archived_at: UtcDatetime | None
-    balance: Amount
-    balance_base: Amount | None
-    balance_rate: Rate | None
-    balance_rate_date: dt.date | None
-    rate_missing_count: int
     created_by: uuid.UUID
     updated_by: uuid.UUID
     created_at: UtcDatetime
     updated_at: UtcDatetime
+    # Ledgers the account is shared into, limited to those the caller is still
+    # a member of; ``null`` on another member's account (§5.24c).
+    shared_to: list[uuid.UUID] | None
+    balance: Amount | None
+    balance_base: Amount | None
+    balance_rate: Rate | None
+    balance_rate_date: dt.date | None
+    rate_missing_count: int
 
 
 class SourceListResponse(ApiModel):
-    """§5.20 response: items + total + the three ledger-level totals.
+    """§5.20 response: the caller's accounts + total + the three personal totals.
 
-    ``assets`` / ``liabilities`` / ``net_worth`` are ``null`` together when
-    the upstream rate service is fully unavailable (§5.20's fallback branch);
-    otherwise all three are always present.
+    ``base_currency`` is the caller's ``users.base_currency``. ``assets`` /
+    ``liabilities`` / ``net_worth`` cover the caller's non-archived accounts
+    and are ``null`` together when one of them cannot be converted into
+    ``base_currency`` (§5.20's fallback branch); otherwise all three are present.
     """
 
     items: list[SourceResponse]
@@ -141,3 +159,22 @@ class SourceListResponse(ApiModel):
     assets: Amount | None
     liabilities: Amount | None
     net_worth: Amount | None
+
+
+class LedgerSourceResponse(SourceResponse):
+    """§5.24c list item: ``SourceResponse`` plus two flags.
+
+    ``mine`` — the caller owns the account; ``usable`` — the caller may record
+    new entries on it in this ledger right now
+    (``not archived and (mine or shared into this ledger)``).
+    """
+
+    mine: bool
+    usable: bool
+
+
+class LedgerSourceListResponse(ApiModel):
+    """§5.24c response: no totals — a ledger has no net worth (decision §14.62 d)."""
+
+    items: list[LedgerSourceResponse]
+    total: int
