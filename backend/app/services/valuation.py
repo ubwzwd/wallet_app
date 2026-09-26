@@ -1,7 +1,7 @@
 """Valuation helpers: per-row conversion, account balances, list summary.
 
 This is the read-time arithmetic of 03-backend-api.md §5.20 and §5.25
-(decisions §8, §14.2, §14.50, §14.52 A14). Nothing here writes business data
+(decisions §8, §14.2, §14.50, §14.52 A14, §14.62). Nothing here writes business data
 and nothing commits — the endpoints own the transaction; ``fx`` may upsert
 cached rate rows as a side effect of converting, which is its own concern.
 
@@ -28,7 +28,6 @@ from sqlalchemy.orm import Session
 from app.core.clock import utcnow
 from app.core.errors import ApiError, ErrorCode
 from app.models.finance_source import FinanceSource
-from app.models.ledger import Ledger
 from app.models.transaction import Transaction
 from app.services import fx
 from app.services.fx import RATE_QUANTUM, quantize_rate  # one rate quantizer for the whole app
@@ -58,7 +57,7 @@ class SourceBalance:
     account currency are simply left out of it and counted in
     ``rate_missing_count`` instead. ``balance_base`` / ``balance_rate`` /
     ``balance_rate_date`` are ``None`` together when the account currency
-    cannot be converted to the ledger base currency at all (§5.20's last
+    cannot be converted to the owner's base currency at all (§5.20's last
     paragraph).
     """
 
@@ -134,12 +133,17 @@ def value_transactions(
 
 
 def source_balances(
-    db: Session, ledger: Ledger, sources: Sequence[FinanceSource]
+    db: Session, base_currency: str, sources: Sequence[FinanceSource]
 ) -> dict[uuid.UUID, SourceBalance]:
-    """Balance and base-currency balance per account (§5.20, decisions §14.2, §8).
+    """Balance and base-currency balance per account (§5.20, decisions §14.2, §8, §14.62).
 
     ``balance`` is ``opening_balance`` plus every transaction of the account
-    converted into the account's own currency on its ``occurred_at``. One
+    **in every ledger** converted into the account's own currency on its
+    ``occurred_at`` — an account belongs to a person, not to a ledger
+    (decision §14.62 f). ``balance_base`` converts that at the latest rate into
+    ``base_currency``, which the callers pass as the **owner's**
+    ``users.base_currency``: the same card is worth the same wherever it is
+    looked at, whatever the ledger's own currency. One
     ``GROUP BY source_id, currency, occurred_at`` query pulls the subtotals for
     all accounts at once and one ``fx.convert_many`` per distinct account
     currency converts them, so the number of upstream calls depends on how many
@@ -150,7 +154,7 @@ def source_balances(
         return {}
 
     by_id = {source.id: source for source in accounts}
-    groups = _amount_groups(db, ledger, list(by_id))
+    groups = _amount_groups(db, list(by_id))
 
     # One conversion batch per target currency; a group already in the account
     # currency still goes through it (fx returns it unchanged, rate 1).
@@ -180,7 +184,7 @@ def source_balances(
     for source in accounts:
         balance = quantize_amount(source.opening_balance + totals[source.id])
         rate = _base_rate(
-            db, source.default_currency.upper(), ledger.base_currency.upper(), base_rates
+            db, source.default_currency.upper(), base_currency.upper(), base_rates
         )
         if rate is None:
             balances[source.id] = SourceBalance(
@@ -241,9 +245,14 @@ def net_worth(
 
 
 def _amount_groups(
-    db: Session, ledger: Ledger, source_ids: Sequence[uuid.UUID]
+    db: Session, source_ids: Sequence[uuid.UUID]
 ) -> list[tuple[uuid.UUID, str, dt.date, Decimal, int]]:
-    """``(source_id, currency, occurred_at, sum(amount), count)`` per group (§5.20)."""
+    """``(source_id, currency, occurred_at, sum(amount), count)`` per group (§5.20).
+
+    No ``ledger_id`` condition: an account's balance covers its transactions in
+    every ledger (decision §14.62 f); ``ix_transactions_source_occurred`` serves
+    the ``source_id IN`` filter on its own.
+    """
     stmt = (
         select(
             Transaction.source_id,
@@ -252,10 +261,7 @@ def _amount_groups(
             func.sum(Transaction.amount),
             func.count(),
         )
-        .where(
-            Transaction.ledger_id == ledger.id,
-            Transaction.source_id.in_(list(source_ids)),
-        )
+        .where(Transaction.source_id.in_(list(source_ids)))
         .group_by(Transaction.source_id, Transaction.currency, Transaction.occurred_at)
     )
     return [

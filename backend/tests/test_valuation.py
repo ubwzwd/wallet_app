@@ -37,10 +37,14 @@ def make_source(
     opening: str = "0",
     archived: bool = False,
 ) -> FinanceSource:
-    """Insert one account row directly (no factories in this wave)."""
+    """Insert one account row owned by ``user`` directly (decision §14.62).
+
+    ``ledger`` is unused now that accounts belong to people; it stays in the
+    signature so every case reads "an account of this ledger's owner".
+    """
     now = utcnow()
     source = FinanceSource(
-        ledger_id=ledger.id,
+        owner_id=user.id,
         name=name,
         type=type_,
         default_currency=currency,
@@ -121,7 +125,7 @@ def test_balance_is_opening_plus_same_currency_rows(db, ledger_setup):
     make_tx(db, ledger, source, user, amount="-4.5000", occurred_at=dt.date(2026, 9, 2))
     make_tx(db, ledger, source, user, kind="income", category_l1="salary", amount="200.0000")
 
-    balances = source_balances(db, ledger, [source])
+    balances = source_balances(db, ledger.base_currency, [source])
 
     assert balances[source.id].balance == Decimal("1150.0000")
     assert balances[source.id].rate_missing_count == 0
@@ -136,7 +140,7 @@ def test_balance_converts_foreign_rows_on_their_own_day(db, ledger_setup):
     make_tx(db, ledger, source, user, amount="-10.0000", currency="EUR")
     make_tx(db, ledger, source, user, amount="-20.0000")
 
-    balance = source_balances(db, ledger, [source])[source.id]
+    balance = source_balances(db, ledger.base_currency, [source])[source.id]
 
     converted = (Decimal("-55.5000") * EUR_TO_CNY).quantize(Decimal("0.0001"))
     assert balance.balance == Decimal("100.0000") + converted + Decimal("-20.0000")
@@ -149,7 +153,7 @@ def test_balance_base_uses_the_latest_rate(db, ledger_setup):
     source = make_source(db, ledger, user, name="Revolut EUR", currency="EUR", opening="100.0000")
     make_tx(db, ledger, source, user, amount="-45.5000", currency="EUR")
 
-    balance = source_balances(db, ledger, [source])[source.id]
+    balance = source_balances(db, ledger.base_currency, [source])[source.id]
 
     assert balance.balance == Decimal("54.5000")
     assert balance.balance_rate == EUR_TO_CNY
@@ -161,7 +165,7 @@ def test_balance_base_of_a_base_currency_account_is_rate_one_today(db, ledger_se
     ledger, user = ledger_setup
     source = make_source(db, ledger, user, opening="12.3400")
 
-    balance = source_balances(db, ledger, [source])[source.id]
+    balance = source_balances(db, ledger.base_currency, [source])[source.id]
 
     assert balance.balance_base == Decimal("12.3400")
     assert balance.balance_rate == Decimal("1.00000000")
@@ -176,7 +180,7 @@ def test_rows_without_a_rate_are_skipped_and_counted(db, ledger_setup):
     make_tx(db, ledger, source, user, amount="-30.0000", currency="XXX")
     make_tx(db, ledger, source, user, amount="-70.0000", currency="XXX")
 
-    balance = source_balances(db, ledger, [source])[source.id]
+    balance = source_balances(db, ledger.base_currency, [source])[source.id]
 
     assert balance.balance == Decimal("400.0000")    # the XXX rows are not in it
     assert balance.rate_missing_count == 2           # transactions, not groups
@@ -188,7 +192,7 @@ def test_balance_base_is_null_when_the_account_currency_has_no_rate(db, ledger_s
     source = make_source(db, ledger, user, currency="XXX", opening="80.0000")
     make_tx(db, ledger, source, user, amount="-30.0000", currency="XXX")
 
-    balance = source_balances(db, ledger, [source])[source.id]
+    balance = source_balances(db, ledger.base_currency, [source])[source.id]
 
     assert balance.balance == Decimal("50.0000")     # no conversion needed for it
     assert balance.balance_base is None
@@ -196,25 +200,46 @@ def test_balance_base_is_null_when_the_account_currency_has_no_rate(db, ledger_s
     assert balance.balance_rate_date is None
 
 
-def test_balances_cover_every_account_and_ignore_other_ledgers(db, user_factory, ledger_factory):
+def test_balances_add_up_the_account_across_ledgers(db, user_factory, ledger_factory):
+    """Decision §14.62 f: one card used in two ledgers has one balance — the sum."""
     user = user_factory()
     ledger = ledger_factory(user, base_currency="CNY")
-    other = ledger_factory(user, name="别的账本", base_currency="CNY")
-    mine = make_source(db, ledger, user, opening="10.0000")
-    theirs = make_source(db, other, user, opening="10.0000")
-    make_tx(db, other, theirs, user, amount="-5.0000")
+    other = ledger_factory(user, name="旅行账本", base_currency="CNY")
+    card = make_source(db, ledger, user, opening="100.0000")
+    make_tx(db, ledger, card, user, amount="-5.0000")
+    make_tx(db, other, card, user, amount="-20.0000")
     empty = make_source(db, ledger, user, name="现金", type_="cash")
 
-    balances = source_balances(db, ledger, [mine, empty])
+    balances = source_balances(db, "CNY", [card, empty])
 
-    assert set(balances) == {mine.id, empty.id}
-    assert balances[mine.id].balance == Decimal("10.0000")
+    assert set(balances) == {card.id, empty.id}
+    assert balances[card.id].balance == Decimal("75.0000")
     assert balances[empty.id].balance == Decimal("0.0000")
+
+
+def test_balance_base_follows_the_currency_passed_in_not_a_ledger(
+    db, user_factory, ledger_factory
+):
+    """The owner's base currency decides ``balance_base`` (§14.62 f)."""
+    user = user_factory()
+    ledger = ledger_factory(user, base_currency="CNY")
+    card = make_source(db, ledger, user, opening="100.0000")
+
+    in_eur = source_balances(db, "EUR", [card])[card.id]
+    in_cny = source_balances(db, "CNY", [card])[card.id]
+
+    cny_to_eur = (Decimal("0.92") / Decimal("7.2")).quantize(Decimal("0.00000001"))
+    assert in_eur.balance == in_cny.balance == Decimal("100.0000")
+    assert in_eur.balance_rate == cny_to_eur
+    assert in_eur.balance_base == (Decimal("100.0000") * cny_to_eur).quantize(
+        Decimal("0.0001")
+    )
+    assert in_cny.balance_base == Decimal("100.0000")
 
 
 def test_source_balances_of_nothing_is_empty(db, ledger_setup):
     ledger, _user = ledger_setup
-    assert source_balances(db, ledger, []) == {}
+    assert source_balances(db, ledger.base_currency, []) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +254,7 @@ def test_net_worth_sums_assets_and_negative_liabilities(db, ledger_setup):
     card = make_source(db, ledger, user, name="信用卡", type_="credit", opening="-2300.0000")
     sources = [checking, cash, card]
 
-    assets, liabilities, total = net_worth(sources, source_balances(db, ledger, sources))
+    assets, liabilities, total = net_worth(sources, source_balances(db, "CNY", sources))
 
     assert assets == Decimal("1200.0000")
     assert liabilities == Decimal("-2300.0000")
@@ -245,7 +270,7 @@ def test_net_worth_ignores_archived_accounts(db, ledger_setup):
     )
     sources = [live, gone, debt]
 
-    assets, liabilities, total = net_worth(sources, source_balances(db, ledger, sources))
+    assets, liabilities, total = net_worth(sources, source_balances(db, "CNY", sources))
 
     assert (assets, liabilities, total) == (
         Decimal("1000.0000"),
@@ -260,7 +285,7 @@ def test_net_worth_is_null_when_an_account_cannot_be_valued(db, ledger_setup):
     unvalued = make_source(db, ledger, user, name="谜之账户", currency="XXX", opening="5.0000")
     sources = [good, unvalued]
 
-    assert net_worth(sources, source_balances(db, ledger, sources)) == (None, None, None)
+    assert net_worth(sources, source_balances(db, "CNY", sources)) == (None, None, None)
 
 
 def test_net_worth_ignores_an_unvalued_but_archived_account(db, ledger_setup):
@@ -271,7 +296,7 @@ def test_net_worth_ignores_an_unvalued_but_archived_account(db, ledger_setup):
     )
     sources = [good, unvalued]
 
-    assets, _liabilities, total = net_worth(sources, source_balances(db, ledger, sources))
+    assets, _liabilities, total = net_worth(sources, source_balances(db, "CNY", sources))
 
     assert (assets, total) == (Decimal("1000.0000"), Decimal("1000.0000"))
 
