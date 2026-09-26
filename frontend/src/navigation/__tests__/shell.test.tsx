@@ -169,6 +169,15 @@ describe('narrow (<1024)', () => {
     expect(router.getByTestId('ledger-switcher-join')).toBeTruthy();
   });
 
+  test('the switcher ends with a way to the full ledger list', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+
+    fireEvent.press(await router.findByTestId('top-bar-ledger'));
+    fireEvent.press(await router.findByTestId('ledger-switcher-manage'));
+
+    await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+  });
+
   test('the top bar carries the member disc, which leads to personal settings', async () => {
     const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
 

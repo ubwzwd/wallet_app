@@ -29,7 +29,6 @@
   "about_label": "关于",
   "entry": {
     "ledger_settings": "账本设置",
-    "switch_ledger": "切换账本",
     "logout": "退出登录"
   },
   "logout_hint": "退出后本地缓存会清掉，账本数据留在云端。下次用同一个邮箱登录就能回来。",

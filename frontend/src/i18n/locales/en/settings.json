@@ -29,7 +29,6 @@
   "about_label": "About",
   "entry": {
     "ledger_settings": "Ledger settings",
-    "switch_ledger": "Switch ledger",
     "logout": "Sign out"
   },
   "logout_hint": "Signing out clears the local cache. Ledger data stays in the cloud — sign in with the same email to come back.",

@@ -141,6 +141,12 @@ function SwitcherRows({
         onPress={() => onNavigate(routes.ledgersJoin())}
         testID="ledger-switcher-join"
       />
+      <ActionRow
+        label={t('common:nav.ledgers')}
+        icon="list"
+        onPress={() => onNavigate(routes.ledgers())}
+        testID="ledger-switcher-manage"
+      />
     </>
   );
 }
