@@ -13,7 +13,13 @@
  *
  * Refreshing is offered twice and without a platform switch: the header button is what a
  * mouse reaches for, the pull-to-refresh is what a thumb reaches for, and both refetch the
- * same four queries.
+ * same queries.
+ *
+ * Accounts belong to people (decision §14.62): the net worth and the 「账户」 card are mine
+ * (`GET /sources`, every ledger's entries on my accounts), while the ledger's own account
+ * list (`GET /ledgers/{id}/sources`) names the accounts in 「最近」 and says whether anything
+ * here can be booked onto at all. A ledger with no entries yet shows the guide (screen 15);
+ * its 「建一个账户」 step only appears while no account is usable here.
  */
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -27,6 +33,7 @@ import { formatAmountPlain, formatMonthShort } from '@/i18n/format';
 import {
   TREND_MONTHS,
   useCategories,
+  useLedgerSources,
   useMySources,
   useStatsSummary,
   useStatsTrend,
@@ -39,7 +46,13 @@ import { Button, Page, Text, TintCard } from '@/ui';
 
 import { AccountsSection } from './AccountsSection';
 import { CategorySection } from './CategorySection';
-import { EmptyLedgerCard, EmptyMonthCard, EmptyTransactionsCard } from './EmptyLedger';
+import {
+  EmptyHeaderActions,
+  EmptyLedgerCard,
+  EmptyMonthCard,
+  EmptyNetWorthHint,
+  EmptyTransactionsCard,
+} from './EmptyLedger';
 import { NetWorthHeader } from './NetWorthHeader';
 import { RECENT_LIMIT, RecentSection } from './RecentSection';
 import { TrendSection } from './TrendSection';
@@ -71,9 +84,11 @@ export default function HomeScreen(): React.JSX.Element {
   const params = useLocalSearchParams<{ month?: string }>();
   const month = resolveMonth(params.month);
 
-  // Archived accounts are asked for: the header needs to say how many it is leaving out
-  // (decision §14.50), and `sumSources` is the one that drops them from the totals.
+  // My accounts, archived ones included: the header says how many it is leaving out
+  // (decision §14.50) — the totals themselves come from the server.
   const sources = useMySources({ include_archived: true });
+  // What this ledger can see, under the key the entry form and the list share.
+  const ledgerSources = useLedgerSources(ledgerId, { include_archived: true });
   const summary = useStatsSummary(ledgerId, month);
   const trend = useStatsTrend(ledgerId, TREND_MONTHS);
   const recent = useTransactions(ledgerId, { limit: RECENT_LIMIT });
@@ -85,25 +100,37 @@ export default function HomeScreen(): React.JSX.Element {
   );
 
   const refetchSources = sources.refetch;
+  const refetchLedgerSources = ledgerSources.refetch;
   const refetchSummary = summary.refetch;
   const refetchTrend = trend.refetch;
   const refetchRecent = recent.refetch;
   const refreshAll = React.useCallback((): void => {
     void refetchSources();
+    void refetchLedgerSources();
     void refetchSummary();
     void refetchTrend();
     void refetchRecent();
-  }, [refetchSources, refetchSummary, refetchTrend, refetchRecent]);
+  }, [refetchSources, refetchLedgerSources, refetchSummary, refetchTrend, refetchRecent]);
 
   const refreshing =
-    sources.isRefetching || summary.isRefetching || trend.isRefetching || recent.isRefetching;
+    sources.isRefetching ||
+    ledgerSources.isRefetching ||
+    summary.isRefetching ||
+    trend.isRefetching ||
+    recent.isRefetching;
 
   const goSources = React.useCallback(
     () => router.navigate(routes.accounts(true) as Href),
-    [l, router],
+    [router],
   );
-  const goSourceList = React.useCallback(() => router.navigate(routes.accounts() as Href), [router]);
-  const goNewSource = React.useCallback(() => router.navigate(routes.accountNew(ledgerId) as Href), [ledgerId, router]);
+  const goSourceList = React.useCallback(
+    () => router.navigate(routes.accounts() as Href),
+    [router],
+  );
+  const goNewSource = React.useCallback(
+    () => router.navigate(routes.accountNew(ledgerId) as Href),
+    [ledgerId, router],
+  );
   const goSourceTransactions = React.useCallback(
     (sourceId: Uuid) => router.navigate(l.transactions({ source_id: [sourceId] }) as Href),
     [l, router],
@@ -114,6 +141,10 @@ export default function HomeScreen(): React.JSX.Element {
   );
   const goNewExpense = React.useCallback(
     () => router.navigate(l.transactionNew({ kind: 'expense' }) as Href),
+    [l, router],
+  );
+  const goNewTransaction = React.useCallback(
+    () => router.navigate(l.transactionNew() as Href),
     [l, router],
   );
   const goImport = React.useCallback(() => router.navigate(l.importsNew() as Href), [l, router]);
@@ -129,10 +160,21 @@ export default function HomeScreen(): React.JSX.Element {
     [l, router],
   );
 
-  const sourceItems = sources.data?.items ?? [];
-  // `undefined` while the list is still loading: an empty ledger must not flash the
-  // onboarding card at a user who simply has a slow connection.
-  const noAccounts = sources.data ? sourceItems.every((s) => s.archived) : false;
+  const ledgerSourceItems = ledgerSources.data?.items ?? [];
+  // Both stay false until their data is in: an empty ledger must not flash the guide at a
+  // user who simply has a slow connection. 「最近」 already carries the ledger's entry count,
+  // so the guide costs no request of its own; a placeholder page left over from another
+  // ledger does not count.
+  const noEntries =
+    recent.data !== undefined && !recent.isPlaceholderData && recent.data.total === 0;
+  // Nothing to book onto here: none of my own accounts is live, and no member shared one in.
+  const needsAccount = ledgerSources.data
+    ? !ledgerSourceItems.some((s) => s.usable)
+    : false;
+  const emptyLedger = noEntries && ledgerSources.data !== undefined;
+  // Screen 15's grey zero: nothing of mine to count yet, not a figure to check.
+  const mutedNetWorth = emptyLedger && needsAccount;
+  const myCurrency = sources.data?.base_currency ?? baseCurrency;
 
   const shortMonth = formatMonthShort(month, lang);
   // `TintCard`'s own `value` is the wide 22/28 step; the mockup's narrow tile is 17/24, so
@@ -164,7 +206,7 @@ export default function HomeScreen(): React.JSX.Element {
     </TintCard>
   );
   const totals =
-    noAccounts || summary.data === undefined ? undefined : (
+    emptyLedger || summary.data === undefined ? undefined : (
       <>
         {/* 屏幕稿 01 writes the two tiles bare — 「6,842.50」, 「18,000.00」 — because the
             net-worth line right above them already says 「折算 CNY」 (§14.59a). */}
@@ -202,56 +244,34 @@ export default function HomeScreen(): React.JSX.Element {
     onInvite: goLedgerSettings,
   };
 
-  // Screen 15 A: the ledger has no account yet. Wide puts the two ways forward in the
-  // header's action area; narrow puts the account button inside the net-worth card.
+  // Screen 15 A: the ledger has no entry yet. Wide puts the two ways forward in the header's
+  // action area — the first account while none is usable here, the first entry otherwise;
+  // narrow puts the account button inside the net-worth card.
   const header = (
     <NetWorthHeader
       query={sources}
-      baseCurrency={baseCurrency}
+      baseCurrency={myCurrency}
       totals={totals}
-      muted={noAccounts}
+      muted={mutedNetWorth}
       onPressArchived={goSources}
       actions={
         // 04 §4.4 wants refresh reachable on every frame: an empty wide ledger gets the two
         // ways forward *and* the refresh icon, not one instead of the other (pull-to-refresh
         // does nothing with a mouse).
-        noAccounts && wide ? (
-          <>
-            <Button
-              label={t('stats:home.empty.invite')}
-              variant="secondary"
-              icon="users"
-              onPress={goLedgerSettings}
-              testID="home-empty-invite"
-            />
-            <Button
-              label={t('stats:home.empty.create_source')}
-              icon="wallet"
-              onPress={goNewSource}
-              testID="home-empty-source"
-            />
-            {refresh}
-          </>
+        emptyLedger && wide ? (
+          <EmptyHeaderActions
+            needsAccount={needsAccount}
+            onInvite={goLedgerSettings}
+            onAddSource={goNewSource}
+            onAddTransaction={goNewTransaction}
+            refresh={refresh}
+          />
         ) : (
           refresh
         )
       }
       hint={
-        noAccounts && !wide ? (
-          <View style={styles.hint}>
-            <Text variant="body" tone="muted">
-              {t('stats:home.empty.net_worth_hint')}
-            </Text>
-            <Button
-              label={t('stats:home.empty.create_source')}
-              icon="wallet"
-              size="lg"
-              fullWidth
-              onPress={goNewSource}
-              testID="home-empty-source"
-            />
-          </View>
-        ) : undefined
+        mutedNetWorth && !wide ? <EmptyNetWorthHint onAddSource={goNewSource} /> : undefined
       }
     />
   );
@@ -259,8 +279,9 @@ export default function HomeScreen(): React.JSX.Element {
   const accounts = (
     <AccountsSection
       query={sources}
-      baseCurrency={baseCurrency}
+      baseCurrency={myCurrency}
       onManage={goSourceList}
+      onCreate={goNewSource}
       onPressSource={goSourceTransactions}
     />
   );
@@ -280,7 +301,7 @@ export default function HomeScreen(): React.JSX.Element {
   const recentBlock = (
     <RecentSection
       query={recent}
-      sources={sourceItems}
+      sources={ledgerSourceItems}
       baseCurrency={baseCurrency}
       categoryIndex={categories.index}
       onSeeAll={goTransactions}
@@ -290,9 +311,9 @@ export default function HomeScreen(): React.JSX.Element {
   );
 
   let body: React.ReactNode;
-  if (noAccounts) {
+  if (emptyLedger) {
     body = wide ? (
-      <EmptyLedgerCard {...emptyActions} />
+      <EmptyLedgerCard {...emptyActions} needsAccount={needsAccount} />
     ) : (
       <>
         <EmptyMonthCard />
@@ -353,5 +374,4 @@ const styles = StyleSheet.create({
   tileNarrow: { flex: 1, minWidth: 0, paddingHorizontal: space['3'] },
   tileValueWide: { fontSize: 22, lineHeight: 28 },
   tileValueNarrow: { fontSize: 17, lineHeight: 24 },
-  hint: { gap: space['3'], marginTop: space['2'] },
 });

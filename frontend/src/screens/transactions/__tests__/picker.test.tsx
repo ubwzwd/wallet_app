@@ -22,7 +22,7 @@ import {
   LEDGER_ID,
   makeCategoryTree,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTransaction,
   makeUser,
   mockApi,
@@ -35,7 +35,7 @@ import { PICKER_Q_DEBOUNCE_MS, TransactionPicker } from '../TransactionPicker';
 let queryClient: QueryClient;
 let api: MockApi;
 
-const CHECKING = makeSource({ id: 'src-checking', name: '招行储蓄卡', type: 'checking' });
+const CHECKING = makeLedgerSource({ id: 'src-checking', name: '招行储蓄卡', type: 'checking' });
 
 const CHEAP = makeTransaction({ id: 'tx-cheap', amount: '-38.0000', merchant: '便利店' });
 const PRICEY = makeTransaction({ id: 'tx-pricey', amount: '-1299.0000', merchant: '京东' });

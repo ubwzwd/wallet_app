@@ -4,6 +4,10 @@
  * The whole route tree is mounted (root layout → app group → ledger layout) so the screen
  * runs against the real guards, the real `LedgerContext` and the real shell, and the
  * assertions are on what the server was asked for and what ended up on screen.
+ *
+ * Decision §14.62: the net worth and the 「账户」 card are mine (`GET /sources`), the ledger's
+ * account list (`GET /ledgers/{id}/sources`) says what can be booked onto here, and the
+ * empty-ledger guide keys on the ledger having no entries.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -22,6 +26,7 @@ import HomeRoute from '../../../../app/(app)/l/[ledgerId]/index';
 
 import type {
   FinanceSource,
+  LedgerSource,
   Money,
   StatsCategoryNode,
   StatsSummary,
@@ -36,6 +41,7 @@ import * as breakpoint from '@/theme/useBreakpoint';
 import {
   makeCategoryTree,
   makeLedger,
+  makeLedgerSource,
   makeSource,
   makeStatsSummary,
   makeStatsTrend,
@@ -53,7 +59,10 @@ import { trendStats } from '../TrendSection';
 const LEDGER = 'ledger-home';
 const MONTH = '2026-09';
 const HOME_URL = `/l/${LEDGER}?month=${MONTH}`;
-const SOURCES_PATH = `/ledgers/${LEDGER}/sources`;
+/** My accounts and my net worth. */
+const SOURCES_PATH = '/sources';
+/** What this ledger can see. */
+const LEDGER_SOURCES_PATH = `/ledgers/${LEDGER}/sources`;
 const SUMMARY_PATH = `/ledgers/${LEDGER}/stats/summary`;
 const TREND_PATH = `/ledgers/${LEDGER}/stats/trend`;
 const TX_PATH = `/ledgers/${LEDGER}/transactions`;
@@ -71,8 +80,8 @@ const ROUTES = {
   '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
   '(app)/l/[ledgerId]/transactions/[txId]/index': () => <RNText>transaction-page</RNText>,
   '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
-  '(app)/l/[ledgerId]/sources/index': () => <RNText>sources-page</RNText>,
-  '(app)/l/[ledgerId]/sources/new': () => <RNText>new-source-page</RNText>,
+  '(app)/accounts/index': () => <RNText>accounts-page</RNText>,
+  '(app)/accounts/new': () => <RNText>new-account-page</RNText>,
   '(app)/l/[ledgerId]/imports/new': () => <RNText>new-import-page</RNText>,
   '(app)/l/[ledgerId]/settings/index': () => <RNText>ledger-settings-page</RNText>,
 };
@@ -121,10 +130,10 @@ function mixedSources(): FinanceSource[] {
 }
 
 /** `GET /transactions` as the home page's 「最近」 block asks for it. */
-function txList(items: Transaction[]): unknown {
+function txList(items: Transaction[], total: number = items.length): unknown {
   return {
     items,
-    total: items.length,
+    total,
     summary: {
       base_currency: 'CNY',
       expense: '0.0000',
@@ -143,21 +152,39 @@ function txList(items: Transaction[]): unknown {
  */
 function mockHome(
   opts: {
+    /** My accounts (`GET /sources`). */
     sources?: FinanceSource[];
+    /** The server's three totals; left out (null), the page falls back to its own sums. */
+    totals?: { assets: Money; liabilities: Money; net_worth: Money };
     sourcesStatus?: number;
+    /** What the ledger can see; defaults to my own accounts, usable unless archived. */
+    ledgerSources?: LedgerSource[];
     summary?: StatsSummary;
     summaryStatus?: number;
     trend?: StatsTrend;
     recent?: Transaction[];
+    /** How many entries the ledger holds (`total` of 「最近」); 0 is an empty ledger. */
+    entries?: number;
     recentStatus?: number;
   } = {},
 ): void {
+  const mine = opts.sources ?? mixedSources();
   if (opts.sourcesStatus !== undefined) {
     mockGet(SOURCES_PATH, SERVER_ERROR, opts.sourcesStatus);
   } else {
-    const items = opts.sources ?? mixedSources();
-    mockGet(SOURCES_PATH, { items, total: items.length });
+    mockGet(SOURCES_PATH, {
+      items: mine,
+      total: mine.length,
+      base_currency: 'CNY',
+      assets: opts.totals?.assets ?? null,
+      liabilities: opts.totals?.liabilities ?? null,
+      net_worth: opts.totals?.net_worth ?? null,
+    });
   }
+  const inLedger =
+    opts.ledgerSources ??
+    mine.map((s) => makeLedgerSource({ ...s, mine: true, usable: !s.archived }));
+  mockGet(LEDGER_SOURCES_PATH, { items: inLedger, total: inLedger.length });
 
   if (opts.summaryStatus !== undefined) {
     mockGet(SUMMARY_PATH, SERVER_ERROR, opts.summaryStatus);
@@ -170,7 +197,8 @@ function mockHome(
   if (opts.recentStatus !== undefined) {
     mockGet(TX_PATH, SERVER_ERROR, opts.recentStatus);
   } else {
-    mockGet(TX_PATH, txList(opts.recent ?? []));
+    const recent = opts.recent ?? [];
+    mockGet(TX_PATH, txList(recent, opts.entries ?? Math.max(recent.length, 12)));
   }
 }
 
@@ -283,6 +311,8 @@ describe('trendStats', () => {
 // ------------------------------------------------- the header: net worth, assets, liabilities
 
 test('assets, liabilities and net worth follow the sumSources rules', async () => {
+  // One account has no rate, so the server leaves its three totals out (null) and the page
+  // falls back to summing what it can.
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
@@ -296,6 +326,32 @@ test('assets, liabilities and net worth follow the sumSources rules', async () =
   expect(router.getByTestId('home-unconvertible-hint')).toHaveTextContent(
     '有 1 个账户暂时无法折算',
   );
+});
+
+test('the net worth is mine: the three numbers are the ones GET /sources totals', async () => {
+  // The server totals my accounts over every ledger they are used in, so its figures win
+  // over anything the page could add up from the rows.
+  mockHome({
+    sources: [
+      makeSource({
+        id: 'src-checking',
+        type: 'checking',
+        balance: '1000.0000',
+        balance_base: '1000.0000',
+        rate_missing_count: 2,
+      }),
+    ],
+    totals: { assets: '5200.0000', liabilities: '-700.0000', net_worth: '4500.0000' },
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-net-worth')).toHaveTextContent('¥4,500.00');
+  expect(router.getByTestId('home-assets')).toHaveTextContent(containing('资产 5,200.00'));
+  expect(router.getByTestId('home-liabilities')).toHaveTextContent(containing('负债 700.00'));
+  expect(router.getByText(/你的净资产 · 折算 CNY/)).toBeTruthy();
+  // Entries left out of my balances for want of a rate are counted, not hidden.
+  expect(router.getByTestId('home-rate-missing-hint')).toHaveTextContent('2 笔因暂无汇率未计入');
+  expect(router.queryByTestId('home-unconvertible-hint')).toBeNull();
 });
 
 test('the month totals sit in the header, expense first (screen 01)', async () => {
@@ -327,16 +383,18 @@ test('the archived line opens the account list with the archived group expanded'
 
   fireEvent.press(await router.findByTestId('home-archived-hint'));
 
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources`));
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts'));
   expect(router.getSearchParams().include_archived).toBe('1');
 });
 
-test('the account list is requested with the archived accounts included', async () => {
+test('the account lists are requested with the archived accounts included', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
   await router.findByTestId('home-assets');
 
+  // Mine, for the net worth and the card; the ledger's, for names and "can I book here".
   expect(getsFor(SOURCES_PATH)).toEqual([{ include_archived: true }]);
+  await waitFor(() => expect(getsFor(LEDGER_SOURCES_PATH)).toEqual([{ include_archived: true }]));
 });
 
 // ------------------------------------------------------------------ block: the accounts
@@ -394,7 +452,27 @@ test('the accounts header links to the account list', async () => {
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-accounts-header-link'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources`));
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts'));
+});
+
+test('with entries here but no account of my own, the card offers to add one', async () => {
+  // I book onto a card a member shared in; my own list is empty.
+  mockHome({
+    sources: [],
+    ledgerSources: [makeLedgerSource({ id: 'src-bob', name: 'Bob 的卡', mine: false })],
+    entries: 5,
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-balances-empty')).toHaveTextContent(
+    containing('你还没有自己的账户'),
+  );
+  // Not an empty ledger: the guide stays away.
+  expect(router.queryByTestId('home-empty-transactions')).toBeNull();
+
+  fireEvent.press(router.getByTestId('home-balances-empty-primary'));
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts/new'));
+  expect(router.getSearchParams().ledger).toBe(LEDGER);
 });
 
 // ------------------------------------------------------------ block: the month's categories
@@ -645,6 +723,7 @@ test('the refresh button refetches every block', async () => {
   });
 
   await waitFor(() => expect(getsFor(SOURCES_PATH).length).toBe(2));
+  expect(getsFor(LEDGER_SOURCES_PATH).length).toBe(2);
   expect(getsFor(SUMMARY_PATH).length).toBe(2);
   expect(getsFor(TREND_PATH).length).toBe(2);
   expect(getsFor(TX_PATH).length).toBe(2);
@@ -664,8 +743,11 @@ test('the wide layout drops the top bar and lays the blocks out in two columns',
 
 // ------------------------------------------- an empty ledger (screen 15 A), both widths
 
+/** A ledger with no entries, and no account I could book onto here (screen 15 A). */
+const NOTHING = { sources: [] as FinanceSource[], ledgerSources: [] as LedgerSource[], entries: 0 };
+
 test('no accounts at all: the narrow home offers the three ways in', async () => {
-  mockHome({ sources: [] });
+  mockHome(NOTHING);
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   // The net worth still reads zero, in grey — the ledger is empty, the page did not fail.
@@ -679,20 +761,25 @@ test('no accounts at all: the narrow home offers the three ways in', async () =>
   expect(router.queryByTestId('home-categories')).toBeNull();
 
   fireEvent.press(router.getByTestId('home-empty-source'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts/new'));
+  // The new account comes back shared into this ledger.
+  expect(router.getSearchParams().ledger).toBe(LEDGER);
 });
 
 test('no accounts at all: the wide home shows the three-step card', async () => {
   useWideLayout();
-  mockHome({ sources: [] });
+  mockHome(NOTHING);
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   expect(await router.findByTestId('home-empty')).toHaveTextContent(containing('这本账还是空的'));
+  expect(router.getByTestId('home-empty')).toHaveTextContent(containing('三步就能跑起来'));
   // The striped panel previews what the page will look like once there is data.
   expect(router.getByTestId('home-empty-preview')).toBeTruthy();
+  expect(router.getByTestId('home-empty-step-3')).toBeTruthy();
 
   fireEvent.press(router.getByTestId('home-empty-step-1'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/sources/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/accounts/new'));
+  expect(router.getSearchParams().ledger).toBe(LEDGER);
 });
 
 /**
@@ -701,12 +788,13 @@ test('no accounts at all: the wide home shows the three-step card', async () => 
  */
 test('no accounts at all: the wide home keeps its refresh button next to the two ways in', async () => {
   useWideLayout();
-  mockHome({ sources: [] });
+  mockHome(NOTHING);
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   await router.findByTestId('home-empty');
   expect(router.getByTestId('home-empty-invite')).toBeTruthy();
   expect(router.getByTestId('home-empty-source')).toBeTruthy();
+  expect(router.queryByTestId('home-empty-add-transaction')).toBeNull();
   expect(getsFor(SOURCES_PATH).length).toBe(1);
 
   await act(async () => {
@@ -717,7 +805,7 @@ test('no accounts at all: the wide home keeps its refresh button next to the two
 
 test('the empty home sends step 2 to the transaction form', async () => {
   useWideLayout();
-  mockHome({ sources: [] });
+  mockHome(NOTHING);
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-empty-step-2'));
@@ -726,7 +814,7 @@ test('the empty home sends step 2 to the transaction form', async () => {
 
 test('the empty home sends step 3 to the ledger settings, where invites live', async () => {
   useWideLayout();
-  mockHome({ sources: [] });
+  mockHome(NOTHING);
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-empty-step-3'));
@@ -734,10 +822,88 @@ test('the empty home sends step 3 to the ledger settings, where invites live', a
 });
 
 test('an archived-only ledger counts as empty', async () => {
+  const old = makeSource({ id: 'src-old', archived: true, balance_base: '10.0000' });
   mockHome({
-    sources: [makeSource({ id: 'src-old', archived: true, balance_base: '10.0000' })],
+    sources: [old],
+    ledgerSources: [makeLedgerSource({ ...old, usable: false })],
+    entries: 0,
   });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   expect(await router.findByTestId('home-empty-transactions')).toBeTruthy();
+  // Nothing is live to book onto, so the account button is still offered.
+  expect(router.getByTestId('home-empty-source')).toBeTruthy();
+});
+
+// ------------------------- a new ledger my accounts already work in (decision §14.62 k)
+
+/** My accounts are live in every ledger I am in: a brand-new ledger needs no account step. */
+const NEW_LEDGER = {
+  sources: mixedSources(),
+  totals: { assets: '1000.0000', liabilities: '-400.0000', net_worth: '600.0000' } as const,
+  entries: 0,
+};
+
+test('a new ledger with my accounts: the wide guide is two steps, and my net worth shows', async () => {
+  useWideLayout();
+  mockHome(NEW_LEDGER);
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  const card = await router.findByTestId('home-empty');
+  expect(card).toHaveTextContent(containing('两步就能跑起来'));
+  expect(card).not.toHaveTextContent(containing('建一个账户'));
+  expect(router.queryByTestId('home-empty-step-3')).toBeNull();
+  // The net worth is mine and real, not screen 15's grey zero.
+  expect(router.getByTestId('home-net-worth')).toHaveTextContent('¥600.00');
+  expect(router.getByTestId('home-assets')).toHaveTextContent(containing('1,000.00'));
+  // The header's primary way forward is the first entry, not the first account.
+  expect(router.queryByTestId('home-empty-source')).toBeNull();
+  expect(router.getByTestId('home-empty-invite')).toBeTruthy();
+
+  // Step 1 is now 「记一笔或导入账单」.
+  fireEvent.press(router.getByTestId('home-empty-step-1'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+});
+
+test('a new ledger with my accounts: the header button opens the entry form', async () => {
+  useWideLayout();
+  mockHome(NEW_LEDGER);
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  fireEvent.press(await router.findByTestId('home-empty-add-transaction'));
+  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+});
+
+test('a new ledger with my accounts: the narrow home drops the account button', async () => {
+  mockHome(NEW_LEDGER);
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-empty-transactions')).toBeTruthy();
+  expect(router.getByTestId('home-net-worth')).toHaveTextContent('¥600.00');
+  expect(router.queryByTestId('home-empty-source')).toBeNull();
+  expect(router.queryByTestId('home-balances')).toBeNull();
+});
+
+test('an account a member shared in is enough to skip the account step', async () => {
+  useWideLayout();
+  mockHome({
+    sources: [],
+    ledgerSources: [makeLedgerSource({ id: 'src-bob', name: 'Bob 的卡', mine: false })],
+    entries: 0,
+  });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-empty')).toHaveTextContent(containing('两步就能跑起来'));
+  expect(router.getByTestId('home-empty-add-transaction')).toBeTruthy();
+  expect(router.queryByTestId('home-empty-source')).toBeNull();
+});
+
+test('a ledger with entries never shows the guide, whatever the accounts', async () => {
+  mockHome({ sources: [], ledgerSources: [], entries: 3 });
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  expect(await router.findByTestId('home-categories-total')).toBeTruthy();
+  expect(router.getByTestId('home-recent')).toBeTruthy();
+  expect(router.queryByTestId('home-empty-transactions')).toBeNull();
+  expect(router.queryByTestId('home-empty-month')).toBeNull();
 });

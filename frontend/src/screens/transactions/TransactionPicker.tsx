@@ -113,8 +113,8 @@ export function TransactionPicker({
   const money = useAmountText();
   // The picker stays mounted (rendering nothing) next to the form that owns it, so both
   // queries wait for it to actually open — otherwise merely showing the refund tab would
-  // fetch the accounts a second time, under a key the form does not share.
-  const sources = useLedgerSources(open ? ledgerId : undefined);
+  // fetch the accounts a second time. Once open it asks under the form's own key.
+  const sources = useLedgerSources(open ? ledgerId : undefined, { include_archived: true });
   const id = testID ?? 'tx-picker';
 
   const [filters, setFilters] = React.useState<PickerFilterValues>(() => seed(initial));

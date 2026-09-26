@@ -28,7 +28,7 @@ import {
   LEDGER_ID,
   makeCategoryTree,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTransaction,
   makeTransferPair,
   makeUser,
@@ -46,7 +46,7 @@ let queryClient: QueryClient;
 let api: MockApi;
 
 const LEDGER = makeLedger();
-const CHECKING = makeSource({
+const CHECKING = makeLedgerSource({
   id: 'src-checking',
   name: '招行储蓄卡',
   type: 'checking',

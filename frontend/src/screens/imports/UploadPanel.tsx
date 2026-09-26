@@ -5,13 +5,15 @@
  * The account row is the mockup's 60-tall well (icon + name + 「储蓄卡 · CNY · 12,480.35」 +
  * chevron) rather than a text field, so the picker's list lives here too: a popover on wide
  * layouts, a bottom sheet on narrow ones — the same split `Select` makes, never `Platform`.
- * Archived accounts are not offered (decision §3), which is `selectableSources`' job.
+ * Archived accounts are not offered (decision §3), nor ones this ledger can no longer use —
+ * `selectableSources`' job. The list splits into 「我的」 and 「成员共享的」 once a member has
+ * shared an account in, and someone else's account shows no balance (decision §14.62).
  */
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { FinanceSource, ImportBatchListItem, Uuid } from '@/api/types';
+import type { ImportBatchListItem, LedgerSource, Uuid } from '@/api/types';
 import { type Lang } from '@/i18n';
 import { formatMoney } from '@/i18n/format';
 import { radius, space } from '@/theme/tokens';
@@ -25,8 +27,11 @@ import {
   Popover,
   SOURCE_TYPE_ICON,
   Sheet,
+  SourceGroupLabel,
   Text,
+  groupSources,
   selectableSources,
+  showsSourceGroups,
 } from '@/ui';
 
 /** The drop zone's 1.5px ring of 屏幕稿 10. 屏幕 10 · 导入指南与上传.dc.html paints it with a
@@ -34,14 +39,14 @@ import {
  *  whatever the prose around the mockup says, so please leave this a solid border. */
 const DROP_RING = 1.5;
 
-function sourceHint(source: FinanceSource, lang: Lang, typeLabel: string): string {
-  return [typeLabel, source.default_currency, formatMoney(source.balance ?? '0', source.default_currency, lang)].join(
-    ' · ',
-  );
+function sourceHint(source: LedgerSource, lang: Lang, typeLabel: string): string {
+  const parts = [typeLabel, source.default_currency];
+  if (source.balance !== null) parts.push(formatMoney(source.balance, source.default_currency, lang));
+  return parts.join(' · ');
 }
 
 export interface TargetSourceRowProps {
-  sources: readonly FinanceSource[];
+  sources: readonly LedgerSource[];
   value: Uuid | null;
   onChange(next: Uuid): void;
   lang: Lang;
@@ -63,32 +68,43 @@ export function TargetSourceRow({
   const anchorRef = React.useRef<View>(null);
 
   const options = React.useMemo(() => selectableSources(sources), [sources]);
+  const groups = React.useMemo(() => groupSources(options), [options]);
+  const titled = showsSourceGroups(groups);
   const selected = options.find((s) => s.id === value) ?? null;
+
+  const row = (source: LedgerSource): React.JSX.Element => (
+    <ListRow
+      key={source.id}
+      testID={`${testID}-option-${source.id}`}
+      icon={
+        <View style={[styles.well, { backgroundColor: colors['accent.subtle'] }]}>
+          <Icon name={SOURCE_TYPE_ICON[source.type]} size={18} color={colors['accent.solid']} />
+        </View>
+      }
+      title={source.name}
+      subtitle={sourceHint(source, lang, t(`source:type.${source.type}`))}
+      selected={source.id === value}
+      onPress={() => {
+        onChange(source.id);
+        setOpen(false);
+      }}
+      trailing={
+        source.id === value ? (
+          <Icon name="check" size={18} color={colors['accent.solid']} />
+        ) : undefined
+      }
+    />
+  );
 
   const list = (
     <View style={styles.options}>
-      {options.map((source) => (
-        <ListRow
-          key={source.id}
-          testID={`${testID}-option-${source.id}`}
-          icon={
-            <View style={[styles.well, { backgroundColor: colors['accent.subtle'] }]}>
-              <Icon name={SOURCE_TYPE_ICON[source.type]} size={18} color={colors['accent.solid']} />
-            </View>
-          }
-          title={source.name}
-          subtitle={sourceHint(source, lang, t(`source:type.${source.type}`))}
-          selected={source.id === value}
-          onPress={() => {
-            onChange(source.id);
-            setOpen(false);
-          }}
-          trailing={
-            source.id === value ? (
-              <Icon name="check" size={18} color={colors['accent.solid']} />
-            ) : undefined
-          }
-        />
+      {groups.map((group) => (
+        <React.Fragment key={group.key}>
+          {titled ? (
+            <SourceGroupLabel group={group.key} testID={`${testID}-group-${group.key}`} />
+          ) : null}
+          {group.sources.map(row)}
+        </React.Fragment>
       ))}
     </View>
   );

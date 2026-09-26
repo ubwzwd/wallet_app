@@ -1,6 +1,6 @@
 {
   "home": {
-    "net_worth_line": "净资产 · 折算 {{currency}}",
+    "net_worth_line": "你的净资产 · 折算 {{currency}}",
     "assets_amount": "资产 {{amount}}",
     "liabilities_amount": "负债 {{amount}}",
     "excluded_archived_other": "不含 {{count}} 个已归档账户",
@@ -8,6 +8,7 @@
     "month_expense": "{{month}}支出",
     "month_income": "{{month}}收入",
     "accounts_title": "账户",
+    "accounts_empty": "你还没有自己的账户",
     "manage_accounts": "管理账户",
     "manage_accounts_short": "管理",
     "categories_title": "{{month}}支出 · 按分类",
@@ -38,6 +39,8 @@
       "invite": "邀请成员",
       "title": "这本账还是空的",
       "body": "三步就能跑起来：建一个账户 → 记一笔或导入账单 → 邀请成员一起记。分类是内置的、不可改，不用先去配置。",
+      "body_two_steps": "两步就能跑起来：记一笔或导入账单 → 邀请成员一起记。你的账户在每本账里都能直接用，分类是内置的、不可改，不用先去配置。",
+      "header_record": "记一笔",
       "step_source_title": "建一个账户",
       "step_source_body": "储蓄卡、现金、信用卡都算",
       "step_source_cta": "去建",

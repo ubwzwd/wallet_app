@@ -19,7 +19,7 @@ import {
   LEDGER_ID,
   makeCategoryTree,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTransaction,
   makeTransferPair,
   makeUser,
@@ -34,19 +34,19 @@ import TransactionFormScreen from '../TransactionFormScreen';
 let queryClient: QueryClient;
 let api: MockApi;
 
-const CHECKING = makeSource({
+const CHECKING = makeLedgerSource({
   id: 'src-checking',
   name: '招行储蓄卡',
   type: 'checking',
   default_currency: 'CNY',
 });
-const CREDIT = makeSource({
+const CREDIT = makeLedgerSource({
   id: 'src-credit',
   name: '招行信用卡',
   type: 'credit',
   default_currency: 'CNY',
 });
-const USD_ACCOUNT = makeSource({
+const USD_ACCOUNT = makeLedgerSource({
   id: 'src-usd',
   name: 'US 账户',
   type: 'checking',

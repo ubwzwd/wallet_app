@@ -23,7 +23,10 @@ import {
   Checkbox,
   MultiSelect,
   Sheet,
+  SourceGroupLabel,
   Text,
+  groupSources,
+  showsSourceGroups,
   sourceTypeLabelKey,
   type SelectOption,
 } from '@/ui';
@@ -44,6 +47,11 @@ import {
  * 屏幕稿 02 draws the accounts two ways: a dropdown reading 「招行储蓄卡 +2」 on the wide card,
  * and — in the drawer, where there is room — the accounts themselves as a tinted list of
  * tick rows carrying each account's type, currency and balance.
+ *
+ * Every account the ledger can see is offered, including ones that can no longer be booked
+ * onto (archived, or no longer shared — decision §14.62): filtering is about the entries
+ * already written. The drawer splits them into 「我的」 and 「成员共享的」 once there are
+ * others', whose balances stay the owner's business.
  */
 export function SourceField(props: FilterFieldProps & { inline?: boolean }): React.JSX.Element {
   const { t } = useTranslation();
@@ -65,6 +73,9 @@ export function SourceField(props: FilterFieldProps & { inline?: boolean }): Rea
     if (count === 1) return first;
     return t('transaction:list.filter.source_summary', { name: first, count: count - 1 });
   };
+
+  const groups = groupSources(props.sources);
+  const titled = showsSourceGroups(groups);
 
   const options: SelectOption[] = props.sources.map((s) => ({
     value: s.id,
@@ -90,41 +101,53 @@ export function SourceField(props: FilterFieldProps & { inline?: boolean }): Rea
             paddingVertical: space['1'],
           }}
         >
-          {props.sources.map((source) => (
-            <Pressable
-              key={source.id}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: values.includes(source.id) }}
-              accessibilityLabel={source.name}
-              onPress={() => toggle(source.id)}
-              testID={`${props.id}-source-${source.id}`}
-              style={{
-                minHeight: 48,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: space['3'],
-                paddingHorizontal: density.rowInnerPadding,
-                paddingVertical: space['2'],
-              }}
-            >
-              <View pointerEvents="none" accessibilityElementsHidden>
-                <Checkbox checked={values.includes(source.id)} onChange={() => {}} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="subheading" numberOfLines={1}>
-                  {source.name}
-                </Text>
-                <Text variant="micro" tone="muted" mono>
-                  {t('transaction:list.row.meta', {
-                    category: t(sourceTypeLabelKey(source.type)),
-                    source: source.default_currency,
-                  })}
-                </Text>
-              </View>
-              <Text variant="caption" tone="secondary" mono numberOfLines={1}>
-                {money(source.balance ?? '0', source.default_currency)}
-              </Text>
-            </Pressable>
+          {groups.map((group) => (
+            <React.Fragment key={group.key}>
+              {titled ? (
+                <SourceGroupLabel
+                  group={group.key}
+                  testID={`${props.id}-source-group-${group.key}`}
+                />
+              ) : null}
+              {group.sources.map((source) => (
+                <Pressable
+                  key={source.id}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: values.includes(source.id) }}
+                  accessibilityLabel={source.name}
+                  onPress={() => toggle(source.id)}
+                  testID={`${props.id}-source-${source.id}`}
+                  style={{
+                    minHeight: 48,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: space['3'],
+                    paddingHorizontal: density.rowInnerPadding,
+                    paddingVertical: space['2'],
+                  }}
+                >
+                  <View pointerEvents="none" accessibilityElementsHidden>
+                    <Checkbox checked={values.includes(source.id)} onChange={() => {}} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="subheading" numberOfLines={1}>
+                      {source.name}
+                    </Text>
+                    <Text variant="micro" tone="muted" mono>
+                      {t('transaction:list.row.meta', {
+                        category: t(sourceTypeLabelKey(source.type)),
+                        source: source.default_currency,
+                      })}
+                    </Text>
+                  </View>
+                  {source.balance === null ? null : (
+                    <Text variant="caption" tone="secondary" mono numberOfLines={1}>
+                      {money(source.balance, source.default_currency)}
+                    </Text>
+                  )}
+                </Pressable>
+              ))}
+            </React.Fragment>
           ))}
         </View>
       ) : (

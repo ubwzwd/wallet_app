@@ -14,8 +14,8 @@ import { useForm, type UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import type {
-  FinanceSource,
   IsoDateTime,
+  LedgerSource,
   Transaction,
   TransactionCreate,
   TransactionUpdate,
@@ -88,10 +88,10 @@ export interface TxFormController {
   kind: TxKind;
   /** Switch tab, keeping amount / date / account / note and clearing a stale category. */
   setKind(next: TxKind): void;
-  /** Every account of the ledger, archived ones included (the picker filters). */
-  sources: FinanceSource[];
+  /** Every account the ledger can see, unusable ones included (the picker filters). */
+  sources: LedgerSource[];
   sourcesLoading: boolean;
-  sourceById(id: string | null): FinanceSource | undefined;
+  sourceById(id: string | null): LedgerSource | undefined;
   /** Pick the (only / outgoing) account and follow its currency. */
   selectSource(id: string | null): void;
   /** Pick the receiving account of a two-leg transfer and follow its currency. */
@@ -134,7 +134,7 @@ export function useTransactionForm(opts: UseTransactionFormOptions): TxFormContr
   );
 
   const sourceById = React.useCallback(
-    (id: string | null): FinanceSource | undefined =>
+    (id: string | null): LedgerSource | undefined =>
       id === null ? undefined : sources.find((s) => s.id === id),
     [sources],
   );
@@ -168,9 +168,10 @@ export function useTransactionForm(opts: UseTransactionFormOptions): TxFormContr
   React.useEffect(() => {
     if (!autoFillSource || !prefsRead || sources.length === 0) return;
     if (getValues('source_id') !== '') return;
-    const usable = sources.filter((s) => !s.archived);
+    const usable = sources.filter((s) => s.usable);
     if (usable.length === 0) return;
-    const preferred = usable.find((s) => s.id === lastSource) ?? usable[0];
+    const preferred =
+      usable.find((s) => s.id === lastSource) ?? usable.find((s) => s.mine) ?? usable[0];
     setValue('source_id', preferred.id);
     if (getValues('currency') === '') setValue('currency', preferred.default_currency);
   }, [autoFillSource, getValues, lastSource, prefsRead, setValue, sources]);

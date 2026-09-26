@@ -155,8 +155,11 @@
       "delete_confirm_label": "输入账本名字确认 {{name}}",
       "delete_tile": {
         "transactions": "交易",
-        "sources": "账户",
+        "sources": "共享账户",
         "imports": "导入批次"
+      },
+      "delete_tile_note": {
+        "sources": "只解除共享，不删账户"
       },
       "delete_tile_value": {
         "transactions": "{{count}} 笔",

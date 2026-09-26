@@ -20,7 +20,7 @@ import {
   apiUrl,
   makeCategoryTree,
   makeLedger,
-  makeSource,
+  makeLedgerSource,
   makeTestHandlers,
   makeTestQueryClient,
   makeTransaction,
@@ -40,13 +40,13 @@ let queryClient: QueryClient;
 let handlers: TestQueryHandlers;
 let api: MockApi;
 
-const CHECKING = makeSource({
+const CHECKING = makeLedgerSource({
   id: 'src-checking',
   name: '招行储蓄卡',
   type: 'checking',
   default_currency: 'CNY',
 });
-const CREDIT = makeSource({
+const CREDIT = makeLedgerSource({
   id: 'src-credit',
   name: '招行信用卡',
   type: 'credit',

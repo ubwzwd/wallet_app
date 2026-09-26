@@ -86,3 +86,37 @@ describe('sumSources', () => {
     expect(summary.unconvertibleCount).toBe(0);
   });
 });
+
+describe('sumSources over a ledger account list (decision §14.62)', () => {
+  test('accounts other members shared in are not mine and count for nothing', () => {
+    const mine = {
+      ...source({ type: 'checking', balance_base: '300.0000' }),
+      mine: true,
+      usable: true,
+    };
+    // A shared-in account arrives without a balance; it must be skipped, not counted as
+    // "no rate yet" — and one carrying a figure anyway is not added to my assets either.
+    const theirs = {
+      ...source({ type: 'checking', balance: null, balance_base: null }),
+      mine: false,
+      usable: true,
+    };
+    const theirsWithFigure = {
+      ...source({ type: 'cash', balance_base: '50.0000' }),
+      mine: false,
+      usable: true,
+    };
+    const theirsArchived = {
+      ...source({ type: 'cash', balance_base: '50.0000', archived: true }),
+      mine: false,
+      usable: false,
+    };
+    const summary = sumSources([mine, theirs, theirsWithFigure, theirsArchived]);
+    expect(summary.assets).toBe('300.0000');
+    expect(summary.net).toBe('300.0000');
+    expect(summary.unconvertibleCount).toBe(0);
+    expect(summary.archivedCount).toBe(0);
+    expect(summary.byType.checking.count).toBe(1);
+    expect(summary.byType.cash.count).toBe(0);
+  });
+});

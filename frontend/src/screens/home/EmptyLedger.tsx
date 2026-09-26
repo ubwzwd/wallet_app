@@ -1,5 +1,11 @@
 /**
- * Screen 15 A — the home page of a ledger with no accounts yet.
+ * Screen 15 A — the home page of a ledger with no entries yet (decision §14.62 k).
+ *
+ * Accounts belong to people, not ledgers, so a new ledger is usually ready to book into
+ * the moment it exists: my own accounts work in every ledger I am in. The guide therefore
+ * keys on "no entries yet", and the 「建一个账户」 step only shows while there is no account I
+ * can use here at all — mine or one a member shared in. Without it the guide is two steps:
+ * record or import → invite.
  *
  * Not an illustration and not a blank page: the net worth still reads S$0.00 in grey (the
  * user needs to see that the ledger is empty, not that the page failed), and the body says
@@ -23,6 +29,11 @@ export interface EmptyLedgerActions {
   onInvite(): void;
 }
 
+export interface EmptyLedgerCardProps extends EmptyLedgerActions {
+  /** No account is usable in this ledger yet: the guide opens with 「建一个账户」. */
+  needsAccount: boolean;
+}
+
 interface Step {
   n: number;
   title: string;
@@ -31,35 +42,39 @@ interface Step {
   onPress(): void;
 }
 
+/** The guide's steps, numbered as shown: three with the account step, two without. */
 function useSteps({
   onAddSource,
   onAddTransaction,
   onInvite,
-}: EmptyLedgerActions): Step[] {
+  needsAccount,
+}: EmptyLedgerCardProps): Step[] {
   const { t } = useTranslation();
-  return [
+  const steps: Omit<Step, 'n'>[] = [
+    ...(needsAccount
+      ? [
+          {
+            title: t('stats:home.empty.step_source_title'),
+            body: t('stats:home.empty.step_source_body'),
+            cta: t('stats:home.empty.step_source_cta'),
+            onPress: onAddSource,
+          },
+        ]
+      : []),
     {
-      n: 1,
-      title: t('stats:home.empty.step_source_title'),
-      body: t('stats:home.empty.step_source_body'),
-      cta: t('stats:home.empty.step_source_cta'),
-      onPress: onAddSource,
-    },
-    {
-      n: 2,
       title: t('stats:home.empty.step_record_title'),
       body: t('stats:home.empty.step_record_body'),
       cta: t('stats:home.empty.step_record_cta'),
       onPress: onAddTransaction,
     },
     {
-      n: 3,
       title: t('stats:home.empty.step_invite_title'),
       body: t('stats:home.empty.step_invite_body'),
       cta: t('stats:home.empty.step_invite_cta'),
       onPress: onInvite,
     },
   ];
+  return steps.map((step, i) => ({ ...step, n: i + 1 }));
 }
 
 function StepRow({ step, first }: { step: Step; first: boolean }): React.JSX.Element {
@@ -108,10 +123,10 @@ function StepRow({ step, first }: { step: Step; first: boolean }): React.JSX.Ele
   );
 }
 
-/** The wide card: headline + the three steps, with the striped preview panel beside them. */
-export function EmptyLedgerCard(actions: EmptyLedgerActions): React.JSX.Element {
+/** The wide card: headline + the steps, with the striped preview panel beside them. */
+export function EmptyLedgerCard(props: EmptyLedgerCardProps): React.JSX.Element {
   const { t } = useTranslation();
-  const steps = useSteps(actions);
+  const steps = useSteps(props);
 
   return (
     <ListCard style={styles.card} testID="home-empty">
@@ -121,7 +136,7 @@ export function EmptyLedgerCard(actions: EmptyLedgerActions): React.JSX.Element 
             {t('stats:home.empty.title')}
           </Text>
           <Text variant="body" tone="secondary" style={styles.body}>
-            {t('stats:home.empty.body')}
+            {t(props.needsAccount ? 'stats:home.empty.body' : 'stats:home.empty.body_two_steps')}
           </Text>
           <View style={styles.steps}>
             {steps.map((step) => (
@@ -140,6 +155,70 @@ export function EmptyLedgerCard(actions: EmptyLedgerActions): React.JSX.Element 
         />
       </View>
     </ListCard>
+  );
+}
+
+/**
+ * The wide header's ways forward on an empty ledger: 邀请成员, then the first account while
+ * none is usable here or the first entry otherwise — and the refresh icon, which 04 §4.4
+ * wants on every frame (pull-to-refresh does nothing with a mouse).
+ */
+export function EmptyHeaderActions({
+  needsAccount,
+  onInvite,
+  onAddSource,
+  onAddTransaction,
+  refresh,
+}: Pick<EmptyLedgerCardProps, 'needsAccount' | 'onInvite' | 'onAddSource' | 'onAddTransaction'> & {
+  refresh: React.ReactNode;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <>
+      <Button
+        label={t('stats:home.empty.invite')}
+        variant="secondary"
+        icon="users"
+        onPress={onInvite}
+        testID="home-empty-invite"
+      />
+      {needsAccount ? (
+        <Button
+          label={t('stats:home.empty.create_source')}
+          icon="wallet"
+          onPress={onAddSource}
+          testID="home-empty-source"
+        />
+      ) : (
+        <Button
+          label={t('stats:home.empty.header_record')}
+          icon="plus"
+          onPress={onAddTransaction}
+          testID="home-empty-add-transaction"
+        />
+      )}
+      {refresh}
+    </>
+  );
+}
+
+/** The narrow net-worth card's 「先建一个账户」 line and button (no account usable here). */
+export function EmptyNetWorthHint({ onAddSource }: { onAddSource(): void }): React.JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.hint}>
+      <Text variant="body" tone="muted">
+        {t('stats:home.empty.net_worth_hint')}
+      </Text>
+      <Button
+        label={t('stats:home.empty.create_source')}
+        icon="wallet"
+        size="lg"
+        fullWidth
+        onPress={onAddSource}
+        testID="home-empty-source"
+      />
+    </View>
   );
 }
 
@@ -262,4 +341,5 @@ const styles = StyleSheet.create({
   },
   centered: { textAlign: 'center' },
   ctaButtons: { alignSelf: 'stretch', gap: space['2'], marginTop: space['3'] },
+  hint: { gap: space['3'], marginTop: space['2'] },
 });
