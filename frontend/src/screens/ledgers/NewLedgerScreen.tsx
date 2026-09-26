@@ -30,7 +30,6 @@ import {
 } from '@/screens/auth/schemas';
 import { useAuth } from '@/store';
 import { space } from '@/theme/tokens';
-import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Card, Page, Text, TextField, toast } from '@/ui';
 import { CurrencyPicker } from '@/ui';
 
@@ -41,7 +40,6 @@ const CARD_MAX_WIDTH = 520;
 
 export default function NewLedgerScreen(): React.JSX.Element {
   const { t } = useTranslation();
-  const wide = useIsWide();
   const router = useRouter();
   const { user } = useAuth();
   const currencies = useCurrencies();
@@ -95,7 +93,7 @@ export default function NewLedgerScreen(): React.JSX.Element {
     <Page testID="new-ledger-screen" contentStyle={styles.page}>
       <LedgerPageHead title={title} testID="new-ledger-header" />
 
-      <View style={[styles.centre, wide ? styles.centreWide : null]}>
+      <View style={styles.centre}>
         <View style={[styles.column, { maxWidth: CARD_MAX_WIDTH }]}>
           <Text variant="body" tone="muted" style={styles.lead}>
             {t('ledger:create.subtitle')}
@@ -167,7 +165,6 @@ export default function NewLedgerScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   page: { flexGrow: 1, gap: space['4'] },
   centre: { flex: 1, alignItems: 'center' },
-  centreWide: { justifyContent: 'center' },
   column: { width: '100%', gap: space['3'] },
   lead: { paddingHorizontal: space['1'] },
   card: { padding: space['5'], gap: space['4'] },

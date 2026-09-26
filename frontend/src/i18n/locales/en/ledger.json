@@ -89,7 +89,7 @@
     "invite": {
       "title": "Invite code",
       "generate": "Generate invite code",
-      "idle_hint": "An invite code is valid for 10 minutes and can be used once. The other person enters it on their ledger list.",
+      "idle_hint": "An invite code is valid for 10 minutes and can be used once. The other person enters it under “Join with an invite code” in their ledger switcher.",
       "expires_in": "expires in {{time}}",
       "revoke": "Revoke",
       "revoke_title": "Revoke invite code",
