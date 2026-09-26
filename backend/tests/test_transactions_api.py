@@ -18,6 +18,8 @@ import pytest
 
 from app.core.clock import utcnow
 from app.models.import_batch import ImportBatch
+from app.models.ledger import LedgerMember
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 from app.models.transaction_event import TransactionEvent
 
@@ -334,6 +336,150 @@ def test_create_on_a_foreign_account_is_not_found(
 
 
 # ---------------------------------------------------------------------------
+# Accounts belong to people, shared into ledgers (decision §14.62, §3.2)
+# ---------------------------------------------------------------------------
+
+
+def join(db, ledger, user) -> None:
+    """Make ``user`` a plain member of ``ledger``."""
+    db.add(
+        LedgerMember(ledger_id=ledger.id, user_id=user.id, role="member", joined_at=utcnow())
+    )
+    db.flush()
+
+
+def unshare(db, ledger, source) -> None:
+    """Withdraw ``source`` from ``ledger`` (what ``DELETE /sources/{sid}/ledgers/{lid}`` does)."""
+    db.execute(
+        LedgerSource.__table__.delete().where(
+            LedgerSource.ledger_id == ledger.id, LedgerSource.source_id == source.id
+        )
+    )
+    db.flush()
+
+
+@pytest.fixture()
+def partner_card(env, db, user_factory, owned_source_factory):
+    """A second member of ``env.ledger`` and her card, shared nowhere yet."""
+    partner = user_factory()
+    join(db, env.ledger, partner)
+    return owned_source_factory(partner, name="她的卡", type="checking", currency="CNY")
+
+
+def test_a_members_account_is_usable_only_while_shared(env, db, partner_card, share_source):
+    hidden = env.post(expense_body(env, source_id=str(partner_card.id)))
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(env.ledger, partner_card)
+    booked = env.post(expense_body(env, source_id=str(partner_card.id)))
+    assert booked.status_code == 201, booked.text
+
+    unshare(db, env.ledger, partner_card)
+    again = env.post(expense_body(env, source_id=str(partner_card.id)))
+    assert again.status_code == 404
+    assert again.json()["code"] == "not_found"
+    # The entry booked while it was shared stays, and stays readable.
+    assert env.get(f"/{booked.json()['id']}").status_code == 200
+
+
+def test_ones_own_unshared_account_is_usable_in_any_of_ones_ledgers(
+    env, ledger_factory, owned_source_factory
+):
+    """§14.62 b: sharing is for the other members; the owner never needs it."""
+    mine = owned_source_factory(env.user, name="私房卡", currency="CNY")
+    second = ledger_factory(env.user, name="旅行", base_currency="CNY")
+
+    here = env.post(expense_body(env, source_id=str(mine.id)))
+    there = env.client.post(
+        f"/api/v1/ledgers/{second.id}/transactions",
+        json=expense_body(env, source_id=str(mine.id)),
+        headers=env.headers,
+    )
+
+    assert here.status_code == 201, here.text
+    assert there.status_code == 201, there.text
+    assert there.json()["source_id"] == str(mine.id)
+
+
+@pytest.mark.parametrize("leg", ["from_source_id", "to_source_id"])
+def test_transfer_legs_follow_sharing(env, db, partner_card, share_source, leg):
+    other = "to_source_id" if leg == "from_source_id" else "from_source_id"
+    body = {
+        leg: str(partner_card.id),
+        other: str(env.cash.id),
+        "amount_out": "100.00",
+        "occurred_at": SEP6.isoformat(),
+        "subtype": "plain",
+    }
+
+    hidden = env.post(body, "/transfer")
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(env.ledger, partner_card)
+    assert env.post(body, "/transfer").status_code == 201
+
+    unshare(db, env.ledger, partner_card)
+    assert env.post(body, "/transfer").status_code == 404
+
+
+def test_patch_moves_a_row_only_onto_a_usable_account(env, db, partner_card, share_source):
+    created = env.post(expense_body(env)).json()
+
+    hidden = env.patch(
+        f"/{created['id']}",
+        {"source_id": str(partner_card.id), "updated_at": created["updated_at"]},
+    )
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(env.ledger, partner_card)
+    moved = env.patch(
+        f"/{created['id']}",
+        {"source_id": str(partner_card.id), "updated_at": created["updated_at"]},
+    )
+    assert moved.status_code == 200, moved.text
+
+    # Unshared afterwards: the row stays on it and stays editable.
+    unshare(db, env.ledger, partner_card)
+    noted = env.patch(
+        f"/{created['id']}", {"note": "补记", "updated_at": moved.json()["updated_at"]}
+    )
+    assert noted.status_code == 200, noted.text
+    assert noted.json()["source_id"] == str(partner_card.id)
+
+
+def test_transfer_patch_moves_a_leg_only_onto_a_usable_account(
+    env, partner_card, share_source
+):
+    created = env.post(
+        {
+            "from_source_id": str(env.bank.id),
+            "to_source_id": str(env.cash.id),
+            "amount_out": "100.00",
+            "occurred_at": SEP6.isoformat(),
+            "subtype": "plain",
+        },
+        "/transfer",
+    ).json()
+    suffix = f"/transfer/{created['pair_id']}"
+
+    hidden = env.patch(
+        suffix, {"to_source_id": str(partner_card.id), "updated_at": created["updated_at"]}
+    )
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(env.ledger, partner_card)
+    moved = env.patch(
+        suffix, {"to_source_id": str(partner_card.id), "updated_at": created["updated_at"]}
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["in"]["source_id"] == str(partner_card.id)
+
+
+# ---------------------------------------------------------------------------
 # GET /transactions (§5.25) — one case per parameter, then a combined one
 # ---------------------------------------------------------------------------
 
@@ -485,6 +631,26 @@ def test_list_source_filter_from_another_ledger_is_not_found(
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
+
+
+def test_list_source_filter_takes_what_the_ledger_account_list_shows(
+    env, db, partner_card, share_source, owned_source_factory
+):
+    """§5.25 / §14.62: mine, shared here, or referenced here — nothing else."""
+    mine = owned_source_factory(env.user, name="私房卡", archived=True)
+    assert env.get(source_id=str(mine.id)).status_code == 200
+
+    hidden = env.get(source_id=str(partner_card.id))
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "not_found"
+
+    share_source(env.ledger, partner_card)
+    booked = env.post(expense_body(env, source_id=str(partner_card.id))).json()
+    assert ids(env.get(source_id=str(partner_card.id))) == {booked["id"]}
+
+    # Unshared, it is still referenced by an entry of this ledger (group ③).
+    unshare(db, env.ledger, partner_card)
+    assert ids(env.get(source_id=str(partner_card.id))) == {booked["id"]}
 
 
 def test_list_filters_by_date_range_inclusive(env, rows):

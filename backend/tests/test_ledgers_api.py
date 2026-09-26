@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch
 from app.models.ledger import Ledger, LedgerMember
+from app.models.ledger_source import LedgerSource
 from app.models.transaction import Transaction
 from app.models.transaction_event import TransactionEvent
 
@@ -26,10 +27,13 @@ from app.models.transaction_event import TransactionEvent
 # ---------------------------------------------------------------------------
 
 
-def make_source(db, ledger, user, name: str = "招行储蓄卡") -> FinanceSource:
+def make_source(
+    db, ledger, user, name: str = "招行储蓄卡", share: bool = True
+) -> FinanceSource:
+    """``user``'s account, shared into ``ledger`` unless ``share=False`` (§14.62)."""
     now = utcnow()
     source = FinanceSource(
-        ledger_id=ledger.id,
+        owner_id=user.id,
         name=name,
         type="checking",
         default_currency=ledger.base_currency,
@@ -42,7 +46,21 @@ def make_source(db, ledger, user, name: str = "招行储蓄卡") -> FinanceSourc
     )
     db.add(source)
     db.flush()
+    if share:
+        share_into(db, ledger, source)
     return source
+
+
+def share_into(db, ledger, source) -> LedgerSource:
+    row = LedgerSource(
+        ledger_id=ledger.id,
+        source_id=source.id,
+        shared_by=source.owner_id,
+        shared_at=utcnow(),
+    )
+    db.add(row)
+    db.flush()
+    return row
 
 
 def make_transaction(db, ledger, source, user, amount: str = "-42.0000") -> Transaction:
@@ -318,16 +336,21 @@ def test_get_ledger_reports_the_three_counts(
     client, db, user_factory, auth_headers, ledger_factory
 ):
     alice = user_factory()
-    ledger = ledger_factory(alice)
+    bob = user_factory()
+    ledger = ledger_factory(alice, members=[bob])
     source = make_source(db, ledger, alice)
-    make_source(db, ledger, alice, name="现金")
+    make_source(db, ledger, bob, name="现金")
+    # §14.62 f: ``sources`` counts the accounts shared into the ledger — not
+    # the ones its members merely own, even if a transaction sits on one.
+    private = make_source(db, ledger, alice, name="私房卡", share=False)
     make_transaction(db, ledger, source, alice)
-    make_transaction(db, ledger, source, alice, amount="-7.5000")
+    make_transaction(db, ledger, private, alice, amount="-7.5000")
     make_batch(db, ledger, source, alice)
 
     other_owner = user_factory()
     other = ledger_factory(other_owner, name="别人的")
     other_source = make_source(db, other, other_owner)
+    share_into(db, other, private)
     make_transaction(db, other, other_source, other_owner)
     db.commit()
 
@@ -337,7 +360,7 @@ def test_get_ledger_reports_the_three_counts(
     body = response.json()
     assert body["counts"] == {"transactions": 2, "sources": 2, "import_batches": 1}
     assert body["role"] == "owner"
-    assert body["member_count"] == 1
+    assert body["member_count"] == 2
 
 
 def test_get_ledger_as_member(client, db, user_factory, auth_headers, ledger_factory):
@@ -687,16 +710,21 @@ def test_delete_cascades_to_everything_in_the_ledger(
     bob = user_factory()
     ledger = ledger_factory(alice, name="家用", members=[bob])
     source = make_source(db, ledger, alice)
+    bobs = make_source(db, ledger, bob, name="他的卡")
     transaction = make_transaction(db, ledger, source, alice)
+    make_transaction(db, ledger, bobs, bob)
     make_event(db, ledger, transaction, alice)
     make_batch(db, ledger, source, alice)
 
     keeper = user_factory()
-    other = ledger_factory(keeper, name="别人的")
+    other = ledger_factory(keeper, name="别人的", members=[alice])
     other_source = make_source(db, other, keeper)
+    share_into(db, other, source)
     make_transaction(db, other, other_source, keeper)
+    make_transaction(db, other, source, alice)
     db.commit()
     ledger_id = ledger.id
+    source_ids = {source.id, bobs.id}
 
     response = client.delete(
         f"/api/v1/ledgers/{ledger_id}?confirm_name=家用", headers=auth_headers(alice)
@@ -706,7 +734,7 @@ def test_delete_cascades_to_everything_in_the_ledger(
     assert response.content == b""
     db.expire_all()
     assert db.get(Ledger, ledger_id) is None
-    for model in (FinanceSource, Transaction, ImportBatch, TransactionEvent):
+    for model in (LedgerSource, Transaction, ImportBatch, TransactionEvent):
         remaining = db.execute(
             select(func.count()).select_from(model).where(model.ledger_id == ledger_id)
         ).scalar_one()
@@ -719,7 +747,12 @@ def test_delete_cascades_to_everything_in_the_ledger(
         ).scalar_one()
         == 0
     )
-    # The other ledger is untouched.
+    # §14.62 f: accounts belong to people — only their shares here are gone.
+    survivors = db.execute(
+        select(FinanceSource.id).where(FinanceSource.id.in_(source_ids))
+    ).scalars()
+    assert set(survivors) == source_ids
+    # The other ledger is untouched, the share of alice's card into it included.
     assert db.get(Ledger, other.id) is not None
     assert (
         db.execute(
@@ -727,8 +760,9 @@ def test_delete_cascades_to_everything_in_the_ledger(
                 Transaction.ledger_id == other.id
             )
         ).scalar_one()
-        == 1
+        == 2
     )
+    assert db.get(LedgerSource, (other.id, source.id)) is not None
 
 
 def test_delete_by_a_plain_member_is_403(

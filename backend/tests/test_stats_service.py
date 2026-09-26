@@ -1,7 +1,7 @@
 """Statistics service tests (03-backend-api.md §5.35, §5.36, decision §7).
 
-Row helpers come from ``test_valuation``: both modules belong to this service
-and there is no shared factory yet. Amounts stay in CNY (the ledger base) so
+Transaction rows come from ``test_valuation``'s helper; accounts from the
+shared ``source_factory``. Amounts stay in CNY (the ledger base) so
 every expected number is exact; the cross-currency and missing-rate paths are
 exercised through ``valuation`` and once more here for ``rate_missing_count``.
 """
@@ -11,18 +11,18 @@ from decimal import Decimal
 import pytest
 
 from app.services.stats import add_months, month_bounds, summary, trend
-from tests.test_valuation import make_source, make_tx
+from tests.test_valuation import make_tx
 
 AUG = dt.date(2026, 8, 15)
 SEP = dt.date(2026, 9, 10)
 
 
 @pytest.fixture()
-def book(db, user_factory, ledger_factory):
-    """A CNY ledger, its owner and one checking account."""
+def book(db, user_factory, ledger_factory, source_factory):
+    """A CNY ledger, its owner and one checking account shared into it."""
     user = user_factory()
     ledger = ledger_factory(user, base_currency="CNY")
-    source = make_source(db, ledger, user)
+    source = source_factory(ledger)
     return ledger, user, source
 
 
@@ -144,9 +144,9 @@ def test_summary_drops_a_category_refunded_back_to_zero(db, book):
     assert result["net"] == Decimal("0.0000")
 
 
-def test_summary_ignores_transfers_and_other_months(db, book):
+def test_summary_ignores_transfers_and_other_months(db, book, source_factory):
     ledger, user, source = book
-    other = make_source(db, ledger, user, name="现金", type_="cash")
+    other = source_factory(ledger, name="现金", type="cash")
     make_tx(db, ledger, source, user, amount="-100.0000", occurred_at=SEP)
     make_tx(db, ledger, source, user, amount="-999.0000", occurred_at=AUG)
     make_tx(
