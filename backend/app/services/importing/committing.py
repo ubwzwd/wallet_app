@@ -40,7 +40,7 @@ from app.models.transaction import Transaction
 from app.services import events, transaction_service
 from app.services.importing.commit_checks import (
     CommitRejected,
-    assert_pairable,
+    assert_pair_target,
     count_where,
     load_context,
     lock_batch,
@@ -162,7 +162,7 @@ def _commit_transfer(
     if row.matched_transaction_id is not None:
         # Judged again on the locked row: another session may have paired it
         # since the pre-commit check, and then this batch rolls back whole.
-        far = assert_pairable(lock_transaction(db, row.matched_transaction_id), row, batch)
+        far = assert_pair_target(db, lock_transaction(db, row.matched_transaction_id), row, batch)
         was_counterparty, was_subtype = far.counterparty, far.transfer_subtype
         pair_id = uuid.uuid4()
         # The account that decides "repayment" is the one the money lands on.

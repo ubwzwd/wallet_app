@@ -139,6 +139,11 @@ def flag_transfer_candidates(
     nor a tie-breaker (decision §14.53a): the same repayment is written
     ``plain`` on one statement and ``repayment`` on the other, and the two legs
     are unified at commit time (§4.5).
+
+    A single leg is only a candidate while its account is live and usable by
+    the uploader in this ledger (01 §3.15 A condition 6, decision §14.62 e):
+    pairing touches that leg too, so the commit refuses anything else (404 /
+    409, §4.5 ①) — suggesting it would pre-tick a pair that cannot land.
     """
     targets = [
         row for row in rows if row.kind == "transfer" and row.occurred_at is not None
@@ -147,6 +152,7 @@ def flag_transfer_candidates(
         return
 
     legs: dict[tuple[str | None, str, Decimal], list[Row[Any]]] = defaultdict(list)
+    fit: dict[UUID, bool] = {}
     for leg in _fetch_transfer_legs(db, ctx, targets):
         legs[(leg.transfer_role, leg.currency, quantize_amount(leg.amount))].append(leg)
 
@@ -162,16 +168,19 @@ def flag_transfer_candidates(
             if _days_apart(leg.occurred_at, row.occurred_at) <= TRANSFER_WINDOW_DAYS
         ]
         single = _by_closest_day(
-            [leg for leg in found if leg.transfer_pair_id is None], row
+            [
+                leg
+                for leg in found
+                if leg.transfer_pair_id is None and _pairable_account(db, ctx, leg, fit)
+            ],
+            row,
         )
         paired = [leg for leg in found if leg.transfer_pair_id is not None]
 
         if len(single) == 1:
             row.flags.add("transfer_candidate")
             row.matched_transaction_id = single[0].id
-            row.counterpart_source_id = _prefillable_counterpart(
-                db, ctx, single[0].source_id
-            )
+            row.counterpart_source_id = single[0].source_id
             add_hint(row, "已勾选：与另一个账户上的那条转账合并为一笔，可取消")
         elif len(single) > 1:
             # Several candidates: pick none, store none (decision §14.53b). The
@@ -193,22 +202,24 @@ def flag_transfer_candidates(
             add_hint(row, "没找到对腿；对方账户在应用里就选一个，不在就填对方名字或留空")
 
 
-def _prefillable_counterpart(
-    db: Session, ctx: ImportContext, source_id: UUID
-) -> UUID | None:
-    """The unique leg's account, but only if it is still fit to pre-fill.
+def _pairable_account(
+    db: Session, ctx: ImportContext, leg: Row[Any], fit: dict[UUID, bool]
+) -> bool:
+    """Whether a leg's account is live and usable by the uploader here.
 
-    A row whose counterpart is unusable (unshared since, someone else's,
-    deleted) or archived would otherwise pass review only to have
-    ``load_counterpart`` 404 it at commit (§4.5 ②); leaving it ``None`` here
-    lets the user pick a real account instead (decision §14.62).
+    Someone else's account not shared into this ledger (or unshared since), or
+    an archived one, would pass review only to have the commit refuse the pair
+    (§4.5 ①, decision §14.62 e) — so such a leg is not offered at all. Cached
+    per account: many rows of one statement meet the same few accounts.
     """
-    source = db.get(FinanceSource, source_id)
-    if source is None or source.archived:
-        return None
-    if not source_access.is_usable(db, ctx.actor_id, ctx.ledger_id, source):
-        return None
-    return source_id
+    if leg.source_id not in fit:
+        source = db.get(FinanceSource, leg.source_id)
+        fit[leg.source_id] = (
+            source is not None
+            and not source.archived
+            and source_access.is_usable(db, ctx.actor_id, ctx.ledger_id, source)
+        )
+    return fit[leg.source_id]
 
 
 def _fetch_transfer_legs(

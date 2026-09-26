@@ -628,14 +628,14 @@ def test_transfer_one_paired_and_one_single_prefills_the_single(
     assert row.counterpart_source_id == free.id
 
 
-def test_transfer_unique_leg_on_an_unusable_account_is_not_prefilled(
+def test_transfer_unique_leg_on_an_unusable_account_is_not_a_candidate(
     db, ledger, credit, user_factory, owned_source_factory, transaction_factory
 ):
-    """The counterpart is unique but belongs to someone else, unshared here.
+    """The only leg sits on someone else's account, not shared here.
 
-    Pre-filling it anyway would pass review only to have ``load_counterpart``
-    404 it at commit (§4.5 ②, decision §14.62); leaving it ``None`` lets the
-    user pick a real account.
+    Pairing touches that leg too, so the commit would refuse it (404, §4.5 ①,
+    decision §14.62 e); 01 §3.15 A condition 6 keeps it out of the candidates,
+    and the row reads like one with no other leg at all.
     """
     stranger = user_factory()
     outside = owned_source_factory(stranger, name="陌生人的储蓄卡")
@@ -652,16 +652,17 @@ def test_transfer_unique_leg_on_an_unusable_account_is_not_prefilled(
 
     flag_rows(db, context(ledger, credit), [row])
 
-    assert row.flags == {"transfer_candidate"}
-    assert row.matched_transaction_id == leg.id
+    assert leg.id is not None
+    assert row.flags == set()
+    assert row.matched_transaction_id is None
     assert row.counterpart_source_id is None
-    assert "已勾选" in row.hint
+    assert "没找到对腿" in row.hint
 
 
-def test_transfer_unique_leg_on_an_archived_account_is_not_prefilled(
+def test_transfer_unique_leg_on_an_archived_account_is_not_a_candidate(
     db, ledger, credit, source_factory, transaction_factory
 ):
-    """The counterpart is unique and usable, but archived (decision §14.62)."""
+    """The only leg is on a usable but archived account: the commit would 409."""
     from datetime import datetime, timezone
 
     archived_checking = source_factory(ledger, name="已归档储蓄卡")
@@ -680,10 +681,11 @@ def test_transfer_unique_leg_on_an_archived_account_is_not_prefilled(
 
     flag_rows(db, context(ledger, credit), [row])
 
-    assert row.flags == {"transfer_candidate"}
-    assert row.matched_transaction_id == leg.id
+    assert leg.id is not None
+    assert row.flags == set()
+    assert row.matched_transaction_id is None
     assert row.counterpart_source_id is None
-    assert "已勾选" in row.hint
+    assert "没找到对腿" in row.hint
 
 
 def test_transfer_without_counterpart_never_guesses_one_account(
