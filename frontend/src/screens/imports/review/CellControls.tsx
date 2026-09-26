@@ -134,6 +134,8 @@ export interface CellOption {
   hint?: string;
   icon?: IconName;
   disabled?: boolean;
+  /** A group title over the options after it (「我的」 / 「成员共享的」): drawn small, never pickable. */
+  heading?: boolean;
 }
 
 export interface CellSelectProps {
@@ -193,6 +195,25 @@ export function CellSelect({
         </Text>
       ) : null}
       {options.map((option) => {
+        if (option.heading === true) {
+          return (
+            <Text
+              key={option.value}
+              variant="micro"
+              tone="muted"
+              weight={600}
+              accessibilityRole="header"
+              testID={`${testID}-option-${option.value}`}
+              style={{
+                paddingHorizontal: space['3'],
+                paddingTop: space['2'],
+                paddingBottom: space['1'],
+              }}
+            >
+              {option.label}
+            </Text>
+          );
+        }
         const selected = option.value === value;
         return (
           <Pressable

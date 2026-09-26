@@ -26,9 +26,16 @@ import { useTranslation } from 'react-i18next';
 import type { ImportRow, LedgerSource, Transaction } from '@/api/types';
 import { formatMoney, parseLocalDate } from '@/i18n/format';
 import { space } from '@/theme/tokens';
-import { Text, groupSources, selectableSources, showsSourceGroups, sourceGroupOptions } from '@/ui';
+import {
+  Text,
+  groupSources,
+  isSourceGroupTitle,
+  selectableSources,
+  showsSourceGroups,
+  sourceGroupOptions,
+} from '@/ui';
 
-import { CellTextInput, CellSelect } from './CellControls';
+import { type CellOption, CellTextInput, CellSelect } from './CellControls';
 import type { CellProps } from './ReviewRow';
 import { CELL_DEBOUNCE_MS } from './ReviewRow';
 
@@ -116,8 +123,12 @@ export function LinkCell({ row, env, testID }: CellProps): React.JSX.Element {
     if (s.balance !== null) parts.push(formatMoney(s.balance, s.default_currency, env.lang));
     return { value: s.id, label: s.name, hint: parts.join(' · ') };
   };
-  const counterpartOptions = [
-    ...sourceGroupOptions(groups, titled, toOption, (key) => t(`transaction:picker.group_${key}`)),
+  // Group titles ride along as options (`sourceGroupOptions`); the cell draws them as
+  // small headers rather than greyed-out rows, like `SourceField`'s list does.
+  const counterpartOptions: CellOption[] = [
+    ...sourceGroupOptions(groups, titled, toOption, (key) =>
+      t(`transaction:picker.group_${key}`),
+    ).map((option) => (isSourceGroupTitle(option) ? { ...option, heading: true } : option)),
     { value: NO_SOURCE, label: t('common:status.none') },
   ];
 
