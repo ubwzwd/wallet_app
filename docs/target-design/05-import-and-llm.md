@@ -126,7 +126,7 @@
 | `file_too_large` | 413 | §2.6 超过 2 MB |
 | `import_rate_limited` | 429 | 每用户每小时 10 批（决策 §5） |
 | `source_archived` | 409 | 目标账户已归档（§2.1、§4.3） |
-| `not_found` | 404 | §2.1 目标账户不属于本账本；§4.3 `counterpart_source_id` 不是本账本的未归档账户（决策 §14.53c） |
+| `not_found` | 404 | §2.1 目标账户对上传者在本账本内不可用（既不是他自己的账户，也没有共享到本账本）；§4.1 / §4.3 `counterpart_source_id` 不是对批次创建者在本账本内可用的未归档账户——含 review 之后被主人取消共享的情形（决策 §14.53c、§14.62 e）（2026-09-16 按决策 §14.62 同步） |
 | `batch_not_ready` | 409 | §4.3 批次不是 `ready`，或必填字段仍为空 |
 | `batch_already_committed` | 409 | §4.3 重复提交 |
 | `rows_uncategorized` | 409 | §4.3 有非转账行没有一级分类 |
@@ -369,7 +369,7 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 ```text
 ① 大小与限流    ≤2 MB              → 413 file_too_large
                 每用户每小时 10 批   → 429 import_rate_limited
-② 目标账户      属于本账本、未归档  → 404 not_found / 409 source_archived
+② 目标账户      对上传者在本账本内可用、未归档 → 404 not_found / 409 source_archived
 ③ 解码          UTF-8（可带 BOM）   → 400 import_format_invalid
 ④ 结构          版本行 / 表头 / 列数 → 400 import_format_invalid（逐行清单）
 ⑤ 版本          与 CATEGORY_VERSION  → 400 skill_outdated
@@ -381,6 +381,8 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
 ①–⑥ 任一不过：不建批次，什么都不写库
 ⑦–⑨ 一律成功：批次 status='ready'
 ```
+
+② 的「可用」与记一笔同一个判断（决策 §14.62 b / e）：目标账户的 `owner_id` 是上传者，或者存在 `ledger_sources(本账本, source_id)`（别的成员把它共享到了本账本）；账户已经不再「属于账本」，所以不再比较 `finance_sources.ledger_id`。不可用一律 404 `not_found`，归档另判 409 `source_archived`。（2026-09-16 按决策 §14.62 同步）
 
 ①–⑥ 是**整份文件的通过条件**，⑦ 之后是**行级提示**。这个分界是决策 §5 的原话，也是屏幕稿要改的地方（`mockups/REVIEW-2026-09-11.md` B2）：kind 认不出、缺分类、日期格式错**不是**退回重传的理由，它们进 review 表格。
 
@@ -833,7 +835,8 @@ def flag_transfer_candidates(db, ctx, rows):
             _add_hint(r, "另一个账户上这笔转账已经配好对了，本行可能是重复的")
         else:
             # 库里没有对腿：对手账户**不猜**（决策 §14.53c）。留空交给用户在 review 里
-            # 决定：选一个本账本的账户（提交时按两腿建，§4.5 ②），或填 counterparty
+            # 决定：选一个对自己在本账本内可用的账户（自己的，或共享到本账本的；2026-09-16 按决策 §14.62 同步；
+            # 提交时按两腿建，§4.5 ②），或填 counterparty
             # 文本 / 什么都不填（提交时按单腿建，§4.5 ③，决策 §1.2）。
             r.counterpart_source_id = None
             _add_hint(r, "没找到对腿；对方账户在应用里就选一个，不在就填对方名字或留空")
@@ -889,7 +892,7 @@ def flag_transfer_candidates(db, ctx, rows):
 | `merchant` / `note` / `source_ref` | 文本，长度上限同 §2.4 ⑧ |
 | `category_l1` / `category_l2` | 必须在表内且收支组匹配，否则 400 `category_invalid` / `category_kind_mismatch` |
 | `matched_transaction_id` | 退款原单（`kind='refund'` 时）或配对目标（`kind='transfer'` 时）；置 `null` = 取消关联。它是"选中了哪一条"的**唯一载体**（决策 §14.53b）：多候选时服务端不预填，用户在前端用交易列表选一条后就是一次这样的 PATCH，非空即"已勾选"，没有第二个状态字段。**同一次 PATCH 里改了 `kind` 会先把它清掉**（见下），要保留关联就别在同一次请求里改 `kind` |
-| `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿）。必须是**本账本的未归档账户**，否则 404 `not_found`（决策 §14.53c）；**不能等于批次自己的目标账户** `batch.source_id`，否则 400 `same_source`（[`03-backend-api.md`](./03-backend-api.md) §4.2 注册表；两腿转账的两条腿必须落在不同账户上，[`01-domain-and-flows.md`](./01-domain-and-flows.md) §6 不变量 9）。**已与 03 §5.41 对齐**：这一条用注册表里更专属的 `same_source`，不落在通用的 `validation_error` 上（§4.2 自己的规矩：有专属 code 就不用 `validation_error`）。服务端从不替用户猜这个值（§3.3） |
+| `counterpart_source_id` | 转账的对手账户（对方在应用里、但对腿还没记过账时用，提交时会**新建**对腿）。必须是**对调用者在本账本内可用的未归档账户**（调用者自己的账户，或别人共享到本账本的账户——`owner_id = 调用者` 或存在 `ledger_sources(batch.ledger_id, source_id)`，决策 §14.62 e（2026-09-16 按决策 §14.62 同步）），否则 404 `not_found`（决策 §14.53c）；**不能等于批次自己的目标账户** `batch.source_id`，否则 400 `same_source`（[`03-backend-api.md`](./03-backend-api.md) §4.2 注册表；两腿转账的两条腿必须落在不同账户上，[`01-domain-and-flows.md`](./01-domain-and-flows.md) §6 不变量 9）。**已与 03 §5.41 对齐**：这一条用注册表里更专属的 `same_source`，不落在通用的 `validation_error` 上（§4.2 自己的规矩：有专属 code 就不用 `validation_error`）。服务端从不替用户猜这个值（§3.3） |
 | `counterparty` | 单腿转账的对手文本，例如"老婆""工资卡"（决策 §14.10、§14.16：只有用户填，skill 不猜） |
 | `status` | `pending` / `edited` / `skipped`，三个值，没有第四个（决策 §5） |
 
@@ -942,7 +945,7 @@ def flag_transfer_candidates(db, ctx, rows):
 | `category_l2` 属于该 `category_l1`；transfer 行两级都为 NULL | 400 | `category_invalid` |
 | `kind='refund'` 且 `matched_transaction_id` 非空时，该目标仍是同账本的 `kind='expense'` 交易 | 400 | `refund_target_invalid` |
 | `kind='transfer'` 且 `matched_transaction_id` 非空时，该目标仍是同账本、方向相反的转账，且在此刻仍是**单腿**（`transfer_pair_id IS NULL`） | 400 | `pair_invalid` |
-| `counterpart_source_id` 非空时，它必须属于本账本（`finance_sources.ledger_id = batch.ledger_id`）且未归档 | 404 | `not_found`（决策 §14.53c） |
+| `counterpart_source_id` 非空时，它必须**对批次创建者在本账本内可用**：`owner_id = batch.created_by` 或存在 `ledger_sources(batch.ledger_id, source_id)`；且未归档。review 之后被主人取消共享（`ledger_sources` 行没了）、归档或删除的，都落在这一条 | 404 | `not_found`（决策 §14.53c、§14.62 e）（2026-09-16 按决策 §14.62 同步） |
 | `counterpart_source_id` 非空时，它**不得等于** `batch.source_id` | 400 | `same_source`（[`01-domain-and-flows.md`](./01-domain-and-flows.md) §6 不变量 9：两腿转账的两个账户不同） |
 | 落成**单腿**（`matched_transaction_id` 与 `counterpart_source_id` 都为空）的 `kind='transfer'` + `transfer_role='in'` + `transfer_subtype='repayment'` 行，批次目标账户必须是 `credit` | 400 | `repayment_target_not_credit`（[`03-backend-api.md`](./03-backend-api.md) §4.2、§5.43，决策 §14.52 A11） |
 | 批次的目标账户仍未归档 | 409 | `source_archived` |
@@ -1908,8 +1911,11 @@ def test_upload_review_pair_commit_revert(client, auth, ledger,
 | `GET .../rows?filter=uncategorized` | 只回没有一级分类的非转账、非 skipped 行；计数与 `uncategorized_count` 一致 |
 | 同一批次并发两次 commit | 一次 200、一次 409 `batch_already_committed`，交易只建一遍 |
 | 两个批次同时想配到同一条单腿上 | 一次成功、一次 400 `pair_invalid`（目标已不是单腿），失败的那批仍是 `ready`、一条交易也没建 |
-| 转账行的 `counterpart_source_id` 指向**别的账本**的账户 | `PATCH .../rows/{rid}` 404 `not_found`；直接改库后再 commit 也是 404 `not_found`，整批不落地（决策 §14.53c） |
-| 转账行的 `counterpart_source_id` 指向本账本**已归档**的账户 | 同上：404 `not_found`（决策 §14.53c） |
+| 转账行的 `counterpart_source_id` 指向对批次创建者在本账本内**不可用**的账户（别的成员的账户、且没有共享到本账本；或别的账本里别人的账户） | `PATCH .../rows/{rid}` 404 `not_found`；直接改库后再 commit 也是 404 `not_found`，整批不落地（决策 §14.53c、§14.62 e）（2026-09-16 按决策 §14.62 同步） |
+| 转账行的 `counterpart_source_id` 指向批次创建者**自己的、没有共享到本账本**的账户 | `PATCH` 200，commit 200 建出两腿——主人在自己所在的任何账本里都能用自己的账户，不需要共享（决策 §14.62 b）（2026-09-16 按决策 §14.62 同步） |
+| 转账行的 `counterpart_source_id` 指向可用但**已归档**的账户 | 同上：404 `not_found`（决策 §14.53c） |
+| 转账行的 `counterpart_source_id` 选的是别的成员共享到本账本的账户，review 之后主人**取消共享**，再 commit | 404 `not_found`（与「归档 / 删除」同一条错误），`rows` 里点名这一行，整批不落地、批次仍是 `ready`；主人重新共享后同一批可以提交（决策 §14.62 e）（2026-09-16 按决策 §14.62 同步） |
+| 目标账户对上传者在本账本内不可用（别的成员没共享进来的账户） | 上传 404 `not_found`，不建批次（§2.1 ②）（2026-09-16 按决策 §14.62 同步） |
 | 转账行的 `counterpart_source_id` 选成**批次自己的目标账户** | `PATCH .../rows/{rid}` 400 `same_source`；直接改库后再 commit 也是 400 `same_source`，整批不落地（01 §6 不变量 9：两腿转账的两个账户不同） |
 | `role='in'` + `subtype='repayment'` 的行落在**非信用卡**目标账户上，且没选对腿也没选对手账户（单腿） | commit 400 `repayment_target_not_credit`，整批不落地（§4.3、决策 §14.52 A11）——导入不是绕过这条不变量的旁门 |
 | 同上但用户选了对手账户（两腿，转入腿仍是本账户且非信用卡） | 200，两腿的 `transfer_subtype` 都被降成 `plain`（§4.5 的统一子类型规则，决策 §14.53a），不报错 |
