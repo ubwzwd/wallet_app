@@ -13,6 +13,7 @@
  *   'home.month'              string | null
  *   'transactions.filters'    TransactionListParams (offset included)
  *   `imports.batch.${id}`     { row?: string; filter?: string }
+ *   'imports.status'          'all' | 'ready' | 'committed' (the history's slice, §14.66 j)
  *
  * A caller that opens a page *with* some state — an account's entries, a batch's
  * transactions — writes it with `useSetLedgerViewState()` and then navigates.

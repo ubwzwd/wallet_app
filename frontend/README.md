@@ -62,20 +62,25 @@ frontend/
                            #   export { default } from '@/screens/<area>/<Screen>'
     _layout.tsx            #   根布局：主题 / i18n / QueryClient / Auth / Toast / 确认框
     (auth)/                #   登录、注册
-    (app)/                 #   需要登录的一切
-      ledgers/             #     账本列表 / 新建 / 加入
-      settings.tsx         #     个人设置
-      l/[ledgerId]/        #     账本内的所有页面（首页 / 交易 / 账户 / 导入 / 账本设置）
+    (app)/                 #   需要登录的一切，全部是 _layout.tsx 那一个 Slot 的直接子路由（没有嵌套导航器）
+      home.tsx             #     首页 /home
+      transactions/        #     交易列表、记一笔、详情与编辑 /transactions*
+      transfers/           #     两腿转账详情与编辑 /transfers/:pairId*
+      imports/             #     导入历史、上传、格式说明、批次 /imports*
+      ledger.tsx           #     当前账本的设置 /ledger
+      settings.tsx         #     个人设置 /settings
+      accounts/            #     本人的账户列表与表单 /accounts*
+      ledgers/             #     零账本引导 / 新建 / 加入 /ledgers*
   src/
     api/                   # axios 客户端、类型（对齐 03-backend-api.md §5）、各 xxxApi
     constants/             # 构建期配置
-    domain/                # 纯函数：金额、四种 kind、转账、净值、路由、筛选序列化
+    domain/                # 纯函数：金额、四种 kind、转账、净值、路由表、筛选的规范化
     i18n/                  # i18next 初始化、格式化、错误码文案、zh / en 语言包
     navigation/            # 路由守卫、AppShell、侧栏 / 底部 tab / 顶栏
     pwa/                   # service worker 注册（仅生产 Web）
     queries/               # TanStack Query 的 hooks 与失效策略
     screens/               # 页面组件与它们私有的子组件
-    store/                 # AuthContext、LedgerContext
+    store/                 # AuthContext、当前账本（CurrentLedgerProvider）、浏览状态（ViewStateProvider）
     test/                  # 测试专用：renderWithProviders / mockApi / fixtures
     theme/                 # 设计 token（由 tokens.json 生成）、ThemeProvider
     ui/                    # 组件库（Button / TextField / Card / 各种选择器 / 图表…）
@@ -113,7 +118,7 @@ node scripts/gen-tokens.mjs --check   # 校验是否与 tokens.json 一致
 
 - `public/manifest.json` + `public/index.html`（`viewport-fit=cover`、apple 系列 meta）+ `public/pwa.css`（输入框 16px，防 iOS 聚焦缩放）。
 - `npm run build:web` 的第二步用 `workbox-config.cjs` 生成 `dist/sw.js`：
-  - 导航回落到 `/index.html`（深链接是核心功能，刷新 `/l/xxx/transactions` 必须拿到应用本体）；
+  - 导航回落到 `/index.html`（深链接是核心功能，刷新 `/transactions/<id>` 必须拿到应用本体）；
   - `GET /api/v1/categories`、`/api/v1/import-format`、`/api/v1/rates/currencies` 走 `CacheFirst`（30 天），**其余 `/api/` 一律 `NetworkOnly`**——账本数据是多人共享的，读到别人改过的旧数据比报错更糟；
   - `offline.html` 仍在预缓存里，但只在应用本体也缺失时兜底。
 - `src/pwa/registerSW.ts` 只在生产 Web 注册 worker；新 worker 接管（`controllerchange`）时由 `src/navigation/useSwUpdateToast.ts` 弹一条「刷新以使用新版本」。

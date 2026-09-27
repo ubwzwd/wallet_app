@@ -1,7 +1,10 @@
 /**
- * URL query ↔ `TransactionListParams` conversion (04 §1.3). Query keys match the
- * `GET /ledgers/{id}/transactions` params verbatim; `limit` never appears in the URL (it's
- * fixed at 50 per §1.3) and an invalid value for any field is dropped rather than kept.
+ * Query-shaped ↔ `TransactionListParams` conversion (04 §1.3). The filters no longer live
+ * in the URL (decision §14.66 e) — they are the ledger's `'transactions.filters'` view
+ * state — but a round trip through this pair is still how every write is normalised, so one
+ * filter state has exactly one spelling. Keys match the `GET /ledgers/{id}/transactions`
+ * params verbatim; `limit` is never part of it (fixed at 50 per §1.3) and an invalid value
+ * for any field is dropped rather than kept.
  */
 import type { TransactionListParams, TxKind } from '@/api/types';
 import { isValidIsoDate } from './dates';
