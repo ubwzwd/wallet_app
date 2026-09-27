@@ -80,7 +80,7 @@ function Harness(): React.JSX.Element {
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/index': Harness,
+  home: Harness,
 };
 
 function listRequests(): Array<{ url?: string; params?: Record<string, unknown> }> {
@@ -135,7 +135,7 @@ afterEach(() => {
 });
 
 test('a fixed condition travels with the request and has no way to be removed', async () => {
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+  renderRouter(ROUTES, { initialUrl: '/home', wrapper: Wrapper });
 
   const label = await screen.findByTestId('tx-picker-fixed');
   expect(label).toHaveTextContent('只看支出');
@@ -149,14 +149,14 @@ test('a fixed condition travels with the request and has no way to be removed', 
 
 test('filterRows narrows the list on the client', async () => {
   filterRows = (tx) => Number(tx.amount) < -1000;
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+  renderRouter(ROUTES, { initialUrl: '/home', wrapper: Wrapper });
 
   expect(await screen.findByTestId(`tx-picker-row-${PRICEY.id}`)).toBeTruthy();
   expect(screen.queryByTestId(`tx-picker-row-${CHEAP.id}`)).toBeNull();
 });
 
 test('picking a row hands the transaction back and closes', async () => {
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+  renderRouter(ROUTES, { initialUrl: '/home', wrapper: Wrapper });
 
   const row = await screen.findByTestId(`tx-picker-row-${CHEAP.id}`);
   // 04 §6.6: a row is a touch target, never a 32px-tall line of text.
@@ -174,7 +174,7 @@ test('picking a row hands the transaction back and closes', async () => {
 });
 
 test('the editable filters go into the request; the fixed one stays put', async () => {
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+  renderRouter(ROUTES, { initialUrl: '/home', wrapper: Wrapper });
 
   fireEvent.changeText(await screen.findByTestId('tx-picker-search'), '京东');
 
@@ -188,7 +188,7 @@ test('the editable filters go into the request; the fixed one stays put', async 
 });
 
 test('typing three characters costs one request, not three', async () => {
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+  renderRouter(ROUTES, { initialUrl: '/home', wrapper: Wrapper });
 
   const box = await screen.findByTestId('tx-picker-search');
   // The unfiltered candidate list; everything after this is the search box's doing.
@@ -218,7 +218,7 @@ test('a picker that is only mounted, not shown, asks the server for nothing', as
   // The refund tab keeps it mounted the whole time it is open; a closed overlay must not
   // cost a list request, nor a second `GET /sources` under a key the form does not share.
   pickerOpen = false;
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}`, wrapper: Wrapper });
+  renderRouter(ROUTES, { initialUrl: '/home', wrapper: Wrapper });
 
   await waitFor(() => expect(api.mock.history.get.length).toBeGreaterThan(0));
   expect(listRequest()).toBeUndefined();

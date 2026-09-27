@@ -11,7 +11,7 @@
  * form's `ledger`, and sign-in's `next`.
  */
 import type { Href } from 'expo-router';
-import type { TransactionListParams, TxKind, Uuid } from '@/api/types';
+import type { TxKind, Uuid } from '@/api/types';
 
 /**
  * A string `Href`. With typed routes generated, expo-router's `Href` is a union of the
@@ -102,27 +102,6 @@ export const routes = {
   /** The current ledger's settings — `/ledger`, distinct from personal `/settings`. */
   ledgerSettings,
 
-  /**
-   * @deprecated Transitional shim for §14.66: the old per-ledger builders, answering the
-   * ledger-free paths. The id, the month, the filters and the batch slice are all ignored —
-   * the ledger is the tab's current one and the rest is view state. It goes as soon as no
-   * screen calls it.
-   */
-  l: (_ledgerId: Uuid) => ({
-    home: (_month?: string) => home(),
-    transactions: (_params?: TransactionListParams) => transactions(),
-    transactionNew,
-    transaction,
-    transactionEdit,
-    transfer,
-    transferEdit,
-    imports,
-    importsGuide,
-    importsNew,
-    importBatch: (batchId: Uuid, _opts?: { row?: string; filter?: string }) =>
-      importBatch(batchId),
-    settings: ledgerSettings,
-  }),
 };
 
 /** Any ASCII control character, not just CR/LF: NUL, tab and the C0/DEL range can all

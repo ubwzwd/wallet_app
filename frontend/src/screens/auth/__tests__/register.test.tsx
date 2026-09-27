@@ -111,14 +111,14 @@ test('"go to sign in" carries the ?next= the user arrived with', async () => {
   mockGet('/config', { registration_open: true });
   mockCurrencies();
   const router = renderRouter(ROUTES, {
-    initialUrl: '/register?next=%2Fl%2Fabc%2Ftransactions',
+    initialUrl: '/register?next=%2Ftransactions',
     wrapper: Wrapper,
   });
 
   fireEvent.press(await screen.findByTestId('register-login-link'));
 
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
-  expect(router.getSearchParams().next).toBe('/l/abc/transactions');
+  expect(router.getSearchParams().next).toBe('/transactions');
 });
 
 test('an unsafe ?next= is dropped on the way to sign in', async () => {
