@@ -56,19 +56,13 @@ describe('routes table matches 04 §1.2 verbatim (§14.66 a)', () => {
     expect(Object.keys(routeModule).sort()).toEqual(['routes', 'safeNext']);
   });
 
-  test('the transitional per-ledger shim answers the flat paths and drops view state', () => {
-    const l = routes.l(LID);
-    expect(l.home('2026-08')).toBe('/home');
-    expect(l.transactions({ kind: ['expense'], source_id: ['s1'] })).toBe('/transactions');
-    expect(l.transactionNew({ kind: 'income' })).toBe('/transactions/new?kind=income');
-    expect(l.transaction('tx1')).toBe('/transactions/tx1');
-    expect(l.importBatch('b1', { row: 'r1', filter: 'uncategorized' })).toBe('/imports/b1');
-    expect(l.settings()).toBe('/ledger');
+  test('no per-ledger builder survives: the ledger is the tab\'s, not the address\'s', () => {
+    const table = routes as Record<string, unknown>;
+    expect(table.l).toBeUndefined();
     // The ledger-scoped account builders are gone, not kept as aliases (§14.42).
-    const shim = l as Record<string, unknown>;
-    expect(shim.sources).toBeUndefined();
-    expect(shim.sourceNew).toBeUndefined();
-    expect(shim.sourceEdit).toBeUndefined();
+    expect(table.sources).toBeUndefined();
+    expect(table.sourceNew).toBeUndefined();
+    expect(table.sourceEdit).toBeUndefined();
   });
 });
 

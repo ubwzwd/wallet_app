@@ -25,7 +25,7 @@
  * toast; with none left, the ledger pages send the user to `/ledgers`.
  */
 import React from 'react';
-import { usePathname, useRouter } from 'expo-router';
+import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -170,6 +170,8 @@ export function CurrentLedgerProvider({
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
+  // `usePathname()` has no query; 记一笔's entry parameters are read from here.
+  const search = useGlobalSearchParams();
   const queryClient = useQueryClient();
   const { data, isError, isFetching, refetch } = useLedgers();
   const unavailable = useUnavailableLedgers();
@@ -180,6 +182,8 @@ export function CurrentLedgerProvider({
   const [chosen, setChosen] = React.useState<string | null>(() =>
     getSessionPrefSync(PREF_NAMES.currentLedgerId),
   );
+  // What this tab remembered when it (re)loaded — see the reload check below.
+  const [remembered] = React.useState(chosen);
 
   const all = data?.items;
   const reachable = React.useMemo(
@@ -197,6 +201,8 @@ export function CurrentLedgerProvider({
   currentIdRef.current = currentId;
   const pathnameRef = React.useRef(pathname);
   pathnameRef.current = pathname;
+  const searchRef = React.useRef(search);
+  searchRef.current = search;
 
   const switchTo = React.useCallback(
     (id: Uuid): void => {
@@ -206,7 +212,7 @@ export function CurrentLedgerProvider({
       setChosen(id);
       void setSessionPref(PREF_NAMES.currentLedgerId, id);
       void setPref(PREF_NAMES.lastLedgerId, id);
-      const target = ledgerSwitchTarget(pathnameRef.current);
+      const target = ledgerSwitchTarget(pathnameRef.current, searchRef.current);
       if (target !== null) router.replace(target);
     },
     [router],
@@ -237,9 +243,25 @@ export function CurrentLedgerProvider({
     }
     if (!lostShown || !current) return;
     toast.info(t('ledger:unavailable.switched', { name: current.name }));
-    const target = ledgerSwitchTarget(pathnameRef.current);
+    // The tab has moved on for good: a later re-read of the list must not announce it again.
+    setChosen(current.id);
+    const target = ledgerSwitchTarget(pathnameRef.current, searchRef.current);
     if (target !== null) router.replace(target);
   }, [unavailable, current, queryClient, router, t]);
+
+  // The same loss found by a reload: the ledger this tab remembered is simply missing from
+  // the list (the user was removed, or it was deleted, while the tab was reloading). The tab
+  // only ever remembers a ledger it was shown, so a miss means it is gone — say where the tab
+  // went, as above. Only for the remembered pick: one made by `switchTo` since may still be on
+  // its way into the list, and that is the fallback's business, not a loss.
+  React.useEffect(() => {
+    if (chosen === null || chosen !== remembered || !all || isFetching || !current) return;
+    if (current.id === chosen || all.some((l) => l.id === chosen)) return;
+    setChosen(current.id);
+    toast.info(t('ledger:unavailable.switched', { name: current.name }));
+    const target = ledgerSwitchTarget(pathnameRef.current, searchRef.current);
+    if (target !== null) router.replace(target);
+  }, [chosen, remembered, all, isFetching, current, router, t]);
 
   // Last, so the effect above still sees the ledger the previous commit showed.
   React.useEffect(() => {

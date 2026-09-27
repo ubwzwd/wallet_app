@@ -37,7 +37,7 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   login: LoginScreen,
   register: () => <RNText>register page</RNText>,
-  'l/[ledgerId]/transactions/index': () => <RNText>transactions page</RNText>,
+  'transactions/index': () => <RNText>transactions page</RNText>,
 };
 
 beforeEach(async () => {
@@ -97,13 +97,13 @@ test('a legal ?next= is where a successful sign-in lands', async () => {
   mockPost('/auth/login', { access_token: 'tok', token_type: 'bearer' });
   mockGet('/me', makeUser());
   const router = renderRouter(ROUTES, {
-    initialUrl: '/login?next=%2Fl%2Fabc%2Ftransactions',
+    initialUrl: '/login?next=%2Ftransactions',
     wrapper: Wrapper,
   });
 
   await fillAndSubmit();
 
-  await waitFor(() => expect(router.getPathname()).toBe('/l/abc/transactions'));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
 });
 
 test('a protocol-relative ?next= is rejected and sign-in lands on /', async () => {
@@ -148,12 +148,12 @@ test('a malformed email never reaches the network', async () => {
 
 test('the link under the card goes to register, carrying a legal ?next=', async () => {
   const router = renderRouter(ROUTES, {
-    initialUrl: '/login?next=%2Fl%2Fabc%2Ftransactions',
+    initialUrl: '/login?next=%2Ftransactions',
     wrapper: Wrapper,
   });
 
   fireEvent.press(await screen.findByTestId('login-register-link'));
 
   await waitFor(() => expect(router.getPathname()).toBe('/register'));
-  expect(router.getSearchParams().next).toBe('/l/abc/transactions');
+  expect(router.getSearchParams().next).toBe('/transactions');
 });

@@ -240,7 +240,7 @@ describe('api client', () => {
         code: 'skill_outdated',
         current_version: '2026-09-10',
         file_version: '2026-06-01',
-        guide_url: '/l/abc/imports/guide',
+        guide_url: '/imports/guide',
       };
       api.mockPost('/ledgers/abc/imports', body, 400);
       const err = await expectApiError(apiClient.post('/ledgers/abc/imports', {}));

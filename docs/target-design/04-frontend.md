@@ -106,7 +106,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 | `/home` | 首页（统计） | 一级页 | 账本页。月份是浏览状态 `'home.month'`，不写进 `?month=`（§4.4） |
 | `/transactions` | 交易列表 | 一级页 | 账本页。**不带查询参数**：筛选与翻页是浏览状态 `'transactions.filters'`（§1.3、§4.5）；带着意图进列表的入口先写浏览状态再导航 |
 | `/transactions/new` | 记一笔 | 子页 · 上级 `/transactions` | 账本页、表单页（窄屏不画底栏，§1.4）。保留 `?kind=expense\|income\|refund\|transfer`（默认 `expense`）、`?source_id=`、`?refund_of=`、`?copy_of=`、`?next=`——只在进入那一刻有意义，不是状态（决策 §14.66 f） |
-| `/transactions/:txId` | 交易详情 | 子页 · 上级 `/transactions` | 账本页。单腿交易；按当前账本取，不属于它就是 404 页（决策 §14.66 h） |
+| `/transactions/:txId` | 交易详情 | 子页 · 上级 `/transactions` | 账本页。单腿交易；按当前账本取，不属于它就是详情页自己的「找不到」态（决策 §14.66 h，§1.5 第 5 条） |
 | `/transactions/:txId/edit` | 编辑单笔 | 子页 · 上级 该交易详情 | 账本页、表单页 |
 | `/transfers/:pairId` | 两腿转账详情 | 子页 · 上级 `/transactions` | 账本页。两腿一起显示 |
 | `/transfers/:pairId/edit` | 编辑两腿转账 | 子页 · 上级 该转账详情 | 账本页、表单页。走 `PATCH .../transactions/transfer/{pair_id}`（决策 §1.2） |
@@ -179,7 +179,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 
 上图窄屏顶栏是一级页的形态；子页的顶栏是「圆形 ‹ + 居中标题」，见下文与 §1.4.1。（2026-09-26 按决策 §14.64 同步）
 
-- **一套壳**：登录后，除了「一本账都没有」时的引导页（屏幕稿 15）与此时的新建 / 加入账本页、以及登录注册页，所有页面——账本里的各页、`/ledgers/new`、`/ledgers/join`、`/settings`——都套同一个壳：宽屏侧栏，窄屏顶栏 + 底栏。不在账本路由上时，壳指向「最近打开的那本账」（与 `/` 落地的是同一本；账本列表还没回来时不猜，先不画依赖它的部分）。（2026-09-26 按决策 §14.64 同步）`/ledgers` 不再是页面：有账本时直接跳到最近那本账的首页，只有零账本时才停在那里显示全屏引导（§4.3）；它仍在登录后布局（`app/(app)/_layout.tsx`）的壳判断里，零账本全屏的判断不变。（2026-09-26 按决策 §14.65 同步）`/accounts*`（账户列表与表单）同样套这个壳，壳指向最近那本账：`withShell` 的判断加上 `pathname.startsWith(routes.accounts())`。（2026-09-16 按决策 §14.62 同步）**不再有「账本里 / 账本外」之分**：当前账本由挂在 `(app)` 层的 `CurrentLedgerProvider` 提供（§2.2），它在壳的外层，所以 `/settings`、`/accounts*`、`/ledgers/new`、`/ledgers/join` 上壳拿到的也是同一个当前账本；壳直接读 `useOptionalLedgerContext()`（零账本时为 `null`），原来给账本外的壳用的 `useChromeLedger()` 已删。挂载顺序是 `RequireAuth` → `CurrentLedgerProvider` → `ViewStateProvider` → `AppShell` → `Slot`，账本页另过 `RequireLedger`；壳在零账本的 `/ledgers*` 上仍不画（§14.64 / §14.65 不变）。（2026-09-27 按决策 §14.66 同步）
+- **一套壳**：登录后，除了「一本账都没有」时的引导页（屏幕稿 15）与此时的新建 / 加入账本页、以及登录注册页，所有页面——账本里的各页、`/ledgers/new`、`/ledgers/join`、`/settings`——都套同一个壳：宽屏侧栏，窄屏顶栏 + 底栏。不在账本路由上时，壳指向「最近打开的那本账」（与 `/` 落地的是同一本；账本列表还没回来时不猜，先不画依赖它的部分）。（2026-09-26 按决策 §14.64 同步）`/ledgers` 不再是页面：有账本时直接跳到最近那本账的首页，只有零账本时才停在那里显示全屏引导（§4.3）；它仍在登录后布局（`app/(app)/_layout.tsx`）的壳判断里，零账本全屏的判断不变。（2026-09-26 按决策 §14.65 同步）`/accounts*`（账户列表与表单）同样套这个壳，壳指向最近那本账。（2026-09-16 按决策 §14.62 同步）扁平化之后布局里不再有 `withShell` 判断：`AppShell` 包住登录后的每一页，只在「零账本 + `/ledgers*`」时自己让开（`AppShell.tsx` 里按 `isActivePath(pathname, routes.ledgers())` 与当前账本是否为 `null` 判断）。（2026-09-27 验收时按代码补正）**不再有「账本里 / 账本外」之分**：当前账本由挂在 `(app)` 层的 `CurrentLedgerProvider` 提供（§2.2），它在壳的外层，所以 `/settings`、`/accounts*`、`/ledgers/new`、`/ledgers/join` 上壳拿到的也是同一个当前账本；壳直接读 `useOptionalLedgerContext()`（零账本时为 `null`），原来给账本外的壳用的 `useChromeLedger()` 已删。挂载顺序是 `RequireAuth` → `ViewStateProvider` → `CurrentLedgerProvider` → `AppShell` → `RequireLedger`（只对账本页生效）→ `Slot`；壳在零账本的 `/ledgers*` 上仍不画（§14.64 / §14.65 不变）。（2026-09-27 按决策 §14.66 同步；挂载顺序 2026-09-27 验收时按代码补正）
 - 窄屏底部 tab 五项：**首页 / 交易 / 记一笔（中央凸起按钮）/ 导入 / 我的**（决策 §0.6）。中央按钮不是 tab，是直接跳 `/transactions/new?kind=expense`；长按（或右侧小箭头）展开四个 kind 的快捷入口。（2026-09-27 按决策 §14.66 同步）
 - **窄屏底栏是全局的**：上一条「一套壳」里的每一页都有它，五格的目标都是当前账本，账本外（`/settings`、`/ledgers/new`、`/ledgers/join`）是最近那本账——中间「＋」与长按的四种 kind 也指向那本账的记一笔。高亮规则：账本里按所在页高亮对应格；`/settings` 高亮「我的」；`/ledgers/new`、`/ledgers/join` 五格都不高亮。一本账都没有时不画底栏。（2026-09-26 按决策 §14.64 同步）`/accounts` 上底栏照画、五格都不高亮（底栏没有「账户」格）；`/accounts/new`、`/accounts/:sourceId/edit` 是表单页，不画底栏（下一条）。（2026-09-16 按决策 §14.62 同步）五格的目标是固定的扁平路径 `/home`、`/transactions`、`/transactions/new?kind=…`、`/imports`，指的总是当前账本（§2.2），不再按「账本里 / 账本外」分别拼地址。**高亮规则**（`isActivePath`）：`/home` 高亮首页；`/transactions*`（含 `/transfers/*`）高亮交易；`/imports*` 高亮导入；`/accounts*` 高亮账户（只在宽屏侧栏有这一项）；`/settings` 高亮我的；`/ledger`（账本设置）与 `/ledgers*` 什么都不高亮。（2026-09-27 按决策 §14.66 同步）
 - **唯一例外：表单页窄屏不画底栏**（屏幕稿 04 / 05 / 06 / 09 表单的窄屏画框都没有底栏）：`/transactions/new`、`/transactions/:txId/edit`、`/transfers/:pairId/edit`、`/accounts/new`、`/accounts/:sourceId/edit` 在窄屏只有壳顶栏（子页形态）与页面自己钉在底部的保存条。判断放在导航层：`backTarget.ts` 旁边一个纯函数 `isFormRoute(pathname)`（`formRoute.ts`），按上面五条新路径匹配；`AppShell` 据此不画 `BottomTabBar`，`usePublishBottomTabInset` 发布 0（页面底部不再为底栏留白）。宽屏侧栏不受影响，照常画。（2026-09-26 按决策 §14.65 同步；路径 2026-09-27 按决策 §14.66 同步）
@@ -271,7 +271,9 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
                                       → 没有 / 不在列表里：last_ledger_id
                                       → 仍没有 / 不在列表里：列表第一本
                                       → 列表为空：ledger = null
-                                      选中后写回两处存储
+                                      选中后写回两处存储；本标签页记住的那本
+                                      不在列表里（刷新前被移出 / 删除）→ 另加
+                                      toast「账本不可用，已切到 X」
                                               │
                               ┌───────────────▼───────────────┐
                               │ 目标是账本页（/home … /ledger）？│
@@ -282,7 +284,8 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
                        /accounts*、/ledgers*）      否 → 渲染页面
                                                            │
                                                            ▼ 使用中 GET /ledgers/{id} 404
-                                              列表里还有别的账本 ? → switchTo(另一本)
+                                              （任一账本内请求 404 都会先重取一次它）
+                                              列表里还有别的账本 ? → 换到另一本
                                                                     + toast「账本不可用，已切到 X」
                                                               否 → /ledgers
 ```
@@ -292,8 +295,8 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 1. **未登录**：跳 `/login?next=<encodeURIComponent(原 URL)>`；登录成功后回 `next`，`next` 非法（非本站相对路径）时回 `/`。
 2. **登录后落地**：`/` 在已登录时有账本 → `/home`，零账本 → `/ledgers`（决策 §14.66 h）。落在哪本账由当前账本的选择规则决定（上图与 §2.2）：本标签页 `sessionStorage` 的 `wallet:current_ledger_id` → `localStorage` 的 `wallet:last_ledger_id` → 账本列表第一本；命中的 id 不在 `GET /ledgers` 结果里也取第一本，并把选中的 id 写回两处。一本都没有（注册时会自动建默认账本，决策 §2，但删除 / 退出后仍可能）就去 `/ledgers`。`/`、`/ledgers`、`CurrentLedgerProvider` 用同一个纯函数 `pickCurrentLedger(ledgers, sessionId, lastId)`，不各写一套（原来的落地选择逻辑与「读上次账本」的钩子收敛进它）。
 3. **账本页的守卫**（决策 §14.66 c）：路由表里 `/home` 到 `/ledger` 这一组在顶层布局里统一过 `RequireLedger`：当前账本为 `null`（零账本）→ `<Redirect>` 到 `/ledgers`；账本列表加载中 / 读失败由外层的 `CurrentLedgerProvider` 画骨架 / 错误 + 重试。`/settings`、`/accounts*`、`/ledgers*` 不过它。地址里没有账本 id，所以「打开了一本不属于我的账」这种情况不再存在，原来的「这个账本不存在，或者你不在它的成员里」页（`LedgerGone`）删除，由第 4 条的自动切换取代。
-4. **中途被移出 / 账本被删**：后端对「账本不可见」和「账本里的某个子资源不存在」用的是**同一个** 404 `not_found`（[`./03-backend-api.md`](./03-backend-api.md) §3.3、§4.2），所以前端不能凭任意一个 404 就判定「被移出」。判定的锚点是**账本详情本身**：`GET /ledgers/{id}`（query key `l/{id}/detail`）返回 404 `not_found` 时（现有的 `useLedgerGone`），清掉该账本的所有 query 缓存（`removeQueries(['l', id])`），列表里还有别的账本就 `switchTo` 到其中一本并 toast `ledger:unavailable.switched`（「账本不可用，已切到 {name}」），一本都没有了就去 `/ledgers`。其他账本内请求收到 404 时只让该页面显示「这条记录不存在或已被删除」，同时触发一次账本详情的重取来确认是不是被移出了。
-5. **深链到别的账本的资源**（决策 §14.66 h）：地址不带账本，打开别人发来的 `/transactions/<id>`（或 `/transfers/<pairId>`、`/imports/<batchId>`）时用本地记住的当前账本去取；不属于它就是 404「不存在或无权限」页（现有），不去别的账本里找。这是用户接受的代价。
+4. **中途被移出 / 账本被删**：后端对「账本不可见」和「账本里的某个子资源不存在」用的是**同一个** 404 `not_found`（[`./03-backend-api.md`](./03-backend-api.md) §3.3、§4.2），所以前端不能凭任意一个 404 就判定「被移出」。判定的锚点是**账本详情本身**：`GET /ledgers/{id}`（query key `l/{id}/detail`）返回 404 `not_found` 时（`QueryCache.onError` 认出这个 key，调根布局注册的 `markLedgerUnavailable`，`src/store/ledgerUnavailable.ts`），清掉该账本的所有 query 缓存（`removeQueries(['l', id])`），列表里还有别的账本就换到其中一本（和 `switchTo` 同一套：路径不变，带资源 id 的页退到列表页）并 toast `ledger:unavailable.switched`（「账本不可用，已切到 {name}」），一本都没有了就去 `/ledgers`。其他账本内请求（query key `['l', id, …]`）收到 404 时只让该页面显示「这条记录不存在或已被删除」，同时由 `QueryCache.onError` 触发一次账本详情的重取（`fetchQuery`，`staleTime: 0`）来确认是不是被移出了——账本还在就什么都不做，账本详情也 404 就走上面这条。**刷新时才发现**（关掉 / 刷新标签页期间被移出）：本标签页 `sessionStorage` 记住的账本不在新读到的列表里，同样换到另一本并 toast 同一句话（带资源 id 的页退到列表页）；只对本标签页记住的那本这样做——`last_ledger_id` 只是设备上的提示，不在列表里就静默取第一本。（2026-09-27 验收时按代码补正）
+5. **深链到别的账本的资源**（决策 §14.66 h）：地址不带账本，打开别人发来的 `/transactions/<id>`（或 `/transfers/<pairId>`、`/imports/<batchId>`）时用本地记住的当前账本去取；不属于它就是该页自己的「不存在或无权限」态（现有 `EmptyState`：交易 / 转账详情是 `errors:not_found`「找不到这条记录，它可能已经被删除，或者你不在这个账本里」+「重试」+ 回列表「交易」；批次页是「重试」+ 页头的返回），不去别的账本里找。这是用户接受的代价。地址根本不是页面时（如原来的 `/l/<id>/…`）才是全屏 404 页 `*`。（2026-09-27 验收时按代码补正）
 6. **401**：拦截器清令牌 → `AuthContext` 转 ANONYMOUS → 守卫把当前路由变成 `/login?next=...`（现状的缺陷是拦截器清了存储却没人通知 `AuthContext`，界面停在原页面，`frontend/src/api/client.ts:58-63`；§2.1 修掉它）。
 7. **注册关闭**：`/register` 仍可访问；页面挂载时先取 `GET /config`（匿名可读，决策 §14.46），`registration_open=false` 就用一张提示卡**替代整个表单**，而不是渲染一个禁用的表单让人白填；`config` 还没回来时渲染表单骨架。提交后拿到 403 `registration_closed` 也切到同一状态（服务端始终是权威）。
 
@@ -315,7 +318,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 |---|---|---|
 | 认证 | `user`、令牌、登录/登出动作 | `AuthContext`（React state + AsyncStorage） |
 | 账本上下文 | 当前 `ledgerId`、`ledger`、`myRole`、`baseCurrency` | `CurrentLedgerProvider`（本标签页 `sessionStorage` → `last_ledger_id` → `GET /ledgers` 第一本，§2.2）（2026-09-27 按决策 §14.66 同步） |
-| 浏览状态 | 首页月份、交易列表筛选与翻页、导入批次切片与定位行 | `ViewStateProvider`（内存，按账本分桶，刷新即丢，§2.2.1）（2026-09-27 按决策 §14.66 同步） |
+| 浏览状态 | 首页月份、交易列表筛选与翻页、导入批次切片与定位行、导入历史切片 | `ViewStateProvider`（内存，按账本分桶，刷新即丢，§2.2.1）（2026-09-27 按决策 §14.66 同步） |
 | 服务端数据 | 一切来自接口的数据 | TanStack Query |
 | 界面偏好 | 语言、主题、上次账本（`last_ledger_id`）、本标签页账本（`sessionStorage` 的 `current_ledger_id`）、列表密度 | `localStorage` / `sessionStorage` / AsyncStorage（2026-09-27 按决策 §14.66 同步） |
 
@@ -381,11 +384,11 @@ interface LedgerContextValue {
 
 文件仍是 `src/store/LedgerContext.tsx`，导出 `CurrentLedgerProvider`、`useLedgerContext()`（形状如上，不变）与 `useOptionalLedgerContext()`（零账本时返回 `null`）。要点：
 
-- **挂在 `(app)` 层，不再由路由参数驱动**：`app/(app)/_layout.tsx` 里是 `RequireAuth` → `CurrentLedgerProvider` → `ViewStateProvider` → `AppShell` → `Slot`，所以登录后的每一页——账本页、`/settings`、`/accounts*`、`/ledgers*`——拿到的都是同一个当前账本；壳直接读 `useOptionalLedgerContext()`，原来给账本外的壳用的 `useChromeLedger()` 删除。`ledgers` 来自 `useQuery(['global','ledgers'])`：还没到时 provider 渲染 `AppSkeleton`，读失败渲染 `LedgersUnavailable`（错误 + 重试），零账本时 `ledger` 为 `null`，账本页由 `RequireLedger` 挡住（→ `/ledgers`，§1.5 第 3 条）。
+- **挂在 `(app)` 层，不再由路由参数驱动**：`app/(app)/_layout.tsx` 里是 `RequireAuth` → `ViewStateProvider` → `CurrentLedgerProvider` → `AppShell` → `RequireLedger`（只对账本页生效）→ `Slot`（`ViewStateProvider` 在外层，列表重读时 provider 画骨架也不会把浏览状态卸掉；它按 `useOptionalLedgerContext()` 取桶，挂在哪一层都读得到当前账本——2026-09-27 验收时按代码补正），所以登录后的每一页——账本页、`/settings`、`/accounts*`、`/ledgers*`——拿到的都是同一个当前账本；壳直接读 `useOptionalLedgerContext()`，原来给账本外的壳用的 `useChromeLedger()` 删除。`ledgers` 来自 `useQuery(['global','ledgers'])`：还没到时 provider 渲染 `AppSkeleton`，读失败渲染 `LedgersUnavailable`（错误 + 重试），零账本时 `ledger` 为 `null`，账本页由 `RequireLedger` 挡住（→ `/ledgers`，§1.5 第 3 条）。
 - **当前账本的来源**（决策 §14.66 b）：Web 上是本标签页 `sessionStorage` 的 `wallet:current_ledger_id` → 没有就 `localStorage` 的 `wallet:last_ledger_id` → 没有就账本列表第一本；命中的 id 不在列表里也取第一本。选中后**两处都写回**。原生端没有 `sessionStorage`，只有 `AsyncStorage` 的 `@wallet_app:last_ledger_id`。选择是一个纯函数 `pickCurrentLedger(ledgers, sessionId, lastId)`，`/` 落地、`/ledgers` 跳转、provider 共用它（原来的落地选择函数与「读上次账本」的钩子收敛进来，不另写一套）。存取经 `src/utils/prefs.ts`：原有的 `getPrefSync` / `setPref`（`localStorage`，`wallet:` 前缀）之外新增 `getSessionPrefSync` / `setSessionPref`（`sessionStorage`，同一前缀；原生端退化为 `AsyncStorage` 的 `last_ledger_id`）。
 - **这样做的效果**：刷新回到本标签页的账本；同一浏览器两个标签页可以各开一本账、互不干扰（各自的 `sessionStorage`）；新开标签页落到最后一次切到的那本（`last_ledger_id`）。
-- **`switchTo(id)`**（决策 §14.66 d）：写两处存储 + 更新 state，**不动 URL、不进浏览器历史**——留在当前页面，换的是上下文；页面里按账本分桶的浏览状态自然换成那本账自己的（§2.2.1），query key `['l', ledgerId, …]` 也随之换桶。当前路径带资源 id 时资源不属于新账本，退到它的列表页：`/transactions/:txId*`、`/transfers/:pairId*` → `router.replace('/transactions')`，`/imports/:batchId` → `router.replace('/imports')`（`replace`，同样不多出一条历史）。切换器（宽屏弹层、窄屏 Sheet）选账本在哪一页都是这一个动作，不再 `router.navigate` 到那本账的首页。
-- **被移出 / 账本被删**（决策 §14.66 c）：`GET /ledgers/{id}` 404（现有的 `useLedgerGone`）→ 切到列表里另一本 + toast `ledger:unavailable.switched`（「账本不可用，已切到 {name}」，zh / en 同步）；没有别的账本 → `/ledgers`。原来的「账本不可用」页组件 `LedgerGone` 删除（§1.5 第 4 条）。
+- **`switchTo(id)`**（决策 §14.66 d）：写两处存储 + 更新 state，**不动 URL、不进浏览器历史**——留在当前页面，换的是上下文；页面里按账本分桶的浏览状态自然换成那本账自己的（§2.2.1），query key `['l', ledgerId, …]` 也随之换桶。当前路径带资源 id 时资源不属于新账本，退到它的列表页：`/transactions/:txId*`、`/transfers/:pairId*` → `router.replace('/transactions')`，`/imports/:batchId` → `router.replace('/imports')`（`replace`，同样不多出一条历史）。记一笔若带着指向旧账本记录的进入参数（`?source_id=` / `?refund_of=` / `?copy_of=`）打开，切换后 `replace` 成只留种类的 `/transactions/new?kind=…`（`next` 也去掉），刷新时不会把旧账本的账户、原单套到新账本上；已填的金额、备注等留在表单里（`ledgerSwitchTarget(pathname, search)`，`src/navigation/ledgerRoute.ts`）。（2026-09-27 验收时按代码补正）切换器（宽屏弹层、窄屏 Sheet）选账本在哪一页都是这一个动作，不再 `router.navigate` 到那本账的首页。
+- **被移出 / 账本被删**（决策 §14.66 c）：`GET /ledgers/{id}` 404（query cache 的 ledger-gone 处理 → `markLedgerUnavailable`，`src/store/ledgerUnavailable.ts`；任一账本内请求 404 会先重取一次账本详情来确认）→ 切到列表里另一本 + toast `ledger:unavailable.switched`（「账本不可用，已切到 {name}」，zh / en 同步）；没有别的账本 → `/ledgers`。刷新后才发现（本标签页记住的账本已不在列表里）同样切走并 toast 这一句。原来的「账本不可用」页组件 `LedgerGone` 删除（§1.5 第 4 条）。（2026-09-27 验收时按代码补正）
 - `myRole` 决定账本设置里那些只有 owner 能点的操作（决策 §2）。
 - web 上 `localStorage` / `sessionStorage` 的键统一由 `src/utils/prefs.ts` 加 `wallet:` 前缀，原生端沿用 `@wallet_app:` 前缀（同步 2026-09-12）。
 - **不变的**（决策 §14.66 i）：后端接口路径照旧带账本 id（`/api/v1/ledgers/{id}/...`，由上下文里的 `ledgerId` 拼）；query key `['l', ledgerId, …]` 照旧按上下文里的账本分桶。
@@ -395,7 +398,7 @@ interface LedgerContextValue {
 首页月份、交易列表的筛选与翻页、导入批次的切片与定位行不写进地址，而是内存里按账本保存的「浏览状态」。新文件 `src/store/ViewState.tsx`：（2026-09-27 按决策 §14.66 新增）
 
 ```ts
-// 挂在 (app) 层、CurrentLedgerProvider 之内
+// 挂在 (app) 层、CurrentLedgerProvider 之外（按 useOptionalLedgerContext() 取桶）
 function ViewStateProvider(props: { children: React.ReactNode }): JSX.Element;
 
 // 读写当前账本桶里的一个键；initial 是这个键在该账本桶里还没有值时的默认值
@@ -409,18 +412,19 @@ function useSetLedgerViewState(): <T>(key: string, value: T) => void;
 ```
 
 - **存储**：provider 内部是 `Map<ledgerId, Map<key, unknown>>`，以 `useLedgerContext().ledgerId` 分桶（零账本时用 `'-'` 这个桶）。**纯内存**：应用打开期间在页面之间来回不丢，刷新即丢，回到默认（本月、无筛选、第一页、批次默认切片）。不写 `localStorage` / `sessionStorage`。
-- **三个键**（键名是约定，调用方不另起）：
+- **四个键**（键名是约定，调用方不另起；`imports.status` 是 §14.66 j 补的）：
 
 | 键 | 类型 | 谁用 | 默认 |
 |---|---|---|---|
 | `'home.month'` | `string \| null`（`YYYY-MM`） | 首页月份切换器、趋势图点柱（§4.4） | `null` = 本月 |
 | `'transactions.filters'` | `TransactionListParams`（含 `offset`） | 交易列表的筛选、分页（`useTxFilters`，§1.3、§4.5） | `{}` = 无筛选、第一页 |
 | `` `imports.batch.${batchId}` `` | `{ row?: string; filter?: string }` | 导入批次的定位行与行内筛选切片（§4.11.6） | `{}` = 按 §4.11.6 的默认切片、不定位 |
+| `'imports.status'` | `'all' \| 'ready' \| 'committed'` | 导入历史的「全部 / 待提交 / 已提交」切片（§4.10，决策 §14.66 j） | `'all'` |
 
 - **按账本分桶**：在 A 账本选了 8 月、筛了「餐饮」，切到 B 账本看到的是 B 自己的月份与筛选（第一次是默认），切回 A 还是 8 月 + 餐饮。
 - **后退不撤销**：换月份、改筛选、翻页、换切片都只写浏览状态，**不进浏览器历史**；浏览器后退回到上一个页面，而不是上一个筛选或月份。
 - **带着意图进入列表**：调用方先 `useSetLedgerViewState()` 写目标键，再 `router.navigate(routes.transactions())`（或对应页面）。例如首页点账户行写 `{source_id: [id]}`、已提交批次「查看这批交易」写 `{import_batch_id: bid}`。写入是**整值替换**，不和已有筛选合并——带着意图进来就只看这个意图。
-- 原来读 `useLocalSearchParams` 与写 `router.setParams` 的地方（首页的 `month`、`useTxFilters` 的三处、批次页的 `row` / `filter`）全部改读写它；表单的 `kind / source_id / refund_of / copy_of / next`、详情的 `txId` / `pairId`、账户的 `sourceId` / `ledger`、`RequireAuth` 的 `next` 仍读地址（§1.3「仍在查询串里的」）。
+- 原来读 `useLocalSearchParams` 与写 `router.setParams` 的地方（首页的 `month`、`useTxFilters` 的三处、批次页的 `row` / `filter`、导入历史的 `status`）全部改读写它，代码里已没有 `router.setParams`；表单的 `kind / source_id / refund_of / copy_of / next`、详情的 `txId` / `pairId`、账户的 `sourceId` / `ledger`、`RequireAuth` 的 `next` 仍读地址（§1.3「仍在查询串里的」）。
 
 ### 2.3 分类表：启动拉取，按 `version` 永久缓存（决策 §1.3）
 
@@ -1573,7 +1577,7 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 - **类型顺序固定**：**储蓄卡 `checking` → 信用卡 `credit` → 现金 `cash` → 其他 `other`**（决策 §14.48：**没有 `savings`**），宽窄两种布局都按这个顺序排。
 - **每行**：名称、类型图标的圆底、类型徽章、币种、`balance`（非基准币种时另给 `balance_base` 与所用汇率日期）。信用卡的余额是负数，显示成「欠 ¥3,204.00」更直白。
 - **「共享到」**（决策 §14.62 b / h）：每行新增一列「共享到」，我所在的**每一本账**一枚 `Chip`——已共享（`shared_to` 含它）是 solid，未共享是 soft；点一下切换：未共享 → `PUT /sources/{sid}/ledgers/{lid}`，已共享 → `DELETE /sources/{sid}/ledgers/{lid}`。乐观更新可选；失败回滚 chip 并 Toast。宽屏是表格里的一列（放在「折算」与「···」之间）；窄屏放在账户行下面的一行 chip。说明小字：「我在任何账本里都能用自己的账户；共享是让这本账的其他成员也能用它记账。取消共享后他们不能再用它记新账，已记的保留。」归档账户的 chip 行照样显示、可切换（归档账户本来就不能记账）。（2026-09-16 按决策 §14.62 同步）
-- **归档**：归档账户折叠在底部「已归档账户」块里，`?include_archived=1` 展开（这个参数只决定这一块展开与否）。（2026-09-16 按屏幕稿同步，决策 §14.59）块头是圆形图标 + 一句「不计入净资产与首页，历史交易照旧保留、照旧能搜到」+ 数量；展开后是**同一套列的行**，置灰，「折算」那一列换成「归档于 2025-11」（`archived_at`，决策 §14.50）。（2026-09-15 按屏幕稿同步，决策 §14.56）
+- **归档**：归档账户折叠在底部「已归档账户」块里，`?include_archived=1` 展开（这个参数只决定这一块展开与否）。（2026-09-16 按屏幕稿同步，决策 §14.59）它只是**进入参数**（决策 §14.66 j）：首页「不含 N 个已归档账户」带着它进来，页面挂载时读一次；之后在页内展开 / 折叠是组件状态，不改地址、不进历史。列表请求本身总是带 `include_archived`（折叠时也要显示数量）。（2026-09-27 验收时按决策与代码补正）块头是圆形图标 + 一句「不计入净资产与首页，历史交易照旧保留、照旧能搜到」+ 数量；展开后是**同一套列的行**，置灰，「折算」那一列换成「归档于 2025-11」（`archived_at`，决策 §14.50）。（2026-09-15 按屏幕稿同步，决策 §14.56）
 - **交互**：点击 → 编辑（`routes.accountEdit(sid)`）；「＋ 新建账户」→ `routes.accountNew()`；行操作「归档 / 取消归档」「删除」。（2026-09-16 按决策 §14.62 同步）
   - **归档确认**（决策 §14.50）：「归档后不能再记账、也不能作为导入目标，历史记录保留。**该账户余额 ¥1,204.00 将从净资产中移除。**」
   - **删除**只在没有交易时可用（决策 §3），否则按钮禁用并提示「这个账户下有交易，只能归档」；服务端也会用 `source_has_transactions` 兜底——**任何账本**里有交易或导入批次引用这张卡都算（决策 §14.62 f）。（2026-09-16 按决策 §14.62 同步）
@@ -2334,8 +2338,8 @@ formatDateTimeShort(iso)             // '09-08 07:12'（操作记录）
 
 | 范围 | 关键用例 |
 |---|---|
-| 路由守卫（§1.5） | 未登录访问 `/transactions` → 落到 `/login?next=…`；登录后回到原 URL；零账本用户打开 `/home` → 落到 `/ledgers` 引导；账本列表读失败 → 错误 + 重试（`LedgersUnavailable`）；`/` 有账本 → `/home`、零账本 → `/ledgers`；深链他人账本的交易 `/transactions/<别的账本的 id>` → 渲染 404「不存在或无权限」页，**不**切到那本账（2026-09-27 按决策 §14.66 同步） |
-| 当前账本（§2.2，决策 §14.66 b–d） | **切换账本不进历史**：在 `/transactions` 上 A → B → A 连切几次后点浏览器后退，回到进 `/transactions` 之前的那一页（如 `/home`），而不是上一本账；切换后路径不变、请求改发到新账本、写 `sessionStorage` 的 `current_ledger_id` 与 `last_ledger_id`；在 `/transactions/:txId`、`/transfers/:pairId`、`/imports/:batchId` 上切换 → `replace` 到 `/transactions` / `/imports`。**刷新保留本标签页的账本**：`sessionStorage` 里是 B、`last_ledger_id` 是 A 时，挂载后当前账本是 B。**两个标签页各开一本账**：两份 `sessionStorage` 分别是 A 与 B 时各自渲染自己的账本，互不改写对方（`last_ledger_id` 是最后切的那本）。`sessionStorage` 的 id 不在列表里 → 取 `last_ledger_id` → 再取第一本并写回。**被移出自动切换**：`GET /ledgers/{A}` 返回 404 → 当前账本换成 B、出 toast「账本不可用，已切到 B」；只有 A 一本时 → 去 `/ledgers`（2026-09-27 按决策 §14.66 同步） |
+| 路由守卫（§1.5） | 未登录访问 `/transactions` → 落到 `/login?next=…`；登录后回到原 URL；零账本用户打开 `/home` → 落到 `/ledgers` 引导；账本列表读失败 → 错误 + 重试（`LedgersUnavailable`）；`/` 有账本 → `/home`、零账本 → `/ledgers`；深链他人账本的交易 `/transactions/<别的账本的 id>` → 渲染详情页自己的「不存在或无权限」态（`tx-detail-error`，§1.5 第 5 条），**不**切到那本账；原来的 `/l/<id>/…` 地址 → 全屏 404 页，「回到首页」→ `/` → `/home`（2026-09-27 按决策 §14.66 同步） |
+| 当前账本（§2.2，决策 §14.66 b–d） | **切换账本不进历史**：在 `/transactions` 上 A → B → A 连切几次后点浏览器后退，回到进 `/transactions` 之前的那一页（如 `/home`），而不是上一本账；切换后路径不变、请求改发到新账本、写 `sessionStorage` 的 `current_ledger_id` 与 `last_ledger_id`；在 `/transactions/:txId`、`/transfers/:pairId`、`/imports/:batchId` 上切换 → `replace` 到 `/transactions` / `/imports`。**刷新保留本标签页的账本**：`sessionStorage` 里是 B、`last_ledger_id` 是 A 时，挂载后当前账本是 B。**两个标签页各开一本账**：两份 `sessionStorage` 分别是 A 与 B 时各自渲染自己的账本，互不改写对方（`last_ledger_id` 是最后切的那本）。`sessionStorage` 的 id 不在列表里 → 取 `last_ledger_id` → 再取第一本并写回，并出 toast「账本不可用，已切到 X」（刷新后才发现被移出；在带资源 id 的页上同时 `replace` 到列表页）；只是 `last_ledger_id` 不在列表里时静默取第一本、不出 toast。**被移出自动切换**：`GET /ledgers/{A}` 返回 404 → 当前账本换成 B、出 toast「账本不可用，已切到 B」；账本 A 里别的请求 404 → 重取一次 `GET /ledgers/{A}` 确认，账本还在就什么都不做；只有 A 一本时 → 去 `/ledgers`。**记一笔带 `?source_id=` 等进入参数时切换** → `replace` 成 `/transactions/new?kind=…`（2026-09-27 按决策 §14.66 同步；刷新发现、404 确认与记一笔参数三条 2026-09-27 验收时补） |
 | 登录页 | 401 后表单**不被清空**、错误可见（现状的反面，现状文档 §2.5） |
 | 注册页（§4.2，决策 §14.46） | `GET /config` 返回 `registration_open:false` → **渲染提示卡而不是表单**；返回 `true` → 渲染表单；提交后 403 `registration_closed` → 切到提示卡 |
 | 记一笔 — 四 kind | 支出提交负金额、收入正金额；transfer tab 不渲染分类控件与商户框；退款 tab 关联原单后分类被预填且可改；超额退款只警告不阻断；已退完的原单**仍可选中**（决策 §14.52 B10） |
@@ -2414,7 +2418,7 @@ formatDateTimeShort(iso)             // '09-08 07:12'（操作记录）
 | D-11 | 要不要「按人筛选」？ | **已裁定（决策 §14.46 的 04-D-11）：不做** |
 | D-12 | 语言字段 `users.language` | **已裁定（决策 §14.6）**：`VARCHAR(8) NULL`，取值 `zh` / `en`，NULL = 跟随系统；`PATCH /me` 可改（§3.3、§5.1）。同一节还加了 `display_name VARCHAR(40) NULL`（§4.13） |
 | D-13 | 视觉方向最终选 A / B / C 哪个？ | **已裁定（决策 §14.45）：都不选**——采用 Claude Design 里定稿的「**04 柔和圆润**」，token 的唯一来源是 [`./mockups/tokens.json`](./mockups/tokens.json)，17 张屏幕稿在同一目录，A/B/C 三方向作废，实现前不再另出 mockup（§6） |
-| D-14 | 导入历史的 `?status=`（全部 / 待提交 / 已提交，§4.10）与账户列表的 `?include_archived=1`（§4.8）要不要也改成浏览状态？ | **待决**（2026-09-27 同步 §14.66 时发现）：§14.66 e 只把首页月份、交易列表筛选与翻页、导入批次切片与定位行列为浏览状态，f 的「保留的查询参数」清单里也没有这两个，决策没有覆盖。现状（代码）仍用 `router.setParams` 写查询串——`setParams` 是替换，不多出历史，所以不违背「后退只在页面之间走」，但与「地址只写页面」不一致。备选：导入历史的切片并进浏览状态；`?include_archived=1` 因为首页「不含 N 个已归档账户」把它当入口参数用，可按 f 的精神留作入口参数。等用户确认 |
+| D-14 | 导入历史的 `?status=`（全部 / 待提交 / 已提交，§4.10）与账户列表的 `?include_archived=1`（§4.8）要不要也改成浏览状态？ | **已裁定（决策 §14.66 j）**：导入历史的切片并进浏览状态（键 `imports.status`，按账本分桶，§2.2.1）；`?include_archived=1` 只作进入参数（首页「不含 N 个已归档账户」带它进来，页面读一次，页内展开 / 折叠是组件状态）；记一笔的种类分段只在进入时读 `?kind=`，切换分段不写 URL。代码里已没有 `router.setParams`。（2026-09-27 验收时按决策与代码补正） |
 
 新问题按老规矩处理：**决策记录没覆盖、又必须选**的才进这张表，正文里不擅自拍板。（2026-09-27 按决策 §14.66 同步）
 
