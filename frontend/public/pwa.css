@@ -1,6 +1,8 @@
 /* MOBUI-03: prevent iOS Safari zoom-on-focus by ensuring input font-size >= 16px.
    The !important keyword is load-bearing — react-native-web emits inline styles on
-   some TextInputs and only !important reliably overrides inline. */
-input, select, textarea {
+   some TextInputs and only !important reliably overrides inline. An input that is
+   already far above 16px opts out with `data-large` (the headline amount box of
+   屏幕稿 04 is 40px; clamping it to 16px is what made its sign look oversized). */
+input:not([data-large]), select, textarea {
   font-size: 16px !important;
 }

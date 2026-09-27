@@ -2093,7 +2093,7 @@ formatDateTimeShort(iso)             // '09-08 07:12'（操作记录）
 - **金额的写法**见 §5.4：基准币种在列表行、表格、统计卡、分类行、影响卡、退款进度、汇总行与 review 表格里**裸写**（`1,234.56`，带正负号、不带 `¥`），只有首页净资产、详情页与记一笔的大数、以及「≈ ¥24,576.75」折算行保留符号；外币按固定符号表写（`S$4,120.80`），永远带符号。屏幕稿里凡是成列的数字都是裸的，符号只出现在一屏一两个的大数上。（2026-09-16 按屏幕稿同步，决策 §14.59）
 - **字号七档**（`type.*`）：`display` 40/44/700、`title` 28/34/700、`heading` 20/28/600、`subheading` 16/24/500、`body` 14/20/400、`caption` 12/16/400、`micro` 11/14/500。标题档（display / title）额外加 `letter-spacing: -0.02em`。
 - **首页与账户页的大数**用 sans（Figtree）而不是 mono，但开 `tabular-nums`（屏幕稿 01 的净资产就是 sans）；表格里的日期、金额、行号仍是 mono。（2026-09-15 按屏幕稿同步，决策 §14.56）
-- **例外**：Web 上输入框实际渲染 16px（`frontend/public/pwa.css:4-6` 防 iOS 聚焦放大，§7.1），虽然 `text.body` 是 14——屏幕稿里的输入框就是按 16px 画的。
+- **例外**：Web 上输入框实际渲染 16px（`frontend/public/pwa.css:4-6` 防 iOS 聚焦放大，§7.1），虽然 `text.body` 是 14——屏幕稿里的输入框就是按 16px 画的。记一笔的大号金额框（40px）用 `data-large` 属性从这条规则里豁免——`AmountField` 的大号输入框带 `dataSet={{ large: '' }}`，规则写成 `input:not([data-large])`；否则数字被压到 16px，30px 的符号显得突兀（2026-09-27 用户手机上发现并修正）。
 - **密度 C2**（`density`）：列表行高 **56**、行内边距 14、容器内边距 14–16、卡片间距 12。交易列表、账户列表、成员列表、导入历史都按 56 走；导入 review 表格的行更紧（它有自己的表格密度，见 §4.11）。
 
 ### 6.4 组件清单
@@ -2199,7 +2199,7 @@ formatDateTimeShort(iso)             // '09-08 07:12'（操作记录）
 
 ### 7.1 保持不变的
 
-- `pwa.css` 的 `input, select, textarea { font-size: 16px !important; }`（`frontend/public/pwa.css:4-6`）——防 iOS Safari 聚焦放大。设计 token 里 `text.body` 是 14px，但 Web 上输入框实际渲染 16px，这是有意的，mockup 里要按 16px 画输入框。
+- `pwa.css` 的 `input:not([data-large]), select, textarea { font-size: 16px !important; }`（`frontend/public/pwa.css`）——防 iOS Safari 聚焦放大。设计 token 里 `text.body` 是 14px，但 Web 上输入框实际渲染 16px，这是有意的，mockup 里要按 16px 画输入框；带 `data-large` 的输入框（记一笔的 40px 金额框）不受这条限制（2026-09-27 补正）。
 - `viewport-fit=cover`（`frontend/public/index.html:6`）+ `SafeAreaProvider`（`frontend/App.tsx:38`）。
 - 图标生成脚本 `frontend/scripts/generate-icons.mjs`（背景色 `#0ea5e9` 要换成 `tokens.json` 的 `accent.solid` `#2F4A38`）。
 - `scripts/verify-pwa.mjs` 与 `scripts/verify-touch-targets.mjs` 的检查项继续跑。

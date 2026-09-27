@@ -16,6 +16,7 @@ import {
   TextInput,
   View,
   type ViewStyle,
+  type TextInputProps,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Money, TxKind } from '@/api/types';
@@ -46,6 +47,12 @@ export const KIND_SIGN: Readonly<Record<TxKind, string | null>> = {
 const LARGE_HEIGHT = 72;
 const LARGE_SIZE = 40;
 const LARGE_SIGN_SIZE = 30;
+/**
+ * `data-large` opts the headline box out of pwa.css's 16px floor (the iOS zoom guard),
+ * which would otherwise clamp the 40px figure and leave the 30px sign towering over it.
+ * react-native-web renders `dataSet` as `data-*` attributes; the RN types do not know it.
+ */
+const LARGE_INPUT_WEB_PROPS = { dataSet: { large: '' } } as unknown as Partial<TextInputProps>;
 
 /** Quick-add steps (decision §14.52 A19). */
 export const QUICK_ADD_STEPS = [10, 50, 100] as const;
@@ -212,6 +219,7 @@ export function AmountField({
           accessibilityLabel={fieldLabel}
           placeholderTextColor={colors['fg.muted']}
           testID={id}
+          {...LARGE_INPUT_WEB_PROPS}
           style={[styles.largeInput, { color: largeColor, fontFamily: fontFamilyFor(450, true) }]}
         />
         {currencyPicker}
@@ -309,6 +317,9 @@ const styles = StyleSheet.create({
   largeSign: { fontSize: LARGE_SIGN_SIZE, lineHeight: LARGE_SIZE - 2 },
   largeInput: {
     flex: 1,
+    // A 40px <input> asks for ~20 characters of min-content width, which would push the
+    // currency picker out of a phone-width box; the flex item must be allowed to shrink.
+    minWidth: 0,
     padding: 0,
     fontSize: LARGE_SIZE,
     lineHeight: LARGE_SIZE + 6,
