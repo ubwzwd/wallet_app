@@ -1,5 +1,5 @@
 /**
- * 编辑两腿转账 `/l/:ledgerId/transfers/:pairId/edit` (04 §4.7, decision §1.2).
+ * 编辑两腿转账 `/transfers/:pairId/edit` (04 §4.7, decision §1.2).
  *
  * One form for both legs: date, note and subtype are shared, each leg keeps its own
  * account / amount / currency, and saving is a **single**
@@ -101,8 +101,8 @@ export default function EditTransferScreen(): React.JSX.Element {
   // A save has a destination of its own: `?next=`, or the detail showing the result.
   const goBack = React.useCallback((): void => {
     if (next) router.replace(next as Href);
-    else router.replace(routes.l(ledgerId).transfer(pairId) as Href);
-  }, [ledgerId, next, pairId, router]);
+    else router.replace(routes.transfer(pairId) as Href);
+  }, [next, pairId, router]);
 
   // Leaving without saving: `?next=` first, then history, then the parent `useBack`
   // names — this entry's detail.
@@ -176,7 +176,7 @@ export default function EditTransferScreen(): React.JSX.Element {
           }}
           secondaryAction={{
             label: t('transaction:list.title'),
-            onPress: () => router.replace(routes.l(ledgerId).transactions() as Href),
+            onPress: () => router.replace(routes.transactions() as Href),
           }}
         />
       </Page>

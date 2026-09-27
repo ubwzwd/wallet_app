@@ -1,5 +1,5 @@
 /**
- * 编辑单笔 `/l/:ledgerId/transactions/:txId/edit` (04 §4.7).
+ * 编辑单笔 `/transactions/:txId/edit` (04 §4.7).
  *
  * The same form as 记一笔, prefilled, plus the four things only editing has:
  *  - the kind rules of decision §14.3 (transfer never crosses over, and a linked refund
@@ -97,8 +97,8 @@ export default function EditTransactionScreen(): React.JSX.Element {
   // A save has a destination of its own: `?next=`, or the detail showing the result.
   const goBack = React.useCallback((): void => {
     if (next) router.replace(next as Href);
-    else router.replace(routes.l(ledgerId).transaction(txId) as Href);
-  }, [ledgerId, next, router, txId]);
+    else router.replace(routes.transaction(txId) as Href);
+  }, [next, router, txId]);
 
   // Leaving without saving: `?next=` first, then history, then the parent `useBack`
   // names — this entry's detail.
@@ -113,8 +113,8 @@ export default function EditTransactionScreen(): React.JSX.Element {
   // pair screen owns both sides and the single PATCH that keeps them consistent.
   const pairId = tx?.transfer_pair_id ?? null;
   React.useEffect(() => {
-    if (pairId !== null) router.replace(routes.l(ledgerId).transferEdit(pairId) as Href);
-  }, [ledgerId, pairId, router]);
+    if (pairId !== null) router.replace(routes.transferEdit(pairId) as Href);
+  }, [pairId, router]);
 
   const onConflict = React.useCallback((): void => {
     // The global 409 handler (04 §3.8) has already invalidated and awaited the refetch,
@@ -181,7 +181,7 @@ export default function EditTransactionScreen(): React.JSX.Element {
           }}
           secondaryAction={{
             label: t('transaction:list.title'),
-            onPress: () => router.replace(routes.l(ledgerId).transactions() as Href),
+            onPress: () => router.replace(routes.transactions() as Href),
           }}
         />
       </Page>

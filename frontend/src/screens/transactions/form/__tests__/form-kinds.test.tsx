@@ -61,9 +61,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
             {children}
           </LedgerProvider>
           <ToastHost />
-          <ConfirmHost
-            labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }}
-          />
+          <ConfirmHost labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }} />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -72,12 +70,12 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
-  'l/[ledgerId]/transactions/index': () => <RNText>transactions</RNText>,
-  'l/[ledgerId]/transactions/new': TransactionFormScreen,
+  home: () => <RNText>ledger home</RNText>,
+  'transactions/index': () => <RNText>transactions</RNText>,
+  'transactions/new': TransactionFormScreen,
 };
 
-const NEW_URL = `/l/${LEDGER_ID}/transactions/new`;
+const NEW_URL = `/transactions/new`;
 
 /** The bodies of every `POST .../transactions` the test made. */
 function postedTransactions(): Array<Record<string, unknown>> {
@@ -168,7 +166,7 @@ test('income is submitted with a positive amount', async () => {
   expect(body.amount).toBe('1200.0000');
 });
 
-test('switching tab rewrites ?kind=, keeps the amount and drops the other tree’s category', async () => {
+test('switching tab keeps the amount, drops the other tree’s category, and leaves ?kind= alone', async () => {
   const router = renderRouter(ROUTES, {
     initialUrl: `${NEW_URL}?kind=expense`,
     wrapper: Wrapper,
@@ -178,7 +176,13 @@ test('switching tab rewrites ?kind=, keeps the amount and drops the other tree�
   await pickFood();
   fireEvent.press(screen.getByTestId('tx-kind-income'));
 
-  await waitFor(() => expect(router.getSearchParams().kind).toBe('income'));
+  await waitFor(() =>
+    expect(screen.getByTestId('tx-kind-income').props.accessibilityState.selected).toBe(true),
+  );
+  // §14.66 j: `?kind=` is how the form was entered, not its state — the tab is form state
+  // only, so the back button leaves the form instead of stepping back through tabs.
+  expect(router.getSearchParams().kind).toBe('expense');
+  expect(appRouter.canGoBack()).toBe(false);
   // Amount, date and account survive; the expense-tree category does not (decision §1.3).
   expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
   expect(screen.getByTestId('tx-source-trigger-value')).toHaveTextContent(CHECKING.name);
@@ -355,7 +359,7 @@ test('a prefill from 「登记退款」 is not an edit: leaving straight away as
   });
 
   expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
 });
 
 test('「复制一笔」 on one leg of a two-leg transfer carries what it can and says what it cannot', async () => {
@@ -383,7 +387,7 @@ test('「复制一笔」 on one leg of a two-leg transfer carries what it can an
     wrapper: Wrapper,
   });
 
-  // The transfer tab, the subtype and the note came along; the URL follows the tab.
+  // The transfer tab, the subtype and the note came along — in the form, not the address.
   await waitFor(() => expect(screen.getByTestId('transfer-note').props.value).toBe('还 6 月账单'));
   expect(screen.getByTestId('tx-kind-transfer').props.accessibilityState.selected).toBe(true);
   expect(screen.getByTestId('transfer-subtype-repayment').props.accessibilityState.selected).toBe(
@@ -393,7 +397,7 @@ test('「复制一笔」 on one leg of a two-leg transfer carries what it can an
   // 屏幕稿 05 · 375 shows the date as a row, so this reads what the row prints rather than
   // the box's `value` (the box lives in the sheet behind it).
   expect(screen.getByTestId('transfer-date-row-value')).toHaveTextContent(todayLocalIso());
-  await waitFor(() => expect(router.getSearchParams().kind).toBe('transfer'));
+  expect(router.getSearchParams()).toEqual({ copy_of: 'tx-leg' });
 
   // What only the other leg knows is left blank on purpose, and the warning says so
   // instead of leaving a half-filled form to be discovered on save.
@@ -417,15 +421,13 @@ test('the cancel button asks exactly once and then really leaves', async () => {
   });
 
   // The navigation the guard itself makes is the answer, not a second exit to challenge.
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
   expect(screen.queryByTestId('confirm-dialog')).toBeNull();
 });
 
 test('a route change away from a dirty form is intercepted, and staying works', async () => {
   const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/transactions`,
+    initialUrl: `/transactions`,
     wrapper: Wrapper,
   });
   act(() => {
@@ -453,7 +455,7 @@ test('a route change away from a dirty form is intercepted, and staying works', 
   await act(async () => {
     fireEvent.press(await screen.findByTestId('confirm-accept'));
   });
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
 });
 
 test('the stats preview reads the cached monthly summary and adds the new amount locally', async () => {

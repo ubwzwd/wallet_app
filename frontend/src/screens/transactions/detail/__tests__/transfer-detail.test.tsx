@@ -47,13 +47,13 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers</RNText>,
-  '(app)/l/[ledgerId]/index': () => <RNText>home</RNText>,
-  '(app)/l/[ledgerId]/transactions/index': () => <RNText>transactions-page</RNText>,
-  '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
-  '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
-  '(app)/l/[ledgerId]/transactions/[txId]/edit': () => <RNText>edit-page</RNText>,
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': TransferDetailRoute,
-  '(app)/l/[ledgerId]/transfers/[pairId]/edit': () => <RNText>transfer-edit-page</RNText>,
+  '(app)/home': () => <RNText>home</RNText>,
+  '(app)/transactions/index': () => <RNText>transactions-page</RNText>,
+  '(app)/transactions/new': () => <RNText>new-transaction-page</RNText>,
+  '(app)/transactions/[txId]/index': TransactionDetailRoute,
+  '(app)/transactions/[txId]/edit': () => <RNText>edit-page</RNText>,
+  '(app)/transfers/[pairId]/index': TransferDetailRoute,
+  '(app)/transfers/[pairId]/edit': () => <RNText>transfer-edit-page</RNText>,
 };
 
 const OUT = makeTransaction({
@@ -118,10 +118,7 @@ function containing(text: string): RegExp {
  * 屏幕稿 07 at 375 puts the operations in a sheet behind the pinned 「修改」 bar, so a
  * narrow test opens the sheet before it can press one.
  */
-async function openActions(
-  router: ReturnType<typeof renderRouter>,
-  prefix: string,
-): Promise<void> {
+async function openActions(router: ReturnType<typeof renderRouter>, prefix: string): Promise<void> {
   fireEvent.press(await router.findByTestId(`${prefix}-open`));
   await router.findByTestId(`${prefix}-delete`);
 }
@@ -174,7 +171,7 @@ afterEach(() => {
 test('both legs are shown with their own account and amount, and no running balance', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
   mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...OUT, events: [] });
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transfers/${PAIR}` });
 
   expect(await router.findByTestId('transfer-detail-legs-out-source')).toHaveTextContent(
     '招行储蓄卡',
@@ -196,7 +193,7 @@ test('宽屏 the breadcrumb names the move (屏幕稿 07 · 1440, B16)', async (
   wideSpy.mockReturnValue(true);
   mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
   mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...OUT, events: [] });
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transfers/${PAIR}` });
 
   expect(await router.findByText('交易 · 09-08 · 招行储蓄卡 → 建行信用卡')).toBeTruthy();
   expect(router.getByTestId('transfer-detail-crumb-back')).toBeTruthy();
@@ -226,7 +223,7 @@ test('a cross-currency pair gives each leg its own rate line', async () => {
     in: into,
   });
   mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...out, events: [] });
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transfers/${PAIR}` });
 
   expect(await router.findByTestId('transfer-detail-legs-out-rate-text')).toHaveTextContent(
     containing('按 2026-09-08 汇率 1 USD = 7.1694 CNY'),
@@ -241,7 +238,7 @@ test('a cross-currency pair gives each leg its own rate line', async () => {
   expect(router.queryByTestId('transfer-detail-legs-out-rate-fallback')).toBeNull();
 });
 
-test('「拆开」warns what unpairing does, then lands on the out leg\'s own page', async () => {
+test("「拆开」warns what unpairing does, then lands on the out leg's own page", async () => {
   mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
 
   // The leg answers as 03 §5.27 does while it is still paired — `pair` expanded — and only
@@ -265,18 +262,13 @@ test('「拆开」warns what unpairing does, then lands on the out leg\'s own pa
     if (unpaired) await new Promise((resolve) => setTimeout(resolve, 50));
     return [200, unpaired ? single : pairedLeg];
   });
-  api.mock
-    .onPost(apiUrl(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}/unpair`))
-    .reply(() => {
-      unpaired = true;
-      // 03 §5.34's shape exactly; the screen navigates off the pair it already had, so it
-      // must not read the response at all.
-      return [
-        200,
-        { pair_id: PAIR, unpaired: [single, { ...IN, transfer_pair_id: null }] },
-      ];
-    });
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+  api.mock.onPost(apiUrl(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}/unpair`)).reply(() => {
+    unpaired = true;
+    // 03 §5.34's shape exactly; the screen navigates off the pair it already had, so it
+    // must not read the response at all.
+    return [200, { pair_id: PAIR, unpaired: [single, { ...IN, transfer_pair_id: null }] }];
+  });
+  const router = renderRouter(ROUTES, { initialUrl: `/transfers/${PAIR}` });
 
   await openActions(router, 'transfer-detail-actions');
   fireEvent.press(router.getByTestId('transfer-detail-actions-unpair'));
@@ -288,20 +280,18 @@ test('「拆开」warns what unpairing does, then lands on the out leg\'s own pa
   await waitFor(() =>
     expect(api.mock.history.post.filter((r) => (r.url ?? '').endsWith('/unpair'))).toHaveLength(1),
   );
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/leg-out`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions/leg-out`));
   // ...and stays there: the leg's page must not redirect back to the pair that is gone.
   expect(await router.findByTestId('tx-detail-header')).toBeTruthy();
   await waitFor(() => expect(router.getByTestId('tx-detail-pair')).toBeTruthy());
-  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/leg-out`);
+  expect(router.getPathname()).toBe(`/transactions/leg-out`);
 });
 
 test('deleting a two-leg transfer goes through the pair endpoint, not a leg', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
   mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...OUT, events: [] });
   mockDelete(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, undefined, 204);
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transfers/${PAIR}` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transfers/${PAIR}` });
 
   await openActions(router, 'transfer-detail-actions');
   fireEvent.press(router.getByTestId('transfer-detail-actions-delete'));
@@ -311,9 +301,7 @@ test('deleting a two-leg transfer goes through the pair endpoint, not a leg', as
   fireEvent.press(router.getByTestId('confirm-accept'));
 
   await waitFor(() => expect(api.mock.history.delete).toHaveLength(1));
-  expect(api.mock.history.delete[0].url).toBe(
-    `/ledgers/${LEDGER}/transactions/transfer/${PAIR}`,
-  );
+  expect(api.mock.history.delete[0].url).toBe(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`);
 });
 
 // ------------------------------------------------------------ the single-leg page
@@ -393,7 +381,7 @@ function candidates(): Transaction[] {
 
 test('a single leg names the other side and offers 「关联为转账对腿」', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions/solo`, SOLO);
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transactions/solo` });
 
   expect(await router.findByTestId('tx-detail-pair-counterparty')).toHaveTextContent('工资卡');
   await openActions(router, 'tx-detail-actions');
@@ -407,14 +395,14 @@ test('a single leg names the other side and offers 「关联为转账对腿」',
 test('宽屏 a single leg’s breadcrumb names the other side (B16)', async () => {
   wideSpy.mockReturnValue(true);
   mockGet(`/ledgers/${LEDGER}/transactions/solo`, SOLO);
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transactions/solo` });
 
   expect(await router.findByText('交易 · 09-05 · 对方：工资卡')).toBeTruthy();
 });
 
 test('a single leg with no counterparty text says 对方不在应用里', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions/solo2`, { ...SOLO, id: 'solo2', counterparty: null });
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo2` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transactions/solo2` });
 
   expect(await router.findByTestId('tx-detail-pair-counterparty')).toHaveTextContent(
     '对方不在应用里',
@@ -427,7 +415,7 @@ test('the picker lists only a legal other leg, and pairing lands on the pair pag
   mockGet(`/ledgers/${LEDGER}/transactions/transfer/${PAIR}`, pairResponse());
   mockGet(`/ledgers/${LEDGER}/transactions/leg-out`, { ...OUT, events: [] });
   mockPost(`/ledgers/${LEDGER}/transactions/solo/pair`, pairResponse());
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transactions/solo` });
 
   await openActions(router, 'tx-detail-actions');
   fireEvent.press(router.getByTestId('tx-detail-actions-pair'));
@@ -460,7 +448,7 @@ test('the picker lists only a legal other leg, and pairing lands on the pair pag
   expect(JSON.parse(api.mock.history.post[0].data as string)).toEqual({
     other_transaction_id: 'cand-ok',
   });
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transfers/${PAIR}`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/transfers/${PAIR}`));
 });
 
 test('turning the same-currency-same-amount filter off widens the candidate list', async () => {
@@ -480,7 +468,7 @@ test('turning the same-currency-same-amount filter off widens the candidate list
   });
   mockGet(`/ledgers/${LEDGER}/transactions/solo`, SOLO);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse([odd]));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/solo` });
+  const router = renderRouter(ROUTES, { initialUrl: `/transactions/solo` });
 
   await openActions(router, 'tx-detail-actions');
   fireEvent.press(router.getByTestId('tx-detail-actions-pair'));

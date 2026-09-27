@@ -1,6 +1,6 @@
 /**
- * `/l/:ledgerId?month=YYYY-MM` — the home page (screen 01 / 15, 04 §4.4, decisions §7 / §8
- * / §14.50 / §14.56).
+ * `/home` — the current ledger's home page (screen 01 / 15, 04 §4.4, decisions §7 / §8 /
+ * §14.50 / §14.56 / §14.66).
  *
  * The mockup's composition: a header carrying the net worth and the month's two totals,
  * then a 1.12fr / 1fr grid — accounts over the 12-month chart on the left, the month's
@@ -8,8 +8,10 @@
  * five blocks. Each block owns its query, its skeleton and its retry, so a failing
  * `/stats/summary` still leaves the balances readable.
  *
- * The month lives in the URL: the switcher in the category title and the chart both write
- * it there, which makes a month shareable and the back button right.
+ * The month is browsing state (decision §14.66 e): the switcher in the category title and
+ * the chart both write the ledger's `'home.month'` view state, never the address. So going
+ * to the list and back keeps the month, the back button never steps through months, each
+ * ledger keeps its own, and a reload starts over at this month.
  *
  * Refreshing is offered twice and without a platform switch: the header button is what a
  * mouse reaches for, the pull-to-refresh is what a thumb reaches for, and both refetch the
@@ -23,7 +25,7 @@
  */
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { Uuid } from '@/api/types';
@@ -39,7 +41,8 @@ import {
   useStatsTrend,
   useTransactions,
 } from '@/queries';
-import { useLedgerContext } from '@/store';
+import { useOpenTransactions } from '@/screens/transactions/useTxFilters';
+import { useLedgerContext, useLedgerViewState } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { Button, Page, Text, TintCard } from '@/ui';
@@ -59,18 +62,17 @@ import { TrendSection } from './TrendSection';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+/** The view-state key of the month the home page shows (decision §14.66 e). */
+export const HOME_MONTH_KEY = 'home.month';
+
 /**
- * The month the page shows: `?month=` when it is a real month at or before `now`, the
- * current month otherwise. A future month is clamped rather than refused — there is
- * nothing to summarise past today, and a hand-edited URL should still land somewhere sane.
+ * The month the page shows: the stored one when it is a real month at or before `now`, the
+ * current month otherwise (nothing stored yet, or a month that has since become the
+ * future — the app left open across midnight at a month's end still lands somewhere sane).
  */
-export function resolveMonth(
-  raw: string | string[] | undefined,
-  now: string = currentMonth(),
-): string {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof value !== 'string' || !MONTH_RE.test(value)) return now;
-  return isAfterMonth(value, now) ? now : value;
+export function resolveMonth(raw: string | null | undefined, now: string = currentMonth()): string {
+  if (typeof raw !== 'string' || !MONTH_RE.test(raw)) return now;
+  return isAfterMonth(raw, now) ? now : raw;
 }
 
 export default function HomeScreen(): React.JSX.Element {
@@ -79,10 +81,10 @@ export default function HomeScreen(): React.JSX.Element {
   const lang = useLang();
   const wide = useIsWide();
   const { ledgerId, baseCurrency } = useLedgerContext();
-  const l = routes.l(ledgerId);
+  const openTransactions = useOpenTransactions();
 
-  const params = useLocalSearchParams<{ month?: string }>();
-  const month = resolveMonth(params.month);
+  const [storedMonth, setStoredMonth] = useLedgerViewState<string | null>(HOME_MONTH_KEY, null);
+  const month = resolveMonth(storedMonth);
 
   // My accounts, archived ones included: the header says how many it is leaving out
   // (decision §14.50) — the totals themselves come from the server.
@@ -95,8 +97,8 @@ export default function HomeScreen(): React.JSX.Element {
   const categories = useCategories();
 
   const setMonth = React.useCallback(
-    (next: string): void => router.setParams({ month: next }),
-    [router],
+    (next: string): void => setStoredMonth(next),
+    [setStoredMonth],
   );
 
   const refetchSources = sources.refetch;
@@ -131,33 +133,32 @@ export default function HomeScreen(): React.JSX.Element {
     () => router.navigate(routes.accountNew(ledgerId) as Href),
     [ledgerId, router],
   );
+  // Both open the list showing what they name — one account's entries, or everything — in
+  // place of whatever filters it was last left with (decision §14.66 e).
   const goSourceTransactions = React.useCallback(
-    (sourceId: Uuid) => router.navigate(l.transactions({ source_id: [sourceId] }) as Href),
-    [l, router],
+    (sourceId: Uuid): void => openTransactions({ source_id: [sourceId] }),
+    [openTransactions],
   );
-  const goTransactions = React.useCallback(
-    () => router.navigate(l.transactions() as Href),
-    [l, router],
-  );
+  const goTransactions = React.useCallback(() => openTransactions(), [openTransactions]);
   const goNewExpense = React.useCallback(
-    () => router.navigate(l.transactionNew({ kind: 'expense' }) as Href),
-    [l, router],
+    () => router.navigate(routes.transactionNew({ kind: 'expense' }) as Href),
+    [router],
   );
   const goNewTransaction = React.useCallback(
-    () => router.navigate(l.transactionNew() as Href),
-    [l, router],
+    () => router.navigate(routes.transactionNew() as Href),
+    [router],
   );
-  const goImport = React.useCallback(() => router.navigate(l.importsNew() as Href), [l, router]);
+  const goImport = React.useCallback(() => router.navigate(routes.importsNew() as Href), [router]);
   const goLedgerSettings = React.useCallback(
-    () => router.navigate(l.settings() as Href),
-    [l, router],
+    () => router.navigate(routes.ledgerSettings() as Href),
+    [router],
   );
   const goRow = React.useCallback(
     (row: TxListRow) =>
       router.navigate(
-        (row.kind === 'pair' ? l.transfer(row.pairId) : l.transaction(row.tx.id)) as Href,
+        (row.kind === 'pair' ? routes.transfer(row.pairId) : routes.transaction(row.tx.id)) as Href,
       ),
-    [l, router],
+    [router],
   );
 
   const ledgerSourceItems = ledgerSources.data?.items ?? [];

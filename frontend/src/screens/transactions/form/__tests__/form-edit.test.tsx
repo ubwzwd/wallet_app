@@ -65,9 +65,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
             {children}
           </LedgerProvider>
           <ToastHost />
-          <ConfirmHost
-            labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }}
-          />
+          <ConfirmHost labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }} />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -76,15 +74,15 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
-  'l/[ledgerId]/transactions/index': () => <RNText>transactions</RNText>,
-  'l/[ledgerId]/transactions/[txId]/index': () => <RNText>transaction detail</RNText>,
-  'l/[ledgerId]/transactions/[txId]/edit': EditTransactionScreen,
-  'l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
-  'l/[ledgerId]/transfers/[pairId]/edit': EditTransferScreen,
+  home: () => <RNText>ledger home</RNText>,
+  'transactions/index': () => <RNText>transactions</RNText>,
+  'transactions/[txId]/index': () => <RNText>transaction detail</RNText>,
+  'transactions/[txId]/edit': EditTransactionScreen,
+  'transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
+  'transfers/[pairId]/edit': EditTransferScreen,
 };
 
-const EDIT_URL = `/l/${LEDGER_ID}/transactions/${TX_ID}/edit`;
+const EDIT_URL = `/transactions/${TX_ID}/edit`;
 const TX_PATH = `/ledgers/${LEDGER_ID}/transactions/${TX_ID}`;
 
 function patches(suffix: string): Array<Record<string, unknown>> {
@@ -202,7 +200,7 @@ test('editing a two-leg transfer sends exactly one PATCH to the pair endpoint', 
   mockPatch(pairPath, pair);
 
   renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    initialUrl: `/transfers/${PAIR_ID}/edit`,
     wrapper: Wrapper,
   });
 
@@ -237,7 +235,7 @@ test('a pair whose legs hold different amounts keeps both boxes and both amounts
   mockPatch(pairPath, pair);
 
   renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    initialUrl: `/transfers/${PAIR_ID}/edit`,
     wrapper: Wrapper,
   });
 
@@ -266,7 +264,7 @@ test('a 409 on the two-leg pair names the fields that differ, and re-sends nothi
   mockPatch(pairPath, { detail: '这条记录刚被改过', code: 'stale_update' }, 409);
 
   renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    initialUrl: `/transfers/${PAIR_ID}/edit`,
     wrapper: Wrapper,
   });
 
@@ -290,7 +288,7 @@ test('a transfer detail that cannot be read offers a way out instead of a skelet
   api.mock.onGet(apiUrl(pairPath)).reply(500, { detail: 'boom' });
 
   renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/transfers/${PAIR_ID}/edit`,
+    initialUrl: `/transfers/${PAIR_ID}/edit`,
     wrapper: Wrapper,
   });
 

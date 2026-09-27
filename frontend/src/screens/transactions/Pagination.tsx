@@ -1,6 +1,6 @@
 /**
  * The wide-layout pager (04 §4.5): `total`, the page number, and prev / next — which write
- * `offset` into the URL, because the URL is the filter state (04 §1.3). Narrow layouts
+ * `offset` into the list's filter state (`useTxFilters`, decision §14.66 e). Narrow layouts
  * never render this; they scroll instead.
  */
 import React from 'react';

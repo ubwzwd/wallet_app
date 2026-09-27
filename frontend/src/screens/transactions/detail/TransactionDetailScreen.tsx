@@ -1,5 +1,5 @@
 /**
- * 交易详情 `/l/:ledgerId/transactions/:txId` (04 §4.7, 屏幕稿 07 单腿 / 08).
+ * 交易详情 `/transactions/:txId` (04 §4.7, 屏幕稿 07 单腿 / 08).
  *
  * One screen for expense / income / refund / single-leg transfer, laid out the way the
  * mockups draw it: a breadcrumb over a `minmax(0,1fr) 300px` grid — headline card and fact
@@ -99,11 +99,10 @@ export default function TransactionDetailScreen(): React.JSX.Element {
   // Narrow: the sub-page bar is 「‹ 交易详情」 (屏幕稿 08 · 375); the crumb is the wide header's.
   useTopBar(t('transaction:detail.page_title'));
 
-  const l = routes.l(ledgerId);
 
   const goList = React.useCallback((): void => {
-    router.replace(l.transactions() as Href);
-  }, [l, router]);
+    router.replace(routes.transactions() as Href);
+  }, [router]);
 
   /** Back where the reader came from; a deep link goes to the list (`useBack`, §14.64 f). */
   const goBack = useBack().goBack;
@@ -174,7 +173,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
   // means this row is half of a pair, so neither may be trusted alone.
   const pairId = tx.pair?.pair_id ?? tx.transfer_pair_id;
   if (pairId !== null && pairId !== undefined) {
-    return <Redirect href={l.transfer(pairId) as Href} />;
+    return <Redirect href={routes.transfer(pairId) as Href} />;
   }
 
   const isTransfer = tx.kind === 'transfer';
@@ -200,7 +199,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
       key: 'edit',
       label: t('common:button.edit'),
       icon: 'pencil',
-      onPress: () => router.push(l.transactionEdit(tx.id) as Href),
+      onPress: () => router.push(routes.transactionEdit(tx.id) as Href),
     },
     ...(tx.kind === 'expense'
       ? [
@@ -211,7 +210,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
             tone: 'refund' as const,
             hint: t('transaction:detail.refund_action_hint'),
             onPress: () =>
-              router.push(l.transactionNew({ kind: 'refund', refund_of: tx.id }) as Href),
+              router.push(routes.transactionNew({ kind: 'refund', refund_of: tx.id }) as Href),
           },
         ]
       : []),
@@ -223,7 +222,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
             label: t('transaction:detail.duplicate_action'),
             icon: 'copy' as const,
             hint: t('transaction:detail.duplicate_action_hint'),
-            onPress: () => router.push(l.transactionNew({ copy_of: tx.id }) as Href),
+            onPress: () => router.push(routes.transactionNew({ copy_of: tx.id }) as Href),
           },
         ]),
     {
@@ -244,7 +243,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
       sources: sourceMap,
       members: members.data?.items ?? [],
       membersReady: members.isSuccess,
-      onOpenBatch: (batchId) => router.push(l.importBatch(batchId) as Href),
+      onOpenBatch: (batchId) => router.push(routes.importBatch(batchId) as Href),
     },
     tx,
     category,
@@ -273,7 +272,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
           origin={tx.refund_of_detail}
           sourceNames={sourceNames}
           index={index}
-          onOpen={(id) => router.push(l.transaction(id) as Href)}
+          onOpen={(id) => router.push(routes.transaction(id) as Href)}
           onPick={() => setPickerOpen(true)}
           onUnlink={onUnlinkRefund}
           busy={update.isPending}
@@ -318,7 +317,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
           refundable={tx.refundable ?? absMoney(tx.amount)}
           currency={tx.currency}
           sourceNames={sourceNames}
-          onOpen={(id) => router.push(l.transaction(id) as Href)}
+          onOpen={(id) => router.push(routes.transaction(id) as Href)}
         />
       ) : null}
 
@@ -330,7 +329,7 @@ export default function TransactionDetailScreen(): React.JSX.Element {
         index={index ?? undefined}
         sourceNames={sourceNames}
         currency={tx.currency}
-        onPressBatch={(batchId) => router.push(l.importBatch(batchId) as Href)}
+        onPressBatch={(batchId) => router.push(routes.importBatch(batchId) as Href)}
       />
     </>
   );

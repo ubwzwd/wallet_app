@@ -62,9 +62,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
             {children}
           </LedgerProvider>
           <ToastHost />
-          <ConfirmHost
-            labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }}
-          />
+          <ConfirmHost labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }} />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -73,12 +71,12 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
-  'l/[ledgerId]/transactions/index': () => <RNText>transactions</RNText>,
-  'l/[ledgerId]/transactions/new': TransactionFormScreen,
+  home: () => <RNText>ledger home</RNText>,
+  'transactions/index': () => <RNText>transactions</RNText>,
+  'transactions/new': TransactionFormScreen,
 };
 
-const TRANSFER_URL = `/l/${LEDGER_ID}/transactions/new?kind=transfer`;
+const TRANSFER_URL = `/transactions/new?kind=transfer`;
 
 function postsTo(suffix: string): Array<Record<string, unknown>> {
   return api.mock.history.post
@@ -186,9 +184,7 @@ test('a non-credit account already chosen is cleared when the subtype becomes �
   expect(screen.getByTestId('transfer-to-trigger-value')).toHaveTextContent(USD_ACCOUNT.name);
 
   fireEvent.press(screen.getByTestId('transfer-subtype-repayment'));
-  expect(screen.getByTestId('transfer-to-trigger-value')).not.toHaveTextContent(
-    USD_ACCOUNT.name,
-  );
+  expect(screen.getByTestId('transfer-to-trigger-value')).not.toHaveTextContent(USD_ACCOUNT.name);
   expect(screen.getByText('还款的转入方必须是信用卡账户')).toBeTruthy();
 });
 
@@ -256,9 +252,7 @@ test('宽屏 页头 explains what a transfer does, and says so differently for a
     );
     // 屏幕稿 05 单腿 says this once: the wide frame carries it in 「这一笔」, not twice — so
     // the amber note in the summary card is there, and the form's own copy is not.
-    expect(
-      screen.getAllByText(i18next.t('transaction:transfer.single_leg_hint')),
-    ).toHaveLength(1);
+    expect(screen.getAllByText(i18next.t('transaction:transfer.single_leg_hint'))).toHaveLength(1);
     expect(screen.queryByTestId('transfer-single-leg-hint')).toBeNull();
   } finally {
     wideSpy.mockRestore();

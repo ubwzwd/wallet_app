@@ -8,7 +8,7 @@
  *    count, the chip strip under it, and every field behind `FilterSheet`.
  *
  * The split is by viewport width (`useIsWide`), never by platform. Every control writes to
- * the URL; nothing here keeps a copy of the filter state.
+ * the list's filter state (`useTxFilters`); nothing here keeps a copy of it.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -104,7 +104,7 @@ export interface FilterBarProps {
 
 /**
  * The currency pills offer what this ledger's accounts actually hold (屏幕稿 02), plus the
- * base currency and whatever a shared URL already asks for, so an inherited filter is
+ * base currency and whatever the filters already ask for, so an inherited filter is
  * always visible as a pill that can be switched off again.
  */
 function currencyCodesOf(props: FilterBarProps): string[] {
@@ -114,56 +114,21 @@ function currencyCodesOf(props: FilterBarProps): string[] {
   return [...codes].sort();
 }
 
-/**
- * Whether the narrow drawer is open, kept outside the component on purpose: every control
- * in it writes the URL, expo-router remounts the screen for the replaced URL (04 §1.3), and
- * component state would not survive that — the drawer would slam shut on the first pill the
- * user touched. 屏幕稿 02 has them set several conditions and then press 「应用」, so the flag
- * outlives the remount; it is cleared when the drawer is closed and when the screen is left
- * for good, so coming back to /transactions never reopens it by itself.
- */
-let drawerOpen = false;
-/**
- * The wide panel's twin (§14.59b): once conditions are on, 屏幕稿 02's three-column card
- * collapses to the 「已选条件」 strip and a 「筛选」 button, so the table starts at the top of
- * the page instead of below a screenful of empty boxes. Module-level for the same reason as
- * `drawerOpen`: every control writes the URL and the screen remounts.
- */
-let panelOpen = false;
-/** Pending reset of `drawerOpen`, armed on unmount and cancelled by a remount in the same tick. */
-let closeTimer: ReturnType<typeof setTimeout> | null = null;
-
 export function FilterBar(props: FilterBarProps): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
   const wide = useIsWide();
-  const [sheetOpen, setSheetOpen] = React.useState(drawerOpen);
-  const [expanded, setExpanded] = React.useState(panelOpen);
-  const setDrawer = React.useCallback((open: boolean): void => {
-    drawerOpen = open;
-    setSheetOpen(open);
-  }, []);
-  const setPanel = React.useCallback((open: boolean): void => {
-    panelOpen = open;
-    setExpanded(open);
-  }, []);
-  // A filter change remounts the screen, and the drawer must survive that; leaving the
-  // screen must close it. Unmount arms a reset, a remount in the same tick cancels it.
-  React.useEffect(() => {
-    if (closeTimer !== null) {
-      clearTimeout(closeTimer);
-      closeTimer = null;
-    }
-    return () => {
-      closeTimer = setTimeout(() => {
-        drawerOpen = false;
-        panelOpen = false;
-      }, 0);
-    };
-  }, []);
+  // Plain component state: a filter change no longer touches the address, so the screen is
+  // not remounted under the user — the drawer stays open while 屏幕稿 02's several conditions
+  // are set one after another, and leaving the page for good closes it.
+  const [sheetOpen, setDrawer] = React.useState(false);
+  // The wide panel's twin (§14.59b): once conditions are on, 屏幕稿 02's three-column card
+  // collapses to the 「已选条件」 strip and a 「筛选」 button, so the table starts at the top of
+  // the page instead of below a screenful of empty boxes.
+  const [expanded, setPanel] = React.useState(false);
   const id = props.testID ?? 'tx-filter-bar';
   // Every control *inside* the wide panel pins it open (§14.59b): 屏幕稿 02 · 1440 draws the
-  // card expanded with four 「已选条件」 chips, so the collapse belongs to arriving at a URL
+  // card expanded with four 「已选条件」 chips, so the collapse belongs to arriving at a list
   // that already carries conditions — not to the click that sets the first one. Collapsing
   // there would pull the card out from under the user: the caret out of the keyword box,
   // and the second half of 日期区间 / 金额区间 out of reach before it could be filled.

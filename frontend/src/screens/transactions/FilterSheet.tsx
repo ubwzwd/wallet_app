@@ -8,7 +8,7 @@
  * 金额区间 down the body, and one 「应用 · N 笔」 button that says how many entries the filters
  * match before it is pressed.
  *
- * There is no 「取消」: every control writes to the URL as it is touched (04 §1.3), so the
+ * There is no 「取消」: every control writes the filters as it is touched (04 §4.5), so the
  * list behind the drawer is already showing the result and there is nothing to roll back —
  * the button confirms and closes.
  */

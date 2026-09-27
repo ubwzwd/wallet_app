@@ -88,13 +88,13 @@ export function PairSection({
           {
             onSuccess: (result) => {
               toast.success(t('transaction:detail.pair_saved'));
-              router.replace(routes.l(ledgerId).transfer(result.pair_id) as Href);
+              router.replace(routes.transfer(result.pair_id) as Href);
             },
           },
         );
       });
     },
-    [ledgerId, pair, router, t],
+    [pair, router, t],
   );
 
   return (

@@ -1,15 +1,18 @@
 /**
- * The filter half of the transaction list (04 §1.3, §4.5; §8.3 的「交易列表」行).
+ * The filter half of the transaction list (04 §4.5; §8.3 的「交易列表」行; decision §14.66 e).
  *
- * The URL is the only filter state there is, so every test here reads or writes it: a
- * control change lands in the query string (and empty values never do), a shared link is
- * restored verbatim (repeated keys included), "清空筛选" goes back to the bare path, the
- * wide pager writes `offset`, `?import_batch_id=` becomes a dismissible chip, and an empty
- * result with two conditions fires exactly two `limit=1` probes.
+ * The filters are the ledger's browsing state, never the address: a control change lands in
+ * the `'transactions.filters'` view state (and empty values never do) and in the request,
+ * the address stays the bare `/transactions` with no history entry, a list opened *with*
+ * filters (an account's entries, a batch's transactions) shows them all, "清空筛选" goes back
+ * to none, the wide pager writes `offset`, `import_batch_id` becomes a dismissible chip, the
+ * filters survive a trip to a detail page and back, and an empty result with two conditions
+ * fires exactly two `limit=1` probes.
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { router as expoRouter } from 'expo-router';
 import i18next from 'i18next';
 
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
@@ -21,6 +24,7 @@ import { setAuthToken } from '@/api/client';
 import type { Transaction, TransactionListParams, TransactionSummary } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
+import { useLedgerViewState } from '@/store';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
   apiUrl,
@@ -38,21 +42,62 @@ import { toast } from '@/ui';
 import { resetLedgerUnavailable } from '@/navigation';
 
 import TransactionsScreen from '../TransactionsScreen';
+import { TX_FILTERS_KEY, useOpenTransactions } from '../useTxFilters';
 
 const LEDGER = 'ledger-1';
 const BATCH_ID = 'batch1234567890';
+
+/** What the next render enters the list with; `undefined` opens it bare. */
+let entryFilters: TransactionListParams | undefined;
+
+/**
+ * The home page's stand-in: it opens the list with `entryFilters`, the way the home page's
+ * account rows and an import batch's 「看交易」 do (§14.66 e).
+ */
+function EntryPage(): React.JSX.Element {
+  const open = useOpenTransactions();
+  const opened = React.useRef(false);
+  React.useEffect(() => {
+    if (opened.current || entryFilters === undefined) return;
+    opened.current = true;
+    open(entryFilters);
+  }, [open]);
+  return <RNText>home</RNText>;
+}
+
+/** The list, plus a readout of the view state it keeps its filters in. */
+function ListRoute(): React.JSX.Element {
+  const [filters] = useLedgerViewState<TransactionListParams>(TX_FILTERS_KEY, {});
+  return (
+    <>
+      <TransactionsScreen />
+      <RNText testID="tx-filters-state">{JSON.stringify(filters)}</RNText>
+    </>
+  );
+}
 
 const ROUTES = {
   _layout: RootLayout,
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers</RNText>,
-  '(app)/l/[ledgerId]/index': () => <RNText>home</RNText>,
-  '(app)/l/[ledgerId]/transactions/index': TransactionsScreen,
-  '(app)/l/[ledgerId]/transactions/new': () => <RNText>new transaction</RNText>,
-  '(app)/l/[ledgerId]/transactions/[txId]/index': () => <RNText>tx detail</RNText>,
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
+  '(app)/home': EntryPage,
+  '(app)/transactions/index': ListRoute,
+  '(app)/transactions/new': () => <RNText>new transaction</RNText>,
+  '(app)/transactions/[txId]/index': () => <RNText>tx detail</RNText>,
+  '(app)/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
 };
+
+/** Open the list — bare, or entered with `filters` from the home page. */
+function renderList(filters?: TransactionListParams): ReturnType<typeof renderRouter> {
+  entryFilters = filters;
+  return renderRouter(ROUTES, { initialUrl: filters ? '/home' : '/transactions' });
+}
+
+/** The filters the list currently keeps. */
+function filtersNow(): TransactionListParams {
+  return JSON.parse(String(screen.getByTestId('tx-filters-state').props.children));
+}
 
 const SOURCE_A = makeLedgerSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
 const SOURCE_B = makeLedgerSource({ id: 's2', name: '建行信用卡', type: 'credit' });
@@ -109,22 +154,7 @@ function serveList(
   });
 }
 
-/** The query string, minus the path parameter the router mixes in. */
-function searchOf(router: { getSearchParams(): Record<string, string | string[] | undefined> }): Record<
-  string,
-  string | string[] | undefined
-> {
-  const { ledgerId: _ledgerId, ...rest } = router.getSearchParams();
-  return rest;
-}
-
 beforeEach(async () => {
-  // The filter bar keeps 「drawer open」 / 「panel open」 in module-level flags so they
-  // survive the remount every URL write causes (FilterBar.tsx). The previous test's
-  // unmount armed the reset; let it land, or one test's open panel leaks into the next.
-  act(() => {
-    jest.advanceTimersByTime(1);
-  });
   api = mockApi();
   listRequests = [];
   queryClient.clear();
@@ -155,30 +185,29 @@ afterEach(() => {
   wideSpy?.mockRestore();
 });
 
-test('picking a kind writes it to the URL, and nothing empty goes with it', async () => {
+test('picking a kind writes it to the filters and the request, not to the address', async () => {
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  const router = renderList();
 
   fireEvent.press(await screen.findByTestId('tx-filter-bar-kind-expense'));
 
-  await waitFor(() => expect(searchOf(router).kind).toBe('expense'));
-  // 04 §1.3: only the conditions that are actually set are written.
-  expect(searchOf(router)).toEqual({ kind: 'expense' });
-  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`);
-
+  // Only the conditions that are actually set are kept.
+  await waitFor(() => expect(filtersNow()).toEqual({ kind: ['expense'] }));
   await waitFor(() =>
     expect(listRequests.some((p) => JSON.stringify(p.kind) === JSON.stringify(['expense']))).toBe(
       true,
     ),
   );
+  // §14.66 e: the address is the page and nothing else, and no history entry was made.
+  expect(router.getPathname()).toBe('/transactions');
+  expect(router.getSearchParams()).toEqual({});
+  expect(expoRouter.canGoBack()).toBe(false);
 });
 
 test('the narrow layout puts the same controls behind a counted filter button', async () => {
   setWide(false);
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
-  const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER}/transactions?kind=expense&currency=SGD`,
-  });
+  renderList({ kind: ['expense'], currency: ['SGD'] });
 
   // 屏幕稿 02 · 375: the button carries how many conditions are on; the fields are inside.
   expect(await screen.findByTestId('tx-filter-bar-open-count')).toHaveTextContent('2');
@@ -188,21 +217,20 @@ test('the narrow layout puts the same controls behind a counted filter button', 
   expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
 
   fireEvent.press(screen.getByTestId('tx-filter-bar-kind-income'));
-  await waitFor(() => expect(searchOf(router).kind).toEqual(['expense', 'income']));
-  // A filter change replaces the URL and remounts the screen; the drawer has to survive
-  // that, or no one could ever set a second condition.
+  await waitFor(() => expect(filtersNow().kind).toEqual(['expense', 'income']));
+  // The drawer stays open while a second condition is set.
   expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
 
-  // 「应用」 only closes the drawer: the URL is already the filter state (04 §1.3).
+  // 「应用」 only closes the drawer: the filters are already applied.
   fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
   await waitFor(() => expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull());
-  expect(searchOf(router).kind).toEqual(['expense', 'income']);
+  expect(filtersNow().kind).toEqual(['expense', 'income']);
 });
 
 test('the account filter offers every account the ledger names, grouped, balances mine only', async () => {
   setWide(false);
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderList();
 
   fireEvent.press(await screen.findByTestId('tx-filter-bar-open'));
   expect(await screen.findByTestId('tx-filter-bar-source-group-mine')).toHaveTextContent('我的');
@@ -216,7 +244,7 @@ test('the account filter offers every account the ledger names, grouped, balance
   expect(screen.getByTestId('tx-filter-bar-currency-JPY')).toBeTruthy();
 
   fireEvent.press(screen.getByTestId('tx-filter-bar-source-s4'));
-  await waitFor(() => expect(searchOf(router).source_id).toBe('s4'));
+  await waitFor(() => expect(filtersNow().source_id).toEqual(['s4']));
   fireEvent.press(screen.getByTestId('tx-filter-bar-done'));
   // The chip names it, rather than printing an id.
   expect(await screen.findByTestId('tx-filter-bar-chips-source_id-s4')).toHaveTextContent(
@@ -226,7 +254,7 @@ test('the account filter offers every account the ledger names, grouped, balance
 
 test('the wide account dropdown groups the same way, and a title is never a filter', async () => {
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderList();
 
   fireEvent.press(await screen.findByTestId('tx-filter-bar-source-trigger'));
   const titleMine = await screen.findByTestId('tx-filter-bar-source-option-__group-mine');
@@ -241,40 +269,61 @@ test('the wide account dropdown groups the same way, and a title is never a filt
 
   fireEvent.press(titleMine);
   fireEvent.press(screen.getByTestId('tx-filter-bar-source-option-s3'));
-  await waitFor(() => expect(searchOf(router).source_id).toBe('s3'));
+  await waitFor(() => expect(filtersNow().source_id).toEqual(['s3']));
 });
 
 test('leaving the screen for good closes the narrow drawer; coming back never reopens it', async () => {
   setWide(false);
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 1 }));
-  const first = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  const router = renderList();
 
   fireEvent.press(await screen.findByTestId('tx-filter-bar-open'));
   expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
 
-  // Unlike the remount a filter change causes, this is a real departure: one tick passes
-  // with nothing mounted, so the drawer flag is dropped.
-  first.unmount();
-  act(() => {
-    jest.advanceTimersByTime(1);
-  });
+  act(() => expoRouter.push('/transactions/e1'));
+  expect(await screen.findByText('tx detail')).toBeTruthy();
+  act(() => expoRouter.back());
 
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
   expect(await screen.findByTestId('tx-filter-bar-open')).toBeTruthy();
   expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
 });
 
+test('the filters and the page survive a trip to a detail page and back', async () => {
+  serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 120 }));
+  const router = renderList();
+
+  fireEvent.press(await screen.findByTestId('tx-filter-bar-kind-expense'));
+  fireEvent.press(screen.getByTestId('tx-filter-bar-currency-JPY'));
+  await waitFor(() => expect(filtersNow()).toEqual({ kind: ['expense'], currency: ['JPY'] }));
+  fireEvent.press(await screen.findByTestId('tx-pagination-next'));
+  await waitFor(() => expect(filtersNow().offset).toBe(50));
+
+  fireEvent.press(await screen.findByTestId('tx-row-e1'));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/e1'));
+  // One step back is the list — every filter change before it made no history entry.
+  act(() => expoRouter.back());
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  expect(expoRouter.canGoBack()).toBe(false);
+
+  expect(filtersNow()).toEqual({ kind: ['expense'], currency: ['JPY'], offset: 50 });
+  expect(await screen.findByTestId('tx-filter-bar-chips-kind-expense')).toBeTruthy();
+  expect(screen.getByTestId('tx-pagination-page')).toHaveTextContent('第 2 / 3 页');
+  const last = listRequests.filter((p) => p.limit !== 1).at(-1);
+  expect(last).toMatchObject({ kind: ['expense'], currency: ['JPY'], offset: 50 });
+});
+
 test('typing in the search box writes `q` once, 300ms after the last keystroke', async () => {
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderList();
 
   const box = await screen.findByTestId('tx-filter-bar-q');
   fireEvent.changeText(box, '咖');
   fireEvent.changeText(box, '咖啡');
-  // Still nothing in the URL while the user is typing.
-  expect(searchOf(router).q).toBeUndefined();
+  // Nothing is applied while the user is typing.
+  expect(filtersNow().q).toBeUndefined();
 
-  await waitFor(() => expect(searchOf(router).q).toBe('咖啡'));
+  await waitFor(() => expect(filtersNow().q).toBe('咖啡'));
   expect(listRequests.filter((p) => p.q !== undefined).map((p) => p.q)).toEqual(['咖啡']);
 });
 
@@ -283,17 +332,17 @@ test('the wide panel stays open while the search box is being typed in', async (
   // still typing is not a finished condition: collapsing there would unmount the box under
   // the caret and force a press on 「筛选」 to type a second character.
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderList();
 
   fireEvent.changeText(await screen.findByTestId('tx-filter-bar-q'), '咖');
-  await waitFor(() => expect(searchOf(router).q).toBe('咖'));
+  await waitFor(() => expect(filtersNow().q).toBe('咖'));
 
   expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
   expect(screen.queryByTestId('tx-filter-bar-expand')).toBeNull();
 
   // And refining it keeps working, which is the whole point.
   fireEvent.changeText(screen.getByTestId('tx-filter-bar-q'), '咖啡');
-  await waitFor(() => expect(searchOf(router).q).toBe('咖啡'));
+  await waitFor(() => expect(filtersNow().q).toBe('咖啡'));
   expect(screen.getByTestId('tx-filter-bar-q')).toBeTruthy();
 });
 
@@ -302,24 +351,24 @@ test('setting the first condition from inside the wide panel does not collapse i
   // yank the card away on the first pill pressed inside it — worst for 日期区间 / 金额区间,
   // whose second box would unmount before it could be filled.
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderList();
 
   expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
   fireEvent.press(screen.getByTestId('tx-filter-bar-kind-expense'));
-  await waitFor(() => expect(searchOf(router).kind).toBe('expense'));
+  await waitFor(() => expect(filtersNow().kind).toEqual(['expense']));
 
   expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
   expect(screen.queryByTestId('tx-filter-bar-expand')).toBeNull();
 
   // And a second condition still lands, with the card still under the user's hands.
   fireEvent.press(screen.getByTestId('tx-filter-bar-kind-income'));
-  await waitFor(() => expect(searchOf(router).kind).toEqual(['expense', 'income']));
+  await waitFor(() => expect(filtersNow().kind).toEqual(['expense', 'income']));
   expect(screen.getByTestId('tx-filter-bar-controls')).toBeTruthy();
 });
 
 test('a filter set from elsewhere still collapses the wide panel to the chip strip', async () => {
   serveList(() => ({ items: [], total: 0 }));
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions?kind=expense` });
+  renderList({ kind: ['expense'] });
 
   expect(await screen.findByTestId('tx-filter-bar-expand')).toBeTruthy();
   expect(screen.queryByTestId('tx-filter-bar-controls')).toBeNull();
@@ -328,10 +377,13 @@ test('a filter set from elsewhere still collapses the wide panel to the chip str
   expect(await screen.findByTestId('tx-filter-bar-controls')).toBeTruthy();
 });
 
-test('a shared URL is restored verbatim, repeated keys included', async () => {
+test('a list opened with filters shows every one of them, several values included', async () => {
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER}/transactions?kind=expense&kind=refund&source_id=s1&source_id=s2&from=2026-09-01&to=2026-09-30`,
+  const router = renderList({
+    kind: ['expense', 'refund'],
+    source_id: ['s1', 's2'],
+    from: '2026-09-01',
+    to: '2026-09-30',
   });
 
   await screen.findByTestId('tx-filter-bar');
@@ -350,62 +402,57 @@ test('a shared URL is restored verbatim, repeated keys included', async () => {
   expect(screen.getByTestId('tx-filter-bar-chips-source_id-s1')).toHaveTextContent(
     '账户：招行储蓄卡',
   );
-  expect(searchOf(router).kind).toEqual(['expense', 'refund']);
+  expect(router.getPathname()).toBe('/transactions');
+  expect(router.getSearchParams()).toEqual({});
 });
 
-test('"清空筛选" goes back to the bare path', async () => {
+test('"清空筛选" drops every condition', async () => {
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER}/transactions?kind=expense&q=coffee&currency=SGD`,
-  });
+  const router = renderList({ kind: ['expense'], q: 'coffee', currency: ['SGD'] });
 
   fireEvent.press(await screen.findByTestId('tx-filter-bar-chips-clear'));
 
-  await waitFor(() => expect(searchOf(router)).toEqual({}));
-  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`);
+  await waitFor(() => expect(filtersNow()).toEqual({}));
+  expect(router.getPathname()).toBe('/transactions');
+  await waitFor(() =>
+    expect(listRequests.filter((p) => p.limit !== 1).at(-1)).toEqual({ limit: 50 }),
+  );
 });
 
 test('one chip can be dropped on its own, leaving the others alone', async () => {
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER}/transactions?kind=expense&kind=refund&currency=SGD`,
-  });
+  renderList({ kind: ['expense', 'refund'], currency: ['SGD'] });
 
   fireEvent.press(await screen.findByTestId('tx-filter-bar-chips-kind-refund-remove'));
 
-  await waitFor(() => expect(searchOf(router).kind).toBe('expense'));
-  expect(searchOf(router).currency).toBe('SGD');
+  await waitFor(() => expect(filtersNow().kind).toEqual(['expense']));
+  expect(filtersNow().currency).toEqual(['SGD']);
 });
 
-test('the wide pager writes `offset` into the URL and into the request', async () => {
+test('the wide pager writes `offset` into the filters and into the request', async () => {
   serveList(() => ({ items: [makeTransaction({ id: 'e1' })], total: 120 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  const router = renderList();
 
   expect(await screen.findByTestId('tx-pagination-page')).toHaveTextContent('第 1 / 3 页');
   fireEvent.press(screen.getByTestId('tx-pagination-next'));
 
-  await waitFor(() => expect(searchOf(router).offset).toBe('50'));
+  await waitFor(() => expect(filtersNow().offset).toBe(50));
   await waitFor(() => expect(listRequests.some((p) => p.offset === 50)).toBe(true));
   expect(screen.getByTestId('tx-pagination-page')).toHaveTextContent('第 2 / 3 页');
+  expect(router.getSearchParams()).toEqual({});
 });
 
-test('?import_batch_id= shows a "来自导入" chip that can be dismissed', async () => {
+test('a batch filter shows a "来自导入" chip that can be dismissed', async () => {
   serveList(() => ({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER}/transactions?import_batch_id=${BATCH_ID}`,
-  });
+  renderList({ import_batch_id: BATCH_ID });
 
   const chip = await screen.findByTestId(`tx-filter-bar-chips-import_batch_id-${BATCH_ID}`);
   expect(chip).toHaveTextContent(`来自导入 #${BATCH_ID.slice(0, 6)}`);
-  await waitFor(() =>
-    expect(listRequests.some((p) => p.import_batch_id === BATCH_ID)).toBe(true),
-  );
+  await waitFor(() => expect(listRequests.some((p) => p.import_batch_id === BATCH_ID)).toBe(true));
 
-  fireEvent.press(
-    screen.getByTestId(`tx-filter-bar-chips-import_batch_id-${BATCH_ID}-remove`),
-  );
+  fireEvent.press(screen.getByTestId(`tx-filter-bar-chips-import_batch_id-${BATCH_ID}-remove`));
 
-  await waitFor(() => expect(searchOf(router)).toEqual({}));
+  await waitFor(() => expect(filtersNow()).toEqual({}));
 });
 
 test('an empty result with two conditions fires exactly two limit=1 probes', async () => {
@@ -417,15 +464,11 @@ test('an empty result with two conditions fires exactly two limit=1 probes', asy
     return { items: [], total: 17 };
   });
 
-  const router = renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER}/transactions?kind=expense&from=2026-09-01&to=2026-09-30`,
-  });
+  renderList({ kind: ['expense'], from: '2026-09-01', to: '2026-09-30' });
 
   const kindSuggestion = await screen.findByTestId('tx-empty-filtered-kind');
   expect(kindSuggestion).toHaveTextContent('去掉「类型：支出」会有 42 笔');
-  expect(screen.getByTestId('tx-empty-filtered-date')).toHaveTextContent(
-    /去掉「.+」会有 17 笔/,
-  );
+  expect(screen.getByTestId('tx-empty-filtered-date')).toHaveTextContent(/去掉「.+」会有 17 笔/);
 
   // The page header's own 「共 M 笔」 probe is a `limit=1` request too, but it carries no
   // condition at all; the rescue probes are the ones that keep the rest of the filter set.
@@ -445,7 +488,7 @@ test('an empty result with two conditions fires exactly two limit=1 probes', asy
 
   fireEvent.press(kindSuggestion);
 
-  await waitFor(() => expect(searchOf(router).kind).toBeUndefined());
-  expect(searchOf(router).from).toBe('2026-09-01');
-  expect(searchOf(router).to).toBe('2026-09-30');
+  await waitFor(() => expect(filtersNow().kind).toBeUndefined());
+  expect(filtersNow().from).toBe('2026-09-01');
+  expect(filtersNow().to).toBe('2026-09-30');
 });
