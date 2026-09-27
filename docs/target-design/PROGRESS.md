@@ -11,6 +11,7 @@
 | 5 前端 | API 层、错误文案表、登录 / 账本 / 首页 / 交易 / 记一笔 / 详情 / 账户 / 设置各页、PWA 与构建 | `v3/phase-5-frontend` → 已合回 `main`（d0b4044） | **完成（2026-09-15）** |
 | 6 导入 | `services/importing/`、导入端点、skill 生成脚本、前端导入指南 / 上传 / review / 历史 | `v3/phase-6-import` → 已合回 `main`（60bf8cb） | **完成（2026-09-15）** |
 | 7 视觉 | 逐屏对稿重做表现层：组件库、宽屏侧栏壳、14 屏与深色、`verify-contrast.mjs` WCAG 门禁、日期 ISO 化 | `v3/phase-7-visual` → 已合回 `main`（272b4ec） | **完成（2026-09-16）**，收尾轮亦已合回（06aa97b） |
+| 7.6 干净地址 | 地址只写页面，当前账本记在本标签页 + 本地，月份 / 筛选 / 批次切片改为内存里按账本分桶的浏览状态；切换账本 / 换月份 / 改筛选不进浏览器历史；登录后所有页面扁平在一个 Slot 下（§14.66） | `v3/url-clean`、`v3/url-clean-b` → 已合回 `main` | **完成（2026-09-27）** |
 | 7.5 导航统一 | 用户手测提出：所有登录后页面同一个壳、窄屏底栏全局、每个子页有返回（§14.64）；取消账本管理页、切换器末行「账本设置」、表单页无底栏、离开守卫覆盖所有出口（§14.65） | `v3/nav-shell`、`v3/nav-followup` → 已合回 `main`（b38c7bb、912406a） | **完成（2026-09-27）** |
 | 8 账户归人 | `finance_sources` 改归用户、`ledger_sources` 共享表、个人净资产、`/sources*` 与共享接口、全局账户页与选择器分组、空账本引导按交易判断（§14.62 k）、迁移（决策 §14.62） | `v3/phase-8-accounts` + `v3/phase-8b-finish` → 已合回 `main`（c481b06） | **完成（2026-09-27）** |
 | 9 部署与原生 | 部署更新、Android / iOS 打包 | | 未开始 |
@@ -32,6 +33,9 @@
 
 ## 日志
 
+- 2026-09-27（晚）：干净地址（§14.66 a–j）合回 `main`。两轮工作流：第一轮（wf_a171e591-e01）文档过、地基 `u-foundation` 因验收命令用子串匹配误撞 `onLedgerGone` 被判不过（代码审核认可），编排者手工合入并补 §14.66 j；第二轮（wf_91063bac-698）三个任务全过，终审再抓到一个真 bug（被移出唯一账本后再加入，`/home` 与 `/ledgers` 互相跳转死循环——`useEnterLedger` 不清 unavailable 标记、登出不重置标记、落地页读的是未过滤的列表）与几个小项（删掉最后一本账后新建会误报「账本不可用」、两处「看这批交易」绕开了 `useOpenTransactions`、`ledgersApi.remove` 没带 `confirm_name` 导致界面上删账本必失败、后端 `GUIDE_URL` 还是 `/l/{id}/imports/guide`、401 登出不清本标签页的账本），编排者手工全部修掉并加回归测试。前端 76 套件 1259 个测试、后端 1263 个测试全绿。
+  - 新结构：`src/domain/routes.ts` 扁平构造器；`app/(app)/*` 扁平路由（`home.tsx`、`ledger.tsx`…）；`src/store/LedgerContext.tsx`（`CurrentLedgerProvider` / `pickCurrentLedger` / `switchTo` 不动 URL）、`ViewState.tsx`（`useLedgerViewState` 键 `home.month` / `transactions.filters` / `imports.status` / `imports.batch.<id>`）、`ledgerUnavailable.ts`；`src/navigation/ledgerRoute.ts`（`isLedgerRoute` / `ledgerSwitchTarget`）；`ledgerHistory.ts`、`nestedEntry.ts`、`useChromeLedger.ts`、`useLastLedgerId.ts`、`LedgerGone.tsx`、`withLedger()` 全部删除。
+  - 教训：验收命令里的 grep 用 `-w`；`expo-router` 的类型路由（`.expo/types/router.d.ts`）在主检出里是上一次 Metro 生成的，路由树变了要重跑一次 Metro 再 `tsc`。
 - 2026-09-27：第八阶段（账户归人，§14.62 a–k）完成并合回 `main`（c481b06 + 手工收口提交）。两轮工作流：第一轮（wf_e34282e2-271，9 任务 / 3 波）合入 6 个——两个被打回的任务代码本身没问题，卡在范围外（`a8-usage-checks` 等另一个后端分支先合入；`a8-fe-consumers` 被地基留下的 409 行 `fixtures.ts` 挡住），验收因此被跳过；编排者手工合入两者、修三个测试文件、把夹具拆成 `fixtures.ts` / `fixtures-sources.ts` / `ids.ts`、贯穿测试改到 `/accounts`。第二轮（wf_d4c075f3-b14，4 小项 + 验收）全部通过：验收在真机走查里又抓到并修了四个真缺陷（`useNestedEntrySync` 的 replace 丢了 query string、review 对手账户组标题样式、`ix_transactions_source_occurred` 模型与迁移都没建、导入提交配对时没查对腿账户）。终审三条 minor 由编排者手工收口（review 改 kind 的重新标记按上传者判断、review 选配对目标走与提交同一道门 404/409、前端配对选择器过滤不可用账户）。后端 1263 个测试、前端 70 套件 1154 个测试全绿。本机演示库已原地迁移（备份 `backend/wallet_local.pre-d47.db`）。
   - **手机手测发现**：记一笔的大号金额数字在 Web 上一直被 `pwa.css` 的 `16px !important`（防 iOS 聚焦放大）压成 16px，30px 的减号因此显得突兀——`AmountField` 大号输入框加 `data-large` 豁免（`input:not([data-large])`），并给它 `minWidth: 0` 免得 40px 的输入框把币种选择器挤出框外。空月份的分类卡里，屏幕稿 15 的条纹占位块贴着卡片左边缘、宽屏上靠左而标题按钮居中——`EmptyState` 的占位块改为居中并按 420 封顶（`alignSelf: 'stretch'` 被 `maxWidth` 截断后会留在起始边），分类卡的空态加水平内边距。
   - **收口时发现的 main 上的导航 bug**：从账本外（`/settings`、`/accounts*`）进 `/l/:id/<子页>` 时 expo-router 6 把内层导航器初始化在首页，地址却是子页——§14.64 验收里「底栏交易」那张截图其实是首页，当时只看了地址。修法 `src/navigation/nestedEntry.ts`（`useNestedEntrySync`，挂在 `app/(app)/_layout.tsx`）：地址变化后读导航容器状态，发现错位就 `router.replace(pathname + 原 query)`。04 §1.4.1 已记。

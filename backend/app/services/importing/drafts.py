@@ -45,7 +45,7 @@ VERSION_RE = re.compile(r"^\s*#\s*version\s*:\s*(\S.*?)\s*$")
 #: be built where the ledger is known — the endpoint layer fills
 #: ``{ledger_id}`` in (``app/api/imports.py``). Nothing in ``services/importing``
 #: formats it: the service layer must not depend on the route shape.
-GUIDE_URL = "/l/{ledger_id}/imports/guide"
+GUIDE_URL = "/imports/guide"
 
 MAX_ERRORS = 50  # §2.2: list at most this many, count the rest in `detail`
 MAX_MERCHANT = 200

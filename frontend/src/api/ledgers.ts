@@ -29,8 +29,11 @@ export const ledgersApi = {
   update: (id: Uuid, b: LedgerUpdate): Promise<Ledger> =>
     apiClient.patch<Ledger>(`/ledgers/${id}`, b).then((r) => r.data),
 
-  remove: (id: Uuid): Promise<void> =>
-    apiClient.delete<void>(`/ledgers/${id}`).then(() => undefined),
+  /** 03 §5.12: the ledger's own name typed back is the confirmation the server requires. */
+  remove: (id: Uuid, confirmName: string): Promise<void> =>
+    apiClient
+      .delete<void>(`/ledgers/${id}`, { params: { confirm_name: confirmName } })
+      .then(() => undefined),
 
   members: (id: Uuid): Promise<Paged<LedgerMember>> =>
     apiClient.get<Paged<LedgerMember>>(`/ledgers/${id}/members`).then((r) => r.data),

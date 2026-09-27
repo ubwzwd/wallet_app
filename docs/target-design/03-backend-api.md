@@ -1033,7 +1033,7 @@ ETag: "2026-09-10"
     "chatgpt_instructions": "你是账单整理助手……（同一份规则的 ChatGPT Custom GPT / Project 指令版本）",
     "categories_block": "支出：\n- clothing 服饰 — 穿在身上的：衣服、鞋、包、配饰。运动装备也算这里；童装归育儿\n  - clothes 衣服 / shoes 鞋子 / bags 包 / accessories 配饰\n……（由 core/categories.render_skill_categories() 生成，逐字取自决策 §1.3）"
   },
-  "guide_url": "/import/guide"
+  "guide_url": "/imports/guide"
 }
 ```
 
@@ -2842,7 +2842,7 @@ Content-Type: application/json
   "code": "skill_outdated",
   "current_version": "2026-09-10",
   "file_version": "2026-08-20",
-  "guide_url": "/import/guide"
+  "guide_url": "/imports/guide"
 }
 ```
 

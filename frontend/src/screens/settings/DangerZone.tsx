@@ -189,7 +189,7 @@ export function DangerZone({
 
   const confirmDelete = (): void => {
     if (!detail) return;
-    remove.mutate(undefined, {
+    remove.mutate(detail.name, {
       onSuccess: () => {
         setDeleteOpen(false);
         toast.success(t('ledger:settings.danger.deleted_toast', { name: detail.name }));

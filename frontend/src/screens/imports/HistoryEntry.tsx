@@ -9,11 +9,11 @@ import React from 'react';
 import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { ImportBatchListItem, TransactionListParams, Uuid } from '@/api/types';
+import type { ImportBatchListItem, Uuid } from '@/api/types';
 import { routes } from '@/domain/routes';
 import type { Lang } from '@/i18n';
 import { useDeleteImport } from '@/queries';
-import { useSetLedgerViewState } from '@/store';
+import { useOpenTransactions } from '@/screens/transactions/useTxFilters';
 import { confirm, toast } from '@/ui';
 
 import { HistoryCard } from './HistoryCard';
@@ -42,7 +42,7 @@ export function HistoryEntry({
 }: HistoryEntryProps): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
-  const setViewState = useSetLedgerViewState();
+  const openTransactions = useOpenTransactions();
   const remove = useDeleteImport(ledgerId, batch.id);
 
   const onDiscard = React.useCallback((): void => {
@@ -82,10 +82,7 @@ export function HistoryEntry({
     onUndo,
     onContinue: () => router.push(routes.importBatch(batch.id) as Href),
     // The list opens filtered to this batch: the filter is its view state (§14.66 e).
-    onView: () => {
-      setViewState<TransactionListParams>('transactions.filters', { import_batch_id: batch.id });
-      router.navigate(routes.transactions() as Href);
-    },
+    onView: () => openTransactions({ import_batch_id: batch.id }),
   };
 
   return wide ? <HistoryTableRow {...shared} /> : <HistoryCard {...shared} />;

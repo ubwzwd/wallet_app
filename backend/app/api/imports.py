@@ -123,7 +123,8 @@ async def create_import(
         drafts = validation.normalize_rows(raw, ictx)  # also §2.6's row ceiling
     except (ImportFormatInvalid, SkillOutdated) as exc:
         if isinstance(exc, SkillOutdated):  # 04 §4.10: the guide route is ledger-scoped
-            exc.guide_url = GUIDE_URL.format(ledger_id=ctx.ledger.id)
+            # §14.66: the guide's path carries no ledger id, so there is nothing to fill in.
+            exc.guide_url = GUIDE_URL
         return JSONResponse(status_code=exc.status_code, content=exc.body())
 
     flagging.flag_rows(db, ictx, drafts)

@@ -194,7 +194,7 @@ def test_rule_5_stale_version_carries_both_versions_and_the_guide() -> None:
         # fills `{ledger_id}` in, because only it knows which ledger (04 §4.10).
         "guide_url": GUIDE_URL,
     }
-    assert "{ledger_id}" in GUIDE_URL
+    assert GUIDE_URL == "/imports/guide"  # §14.66: the page path carries no ledger id
 
 
 def test_missing_version_line_is_not_skill_outdated() -> None:

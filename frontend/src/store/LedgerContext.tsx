@@ -254,8 +254,13 @@ export function CurrentLedgerProvider({
   // only ever remembers a ledger it was shown, so a miss means it is gone — say where the tab
   // went, as above. Only for the remembered pick: one made by `switchTo` since may still be on
   // its way into the list, and that is the fallback's business, not a loss.
+  // One look, at the first list that settles after the reload: later re-reads (the last
+  // ledger deleted, then a new one created) are not reloads and must not announce a loss.
+  const reloadChecked = React.useRef(false);
   React.useEffect(() => {
-    if (chosen === null || chosen !== remembered || !all || isFetching || !current) return;
+    if (reloadChecked.current || !all || isFetching) return;
+    reloadChecked.current = true;
+    if (chosen === null || chosen !== remembered || !current) return;
     if (current.id === chosen || all.some((l) => l.id === chosen)) return;
     setChosen(current.id);
     toast.info(t('ledger:unavailable.switched', { name: current.name }));

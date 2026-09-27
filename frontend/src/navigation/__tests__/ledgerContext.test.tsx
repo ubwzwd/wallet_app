@@ -17,6 +17,7 @@ jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 import RootLayout from '../../../app/_layout';
 import AppGroupLayout from '../../../app/(app)/_layout';
+import LedgersRoute from '../../../app/(app)/ledgers/index';
 
 import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
@@ -285,6 +286,61 @@ describe('a ledger the server gave up on (§14.66 c)', () => {
     // Everything cached under the lost ledger is dropped; another ledger's is left alone.
     await waitFor(() => expect(queryClient.getQueryData(txKey)).toBeUndefined());
     expect(queryClient.getQueryData(qk.ledger(LEDGER_B).tx('tx-2'))).toEqual({ id: 'tx-2' });
+  });
+
+  test('the last ledger deleted, then a new one created: no loss is announced', async () => {
+    // The reload check looks once, at the first list that settles. A later re-read that no
+    // longer holds the remembered ledger (it was deleted on purpose) is not a reload loss.
+    rememberInTab(LEDGER_A);
+    mockGet('/ledgers', {
+      items: [makeLedger({ id: LEDGER_A, name: '家庭账本', base_currency: 'CNY', role: 'owner' })],
+      total: 1,
+    });
+    const router = renderRouter(ROUTES, { initialUrl: '/home' });
+    expect(await router.findByTestId('probe-id')).toHaveTextContent(LEDGER_A);
+
+    mockGet('/ledgers', { items: [], total: 0 });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: qk.global.ledgers() });
+    });
+    await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+
+    mockGet('/ledgers', {
+      items: [makeLedger({ id: LEDGER_B, name: '新账本', base_currency: 'SGD', role: 'owner' })],
+      total: 1,
+    });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: qk.global.ledgers() });
+    });
+    await waitFor(() => expect(router.getByText('ledgers-page')).toBeTruthy());
+    expect(toast.peek()).toHaveLength(0);
+  });
+
+  test('`/ledgers` ignores a ledger this tab was flagged out of, like `/home` does', async () => {
+    // Otherwise the two guards send the user back and forth forever when that ledger is the
+    // only one (removed mid-session, then re-invited before the list is re-read). The real
+    // `/ledgers` page is mounted here: its landing logic is what must agree with the guard.
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
+    mockGet('/ledgers', {
+      items: [makeLedger({ id: LEDGER_A, name: '家庭账本', base_currency: 'CNY', role: 'owner' })],
+      total: 1,
+    });
+    const router = renderRouter(
+      { ...ROUTES, '(app)/ledgers/index': LedgersRoute },
+      { initialUrl: '/home' },
+    );
+    expect(await router.findByTestId('probe-id')).toHaveTextContent(LEDGER_A);
+
+    act(() => markLedgerUnavailable(LEDGER_A));
+
+    await waitFor(() => expect(router.getPathname()).toBe('/ledgers'));
+    expect(await router.findByText('先有一本账')).toBeTruthy();
+    // The re-read still lists the flagged ledger; the landing must not bounce back to /home.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: qk.global.ledgers() });
+    });
+    await waitFor(() => expect(router.getByText('先有一本账')).toBeTruthy());
+    expect(router.getPathname()).toBe('/ledgers');
   });
 
   test('on one of its records, the tab also leaves for the list', async () => {

@@ -426,7 +426,7 @@ date,amount,currency,kind,transfer_role,transfer_subtype,merchant,note,category_
   "code": "skill_outdated",
   "current_version": "2026-09-10",
   "file_version": "2026-08-20",
-  "guide_url": "/import/guide"
+  "guide_url": "/imports/guide"
 }
 ```
 

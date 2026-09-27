@@ -342,6 +342,8 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
   expect(api.mock.history.delete[0].url).toContain(`/ledgers/${LEDGER_ID}`);
+  // 03 §5.12: the typed name travels as the server's confirmation, or the DELETE is a 400.
+  expect(api.mock.history.delete[0].params).toEqual({ confirm_name: '家庭账本' });
 });
 
 test('deleting with another ledger left switches the tab to it and lands on /home', async () => {

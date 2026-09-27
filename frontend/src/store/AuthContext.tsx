@@ -30,6 +30,8 @@ import {
 import { applyLanguage } from '@/i18n';
 import { PREF_NAMES, setPref, setSessionPref } from '@/utils/prefs';
 
+import { resetLedgerUnavailable } from './ledgerUnavailable';
+
 export type AuthStatus = 'bootstrapping' | 'anonymous' | 'authenticated';
 
 export interface AuthContextValue {
@@ -110,6 +112,10 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
     session.current += 1;
     setUserState(null);
     setStatus('anonymous');
+    // Every sign-out (logout, a 401, a failed bootstrap): the next account on this tab must
+    // not inherit a ledger the previous one was flagged out of, nor its tab-remembered pick.
+    resetLedgerUnavailable();
+    void setSessionPref(PREF_NAMES.currentLedgerId, null);
   }, []);
 
   // ---- bootstrap -----------------------------------------------------------

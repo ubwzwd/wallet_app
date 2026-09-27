@@ -113,10 +113,10 @@ export function useUpdateLedger(
 export function useDeleteLedger(
   l: Uuid,
   opts?: MutationOpts,
-): UseMutationResult<void, Error, void> {
+): UseMutationResult<void, Error, string> {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => ledgersApi.remove(l),
+    mutationFn: (confirmName: string) => ledgersApi.remove(l, confirmName),
     meta: { silent: opts?.silent },
     onSuccess: () => removeLedger(qc, l),
   });

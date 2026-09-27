@@ -14,6 +14,7 @@ import { Redirect } from 'expo-router';
 
 import { type RouteHref, routes } from '@/domain/routes';
 import { useLedgers } from '@/queries';
+import { useUnavailableLedgers } from '@/store';
 import { useAuth } from '@/store/AuthContext';
 
 import { AppSkeleton } from './RequireAuth';
@@ -40,10 +41,13 @@ export type LandingTarget =
  */
 export function useLandingTarget(): LandingTarget {
   const { data, isPending, isFetching, isError, refetch } = useLedgers();
+  // The same reachable set `CurrentLedgerProvider` decides from: a ledger this tab was
+  // flagged out of must not send `/ledgers` back to `/home` while `/home` sends it here.
+  const unavailable = useUnavailableLedgers();
 
   if (isError) return { kind: 'error', retry: () => void refetch() };
   if (isPending) return { kind: 'pending' };
-  if (data.items.length === 0) return { kind: 'none' };
+  if (data.items.every((l) => unavailable.has(l.id))) return { kind: 'none' };
   if (isFetching) return { kind: 'pending' };
   return { kind: 'ledger', href: routes.home() };
 }

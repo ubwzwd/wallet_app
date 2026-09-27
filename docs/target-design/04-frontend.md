@@ -126,7 +126,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 
 上表 2026-09-27 按决策 §14.66 整表重写：原 `/l/:ledgerId`、`/l/:ledgerId/transactions*`、`/l/:ledgerId/transfers/*`、`/l/:ledgerId/imports*`、`/l/:ledgerId/settings` 已删，不留跳转（旧地址落到 404）。路径由 `src/domain/routes.ts` 的构造器给出：`routes.home()`、`routes.transactions()`（不再把筛选序列化进查询串）、`routes.transactionNew(opts?)`、`routes.transaction(txId)`、`routes.transactionEdit(txId)`、`routes.transfer(pairId)`、`routes.transferEdit(pairId)`、`routes.imports()`、`routes.importsNew()`、`routes.importsGuide()`、`routes.importBatch(batchId)`、`routes.ledgerSettings()`、`routes.settings()`、`routes.accounts()` / `routes.accountNew(ledgerId?)` / `routes.accountEdit(sid)`、`routes.ledgers()` / `routes.ledgersNew()` / `routes.ledgersJoin()` / `routes.login(next?)` / `routes.register(next?)`；原来的 `routes.l(ledgerId)`、带账本前缀的查询参数清单与按账本改写路径的帮手都已删除。（2026-09-27 按决策 §14.66 同步）
 
-**为什么地址里不再有账本 id**（决策 §14.66，取代原来「账本 id 在路径里」的理由）：`/l/<uuid>?month=…` 这样的地址太老派；更要紧的是**后退**——账本 id 在路径里时，切换账本、换月份、改筛选都会进浏览器历史，在两本账之间来回切几次之后，后退是在两本账之间来回切，而不是退回上一页。现在切换账本、换月份、改筛选都不进历史，后退只在页面之间走。原来的三个理由各自的去向：同一浏览器两个标签页看两本账——当前账本按标签页记在 `sessionStorage`，照样互不干扰（§2.2）；刷新——回到本标签页的账本，浏览状态回到默认；把一条链接发给同账本的人——交易链接 `/transactions/<id>` 仍可分享，对方用自己本地记住的账本去取，不属于它就是 404「不存在或无权限」页，这是用户接受的代价（决策 §14.66 h）；筛选视图不再能靠复制地址分享。（2026-09-27 按决策 §14.66 同步）
+**为什么地址里不再有账本 id**（决策 §14.66，取代原来「账本 id 在路径里」的理由）：`/l/<uuid>?month=…` 这样的地址太老派；更要紧的是**后退**——账本 id 在路径里时，切换账本、换月份、改筛选都会进浏览器历史，在两本账之间来回切几次之后，后退是在两本账之间来回切，而不是退回上一页。现在切换账本、换月份、改筛选都不进历史，后退只在页面之间走。原来的三个理由各自的去向：同一浏览器两个标签页看两本账——当前账本按标签页记在 `sessionStorage`，照样互不干扰（§2.2）；刷新——回到本标签页的账本，浏览状态回到默认；把一条链接发给同账本的人——交易链接 `/transactions/<id>` 仍可分享，对方用自己本地记住的账本去取，不属于它就是该页自己的「不存在或无权限」态（§1.5 第 5 条），这是用户接受的代价（决策 §14.66 h）；筛选视图不再能靠复制地址分享。（2026-09-27 按决策 §14.66 同步）
 
 ### 1.3 筛选、月份与切片不在 URL 里（浏览状态）
 

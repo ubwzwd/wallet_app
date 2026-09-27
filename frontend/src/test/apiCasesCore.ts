@@ -127,8 +127,9 @@ export const coreCases: Case[] = [
     name: 'ledgersApi.remove',
     method: 'delete',
     path: `/ledgers/${LEDGER_ID}`,
+    query: 'confirm_name=%E5%AE%B6%E5%BA%AD%E8%B4%A6%E6%9C%AC',
     status: 204,
-    call: () => ledgersApi.remove(LEDGER_ID),
+    call: () => ledgersApi.remove(LEDGER_ID, '家庭账本'),
     expected: undefined,
   },
   {

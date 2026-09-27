@@ -14,7 +14,7 @@ import { type Href, useRouter } from 'expo-router';
 import type { Ledger } from '@/api/types';
 import { routes } from '@/domain/routes';
 import { useLedgers } from '@/queries';
-import { useOptionalLedgerContext } from '@/store';
+import { clearLedgerUnavailable, useOptionalLedgerContext } from '@/store';
 
 export function useEnterLedger(): (ledger: Ledger) => void {
   const router = useRouter();
@@ -24,6 +24,9 @@ export function useEnterLedger(): (ledger: Ledger) => void {
 
   return React.useCallback(
     (ledger: Ledger): void => {
+      // A ledger this tab had flagged as unavailable (removed from it, then re-invited) is
+      // reachable again; without this the guards on `/home` and `/ledgers` disagree forever.
+      clearLedgerUnavailable(ledger.id);
       switchTo?.(ledger.id);
       void refetch().then(() => router.replace(routes.home() as Href));
     },

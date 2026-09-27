@@ -21,7 +21,6 @@ import type {
   ImportBatch,
   ImportCommitResult,
   ImportRow,
-  TransactionListParams,
   Uuid,
 } from '@/api/types';
 import { routes } from '@/domain/routes';
@@ -36,7 +35,8 @@ import {
   useImportRows,
   useLedgerSources,
 } from '@/queries';
-import { useLedgerContext, useSetLedgerViewState } from '@/store';
+import { useOpenTransactions } from '@/screens/transactions/useTxFilters';
+import { useLedgerContext } from '@/store';
 import { space } from '@/theme/tokens';
 import { useIsWide } from '@/theme/useBreakpoint';
 import {
@@ -96,7 +96,7 @@ function CommittedView({
   const { t } = useTranslation();
   const router = useRouter();
   const lang = useLang();
-  const setViewState = useSetLedgerViewState();
+  const openTransactions = useOpenTransactions();
   const remove = useDeleteImport(ledgerId, batch.id);
 
   const onUndo = React.useCallback((): void => {
@@ -116,13 +116,8 @@ function CommittedView({
         result={result}
         undoing={remove.isPending}
         onUndo={onUndo}
-        onViewTransactions={() => {
-          // The list opens on this batch's entries: its filter is view state (§14.66 e).
-          setViewState<TransactionListParams>('transactions.filters', {
-            import_batch_id: batch.id,
-          });
-          router.navigate(routes.transactions() as Href);
-        }}
+        // The list opens on this batch's entries: its filter is view state (§14.66 e).
+        onViewTransactions={() => openTransactions({ import_batch_id: batch.id })}
         onImportAnother={() => router.push(routes.importsNew() as Href)}
       />
       {/* 屏幕稿 11 · 撤销确认 lives with the screen that can undo (see `UndoDialog.tsx`). */}

@@ -162,8 +162,8 @@ def test_outdated_version_is_skill_outdated(ledger_setup, client, db):
     assert body["current_version"] == CATEGORY_VERSION
     # 04 §4.10: the frontend pushes this path as it stands, so it has to be the
     # app's real, ledger-scoped guide route — not a template, not a bare path.
-    assert body["guide_url"] == f"/l/{ledger.id}/imports/guide"
-    assert "{" not in body["guide_url"]
+    # §14.66: the guide page carries no ledger id in its path.
+    assert body["guide_url"] == "/imports/guide"
     assert db.query(ImportBatch).count() == 0
 
 
