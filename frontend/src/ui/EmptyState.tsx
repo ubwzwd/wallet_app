@@ -199,7 +199,16 @@ const styles = StyleSheet.create({
   centered: { textAlign: 'center' },
   body: { maxWidth: 420 },
   actions: { flexDirection: 'row', gap: space['2'], marginTop: space['2'] },
-  ghost: { alignSelf: 'stretch', gap: space['4'], borderRadius: radius.md + 2, maxWidth: 420 },
+  // Centred and capped, never stretched: a stretched item clamped by `maxWidth` stays at
+  // the start edge, which left the striped rows hugging a wide card's left side while the
+  // headline and button beneath them sat in the middle (屏幕稿 15 centres the block).
+  ghost: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 420,
+    gap: space['4'],
+    borderRadius: radius.md + 2,
+  },
   ghostRows: { gap: space['3'] - 2 },
   ghostRow: { flexDirection: 'row', alignItems: 'center', gap: space['3'] },
   ghostDot: { width: 10, height: 10, borderRadius: 3 },

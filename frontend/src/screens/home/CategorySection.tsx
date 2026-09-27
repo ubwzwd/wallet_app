@@ -271,5 +271,7 @@ const styles = StyleSheet.create({
   restWide: { minHeight: 52, paddingHorizontal: space['4'] + 2, gap: space['3'] + 2 },
   chip: { width: 10, height: 10, borderRadius: 3, flexShrink: 0 },
   restLabel: { flex: 1 },
-  emptyState: { paddingVertical: space['5'] },
+  // The card carries no side padding of its own (its rows do), so the empty state's
+  // striped rows and note need their own inset to stay off the card edge.
+  emptyState: { paddingVertical: space['5'], paddingHorizontal: space['4'] },
 });
