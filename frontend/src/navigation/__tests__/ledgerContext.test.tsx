@@ -127,8 +127,8 @@ describe('which ledger is current (§14.66 b)', () => {
 
     expect(await router.findByTestId('probe-id')).toHaveTextContent(LEDGER_A);
     await waitFor(async () => expect(await getPref(PREF_NAMES.lastLedgerId)).toBe(LEDGER_A));
-    // Native has no tabs: the per-tab pref degrades to an ordinary one.
-    expect(await getPref(PREF_NAMES.currentLedgerId)).toBe(LEDGER_A);
+    // Native has no tabs: the per-tab pref stores nothing, `last_ledger_id` carries it.
+    expect(await getPref(PREF_NAMES.currentLedgerId)).toBeNull();
   });
 
   test('a remembered ledger that is no longer ours falls back to the first', async () => {
@@ -201,7 +201,6 @@ describe('switchTo (§14.66 d)', () => {
     fireEvent.press(router.getByTestId('switch-to-b'));
 
     await waitFor(async () => expect(await getPref(PREF_NAMES.lastLedgerId)).toBe(LEDGER_B));
-    expect(await getPref(PREF_NAMES.currentLedgerId)).toBe(LEDGER_B);
   });
 
   test.each([

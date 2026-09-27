@@ -106,9 +106,8 @@ function webSessionStorage(): Storage | null {
 /**
  * Synchronous read of a per-tab preference (decision §14.66 b): web `sessionStorage` under
  * the same `wallet:<name>` key, so a reload keeps it and a second tab has its own. Native
- * has no tabs and no synchronous storage, so there it degrades to an ordinary preference and
- * this read is always `null` (like `getPrefSync`) — the caller falls back to the persistent
- * one it keeps beside it.
+ * has no tabs, so there this read is always `null` and nothing is stored — the caller falls
+ * back to the persistent preference it keeps beside it (`last_ledger_id`).
  */
 export function getSessionPrefSync(name: string): string | null {
   if (Platform.OS !== 'web') return getPrefSync(name);
@@ -121,12 +120,12 @@ export function getSessionPrefSync(name: string): string | null {
   }
 }
 
-/** Write (or with `null`, remove) a per-tab preference; failures are swallowed like `setPref`. */
+/**
+ * Write (or with `null`, remove) a per-tab preference; failures are swallowed like `setPref`.
+ * A no-op on native: there is no tab, and the caller writes the persistent preference itself.
+ */
 export async function setSessionPref(name: string, value: string | null): Promise<void> {
-  if (Platform.OS !== 'web') {
-    await setPref(name, value);
-    return;
-  }
+  if (Platform.OS !== 'web') return;
   const s = webSessionStorage();
   if (!s) return;
   try {

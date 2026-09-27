@@ -28,7 +28,7 @@ import {
   type User,
 } from '@/api';
 import { applyLanguage } from '@/i18n';
-import { PREF_NAMES, setPref } from '@/utils/prefs';
+import { PREF_NAMES, setPref, setSessionPref } from '@/utils/prefs';
 
 export type AuthStatus = 'bootstrapping' | 'anonymous' | 'authenticated';
 
@@ -185,6 +185,8 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
     queryClient.clear();
     await clearApiCache();
     await setPref(PREF_NAMES.lastLedgerId, null);
+    // This tab's current ledger (§14.66 b) goes too, so the next account starts fresh.
+    await setSessionPref(PREF_NAMES.currentLedgerId, null);
     // Navigating to /login is the caller's job (04 §1.5 rule 5).
   }, [goAnonymous, queryClient]);
 

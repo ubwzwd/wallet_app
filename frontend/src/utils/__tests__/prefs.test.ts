@@ -98,13 +98,11 @@ describe('per-tab prefs (decision §14.66 b)', () => {
   });
 
   describe('on native', () => {
-    test('degrade to an ordinary preference, with no synchronous read', async () => {
+    test('store nothing and read back null: the caller keeps the persistent pref itself', async () => {
       if (Platform.OS === 'web') return;
       await setSessionPref(PREF_NAMES.currentLedgerId, 'ledger-b');
-      expect(await getPref(PREF_NAMES.currentLedgerId)).toBe('ledger-b');
-      expect(getSessionPrefSync(PREF_NAMES.currentLedgerId)).toBeNull();
-      await setSessionPref(PREF_NAMES.currentLedgerId, null);
       expect(await getPref(PREF_NAMES.currentLedgerId)).toBeNull();
+      expect(getSessionPrefSync(PREF_NAMES.currentLedgerId)).toBeNull();
     });
   });
 });
