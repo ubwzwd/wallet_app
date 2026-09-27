@@ -110,7 +110,7 @@ function webSessionStorage(): Storage | null {
  * back to the persistent preference it keeps beside it (`last_ledger_id`).
  */
 export function getSessionPrefSync(name: string): string | null {
-  if (Platform.OS !== 'web') return getPrefSync(name);
+  if (Platform.OS !== 'web') return null;
   const s = webSessionStorage();
   if (!s) return null;
   try {
