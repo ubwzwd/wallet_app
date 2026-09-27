@@ -68,6 +68,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   api.restore();
   queryClient.clear();
 });
@@ -219,7 +220,6 @@ test('logout clears the token, the query cache and the last- and current-ledger 
   expect(await AsyncStorage.getItem(prefKey(PREF_NAMES.lastLedgerId))).toBeNull();
   // This tab's current ledger (sessionStorage on the web) is dropped too.
   expect(sessionSpy).toHaveBeenCalledWith(PREF_NAMES.currentLedgerId, null);
-  sessionSpy.mockRestore();
 });
 
 test('a 401 on any protected request moves the session to anonymous exactly once', async () => {
