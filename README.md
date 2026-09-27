@@ -1,127 +1,50 @@
 # Wallet App
 
-A cross-platform expense tracking application with multi-currency support and AI-powered receipt parsing.
+多账本、多账户、多币种的家庭记账应用。Web（PWA）优先，后续打包 Android / iOS。
 
-## 🎉 Status: M1 Core Complete ✅
+v3.0 于 2026-09 按 [`docs/target-design/`](docs/target-design/README.md) 重写完成：产品网页端全功能、视觉按设计稿对齐、账户归人并按账本共享、干净地址。进度见 [`docs/target-design/PROGRESS.md`](docs/target-design/PROGRESS.md)。
 
-The web application is **fully functional** with all core features implemented!
+## 仓库结构
 
-### ✅ What's Working Now
+| 目录 | 内容 |
+|---|---|
+| `backend/` | FastAPI + SQLAlchemy + Alembic。本地 SQLite，生产 Postgres。 |
+| `frontend/` | Expo SDK 54 + expo-router，`react-native-web` 出 Web 包，同一套代码打原生。 |
+| `skills/wallet-import/` | 用户交给自己的 ChatGPT / Claude 的账单整理 skill，产出标准 CSV 再导入。由 `scripts/gen_import_skill.py` 从分类表生成。 |
+| `infra/` | 生产形态栈：`Dockerfile.api`、`docker-compose.prod.yml`（Postgres + 迁移 + API + Caddy）、`Caddyfile`、操作手册 `RUNBOOK.md`。 |
+| `docs/target-design/` | v3.0 设计文档。[`00-decisions.md`](docs/target-design/00-decisions.md) 是唯一事实来源，01–05 各章展开它，`mockups/` 是视觉稿。 |
+| `docs/current-design/` | 重写前（v2）的现状记录，只作历史参考。 |
+| `SPEC.md` | v1 时期的产品 / 工程规格，已被 `docs/target-design/` 取代。 |
 
-**User Management**
-- ✅ User registration and login
-- ✅ JWT authentication with persistent login
-- ✅ Secure password hashing (bcrypt)
+## 本地运行
 
-**Finance Sources**
-- ✅ Create and manage payment sources (bank accounts, credit cards, cash, etc.)
-- ✅ Archive/unarchive inactive sources
-- ✅ Multi-currency support per source
+后端（Python 3.12，系统解释器，无 poetry）：
 
-**Transactions**
-- ✅ Record income and expenses
-- ✅ Multi-currency transactions (USD, EUR, GBP, CNY, SGD, HKD)
-- ✅ Add tags, descriptions, and merchant info
-- ✅ Edit and delete transactions
-- ✅ Color-coded display (green for income, red for expense)
-- ✅ Transfer transaction support with paired deletion
+```bash
+cd backend
+DEBUG=true ENVIRONMENT=development SECRET_KEY=local-dev-secret DATABASE_URL=sqlite:///./wallet_local.db \
+  python3 -m alembic upgrade head
+DEBUG=true ENVIRONMENT=development SECRET_KEY=local-dev-secret DATABASE_URL=sqlite:///./wallet_local.db \
+  ALLOWED_ORIGINS=http://localhost:8081 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
-**Currency Support**
-- ✅ 6 supported currencies with real-time exchange rates
-- ✅ Frankfurter API integration (ECB data)
-- ✅ Automatic retry on API failures
+前端：
 
-**User Experience**
-- ✅ Clean, modern web interface
-- ✅ Intuitive navigation with Home buttons
-- ✅ Responsive design (mobile-ready)
-- ✅ Pull-to-refresh on lists
-- ✅ Empty states with helpful messages
+```bash
+cd frontend
+npm install
+EXPO_PUBLIC_API_BASE_URL=http://{host}:8000/api/v1 npx expo start --web --port 8081
+```
 
-## Features
+`{host}` 在运行时换成页面自己的主机名：电脑上是 `localhost`，同一 Wi-Fi 的手机上是电脑的局域网 IP，一个包两边都能连。
 
-- **Multi-Currency Support**: Track expenses in any currency with real-time exchange rates
-- **Finance Source Management**: Support for checking accounts, credit cards, cash, investments, and more
-- **Smart Tagging**: Organize transactions with flexible tags and categories
-- **Persistent Login**: Stay logged in across browser sessions
-- **AI-Powered OCR** (Coming in M3): Upload receipts and let AI automatically parse transaction details
-- **Cross-Platform**: Web ready, Android/iOS via Expo (M2+)
+## 测试与检查
 
-## Tech Stack
+```bash
+cd backend && DEBUG=false SECRET_KEY=test-secret-key-for-tests-only python3 -m pytest -q
+cd frontend && CI=1 npm run verify   # tsc + jest + build:web + PWA / 触控目标 / 对比度门禁
+```
 
-### Frontend
-- Expo (React Native + React Native Web)
-- TypeScript
-- NativeWind (Tailwind CSS)
-- TanStack Query
-- Zod
+## 部署
 
-### Backend
-- FastAPI
-- PostgreSQL
-- SQLAlchemy 2.0
-- Alembic (migrations)
-- Pydantic v2
-
-### Infrastructure
-- **Cloud**: AWS (ECS Fargate, RDS PostgreSQL, S3 + CloudFront)
-- **Local Dev**: Docker Compose
-
-## Roadmap
-
-- ✅ **M1** (COMPLETED): Web core functionality (auth, finance sources, transactions, multi-currency)
-- **M2** (NEXT): Android mobile app
-- **M3**: AI-powered receipt parsing with OCR + LLM
-- **M4**: Statistics dashboard with charts and insights
-- **M5**: AI consumption analysis and recommendations
-- **M6**: iOS and Windows support
-
-## Getting Started
-
-### Prerequisites
-- Docker and Docker Compose
-- Node.js 18+ (for frontend)
-- Python 3.11+ (for backend)
-
-### Quick Start
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ubwzwd/wallet_app.git
-   cd wallet_app
-   ```
-
-2. **Start the backend**
-   ```bash
-   docker compose -f infra/docker-compose.dev.yml up -d db  # Start PostgreSQL
-   cd backend
-   poetry install                                            # Install dependencies
-   alembic upgrade head                                      # Run migrations
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-3. **Start the frontend**
-   ```bash
-   cd frontend
-   npm install
-   npm run web
-   ```
-
-4. **Open your browser**
-   - Navigate to `http://localhost:8081`
-   - Register a new account or use demo: `user@test.com` / `password123`
-
-### Test Account
-- **Email**: `user@test.com`
-- **Password**: `password123`
-
-## Documentation
-
-See [SPEC.md](./SPEC.md) for detailed product and engineering specifications.
-
-## License
-
-Copyright © 2025. All rights reserved.
-
-This is a private project. Unauthorized copying, distribution, or use of this software is strictly prohibited.
-
+生产形态栈的定义在 `infra/`，目标是一台 Oracle Cloud Always Free 的 A1.Flex 虚拟机（Docker Compose + Caddy 自动签证书）。步骤见 [`infra/RUNBOOK.md`](infra/RUNBOOK.md)。第九阶段正在把它落地。

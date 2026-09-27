@@ -1,3 +1,5 @@
+> **已过时**：这是 v1（2026-04）的规格。v3.0 的唯一事实来源是 [`docs/target-design/00-decisions.md`](docs/target-design/00-decisions.md)，各章见 [`docs/target-design/`](docs/target-design/README.md)。本文件只作历史参考。
+
 # Wallet App — Product Spec + Engineering Spec
 
 Version: 1.0
