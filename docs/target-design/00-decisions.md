@@ -357,3 +357,13 @@
     - f. **表单页窄屏不画底栏**：记一笔 / 交易编辑 / 转账编辑 / 账户新建 / 账户编辑在窄屏只有顶栏与底部保存条，不画底栏（屏幕稿 04 / 05 / 06 / 09 表单的窄屏画框都没有底栏）。这是 §14.64 b「底栏全局」的唯一例外。
     - g. **离开守卫覆盖所有出口**：表单有未保存改动时，点侧栏任一项、底栏任一格、账本切换器里的账本、顶栏 ‹、宽屏面包屑、浏览器后退，都先弹确认；取消后留在表单，内容还在。起因：§14.64 验收发现窄屏点底栏别的格会直接离开，不弹确认，内容丢失。
     - h. **表单自己的去向优先**：带 `?next=` 打开的表单，窄屏壳顶栏 ‹ 与宽屏面包屑走同一个出口（先 `next`，再历史，再上级），不再宽窄两样。
+66. **地址只写页面，当前账本与浏览状态记在本地**（2026-09-27 用户决定：`/l/<uuid>?month=…` 太老派，URL 要干净，当前账本靠本地记忆；取代 04 §1.2 的 `/l/:ledgerId/*` 路由族、§2.2「账本 id 来自路由参数」、§4.4「月份写进 `?month=`」、§4.5「筛选写进 URL」，以及 §14.64 f 里跨出账本再退回来的恢复逻辑；决策看板 S14-66。b–i 的细则由 Claude 定）：
+    - a. **路径表**：`/home`、`/transactions`、`/transactions/new`、`/transactions/:txId`、`/transactions/:txId/edit`、`/transfers/:pairId`、`/transfers/:pairId/edit`、`/imports`、`/imports/new`、`/imports/guide`、`/imports/:batchId`、`/ledger`（账本设置，原 `/l/:id/settings`）、`/settings`（个人设置，不变）、`/accounts`、`/accounts/new`、`/accounts/:sourceId/edit`（不变）、`/ledgers`（零账本引导；有账本时跳 `/home`）、`/ledgers/new`、`/ledgers/join`、`/login`、`/register`。交易 / 转账 / 批次 / 账户的 id 仍在路径里——它们是页面本身，不是浏览状态。
+    - b. **当前账本**：每个标签页自己记一份（Web `sessionStorage` `wallet:current_ledger_id`），没有时取 `last_ledger_id`（`localStorage`，现有）；切换账本两处都写。这样刷新回到本标签页的账本，两个标签页可以各开一本账互不干扰。原生端只有 `AsyncStorage` 的 `last_ledger_id`。
+    - c. **守卫**：账本页（a 里 `/home` 到 `/ledger`）在登录后的顶层布局里统一过 `RequireLedger`：取当前账本 id，在账本列表里找得到就进；找不到或没有就取列表第一本（并写回本地）；一本都没有 → `/ledgers` 引导；列表读失败 → 错误 + 重试。被移出 / 删除的账本（`GET /ledgers/{id}` 404）→ 换到另一本 + toast「账本不可用，已切到 X」，没有别的账本 → `/ledgers`。
+    - d. **切换账本**：留在当前页面（路径不变），换的是上下文；页面里按账本缓存的浏览状态自然切到那本账自己的（见 e）。带资源 id 的页面（详情、编辑、批次）切换后资源不属于新账本，退到它的列表页（`/transactions` 或 `/imports`）。
+    - e. **浏览状态出 URL**：首页月份、交易列表的筛选与翻页、导入批次的切片 / 定位行，都不再写进查询串，改为内存里按账本保存的「浏览状态」（`src/store/ViewState`：`useLedgerViewState(key, default)`，以当前账本 id 分桶），应用打开期间在页面间来回不丢，刷新后回到默认（本月、无筛选、第一页）。浏览器后退不再撤销筛选或月份。
+    - f. **保留的查询参数**（只在进入页面那一刻有意义，不是状态）：`/transactions/new?kind=&source_id=&refund_of=&copy_of=&next=`、`/accounts/new?ledger=`、`/login?next=`、`/register?next=`。「关联原单」「复制一笔」「登记退款」等入口照旧带参进表单。
+    - g. **返回规则**（§14.64 f 的上级表按新路径改）：详情 / 记一笔 → `/transactions`；编辑 → 详情；账户新建 / 编辑 → `/accounts`；账户列表（窄）→ `/home`；导入上传 / 批次 → `/imports`；格式说明 → `/imports/new`；账本设置 → `/home`；新建 / 加入账本 → `/home`（零账本 → `/ledgers`）；`/settings` 零账本 → `/ledgers`。登录后所有页面都是同一个 `Slot` 的直接子路由（`accounts/_layout.tsx` 也删），不再有嵌套导航器，所以 §14.64 的 `ledgerHistory.ts` 与 2026-09-27 的 `nestedEntry.ts` 一并删除。
+    - h. **分享 / 深链**：地址不带账本，打开别人发来的 `/transactions/<id>` 时用本地记住的账本去取，不属于它就是 404「不存在或无权限」页（现有），这是用户接受的代价。`/` 落地：有账本 → `/home`，零账本 → `/ledgers`。
+    - i. **不变的**：后端接口路径照旧带账本 id；query key `['l', ledgerId, …]` 照旧按上下文里的账本分桶；PWA 的 SPA 回退对新路径同样生效。
