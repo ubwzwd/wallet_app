@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/transactions` — the transaction list (04 §4.5, 屏幕稿 02 / 15).
+ * `/transactions` — the current ledger's transaction list (04 §4.5, 屏幕稿 02 / 15).
  *
  * Two frames over one query family. **Wide** (屏幕稿 02 · 1440) is the page header with its
  * inline stats and 「＋ 记一笔」, the 「筛选」 card, and a real seven-column table whose foot
@@ -8,7 +8,8 @@
  * and a summary card at the end, scrolling infinitely — that half lives in
  * `TransactionsNarrow.tsx`, wired from here.
  *
- * The URL owns the filters (04 §1.3), so this screen holds almost no state of its own. Two
+ * The ledger's view state owns the filters and the page (decision §14.66 e, `useTxFilters`),
+ * so this screen holds almost no state of its own. Two
  * numbers are deliberately *not* computed from the rows: the summary comes from the
  * response's `summary` (the whole filtered result, not this page) and the count from its
  * `total` — subtracting the pairs merged *on this page* (a transfer's two legs render as
@@ -67,12 +68,11 @@ export default function TransactionsScreen(): React.JSX.Element {
   const router = useRouter();
   const wide = useIsWide();
   const { ledgerId, baseCurrency } = useLedgerContext();
-  const l = routes.l(ledgerId);
   // The narrow layout's chrome carries the page title (04 §1.4); the wide one has no top
   // bar, so there the `PageHeader` below is the only one (decision §14.56).
   useTopBar(t('transaction:list.title'));
 
-  const f = useTxFilters(ledgerId);
+  const f = useTxFilters();
 
   // Archived accounts are included: they can't take new entries, but they still own old
   // ones, and a filter that couldn't name them would hide those rows' account (§4.8).
@@ -120,11 +120,11 @@ export default function TransactionsScreen(): React.JSX.Element {
       const pairId = pairIdOf(row);
       router.push(
         (pairId
-          ? l.transfer(pairId)
-          : l.transaction(row.kind === 'pair' ? row.out.id : row.tx.id)) as Href,
+          ? routes.transfer(pairId)
+          : routes.transaction(row.kind === 'pair' ? row.out.id : row.tx.id)) as Href,
       );
     },
-    [l, router],
+    [router],
   );
 
   const editRow = React.useCallback(
@@ -132,11 +132,11 @@ export default function TransactionsScreen(): React.JSX.Element {
       const pairId = pairIdOf(row);
       router.push(
         (pairId
-          ? l.transferEdit(pairId)
-          : l.transactionEdit(row.kind === 'pair' ? row.out.id : row.tx.id)) as Href,
+          ? routes.transferEdit(pairId)
+          : routes.transactionEdit(row.kind === 'pair' ? row.out.id : row.tx.id)) as Href,
       );
     },
-    [l, router],
+    [router],
   );
 
   const deleteRow = React.useCallback(
@@ -216,8 +216,8 @@ export default function TransactionsScreen(): React.JSX.Element {
   const emptyBlock =
     f.activeCount === 0 ? (
       <EmptyNoData
-        onAdd={() => router.push(l.transactionNew() as Href)}
-        onImport={() => router.push(l.importsNew() as Href)}
+        onAdd={() => router.push(routes.transactionNew() as Href)}
+        onImport={() => router.push(routes.importsNew() as Href)}
       />
     ) : (
       <EmptyFilteredState
@@ -252,7 +252,7 @@ export default function TransactionsScreen(): React.JSX.Element {
             <Button
               icon="plus"
               label={t('common:nav.add')}
-              onPress={() => router.push(l.transactionNew() as Href)}
+              onPress={() => router.push(routes.transactionNew() as Href)}
               testID="tx-add"
             />
           }

@@ -49,13 +49,13 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers</RNText>,
-  '(app)/l/[ledgerId]/index': () => <RNText>home</RNText>,
-  '(app)/l/[ledgerId]/transactions/index': () => <RNText>transactions-page</RNText>,
-  '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
-  '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
-  '(app)/l/[ledgerId]/transactions/[txId]/edit': () => <RNText>edit-page</RNText>,
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
-  '(app)/l/[ledgerId]/imports/[batchId]/index': () => <RNText>batch-page</RNText>,
+  '(app)/home': () => <RNText>home</RNText>,
+  '(app)/transactions/index': () => <RNText>transactions-page</RNText>,
+  '(app)/transactions/new': () => <RNText>new-transaction-page</RNText>,
+  '(app)/transactions/[txId]/index': TransactionDetailRoute,
+  '(app)/transactions/[txId]/edit': () => <RNText>edit-page</RNText>,
+  '(app)/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
+  '(app)/imports/[batchId]': () => <RNText>batch-page</RNText>,
 };
 
 function members(): { items: LedgerMember[]; total: number } {
@@ -95,16 +95,14 @@ function containing(text: string): RegExp {
 /** Register `GET /transactions/{id}` and open that page. */
 function open(tx: Transaction): ReturnType<typeof renderRouter> {
   mockGet(txPath(tx.id), tx);
-  return renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions/${tx.id}` });
+  return renderRouter(ROUTES, { initialUrl: `/transactions/${tx.id}` });
 }
 
 /**
  * 屏幕稿 08 at 375 puts the operations in a sheet behind the pinned 「修改」 bar, so a
  * narrow test opens the sheet before it can press one.
  */
-async function openActions(
-  router: ReturnType<typeof renderRouter>,
-): Promise<void> {
+async function openActions(router: ReturnType<typeof renderRouter>): Promise<void> {
   fireEvent.press(await router.findByTestId('tx-detail-actions-open'));
   await router.findByTestId('tx-detail-actions-delete');
 }
@@ -177,9 +175,7 @@ test('an expense lists its refunds with the account the money went back to, plus
   const router = open(EXPENSE);
 
   // The header says what it is, and never shows the transaction id (decision §14.52 A6).
-  expect(await router.findByTestId('tx-detail-header-account-title')).toHaveTextContent(
-    '京东订单',
-  );
+  expect(await router.findByTestId('tx-detail-header-account-title')).toHaveTextContent('京东订单');
   expect(router.getByTestId('tx-detail-header-account-sub')).toHaveTextContent(
     containing('招行储蓄卡'),
   );
@@ -195,9 +191,7 @@ test('an expense lists its refunds with the account the money went back to, plus
 
   // And the row opens that refund.
   fireEvent.press(router.getByTestId('tx-detail-refunds-row-r-1'));
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/r-1`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions/r-1`));
 });
 
 test('「登记退款」is offered on an expense and nowhere else', async () => {
@@ -230,9 +224,7 @@ test('「复制一笔」opens the form with copy_of, and 「登记退款」with 
 
   await openActions(router);
   fireEvent.press(router.getByTestId('tx-detail-actions-duplicate'));
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions/new`));
   expect(router.getSearchParams().copy_of).toBe('e-1');
   router.unmount();
 
@@ -240,9 +232,7 @@ test('「复制一笔」opens the form with copy_of, and 「登记退款」with 
   const second = open(EXPENSE);
   await openActions(second);
   fireEvent.press(second.getByTestId('tx-detail-actions-refund'));
-  await waitFor(() =>
-    expect(second.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
-  );
+  await waitFor(() => expect(second.getPathname()).toBe(`/transactions/new`));
   expect(second.getSearchParams().kind).toBe('refund');
   expect(second.getSearchParams().refund_of).toBe('e-1');
 });
@@ -274,8 +264,20 @@ const REFUND = makeTransaction({
     refundable: '0.0000',
     // Deliberately out of order: the page sorts them oldest first (decision §14.52 A25).
     other_refunds: [
-      { id: 'r-late', occurred_at: '2026-09-07', amount: '200.0000', currency: 'CNY', note: '尾款' },
-      { id: 'r-early', occurred_at: '2026-09-05', amount: '199.0000', currency: 'CNY', note: '首笔' },
+      {
+        id: 'r-late',
+        occurred_at: '2026-09-07',
+        amount: '200.0000',
+        currency: 'CNY',
+        note: '尾款',
+      },
+      {
+        id: 'r-early',
+        occurred_at: '2026-09-05',
+        amount: '199.0000',
+        currency: 'CNY',
+        note: '首笔',
+      },
     ],
   },
   events: [],
@@ -290,9 +292,7 @@ test('a refund shows the original expense and the other refunds against it, olde
   expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(
     containing('消费购物 / 数码'),
   );
-  expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(
-    containing('招行储蓄卡'),
-  );
+  expect(router.getByTestId('tx-detail-origin-meta')).toHaveTextContent(containing('招行储蓄卡'));
   expect(router.getByTestId('tx-detail-origin-amount')).toHaveTextContent('−598.00');
   expect(router.getByTestId('tx-detail-origin-summary')).toHaveTextContent(
     '已退 598.00 / 可退 0.00',
@@ -309,10 +309,10 @@ test('a refund shows the original expense and the other refunds against it, olde
 
   // The card opens the original expense.
   fireEvent.press(router.getByTestId('tx-detail-origin-open'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/e-1`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/transactions/e-1`));
 });
 
-test('「解除关联」PATCHes refund_of to null with the row\'s updated_at', async () => {
+test("「解除关联」PATCHes refund_of to null with the row's updated_at", async () => {
   const router = open(REFUND);
   mockPatch(txPath('rf-1'), { ...REFUND, refund_of: null, refund_of_detail: null });
 
@@ -416,7 +416,9 @@ function seedSummary(): void {
  * one typed in by hand says 手动录入 and is not a link at all.
  */
 test('来源 names the import batch a row came from and opens that batch', async () => {
-  const router = open(makeTransaction({ ...EXPENSE, id: 'e-imported', import_batch_id: 'batch-1' }));
+  const router = open(
+    makeTransaction({ ...EXPENSE, id: 'e-imported', import_batch_id: 'batch-1' }),
+  );
 
   // A batch turns the row into a link, so the value lives inside it rather than in the
   // plain `-value-origin` text node.
@@ -424,7 +426,7 @@ test('来源 names the import batch a row came from and opens that batch', async
   expect(link).toHaveTextContent(containing('batch-1'));
   expect(router.queryByTestId('tx-detail-facts-value-origin')).toBeNull();
   fireEvent.press(link);
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/batch-1`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/imports/batch-1`));
 });
 
 test('a hand-typed row says 手动录入 and offers no link', async () => {
@@ -482,7 +484,7 @@ test('宽屏 prices what deleting this row would change, and keeps the actions i
  * home screen visited, nothing in the cache — still draws it (04 §4.7, 屏幕稿 08 · 1440
  * leads the right column with it).
  */
-test('宽屏 深链: 「对 N 月的影响」 fetches the row\'s own month instead of staying blank', async () => {
+test("宽屏 深链: 「对 N 月的影响」 fetches the row's own month instead of staying blank", async () => {
   wideSpy.mockReturnValue(true);
   mockGet(`/ledgers/${LEDGER}/stats/summary`, summaryBody());
 
@@ -498,7 +500,7 @@ test('宽屏 深链: 「对 N 月的影响」 fetches the row\'s own month inste
  * A category the summary does not report has no figure to print: 「0.00 · 含本笔 299.00」
  * would be a number invented by the card, so the row drops out instead.
  */
-test('宽屏 drops the category line when the month\'s summary has no such node', async () => {
+test("宽屏 drops the category line when the month's summary has no such node", async () => {
   wideSpy.mockReturnValue(true);
   mockGet(`/ledgers/${LEDGER}/stats/summary`, summaryBody());
 
@@ -584,9 +586,7 @@ test('a foreign-currency row shows the rate it was converted at, and says when i
   const line = await router.findByTestId('tx-detail-rate-text');
   expect(line).toHaveTextContent(containing('≈ ¥66.20'));
   expect(line).toHaveTextContent(containing('1 SGD = 5.3387 CNY'));
-  expect(router.getByTestId('tx-detail-rate-fallback')).toHaveTextContent(
-    containing('该日无行情'),
-  );
+  expect(router.getByTestId('tx-detail-rate-fallback')).toHaveTextContent(containing('该日无行情'));
 });
 
 test('a row without a rate says 暂无汇率 rather than showing a converted zero', async () => {
@@ -608,7 +608,7 @@ test('a row without a rate says 暂无汇率 rather than showing a converted zer
   expect(await router.findByTestId('tx-detail-rate-missing')).toHaveTextContent('暂无汇率');
 });
 
-test('opening a leg of a two-leg transfer redirects to the pair\'s own page', async () => {
+test("opening a leg of a two-leg transfer redirects to the pair's own page", async () => {
   const pairId = 'pair-77';
   const router = open(
     makeTransaction({
@@ -631,6 +631,6 @@ test('opening a leg of a two-leg transfer redirects to the pair\'s own page', as
     }),
   );
 
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transfers/${pairId}`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/transfers/${pairId}`));
   expect(screen.getByText('transfer-page')).toBeTruthy();
 });

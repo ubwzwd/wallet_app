@@ -59,7 +59,7 @@ describe('ledgerSwitchTarget — a switch keeps the page unless it names an old 
     routes.home(),
     routes.transactions(),
     routes.transactionNew(),
-    routes.transactionNew({ kind: 'income', source_id: 's-1' }),
+    routes.transactionNew({ kind: 'income', next: '/home' }),
     routes.imports(),
     routes.importsNew(),
     routes.importsGuide(),
@@ -70,6 +70,57 @@ describe('ledgerSwitchTarget — a switch keeps the page unless it names an old 
     routes.ledgersNew(),
   ])('%s stays put', (path) => {
     expect(ledgerSwitchTarget(path)).toBeNull();
+  });
+});
+
+describe('ledgerSwitchTarget — 记一笔 drops the entry parameters naming old records', () => {
+  test.each([
+    // The account, the refunded original and the copied entry are the old ledger's.
+    [
+      routes.transactionNew({ kind: 'income', source_id: 's-1' }),
+      routes.transactionNew({ kind: 'income' }),
+    ],
+    [routes.transactionNew({ copy_of: 'tx-1' }), routes.transactionNew()],
+    [
+      routes.transactionNew({
+        kind: 'expense',
+        source_id: 's-1',
+        next: '/imports/b-1',
+      }),
+      routes.transactionNew({ kind: 'expense' }),
+    ],
+    // `?refund_of=` alone opened the refund tab: the tab is kept, spelled out.
+    [routes.transactionNew({ refund_of: 'tx-1' }), routes.transactionNew({ kind: 'refund' })],
+    [
+      routes.transactionNew({
+        kind: 'refund',
+        refund_of: 'tx-1',
+        next: '/transactions/tx-1',
+      }),
+      routes.transactionNew({ kind: 'refund' }),
+    ],
+  ])('%s → %s', (url, target) => {
+    expect(ledgerSwitchTarget(url)).toBe(target);
+  });
+
+  test('the query can come from the router instead, since usePathname() has none', () => {
+    const path = routes.transactionNew();
+    expect(ledgerSwitchTarget(path, { kind: 'transfer', source_id: 's-1' })).toBe(
+      routes.transactionNew({ kind: 'transfer' }),
+    );
+    expect(ledgerSwitchTarget(path, { copy_of: ['tx-1', 'tx-2'] })).toBe(routes.transactionNew());
+    expect(ledgerSwitchTarget(path, '?refund_of=tx-1')).toBe(
+      routes.transactionNew({ kind: 'refund' }),
+    );
+    // Only the kind and `next`: nothing of the old ledger's to drop.
+    expect(ledgerSwitchTarget(path, { kind: 'income', next: '/home' })).toBeNull();
+    expect(ledgerSwitchTarget(path, { source_id: '' })).toBeNull();
+  });
+
+  test('an unknown kind is not carried over', () => {
+    expect(ledgerSwitchTarget('/transactions/new?kind=bogus&source_id=s-1')).toBe(
+      routes.transactionNew(),
+    );
   });
 });
 

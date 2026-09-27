@@ -13,6 +13,7 @@ import React from 'react';
 import { Text as RNText } from 'react-native';
 import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
 import { within } from '@testing-library/react-native';
+import { router as expoRouter } from 'expo-router';
 import i18next from 'i18next';
 
 // `expo-font` reaches for `expo-asset`; fonts never gate rendering, so the root layout's
@@ -31,8 +32,12 @@ import type {
   StatsSummary,
   StatsTrend,
   Transaction,
+  TransactionListParams,
 } from '@/api/types';
 import { setAuthToken } from '@/api/client';
+import { currentMonth, shiftMonth } from '@/domain/dates';
+import { routes } from '@/domain/routes';
+import { useLedgerViewState } from '@/store';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
 import { resetLedgerUnavailable } from '@/navigation';
@@ -56,8 +61,10 @@ import { resolveMonth } from '../HomeScreen';
 import { trendStats } from '../TrendSection';
 
 const LEDGER = 'ledger-home';
-const MONTH = '2026-09';
-const HOME_URL = `/l/${LEDGER}?month=${MONTH}`;
+/** The page opens on the current month: the month is view state, never in the address. */
+const MONTH = currentMonth();
+const PREV_MONTH = shiftMonth(MONTH, -1);
+const HOME_URL = routes.home();
 /** My accounts and my net worth. */
 const SOURCES_PATH = '/sources';
 /** What this ledger can see. */
@@ -68,20 +75,26 @@ const TX_PATH = `/ledgers/${LEDGER}/transactions`;
 
 const SERVER_ERROR = { detail: 'boom', code: 'internal_error' };
 
+/** The list's stand-in: it shows the filters the list would open with (§14.66 e). */
+function TransactionsProbe(): React.JSX.Element {
+  const [filters] = useLedgerViewState<TransactionListParams>('transactions.filters', {});
+  return <RNText testID="tx-filters">{JSON.stringify(filters)}</RNText>;
+}
+
 const ROUTES = {
   _layout: RootLayout,
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers-page</RNText>,
-  '(app)/l/[ledgerId]/index': HomeRoute,
-  '(app)/l/[ledgerId]/transactions/index': () => <RNText>transactions-page</RNText>,
-  '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
-  '(app)/l/[ledgerId]/transactions/[txId]/index': () => <RNText>transaction-page</RNText>,
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
+  '(app)/home': HomeRoute,
+  '(app)/transactions/index': TransactionsProbe,
+  '(app)/transactions/new': () => <RNText>new-transaction-page</RNText>,
+  '(app)/transactions/[txId]/index': () => <RNText>transaction-page</RNText>,
+  '(app)/transfers/[pairId]/index': () => <RNText>transfer-page</RNText>,
   '(app)/accounts/index': () => <RNText>accounts-page</RNText>,
   '(app)/accounts/new': () => <RNText>new-account-page</RNText>,
-  '(app)/l/[ledgerId]/imports/new': () => <RNText>new-import-page</RNText>,
-  '(app)/l/[ledgerId]/settings/index': () => <RNText>ledger-settings-page</RNText>,
+  '(app)/imports/new': () => <RNText>new-import-page</RNText>,
+  '(app)/ledger': () => <RNText>ledger-settings-page</RNText>,
 };
 
 let api: MockApi;
@@ -284,11 +297,13 @@ describe('resolveMonth', () => {
     expect(resolveMonth(undefined, '2026-09')).toBe('2026-09');
     expect(resolveMonth('nonsense', '2026-09')).toBe('2026-09');
     expect(resolveMonth('2026-13', '2026-09')).toBe('2026-09');
+    expect(resolveMonth(null, '2026-09')).toBe('2026-09');
   });
 
   test('never walks past the current month', () => {
+    // A month stored before the app sat open across a month's end is still honoured, but
+    // one that is somehow in the future is not.
     expect(resolveMonth('2027-01', '2026-09')).toBe('2026-09');
-    expect(resolveMonth(['2027-01'], '2026-09')).toBe('2026-09');
   });
 });
 
@@ -358,11 +373,11 @@ test('the month totals sit in the header, expense first (screen 01)', async () =
 
   // `expense_total` already has the month's refunds deducted (decision §7). 屏幕稿 01 writes
   // both tiles bare — 「6,842.50」 — so neither carries a 「¥」 (§14.59a).
-  expect(await router.findByTestId('home-expense-total')).toHaveTextContent(
-    containing('8,421.66'),
-  );
+  expect(await router.findByTestId('home-expense-total')).toHaveTextContent(containing('8,421.66'));
   expect(router.getByTestId('home-expense-total')).not.toHaveTextContent(containing('¥'));
-  expect(router.getByTestId('home-expense-total')).toHaveTextContent(containing('9 月支出'));
+  expect(router.getByTestId('home-expense-total')).toHaveTextContent(
+    containing(`${Number(MONTH.slice(5))} 月支出`),
+  );
   expect(router.getByTestId('home-income-total')).toHaveTextContent(containing('23,500.00'));
 });
 
@@ -408,8 +423,28 @@ test('an account row links to the transaction list filtered to that account', as
   expect(router.queryByTestId('home-balance-src-archived')).toBeNull();
 
   fireEvent.press(row);
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
-  expect(router.getSearchParams().source_id).toBe('src-checking');
+  // The filter travels in the list's view state, not in the address (§14.66 e).
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  expect(router.getSearchParams()).toEqual({});
+  expect(JSON.parse(String(router.getByTestId('tx-filters').props.children))).toEqual({
+    source_id: ['src-checking'],
+  });
+});
+
+test('an account row replaces whatever the list was last filtered by', async () => {
+  mockHome();
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+
+  fireEvent.press(await router.findByTestId('home-balance-src-credit'));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  act(() => expoRouter.back());
+  fireEvent.press(await router.findByTestId('home-balance-src-checking'));
+
+  await waitFor(() =>
+    expect(JSON.parse(String(router.getByTestId('tx-filters').props.children))).toEqual({
+      source_id: ['src-checking'],
+    }),
+  );
 });
 
 /**
@@ -525,9 +560,7 @@ test('the month total, the deducted refunds and the missing-rate count are all s
     containing('8,421.66'),
   );
   expect(router.getByTestId('home-refund-note')).toHaveTextContent('其中已冲减退款 82.98');
-  expect(router.getByTestId('home-summary-rate-missing')).toHaveTextContent(
-    '3 笔因暂无汇率未计入',
-  );
+  expect(router.getByTestId('home-summary-rate-missing')).toHaveTextContent('3 笔因暂无汇率未计入');
 });
 
 test('a month with no transactions offers "add a transaction" prefilled as an expense', async () => {
@@ -541,7 +574,7 @@ test('a month with no transactions offers "add a transaction" prefilled as an ex
   expect(router.getByTestId('home-summary-empty-ghost')).toBeTruthy();
   fireEvent.press(router.getByTestId('home-summary-empty-primary'));
 
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/new'));
   expect(router.getSearchParams().kind).toBe('expense');
 });
 
@@ -582,18 +615,39 @@ test('a month with income but no expenses still shows the empty block, not an em
   expect(router.queryByTestId('home-categories-rest')).toBeNull();
 });
 
-test('switching the month rewrites ?month= and refetches the summary for it', async () => {
+test('switching the month refetches the summary for it, and leaves the address alone', async () => {
   mockHome();
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
   await router.findByTestId('home-categories-total');
-  expect(getsFor(SUMMARY_PATH)).toEqual([{ month: '2026-09' }]);
+  expect(getsFor(SUMMARY_PATH)).toEqual([{ month: MONTH }]);
 
   fireEvent.press(router.getByTestId('home-month-prev'));
 
-  await waitFor(() => expect(router.getSearchParams().month).toBe('2026-08'));
-  await waitFor(() => expect(getsFor(SUMMARY_PATH)).toContainEqual({ month: '2026-08' }));
+  await waitFor(() => expect(getsFor(SUMMARY_PATH)).toContainEqual({ month: PREV_MONTH }));
+  // Browsing state (§14.66 e): no `?month=`, and no history entry to step back through.
+  expect(router.getPathname()).toBe('/home');
+  expect(router.getSearchParams()).toEqual({});
+  expect(expoRouter.canGoBack()).toBe(false);
   // The trend is keyed on the ledger, not the month: changing months must not refetch it.
   expect(getsFor(TREND_PATH)).toEqual([{ months: 12 }]);
+});
+
+test('the month survives a trip to the list and back', async () => {
+  mockHome();
+  const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
+  await router.findByTestId('home-categories-total');
+
+  fireEvent.press(router.getByTestId('home-month-prev'));
+  await waitFor(() => expect(getsFor(SUMMARY_PATH)).toContainEqual({ month: PREV_MONTH }));
+
+  fireEvent.press(router.getByTestId('home-recent-header-link'));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  // One step back is the home page — not the month before the switch.
+  act(() => expoRouter.back());
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+
+  const shortPrev = `${Number(PREV_MONTH.slice(5))} 月支出`;
+  expect(await router.findByTestId('home-expense-total')).toHaveTextContent(containing(shortPrev));
 });
 
 test('the month switcher never walks past the current month', async () => {
@@ -608,19 +662,23 @@ test('the month switcher never walks past the current month', async () => {
 
 test('the trend keeps the monthly average and the peak, and a column switches the month', async () => {
   useWideLayout();
+  // The twelve months up to this one; the peak is the fourth.
   const months = Array.from({ length: 12 }, (_, i) => ({
-    month: `2026-${String(i + 1).padStart(2, '0')}`,
+    month: shiftMonth(MONTH, i - 11),
     expense: (i === 3 ? '3600.0000' : '1200.0000') as Money,
   }));
+  const peak = months[3].month;
   mockHome({ trend: makeStatsTrend({ months }) });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   expect(await router.findByTestId('home-trend-average')).toHaveTextContent('月均 1,400.00');
-  expect(router.getByTestId('home-trend-peak')).toHaveTextContent('峰值 3,600.00（4 月）');
+  expect(router.getByTestId('home-trend-peak')).toHaveTextContent(
+    `峰值 3,600.00（${Number(peak.slice(5))} 月）`,
+  );
 
-  fireEvent.press(router.getByTestId('home-trend-chart-point-2026-04'));
-  await waitFor(() => expect(router.getSearchParams().month).toBe('2026-04'));
-  await waitFor(() => expect(getsFor(SUMMARY_PATH)).toContainEqual({ month: '2026-04' }));
+  fireEvent.press(router.getByTestId(`home-trend-chart-point-${peak}`));
+  await waitFor(() => expect(getsFor(SUMMARY_PATH)).toContainEqual({ month: peak }));
+  expect(router.getSearchParams()).toEqual({});
 });
 
 test('the narrow trend header keeps the average alone (screen 01 at 375)', async () => {
@@ -639,8 +697,13 @@ test('the recent block asks for five transactions and merges a transfer into one
     recent: [
       makeTransaction({ id: 'tx-coffee', merchant: '瑞幸咖啡', source_id: 'src-checking' }),
       makeTransaction({
-        id: 'tx-salary', kind: 'income', merchant: '公司', amount: '3000.0000',
-        source_id: 'src-checking', category_l1: 'salary', category_l2: null,
+        id: 'tx-salary',
+        kind: 'income',
+        merchant: '公司',
+        amount: '3000.0000',
+        source_id: 'src-checking',
+        category_l1: 'salary',
+        category_l2: null,
       }),
       pair.out,
       pair.in,
@@ -659,18 +722,24 @@ test('the recent block asks for five transactions and merges a transfer into one
   expect(getsFor(TX_PATH)).toEqual([{ limit: 5 }]);
 
   fireEvent.press(row);
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/tx-coffee`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/tx-coffee'));
 });
 
 test('the recent header links to the full transaction list', async () => {
   mockHome({ recent: [makeTransaction({ id: 'tx-1' })] });
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
+  // Even after the list was last opened on one account, 「全部」 means all of it.
+  fireEvent.press(await router.findByTestId('home-balance-src-checking'));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  act(() => expoRouter.back());
+
   fireEvent.press(await router.findByTestId('home-recent-header-link'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
-  expect(router.getSearchParams().source_id).toBeUndefined();
+  await waitFor(() =>
+    expect(JSON.parse(String(router.getByTestId('tx-filters').props.children))).toEqual({}),
+  );
+  expect(router.getPathname()).toBe('/transactions');
+  expect(router.getSearchParams()).toEqual({});
 });
 
 // ------------------------------------------------------- the blocks load independently
@@ -751,9 +820,7 @@ test('no accounts at all: the narrow home offers the three ways in', async () =>
   // The net worth still reads zero, in grey — the ledger is empty, the page did not fail.
   expect(await router.findByTestId('home-net-worth')).toHaveTextContent('¥0.00');
   expect(router.getByTestId('home-empty-month')).toBeTruthy();
-  expect(router.getByTestId('home-empty-transactions')).toHaveTextContent(
-    containing('还没有交易'),
-  );
+  expect(router.getByTestId('home-empty-transactions')).toHaveTextContent(containing('还没有交易'));
   // The account rows and the category ranking are gone: there is nothing to rank yet.
   expect(router.queryByTestId('home-balances')).toBeNull();
   expect(router.queryByTestId('home-categories')).toBeNull();
@@ -807,7 +874,7 @@ test('the empty home sends step 2 to the transaction form', async () => {
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-empty-step-2'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/new'));
 });
 
 test('the empty home sends step 3 to the ledger settings, where invites live', async () => {
@@ -816,7 +883,7 @@ test('the empty home sends step 3 to the ledger settings, where invites live', a
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-empty-step-3'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledger'));
 });
 
 test('an archived-only ledger counts as empty', async () => {
@@ -860,7 +927,7 @@ test('a new ledger with my accounts: the wide guide is two steps, and my net wor
 
   // Step 1 is now 「记一笔或导入账单」.
   fireEvent.press(router.getByTestId('home-empty-step-1'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/new'));
 });
 
 test('a new ledger with my accounts: the header button opens the entry form', async () => {
@@ -869,7 +936,7 @@ test('a new ledger with my accounts: the header button opens the entry form', as
   const router = renderRouter(ROUTES, { initialUrl: HOME_URL });
 
   fireEvent.press(await router.findByTestId('home-empty-add-transaction'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/new'));
 });
 
 test('a new ledger with my accounts: the narrow home drops the account button', async () => {

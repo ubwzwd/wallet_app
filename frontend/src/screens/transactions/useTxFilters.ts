@@ -1,28 +1,51 @@
 /**
- * The URL is the transaction list's only filter state (04 §1.3).
+ * The transaction list's filter state (04 §4.5, decision §14.66 e).
+ *
+ * The filters and the wide layout's page cursor (`offset`) are browsing state: they live in
+ * the current ledger's view state under `'transactions.filters'`, never in the address. So
+ * going to a detail page and back keeps them, the back button walks pages and never undoes
+ * a filter, each ledger keeps its own set, and a reload starts over with none.
  *
  * Everything the filter bar, the chips, the pager and the "rescue" suggestions do goes
- * through here: read with `parseTxFilters`, write with `serializeTxFilters` (empty values
- * never reach the URL) and always through `router.replace`, so a filter change does not
- * pile up on the back stack. Only the search box is debounced — 300ms of typing would
- * otherwise be 300ms of history entries and requests.
+ * through here. Every write is normalised by the same rules `parseTxFilters` applies (empty
+ * values dropped, malformed ones refused), so two equal filter sets are one query. Only the
+ * search box is debounced — 300ms of typing would otherwise be 300ms of requests.
+ *
+ * A page that opens the list *with* a filter (an account's entries on the home page, a
+ * batch's transactions) uses `useOpenTransactions`: it writes the filter, then navigates.
  */
 import React from 'react';
-import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 
-import type { TransactionListParams, Uuid } from '@/api/types';
+import type { TransactionListParams } from '@/api/types';
 import { activeFilterCount, parseTxFilters, removeFilter, serializeTxFilters } from '@/domain/filters';
 import { routes } from '@/domain/routes';
+import { useLedgerContext, useLedgerViewState, useSetLedgerViewState } from '@/store';
 
-/** 04 §4.5: the search box writes the URL 300ms after the last keystroke. */
+/** The view-state key the list's filters live under (decision §14.66 e). */
+export const TX_FILTERS_KEY = 'transactions.filters';
+
+/** 04 §4.5: the search box writes the filters 300ms after the last keystroke. */
 export const Q_DEBOUNCE_MS = 300;
 
+/** One identity for "no filters", so an untouched list does not churn its memos. */
+const NO_FILTERS: TransactionListParams = {};
+
+/** Empty values dropped, malformed ones refused, `limit` never kept. */
+export function normalizeTxFilters(params: TransactionListParams): TransactionListParams {
+  return parseTxFilters(serializeTxFilters(params));
+}
+
+function sameFilters(a: TransactionListParams, b: TransactionListParams): boolean {
+  return JSON.stringify(serializeTxFilters(a)) === JSON.stringify(serializeTxFilters(b));
+}
+
 export interface TxFiltersApi {
-  /** What the URL currently says, `offset` included. */
+  /** The current filters, `offset` included. */
   filters: TransactionListParams;
   /** Number of active conditions — the badge on the narrow-layout filter button. */
   activeCount: number;
-  /** The search box's own value: it runs ahead of the URL by up to `Q_DEBOUNCE_MS`. */
+  /** The search box's own value: it runs ahead of the filters by up to `Q_DEBOUNCE_MS`. */
   qDraft: string;
   setQ(value: string): void;
   /** Merge a change in and drop the page cursor (a new filter means page 1). */
@@ -33,22 +56,31 @@ export interface TxFiltersApi {
   remove(key: keyof TransactionListParams, value?: string): void;
   /** Replace the whole filter set — used by the "drop this condition" suggestions. */
   replaceAll(next: TransactionListParams): void;
-  /** Back to the bare path. */
+  /** No conditions, first page. */
   clear(): void;
 }
 
-export function useTxFilters(ledgerId: Uuid): TxFiltersApi {
+/**
+ * Open the transaction list showing exactly `filters` (none: the whole ledger). What the
+ * list had before is replaced, not merged — the caller is saying what to show.
+ */
+export function useOpenTransactions(): (filters?: TransactionListParams) => void {
   const router = useRouter();
-  const search = useLocalSearchParams<Record<string, string | string[]>>();
+  const setViewState = useSetLedgerViewState();
+  return React.useCallback(
+    (filters: TransactionListParams = NO_FILTERS): void => {
+      setViewState<TransactionListParams>(TX_FILTERS_KEY, normalizeTxFilters(filters));
+      router.navigate(routes.transactions() as Href);
+    },
+    [router, setViewState],
+  );
+}
 
-  // `useLocalSearchParams` hands back a fresh object every render, so the parsed value is
-  // stabilised on its serialisation — otherwise every consumer's `useMemo` would churn.
-  const parsed = parseTxFilters(search as Record<string, string | string[] | undefined>);
-  const parsedKey = JSON.stringify(serializeTxFilters(parsed));
-  const filters = React.useMemo<TransactionListParams>(
-    () => parsed,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [parsedKey],
+export function useTxFilters(): TxFiltersApi {
+  const { ledgerId } = useLedgerContext();
+  const [filters, setFilters] = useLedgerViewState<TransactionListParams>(
+    TX_FILTERS_KEY,
+    NO_FILTERS,
   );
 
   const filtersRef = React.useRef(filters);
@@ -56,14 +88,17 @@ export function useTxFilters(ledgerId: Uuid): TxFiltersApi {
 
   const write = React.useCallback(
     (next: TransactionListParams): void => {
-      router.replace(routes.l(ledgerId).transactions(next) as Href);
+      const normalized = normalizeTxFilters(next);
+      if (sameFilters(normalized, filtersRef.current)) return;
+      filtersRef.current = normalized;
+      setFilters(normalized);
     },
-    [ledgerId, router],
+    [setFilters],
   );
 
   // ------------------------------------------------------------- debounced `q`
-  const urlQ = filters.q ?? '';
-  const [qDraft, setQDraft] = React.useState(urlQ);
+  const storedQ = filters.q ?? '';
+  const [qDraft, setQDraft] = React.useState(storedQ);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingQ = React.useRef<string | null>(null);
 
@@ -75,11 +110,21 @@ export function useTxFilters(ledgerId: Uuid): TxFiltersApi {
     pendingQ.current = null;
   }, []);
 
-  // The URL moved on its own (back button, "clear filters", a suggestion): adopt it —
-  // unless the user is mid-edit, whose keystrokes would otherwise be thrown away.
+  // The filters moved on their own ("clear filters", a suggestion, a chip): adopt the
+  // keyword — unless the user is mid-edit, whose keystrokes would otherwise be thrown away.
   React.useEffect(() => {
-    if (pendingQ.current === null) setQDraft(urlQ);
-  }, [urlQ]);
+    if (pendingQ.current === null) setQDraft(storedQ);
+  }, [storedQ]);
+
+  // Another ledger is another set of filters: a half-typed keyword belonged to the old one,
+  // so it is dropped rather than applied to the new one a moment later.
+  const lastLedger = React.useRef(ledgerId);
+  React.useEffect(() => {
+    if (lastLedger.current === ledgerId) return;
+    lastLedger.current = ledgerId;
+    cancelPendingQ();
+    setQDraft(filtersRef.current.q ?? '');
+  }, [cancelPendingQ, ledgerId]);
 
   React.useEffect(() => () => cancelPendingQ(), [cancelPendingQ]);
 

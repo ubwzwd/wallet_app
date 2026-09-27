@@ -3,7 +3,7 @@
  *
  * One set of controls, two frames: `FilterBar` lays them out as the three-column grid of
  * the wide 「筛选」 card, `FilterSheet` stacks them in a bottom sheet. Every control writes
- * straight to the URL — nothing here keeps a copy of the filter state except the two
+ * straight to the filter state — nothing here keeps a copy of it except the two
  * amount boxes, which commit on blur so a half-typed `12.` is not parsed as a filter.
  * Neither the category selects nor the account list carries a search box (decision §14.57
  * and 屏幕稿 02: the lists are short enough to read at a glance).

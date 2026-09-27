@@ -6,8 +6,8 @@
  * recent categories, recent merchants — 04 §4.6, decision §14.52 A19) and the two body
  * builders that turn the form into a `POST`/`PATCH` payload.
  *
- * Nothing here knows about the router: the create screen mirrors `kind` into the URL,
- * the edit screens prefill from their own query.
+ * Nothing here knows about the router: the create screen reads its entry parameters once
+ * (§14.66 j), the edit screens prefill from their own query.
  */
 import React from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';

@@ -41,7 +41,7 @@ export const TOP_CATEGORIES = 8;
 
 export interface CategorySectionProps {
   query: UseQueryResult<StatsSummary>;
-  /** `'YYYY-MM'` — the month in the URL. */
+  /** `'YYYY-MM'` — the month the home page shows (its view state). */
   month: string;
   onChangeMonth(next: string): void;
   baseCurrency: string;

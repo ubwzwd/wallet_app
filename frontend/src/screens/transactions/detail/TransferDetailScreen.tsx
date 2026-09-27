@@ -1,5 +1,5 @@
 /**
- * 两腿转账详情 `/l/:ledgerId/transfers/:pairId` (04 §4.7, decisions §1.2, §14.34, §14.53a,
+ * 两腿转账详情 `/transfers/:pairId` (04 §4.7, decisions §1.2, §14.34, §14.53a,
  * 屏幕稿 07 两腿).
  *
  * The pair is the unit here: one `GET .../transactions/transfer/{pair_id}` (03 §5.30a) gives
@@ -97,11 +97,10 @@ export default function TransferDetailScreen(): React.JSX.Element {
   // Narrow: the sub-page bar is 「‹ 交易详情」 (屏幕稿 07 · 375); the legs below name the move.
   useTopBar(t('transaction:detail.page_title'));
 
-  const l = routes.l(ledgerId);
 
   const goList = React.useCallback((): void => {
-    router.replace(l.transactions() as Href);
-  }, [l, router]);
+    router.replace(routes.transactions() as Href);
+  }, [router]);
 
   /** Back where the reader came from; a deep link goes to the list (`useBack`, §14.64 f). */
   const goBack = useBack().goBack;
@@ -144,11 +143,11 @@ export default function TransferDetailScreen(): React.JSX.Element {
           qc.setQueryData(qk.ledger(ledgerId).tx(outId), (prev?: Transaction) =>
             prev ? { ...prev, pair: null, transfer_pair_id: null } : prev,
           );
-          router.replace(l.transaction(outId) as Href);
+          router.replace(routes.transaction(outId) as Href);
         },
       });
     });
-  }, [ledgerId, l, pair, pairId, qc, router, t, unpair]);
+  }, [ledgerId, pair, pairId, qc, router, t, unpair]);
 
   if (query.isError) {
     return (
@@ -177,7 +176,7 @@ export default function TransferDetailScreen(): React.JSX.Element {
       key: 'edit',
       label: t('common:button.edit'),
       icon: 'pencil',
-      onPress: () => router.push(l.transferEdit(pair.pair_id) as Href),
+      onPress: () => router.push(routes.transferEdit(pair.pair_id) as Href),
     },
     {
       key: 'unpair',
@@ -206,7 +205,7 @@ export default function TransferDetailScreen(): React.JSX.Element {
       sources: sourceMap,
       members: members.data?.items ?? [],
       membersReady: members.isSuccess,
-      onOpenBatch: (batchId) => router.push(l.importBatch(batchId) as Href),
+      onOpenBatch: (batchId) => router.push(routes.importBatch(batchId) as Href),
     },
     pair,
     outLeg.data,
@@ -297,7 +296,7 @@ export default function TransferDetailScreen(): React.JSX.Element {
         index={index ?? undefined}
         sourceNames={sourceNames}
         currency={pair.out.currency}
-        onPressBatch={(batchId) => router.push(l.importBatch(batchId) as Href)}
+        onPressBatch={(batchId) => router.push(routes.importBatch(batchId) as Href)}
       />
     </>
   );

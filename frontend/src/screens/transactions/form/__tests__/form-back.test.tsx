@@ -54,8 +54,8 @@ const CHECKING = makeLedgerSource({
 });
 const TX_ID = 'tx-under-edit';
 const PAIR_ID = 'pair-under-edit';
-const L = `/l/${LEDGER_ID}`;
-const NEW_URL = `${L}/transactions/new`;
+const HOME = '/home';
+const NEW_URL = '/transactions/new';
 
 /** What `AppShell` draws above a sub-page: the ‹ bar on a narrow screen, nothing wide. */
 function ShellBar(): React.JSX.Element | null {
@@ -77,9 +77,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
             </LeaveGuardProvider>
           </LedgerProvider>
           <ToastHost />
-          <ConfirmHost
-            labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }}
-          />
+          <ConfirmHost labels={{ confirm: '确认', cancel: '取消', confirmAgain: '再点一次确认' }} />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -88,13 +86,13 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
-  'l/[ledgerId]/transactions/index': () => <RNText>transactions</RNText>,
-  'l/[ledgerId]/transactions/new': TransactionFormScreen,
-  'l/[ledgerId]/transactions/[txId]/index': () => <RNText>transaction detail</RNText>,
-  'l/[ledgerId]/transactions/[txId]/edit': EditTransactionScreen,
-  'l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
-  'l/[ledgerId]/transfers/[pairId]/edit': EditTransferScreen,
+  home: () => <RNText>ledger home</RNText>,
+  'transactions/index': () => <RNText>transactions</RNText>,
+  'transactions/new': TransactionFormScreen,
+  'transactions/[txId]/index': () => <RNText>transaction detail</RNText>,
+  'transactions/[txId]/edit': EditTransactionScreen,
+  'transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
+  'transfers/[pairId]/edit': EditTransferScreen,
 };
 
 function setWide(wide: boolean): void {
@@ -143,7 +141,7 @@ describe('wide', () => {
     expect(screen.getByText('交易 · 记一笔')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 
@@ -166,52 +164,52 @@ describe('wide', () => {
     await act(async () => {
       fireEvent.press(await screen.findByTestId('confirm-accept'));
     });
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 
   test('the breadcrumb honours the form’s own ?next= before the table', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${NEW_URL}?next=${encodeURIComponent(L)}`,
+      initialUrl: `${NEW_URL}?next=${encodeURIComponent(HOME)}`,
       wrapper: Wrapper,
     });
 
     fireEvent.press(await screen.findByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(L));
+    await waitFor(() => expect(router.getPathname()).toBe(HOME));
   });
 
   test('编辑 an entry: 「交易 · 编辑」, and cold its back goes to that entry’s detail', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transactions/${TX_ID}/edit`,
+      initialUrl: `/transactions/${TX_ID}/edit`,
       wrapper: Wrapper,
     });
 
     expect(await screen.findByTestId('tx-form-header-back')).toBeTruthy();
     expect(screen.getByText('交易 · 编辑')).toBeTruthy();
     fireEvent.press(screen.getByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions/${TX_ID}`));
   });
 
   test('编辑 a transfer pair: cold, its back goes to the pair’s detail', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transfers/${PAIR_ID}/edit`,
+      initialUrl: `/transfers/${PAIR_ID}/edit`,
       wrapper: Wrapper,
     });
 
     expect(await screen.findByTestId('transfer-amount')).toBeTruthy();
     expect(screen.getByText('交易 · 编辑')).toBeTruthy();
     fireEvent.press(screen.getByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transfers/${PAIR_ID}`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transfers/${PAIR_ID}`));
   });
 
   test('with history, the breadcrumb steps back instead of going to the parent', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: L, wrapper: Wrapper });
+    const router = renderRouter(ROUTES, { initialUrl: HOME, wrapper: Wrapper });
     act(() => {
       appRouter.push(NEW_URL as never);
     });
 
     fireEvent.press(await screen.findByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(L));
+    await waitFor(() => expect(router.getPathname()).toBe(HOME));
   });
 });
 
@@ -220,13 +218,13 @@ describe('wide, ?next= and the states before the form', () => {
 
   test('编辑: the breadcrumb honours ?next= before the detail', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transactions/${TX_ID}/edit?next=${encodeURIComponent(L)}`,
+      initialUrl: `/transactions/${TX_ID}/edit?next=${encodeURIComponent(HOME)}`,
       wrapper: Wrapper,
     });
 
     await waitFor(() => expect(screen.getByTestId('tx-merchant').props.value).toBe('全家便利店'));
     fireEvent.press(screen.getByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(L));
+    await waitFor(() => expect(router.getPathname()).toBe(HOME));
   });
 
   test('an entry that cannot be read still has its breadcrumb, leading to the detail', async () => {
@@ -234,14 +232,14 @@ describe('wide, ?next= and the states before the form', () => {
       detail: 'gone',
     });
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transactions/${TX_ID}/edit`,
+      initialUrl: `/transactions/${TX_ID}/edit`,
       wrapper: Wrapper,
     });
 
     expect(await screen.findByTestId('tx-edit-error')).toBeTruthy();
     expect(screen.getByText('交易 · 编辑')).toBeTruthy();
     fireEvent.press(screen.getByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions/${TX_ID}`));
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 
@@ -250,13 +248,13 @@ describe('wide, ?next= and the states before the form', () => {
       .onGet(apiUrl(`/ledgers/${LEDGER_ID}/transactions/transfer/${PAIR_ID}`))
       .reply(404, { detail: 'gone' });
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transfers/${PAIR_ID}/edit?next=${encodeURIComponent(`${L}/transactions`)}`,
+      initialUrl: `/transfers/${PAIR_ID}/edit?next=${encodeURIComponent(`/transactions`)}`,
       wrapper: Wrapper,
     });
 
     expect(await screen.findByTestId('transfer-edit-error')).toBeTruthy();
     fireEvent.press(screen.getByTestId('tx-form-header-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
   });
 
   test('while the entry is still loading, the breadcrumb is already there', async () => {
@@ -264,7 +262,7 @@ describe('wide, ?next= and the states before the form', () => {
     api.mock
       .onGet(apiUrl(`/ledgers/${LEDGER_ID}/transactions/${TX_ID}`))
       .reply(() => new Promise(() => undefined));
-    renderRouter(ROUTES, { initialUrl: `${L}/transactions/${TX_ID}/edit`, wrapper: Wrapper });
+    renderRouter(ROUTES, { initialUrl: `/transactions/${TX_ID}/edit`, wrapper: Wrapper });
 
     expect(await screen.findByTestId('tx-edit-skeleton')).toBeTruthy();
     expect(screen.getByTestId('tx-form-header-back')).toBeTruthy();
@@ -302,12 +300,12 @@ describe('narrow', () => {
     await act(async () => {
       fireEvent.press(await screen.findByTestId('confirm-accept'));
     });
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions`));
   });
 
   test('a dirty 编辑 asks before the top bar’s ‹ leaves for the detail', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transactions/${TX_ID}/edit`,
+      initialUrl: `/transactions/${TX_ID}/edit`,
       wrapper: Wrapper,
     });
 
@@ -320,39 +318,41 @@ describe('narrow', () => {
       fireEvent.press(screen.getByTestId('confirm-cancel'));
     });
     await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
-    expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}/edit`);
+    expect(router.getPathname()).toBe(`/transactions/${TX_ID}/edit`);
     expect(screen.getByTestId('tx-merchant').props.value).toBe('罗森');
 
     fireEvent.press(screen.getByTestId('top-bar-back'));
     await act(async () => {
       fireEvent.press(await screen.findByTestId('confirm-accept'));
     });
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions/${TX_ID}`));
   });
 
   test('a cold 记一笔 with ?next=: the ‹ goes to next, as the breadcrumb does', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${NEW_URL}?next=${encodeURIComponent(L)}`,
+      initialUrl: `${NEW_URL}?next=${encodeURIComponent(HOME)}`,
       wrapper: Wrapper,
     });
 
     fireEvent.press(await screen.findByTestId('top-bar-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(L));
+    await waitFor(() => expect(router.getPathname()).toBe(HOME));
   });
 
   test('a dirty 编辑 with ?next=: the ‹ asks once, then goes to next', async () => {
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transfers/${PAIR_ID}/edit?next=${encodeURIComponent(L)}`,
+      initialUrl: `/transfers/${PAIR_ID}/edit?next=${encodeURIComponent(HOME)}`,
       wrapper: Wrapper,
     });
 
-    await waitFor(() => expect(screen.getByTestId('transfer-note').props.value).toBe('还 8 月账单'));
+    await waitFor(() =>
+      expect(screen.getByTestId('transfer-note').props.value).toBe('还 8 月账单'),
+    );
     fireEvent.changeText(screen.getByTestId('transfer-note'), '改了');
     fireEvent.press(screen.getByTestId('top-bar-back'));
     await act(async () => {
       fireEvent.press(await screen.findByTestId('confirm-accept'));
     });
-    await waitFor(() => expect(router.getPathname()).toBe(L));
+    await waitFor(() => expect(router.getPathname()).toBe(HOME));
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 
@@ -361,13 +361,13 @@ describe('narrow', () => {
       detail: 'gone',
     });
     const router = renderRouter(ROUTES, {
-      initialUrl: `${L}/transactions/${TX_ID}/edit`,
+      initialUrl: `/transactions/${TX_ID}/edit`,
       wrapper: Wrapper,
     });
 
     expect(await screen.findByTestId('tx-edit-error')).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('编辑'));
     fireEvent.press(screen.getByTestId('top-bar-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions/${TX_ID}`));
+    await waitFor(() => expect(router.getPathname()).toBe(`/transactions/${TX_ID}`));
   });
 });

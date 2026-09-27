@@ -48,11 +48,11 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers</RNText>,
-  '(app)/l/[ledgerId]/index': () => <RNText>home</RNText>,
-  '(app)/l/[ledgerId]/transactions/index': TransactionsScreen,
-  '(app)/l/[ledgerId]/transactions/new': () => <RNText>new transaction</RNText>,
-  '(app)/l/[ledgerId]/transactions/[txId]/index': () => <RNText>tx detail</RNText>,
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
+  '(app)/home': () => <RNText>home</RNText>,
+  '(app)/transactions/index': TransactionsScreen,
+  '(app)/transactions/new': () => <RNText>new transaction</RNText>,
+  '(app)/transactions/[txId]/index': () => <RNText>tx detail</RNText>,
+  '(app)/transfers/[pairId]/index': () => <RNText>transfer detail</RNText>,
 };
 
 const SOURCE_A = makeLedgerSource({ id: 's1', name: '招行储蓄卡', type: 'checking' });
@@ -201,7 +201,7 @@ afterEach(() => {
 
 test('the two legs of a transfer render as one row, and the header counts the entries', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   // One row keyed by the pair id, and neither leg on its own.
   expect(await screen.findByTestId(`tx-row-${PAIR_ID}`)).toBeTruthy();
@@ -239,7 +239,7 @@ test('the header count does not drift when a second page is loaded', async () =>
   api.mock.onGet(apiUrl(`/ledgers/${LEDGER}/transactions`)).replyOnce(200, first);
   api.mock.onGet(apiUrl(`/ledgers/${LEDGER}/transactions`)).reply(200, second);
 
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   // Five rows out of six legs, and the header still says what the server matched.
   expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 8 笔');
@@ -255,7 +255,7 @@ test('the header count does not drift when a second page is loaded', async () =>
 test('the wide pager counts the whole filtered result, not the page', async () => {
   setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ total: 42 }));
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 42 笔');
 });
@@ -263,7 +263,7 @@ test('the wide pager counts the whole filtered result, not the page', async () =
 test('the wide layout is a seven-column table with a counted foot strip', async () => {
   setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ total: 6 }));
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   // 屏幕稿 02 · 1440: 日期 / 种类 / 商户 / 分类 / 账户 / 备注 / 金额.
   expect(await screen.findByTestId('tx-table-head-date')).toHaveTextContent('日期');
@@ -296,9 +296,9 @@ test('the wide layout is a seven-column table with a counted foot strip', async 
   expect(screen.getByTestId('tx-table-net')).toHaveTextContent('净额 +17,000.01');
 });
 
-test('each day header carries that day\'s expense and income subtotal', async () => {
+test("each day header carries that day's expense and income subtotal", async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   expect(await screen.findByTestId('tx-day-2026-09-10-total')).toHaveTextContent(
     '当日支出 45.00 · 收入 18,000.00',
@@ -313,7 +313,7 @@ test('each day header carries that day\'s expense and income subtotal', async ()
 
 test('the bottom summary comes from the response, not from the rows on screen', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   const expense = await screen.findByTestId('tx-summary-expense');
   // The page's own expenses add up to 111.20; the envelope says 999.99 and that is what wins.
@@ -335,7 +335,7 @@ test('the narrow summary footnote states the refund the net includes, and is abs
       summary: { ...WHOLE_RESULT_SUMMARY, net: '17199.0100', rate_missing_count: 0 },
     }),
   );
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   // 18,000.00 − 999.99 + 199.00 = 17,199.01, so the refunds came to 199.00.
   expect(await screen.findByTestId('tx-summary-refund-note')).toHaveTextContent(
@@ -355,7 +355,7 @@ test('the narrow summary footnote states the refund the net includes, and is abs
   mockGet('/rates/currencies', makeCurrencyList());
   mockGet(`/ledgers/${LEDGER}/sources`, { items: [SOURCE_A, SOURCE_B], total: 2 });
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   expect(await screen.findByTestId('tx-summary-net')).toHaveTextContent('+17,000.01');
   expect(screen.queryByTestId('tx-summary-refund-note')).toBeNull();
@@ -373,7 +373,7 @@ async function openRowMenu(rowTestId: string): Promise<void> {
 test('deleting a merged transfer row confirms once and calls DELETE .../transfer/{pair_id}', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   mockDelete(`/ledgers/${LEDGER}/transactions/transfer/${PAIR_ID}`, undefined, 204);
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   await openRowMenu(`tx-row-${PAIR_ID}`);
   fireEvent.press(screen.getByTestId('tx-row-menu-delete'));
@@ -392,7 +392,7 @@ test('deleting a merged transfer row confirms once and calls DELETE .../transfer
 test('deleting a plain row calls DELETE on the transaction, not on a pair', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
   mockDelete(`/ledgers/${LEDGER}/transactions/e1`, undefined, 204);
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   await openRowMenu('tx-row-e1');
   fireEvent.press(screen.getByTestId('tx-row-menu-delete'));
@@ -409,7 +409,7 @@ test('deleting a plain row calls DELETE on the transaction, not on a pair', asyn
 
 test('an empty ledger and an empty filter result say different things', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ items: [], total: 0 }));
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   // 屏幕稿 15 · 空交易列表: "nothing recorded yet" offers the two ways to put something in.
   expect(await screen.findByTestId('tx-empty')).toHaveTextContent(/还没有任何交易/);
@@ -417,10 +417,7 @@ test('an empty ledger and an empty filter result say different things', async ()
   expect(screen.getByTestId('tx-empty-secondary')).toBeTruthy();
   expect(screen.queryByTestId('tx-empty-filtered-state')).toBeNull();
 
-  router.unmount();
-  queryClient.clear();
-
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions?q=没有这个词` });
+  fireEvent.changeText(screen.getByTestId('tx-filter-bar-q'), '没有这个词');
 
   // 屏幕稿 15 · 筛选无结果: a different problem, so a different block and a different way out.
   expect(await screen.findByTestId('tx-empty-filtered-state')).toHaveTextContent(
@@ -439,22 +436,20 @@ test('an empty ledger and an empty filter result say different things', async ()
  */
 test('an imported row carries a badge, and the badge is not a button', async () => {
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
-  const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  const router = renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   const badge = await screen.findByTestId('tx-row-im1-badge-imported');
   expect(badge).toHaveTextContent('导入');
   expect(badge.props.accessibilityRole).not.toBe('button');
   // Pressing it does nothing of its own; the row underneath is what opens.
   fireEvent.press(badge);
-  await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/im1`),
-  );
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/im1'));
 });
 
 test('the wide table repeats the same non-interactive badge', async () => {
   setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse());
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   const badge = await screen.findByTestId('tx-row-im1-badge-imported');
   expect(badge).toHaveTextContent('导入');
@@ -469,7 +464,7 @@ test('the wide table repeats the same non-interactive badge', async () => {
 test('an empty wide result keeps the count but prints no money', async () => {
   setWide(true);
   mockGet(`/ledgers/${LEDGER}/transactions`, listResponse({ items: [], total: 0 }));
-  renderRouter(ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  renderRouter(ROUTES, { initialUrl: '/transactions' });
 
   expect(await screen.findByTestId('tx-count')).toHaveTextContent('共 0 笔');
   expect(screen.queryByTestId('tx-summary-line')).toBeNull();

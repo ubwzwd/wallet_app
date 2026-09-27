@@ -1,16 +1,21 @@
 /**
- * 记一笔 `/l/:ledgerId/transactions/new?kind=...` (04 §4.6) — and, through `TransactionForm`,
- * the body of the edit screen as well.
+ * 记一笔 `/transactions/new?kind=&source_id=&refund_of=&copy_of=&next=` (04 §4.6) — and,
+ * through `TransactionForm`, the body of the edit screen as well.
  *
- * One form, four tabs (decision §1). Switching tabs rewrites the URL and keeps everything
- * that still means the same thing (amount, date, account, note); only the category is
- * dropped when the tree underneath it changes (decision §1.3).
+ * The query parameters are how the form is *entered* (decision §14.66 f / j): they are read
+ * once, when the form mounts, and never written back. Switching tabs is form state only —
+ * the address stays as it was entered, so the back button leaves the form instead of
+ * stepping through tabs.
+ *
+ * One form, four tabs (decision §1). Switching tabs keeps everything that still means the
+ * same thing (amount, date, account, note); only the category is dropped when the tree
+ * underneath it changes (decision §1.3).
  */
 import React from 'react';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { Transaction, TxKind } from '@/api/types';
+import type { Transaction } from '@/api/types';
 import { KINDS } from '@/domain/kinds';
 import { safeNext } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
@@ -23,44 +28,66 @@ import { toast } from '@/ui';
 import { TransactionForm } from './TransactionForm';
 import { applyFieldErrors } from './conflicts';
 import type { TxFormValues } from './schemas';
-import {
-  toTransactionCreate,
-  toTransferCreate,
-  useTransactionForm,
-  type TxFormController,
-} from './useTransactionForm';
+import { toTransactionCreate, toTransferCreate, useTransactionForm } from './useTransactionForm';
 
 export { TransactionForm, type TransactionFormProps } from './TransactionForm';
 export { ConflictBanner, applyFieldErrors, findConflicts, type FormConflict } from './conflicts';
+
+type EntryParams = {
+  kind?: string;
+  source_id?: string;
+  refund_of?: string;
+  copy_of?: string;
+  next?: string;
+};
 
 export default function TransactionFormScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const { ledgerId } = useLedgerContext();
-  const params = useLocalSearchParams<{
-    kind?: string;
-    source_id?: string;
-    refund_of?: string;
-    copy_of?: string;
-    next?: string;
-  }>();
+  const params = useLocalSearchParams<EntryParams>();
 
-  const paramKind = KINDS.find((k) => k === params.kind);
-  const refundOf = typeof params.refund_of === 'string' ? params.refund_of : null;
-  const copyOf = typeof params.copy_of === 'string' ? params.copy_of : null;
-  const next = safeNext(params.next);
+  // What the form was opened with, and in which ledger — frozen at mount (§14.66 j).
+  const [entry] = React.useState(() => ({
+    ledgerId,
+    kind: KINDS.find((k) => k === params.kind),
+    sourceId: typeof params.source_id === 'string' ? params.source_id : '',
+    refundOf: typeof params.refund_of === 'string' ? params.refund_of : null,
+    copyOf: typeof params.copy_of === 'string' ? params.copy_of : null,
+    next: safeNext(params.next),
+  }));
+  // A switch to another ledger keeps the page (§14.66 d), but the record to copy and the
+  // page to return to belong to the ledger the form was opened in.
+  const sameLedger = entry.ledgerId === ledgerId;
+  const copyOf = sameLedger ? entry.copyOf : null;
+  const next = sameLedger ? entry.next : null;
 
   const ctrl = useTransactionForm({
     ledgerId,
     mode: 'create',
     initial: {
       // `?refund_of=` lands on the refund tab even without an explicit `?kind=`.
-      kind: paramKind ?? (refundOf ? 'refund' : 'expense'),
-      source_id: typeof params.source_id === 'string' ? params.source_id : '',
-      refund_of: refundOf,
+      kind: entry.kind ?? (entry.refundOf ? 'refund' : 'expense'),
+      source_id: entry.sourceId,
+      refund_of: entry.refundOf,
       occurred_at: todayLocalIso(),
     },
   });
+
+  // What was typed survives a ledger switch; what named the old ledger's records does not:
+  // its accounts and the original a refund pointed at. The account falls back to the new
+  // ledger's default, as on a fresh form.
+  const formLedger = React.useRef(ledgerId);
+  React.useEffect(() => {
+    if (formLedger.current === ledgerId) return;
+    formLedger.current = ledgerId;
+    const { setValue } = ctrl.form;
+    setValue('source_id', '');
+    setValue('currency', '');
+    setValue('to_source_id', '');
+    setValue('currency_in', '');
+    setValue('refund_of', null);
+  }, [ctrl.form, ledgerId]);
 
   const create = useCreateTransaction(ledgerId, { silent: true });
   const createTransfer = useCreateTransfer(ledgerId, { silent: true });
@@ -90,7 +117,6 @@ export default function TransactionFormScreen(): React.JSX.Element {
         note: copyData.note ?? '',
         occurred_at: todayLocalIso(),
       });
-      router.setParams({ kind: 'transfer' });
       setFocusKey((n) => n + 1);
       toast.warning(t('transaction:form.copy_transfer_pair_unsupported'));
       return;
@@ -118,10 +144,10 @@ export default function TransactionFormScreen(): React.JSX.Element {
       counterparty: copyData.counterparty ?? '',
       currency_in: isSingleLeg ? copyData.currency : '',
     });
-    // The tab follows the copy, so the URL has to as well — browser back/forward reads it.
-    router.setParams({ kind: copyData.kind });
+    // The tab follows the copy — in the form only; the address keeps what it was entered
+    // with (§14.66 j).
     setFocusKey((n) => n + 1);
-  }, [copyData, ctrl.form, router, t]);
+  }, [copyData, ctrl.form, t]);
 
   // `?next=` first; otherwise back through history, or — deep-linked straight into the
   // form (a shared link, a PWA cold start) — to the parent `useBack` names: the list.
@@ -176,33 +202,6 @@ export default function TransactionFormScreen(): React.JSX.Element {
     [create, createTransfer, onError, onSuccess],
   );
 
-  const setKind = ctrl.setKind;
-  const onChangeKind = React.useCallback(
-    (kind: TxKind): void => {
-      setKind(kind);
-      router.setParams({ kind });
-    },
-    [router, setKind],
-  );
-
-  // The other direction: `?kind=` changing on its own (browser back/forward, a deep link
-  // into an already-mounted form) moves the tab. Only an actual change of the parameter
-  // counts — comparing against the form would undo a tab press, because `setParams` lands
-  // a render after `setKind`.
-  const lastParamKind = React.useRef(paramKind);
-  React.useEffect(() => {
-    if (paramKind === lastParamKind.current) return;
-    lastParamKind.current = paramKind;
-    if (paramKind) setKind(paramKind);
-  }, [paramKind, setKind]);
-
-  // The tab row lives inside `TransactionForm`, which only knows the controller — so the
-  // URL sync is wired by replacing `setKind` on the controller passed down.
-  const routedCtrl: TxFormController = React.useMemo(
-    () => ({ ...ctrl, setKind: onChangeKind }),
-    [ctrl, onChangeKind],
-  );
-
   const onCancel = React.useCallback((): void => {
     void leave.confirmLeave().then((ok) => {
       if (!ok) return;
@@ -216,16 +215,17 @@ export default function TransactionFormScreen(): React.JSX.Element {
   // `?next=` first (§14.65 h).
   useBackOverride(onCancel);
 
+  const setKind = ctrl.setKind;
   const switchToIncome = React.useCallback((): void => {
-    onChangeKind('income');
+    setKind('income');
     ctrl.form.setValue('external', false);
     ctrl.form.setValue('category_l1', 'social_income');
     ctrl.form.setValue('category_l2', null);
-  }, [ctrl.form, onChangeKind]);
+  }, [ctrl.form, setKind]);
 
   return (
     <TransactionForm
-      ctrl={routedCtrl}
+      ctrl={ctrl}
       submitting={submitting}
       onSubmit={onSubmit}
       onCancel={onCancel}
