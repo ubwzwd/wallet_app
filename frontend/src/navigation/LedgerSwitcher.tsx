@@ -19,7 +19,7 @@
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { usePathname, useRouter } from 'expo-router';
+import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { Ledger, Uuid } from '@/api/types';
@@ -41,9 +41,10 @@ export function usePickLedger(): (id: Uuid) => void {
   const ledgerContext = useOptionalLedgerContext();
   const guarded = useGuardedNavigate();
   const pathname = usePathname();
+  const search = useGlobalSearchParams();
   return (id) => {
     if (!ledgerContext || ledgerContext.ledgerId === id) return;
-    const navigates = ledgerSwitchTarget(pathname) !== null;
+    const navigates = ledgerSwitchTarget(pathname, search) !== null;
     guarded(() => ledgerContext.switchTo(id), { navigates });
   };
 }

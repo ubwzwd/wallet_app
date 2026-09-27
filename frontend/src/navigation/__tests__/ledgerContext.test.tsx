@@ -25,6 +25,7 @@ import { markLedgerUnavailable, resetLedgerUnavailable, useLedgerContext } from 
 import { makeLedger, makeUser } from '@/test/fixtures';
 import { apiUrl, mockApi, mockGet, type MockApi } from '@/test/mockApi';
 import { toast } from '@/ui';
+import * as prefs from '@/utils/prefs';
 import { PREF_NAMES, getPref, setPref, setSessionPref } from '@/utils/prefs';
 
 const LEDGER_A = 'ledger-a';
@@ -107,7 +108,15 @@ beforeEach(async () => {
 afterEach(() => {
   api.restore();
   toast.clear();
+  jest.restoreAllMocks();
 });
+
+/** This tab remembers `id` (web `sessionStorage`; jest runs as native, which has none). */
+function rememberInTab(id: string): void {
+  jest
+    .spyOn(prefs, 'getSessionPrefSync')
+    .mockImplementation((name) => (name === PREF_NAMES.currentLedgerId ? id : null));
+}
 
 describe('which ledger is current (§14.66 b)', () => {
   test('the remembered ledger, with no ledger anywhere in the URL', async () => {
@@ -137,6 +146,17 @@ describe('which ledger is current (§14.66 b)', () => {
 
     expect(await router.findByTestId('probe-id')).toHaveTextContent(LEDGER_A);
     await waitFor(async () => expect(await getPref(PREF_NAMES.lastLedgerId)).toBe(LEDGER_A));
+    // The device's last ledger is only a hint; nothing to announce.
+    expect(toast.peek()).toHaveLength(0);
+  });
+
+  test('this tab’s own ledger is taken over the device’s, silently', async () => {
+    rememberInTab(LEDGER_B);
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
+    const router = renderRouter(ROUTES, { initialUrl: '/home' });
+
+    expect(await router.findByTestId('probe-id')).toHaveTextContent(LEDGER_B);
+    expect(toast.peek()).toHaveLength(0);
   });
 
   test('while the ledger list is on its way nothing is guessed', async () => {
@@ -262,6 +282,27 @@ describe('a ledger the server gave up on (§14.66 c)', () => {
     await waitFor(() => expect(router.getByTestId('probe-count')).toHaveTextContent('1'));
     expect(router.getByTestId('probe-id')).toHaveTextContent(LEDGER_A);
     expect(toast.peek()).toHaveLength(0);
+  });
+
+  test('found on a reload: the tab’s ledger is gone from the list, and the toast says where to', async () => {
+    rememberInTab('ledger-i-was-removed-from');
+    await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
+    const router = renderRouter(ROUTES, { initialUrl: '/home' });
+
+    expect(await router.findByTestId('probe-id')).toHaveTextContent(LEDGER_B);
+    expect(router.getPathname()).toBe('/home');
+    await waitFor(() =>
+      expect(toast.peek().map((item) => item.message)).toEqual(['账本不可用，已切到 旅行账本']),
+    );
+  });
+
+  test('found on a reload of one of its records: the tab leaves for the list', async () => {
+    rememberInTab('ledger-i-was-removed-from');
+    const router = renderRouter(ROUTES, { initialUrl: '/transactions/tx-1' });
+
+    await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+    expect(router.getByTestId('probe-id')).toHaveTextContent(LEDGER_A);
+    await waitFor(() => expect(toast.peek()).toHaveLength(1));
   });
 
   test('with no other ledger to go to, a ledger page goes to the onboarding', async () => {

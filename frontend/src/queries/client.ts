@@ -17,10 +17,11 @@ import type { TFunction } from 'i18next';
 
 import { isApiClientError, isClientError } from '@/api/errors';
 import type { ApiClientError } from '@/api/errors';
+import { ledgersApi } from '@/api/ledgers';
 import { errorMessage } from '@/i18n/errorCodes';
 import { toast, type ToastKind } from '@/ui/Toast';
 
-import { LEDGER_KEY_PREFIX } from './keys';
+import { LEDGER_KEY_PREFIX, qk } from './keys';
 
 declare module '@tanstack/react-query' {
   interface Register {
@@ -64,6 +65,12 @@ function ledgerIdOfDetailKey(key: readonly unknown[]): string | null {
   return typeof key[1] === 'string' ? key[1] : null;
 }
 
+/** The ledger of any other ledger-scoped key, `['l', <id>, …]`. */
+function ledgerIdOfScopedKey(key: readonly unknown[]): string | null {
+  if (key.length < 3 || key[0] !== LEDGER_KEY_PREFIX) return null;
+  return typeof key[1] === 'string' ? key[1] : null;
+}
+
 function translate(e: unknown): string {
   return errorMessage(i18next.t.bind(i18next) as TFunction, e);
 }
@@ -81,7 +88,23 @@ export function createQueryClient(deps: QueryHandlers): QueryClient {
       }
       if (e.status === 404 && e.code === 'not_found') {
         const ledgerId = ledgerIdOfDetailKey(query.queryKey);
-        if (ledgerId) deps.onLedgerGone(ledgerId);
+        if (ledgerId) {
+          deps.onLedgerGone(ledgerId);
+          return;
+        }
+        // Any other ledger-scoped 404 means "that record is gone" — unless the whole ledger
+        // is (04 §1.5 rule 4). Only the ledger detail may say which, so ask it once more;
+        // its own 404 comes back through the branch above.
+        const scoped = ledgerIdOfScopedKey(query.queryKey);
+        if (scoped && client) {
+          void client
+            .fetchQuery({
+              queryKey: qk.ledger(scoped).detail(),
+              queryFn: () => ledgersApi.get(scoped),
+              staleTime: 0,
+            })
+            .catch(() => undefined);
+        }
       }
       // Everything else belongs to the page that asked for the data.
     },

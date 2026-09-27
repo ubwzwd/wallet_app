@@ -2,6 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import i18next from 'i18next';
 
 import { ApiClientError } from '@/api/errors';
+import { ledgersApi } from '@/api/ledgers';
+import type { LedgerDetail } from '@/api/types';
 import { initI18n } from '@/i18n';
 
 import { createQueryClient, shouldRetry, type QueryHandlers } from '../client';
@@ -36,6 +38,15 @@ async function runMutation(
 beforeAll(async () => {
   await initI18n();
 });
+
+/** Let the follow-up fetch the cache fired and forgot settle. */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function waitForCalls(fn: jest.Mock | jest.SpyInstance): Promise<void> {
+  for (let i = 0; i < 50 && fn.mock.calls.length === 0; i += 1) await flush();
+}
 
 describe('retry policy (04 §2.4)', () => {
   test('never retries a 4xx', () => {
@@ -94,9 +105,7 @@ describe('QueryCache.onError', () => {
     expect(deps.onLedgerGone).toHaveBeenCalledWith(L);
   });
 
-  test('404 on any other key is left to the page', async () => {
-    const deps = handlers();
-    const qc = createQueryClient(deps);
+  async function recordGone(qc: QueryClient): Promise<void> {
     await qc
       .fetchQuery({
         queryKey: qk.ledger(L).tx('t1'),
@@ -105,8 +114,56 @@ describe('QueryCache.onError', () => {
         gcTime: Infinity,
       })
       .catch(() => undefined);
+  }
+
+  afterEach(() => jest.restoreAllMocks());
+
+  test('404 on any other ledger key: the ledger detail is asked, and a live ledger is left alone', async () => {
+    const get = jest
+      .spyOn(ledgersApi, 'get')
+      .mockResolvedValue({ id: L } as unknown as LedgerDetail);
+    const deps = handlers();
+    const qc = createQueryClient(deps);
+
+    await recordGone(qc);
+
+    await waitForCalls(get);
+    expect(get).toHaveBeenCalledWith(L);
+    await flush();
+    // The record is gone, not the ledger: the page says so itself.
     expect(deps.onLedgerGone).not.toHaveBeenCalled();
     expect(deps.notify).not.toHaveBeenCalled();
+    qc.clear();
+  });
+
+  test('404 on any other ledger key, and the detail 404s too: the ledger is gone (§1.5 rule 4)', async () => {
+    jest.spyOn(ledgersApi, 'get').mockRejectedValue(err(404, 'not_found'));
+    const deps = handlers();
+    const qc = createQueryClient(deps);
+
+    await recordGone(qc);
+
+    await waitForCalls(deps.onLedgerGone);
+    expect(deps.onLedgerGone).toHaveBeenCalledWith(L);
+    expect(deps.onLedgerGone).toHaveBeenCalledTimes(1);
+    qc.clear();
+  });
+
+  test('404 on a key outside any ledger asks nothing more', async () => {
+    const get = jest.spyOn(ledgersApi, 'get');
+    const deps = handlers();
+    const qc = createQueryClient(deps);
+    await qc
+      .fetchQuery({
+        queryKey: qk.global.ledgers(),
+        queryFn: () => Promise.reject(err(404, 'not_found')),
+        retry: false,
+      })
+      .catch(() => undefined);
+    await flush();
+    expect(get).not.toHaveBeenCalled();
+    expect(deps.onLedgerGone).not.toHaveBeenCalled();
+    qc.clear();
   });
 });
 
