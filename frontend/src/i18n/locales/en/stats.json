@@ -20,7 +20,7 @@
     "month_next": "Next month",
     "month_empty": "No transactions recorded this month yet",
     "month_expense_empty": "No spending this month yet",
-    "month_empty_hint": "After a full month here, the categories line up — you'll see where the money went at a glance.",
+    "month_empty_hint": "After a full month here, the categories line up.",
     "add_transaction": "Add a transaction",
     "refund_deducted": "Includes {{amount}} of refunds already deducted",
     "rate_missing_one": "{{count}} transaction isn't included — no exchange rate yet",
