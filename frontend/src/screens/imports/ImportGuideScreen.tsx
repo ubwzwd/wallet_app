@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/imports/guide` — 「标准格式说明」, the secondary page step 3 of the import
+ * `/imports/guide` — 「标准格式说明」, the secondary page step 3 of the import
  * page links to (04 §4.10, decision §6, §14.56: the steps and the skill text now live on
  * `/imports/new`; only the format reference stayed here).
  *

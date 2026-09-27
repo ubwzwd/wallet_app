@@ -395,16 +395,29 @@ test('both layouts list accounts in the frozen §14.48 type order', async () => 
   expect(names).toEqual([checking.name, credit.name, cash.name, other.name]);
 });
 
-test('toggling the archived section writes include_archived into the URL', async () => {
+test('toggling the archived section is page state: the URL is never rewritten (§14.66 j)', async () => {
   seedList();
   const router = renderList();
 
   fireEvent.press(await screen.findByTestId('sources-archived-toggle'));
-  await waitFor(() => expect(router.getSearchParams().include_archived).toBe('1'));
   expect(await screen.findByTestId('source-row-src-archived')).toBeTruthy();
+  expect(router.getPathname()).toBe('/accounts');
+  expect(router.getSearchParams().include_archived).toBeUndefined();
 
   fireEvent.press(screen.getByTestId('sources-archived-toggle'));
-  await waitFor(() => expect(router.getSearchParams().include_archived).toBeUndefined());
+  await waitFor(() => expect(screen.queryByTestId('source-row-src-archived')).toBeNull());
+  expect(router.getSearchParams().include_archived).toBeUndefined();
+});
+
+test('?include_archived=1 is read once on entry: folding the section leaves the URL alone', async () => {
+  seedList();
+  const router = renderList('/accounts?include_archived=1');
+
+  expect(await screen.findByTestId('source-row-src-archived')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('sources-archived-toggle'));
+  await waitFor(() => expect(screen.queryByTestId('source-row-src-archived')).toBeNull());
+  // The entry parameter stays what it was — the fold is not written back as history.
+  expect(router.getSearchParams().include_archived).toBe('1');
 });
 
 test('the empty state offers the create action', async () => {

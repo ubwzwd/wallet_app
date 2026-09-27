@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/imports` — the batch history and the two destructive actions
+ * `/imports` — the batch history and the two destructive actions
  * (04 §4.10, §8.5 cases 7–8; decisions §14.22, §14.40, §14.43, §14.52 A17 / B24, §14.56).
  *
  * The wide table (屏幕稿 11) and the narrow cards name the same things with the same test
@@ -9,14 +9,15 @@
 import React from 'react';
 import { Text as RNText } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { Slot, router as expoRouter } from 'expo-router';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
 import type { ImportBatchListItem, LedgerMember } from '@/api/types';
 import { initI18n } from '@/i18n';
 import { TopBarProvider, TopBarSurface } from '@/navigation';
-import { AuthProvider, LedgerProvider } from '@/store';
+import { AuthProvider, LedgerProvider, ViewStateProvider, useLedgerViewState } from '@/store';
 import * as breakpoint from '@/theme/useBreakpoint';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ConfirmHost, ToastHost, toast } from '@/ui';
@@ -100,12 +101,14 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
     <QueryClientProvider client={queryClient}>
       <ThemeProvider initialPref="light">
         <AuthProvider queryClient={queryClient}>
-          <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
-            <TopBarProvider>
-              <TopBarSurface onPressLedger={() => {}} />
-              {children}
-            </TopBarProvider>
-          </LedgerProvider>
+          <ViewStateProvider>
+            <LedgerProvider ledgerId={LEDGER_ID} ledgers={[LEDGER]}>
+              <TopBarProvider>
+                <TopBarSurface onPressLedger={() => {}} />
+                {children}
+              </TopBarProvider>
+            </LedgerProvider>
+          </ViewStateProvider>
           <ToastHost />
           <ConfirmHost
             labels={{
@@ -120,13 +123,28 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
   );
 }
 
+/**
+ * A slice change repaints the table's loading skeleton while the server answers, and under
+ * the fake timers `renderRouter` installs every `waitFor` tick then costs real seconds — so
+ * the cases that switch slices get more than jest's default 5 s on a loaded machine.
+ */
+const SLICE_TEST_TIMEOUT = 20_000;
+
+/** The transaction list, reduced to the filters it would open with (its view state). */
+function TransactionListProbe(): React.JSX.Element {
+  const [filters] = useLedgerViewState<Record<string, unknown>>('transactions.filters', {});
+  return <RNText testID="tx-filters">{JSON.stringify(filters)}</RNText>;
+}
+
+/** One flat `Slot`, as in the app (§14.66 g): leaving a page unmounts it. */
 const ROUTES = {
+  _layout: () => <Slot />,
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/imports/index': ImportsHistoryScreen,
-  'l/[ledgerId]/imports/new': () => <RNText>upload page</RNText>,
-  'l/[ledgerId]/imports/guide': () => <RNText>guide page</RNText>,
-  'l/[ledgerId]/imports/[batchId]': () => <RNText>review table</RNText>,
-  'l/[ledgerId]/transactions/index': () => <RNText>transaction list</RNText>,
+  'imports/index': ImportsHistoryScreen,
+  'imports/new': () => <RNText>upload page</RNText>,
+  'imports/guide': () => <RNText>guide page</RNText>,
+  'imports/[batchId]': () => <RNText>review table</RNText>,
+  'transactions/index': TransactionListProbe,
 };
 
 /** The history endpoint as the server answers it: `?status=` filters server-side, so the
@@ -153,7 +171,7 @@ function listRequests(): Array<Record<string, unknown> | undefined> {
 }
 
 function renderHistory(): ReturnType<typeof renderRouter> {
-  return renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_ID}/imports`, wrapper: Wrapper });
+  return renderRouter(ROUTES, { initialUrl: '/imports', wrapper: Wrapper });
 }
 
 beforeEach(async () => {
@@ -228,8 +246,21 @@ test('the two status rows offer different actions and lead to the right places',
   expect(screen.queryByTestId(`import-batch-${PASTED_ID}-continue`)).toBeNull();
 
   fireEvent.press(screen.getByTestId(`import-batch-${PASTED_ID}-view`));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/transactions`));
-  expect(router.getSearchParams().import_batch_id).toBe(PASTED_ID);
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  // The list opens filtered to the batch through its view state, not the query (§14.66 e).
+  expect(router.getSearchParams().import_batch_id).toBeUndefined();
+  expect(JSON.parse(String(screen.getByTestId('tx-filters').props.children))).toEqual({
+    import_batch_id: PASTED_ID,
+  });
+});
+
+test('continuing a draft opens its batch page at a bare address', async () => {
+  seed();
+  const router = renderHistory();
+
+  fireEvent.press(await screen.findByTestId(`import-batch-${BATCH_ID}-continue`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/imports/${BATCH_ID}`));
+  expect(router.getSearchParams()).toEqual({ batchId: BATCH_ID });
 });
 
 test('undo asks with dry_run first, words both counters separately, then deletes for real', async () => {
@@ -380,7 +411,7 @@ test('the empty state offers the import page and the guide, and the header keeps
   expect(screen.getByTestId('imports-new')).toBeTruthy();
 
   fireEvent.press(screen.getByTestId('imports-empty-primary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/new'));
 });
 
 test('the empty state still leads to the guide', async () => {
@@ -388,10 +419,10 @@ test('the empty state still leads to the guide', async () => {
   const router = renderHistory();
 
   fireEvent.press(await screen.findByTestId('imports-empty-secondary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/guide`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/guide'));
 });
 
-test('the header counts the batches and the status filter narrows the list through the URL', async () => {
+test('the header counts the batches and the status filter narrows the list, never the URL', async () => {
   seed();
   const router = renderHistory();
 
@@ -409,15 +440,17 @@ test('the header counts the batches and the status filter narrows the list throu
     ),
   );
 
+  // The slice is browsing state (§14.66 j): the address stays a bare `/imports`.
   fireEvent.press(screen.getByTestId('imports-filter-ready'));
-  await waitFor(() => expect(router.getSearchParams().status).toBe('ready'));
   await waitFor(() => expect(screen.queryByTestId(`import-batch-${PASTED_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${BATCH_ID}`)).toBeTruthy();
+  expect(router.getPathname()).toBe('/imports');
+  expect(router.getSearchParams()).toEqual({});
 
   fireEvent.press(screen.getByTestId('imports-filter-committed'));
-  await waitFor(() => expect(router.getSearchParams().status).toBe('committed'));
   await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
   expect(screen.getByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
+  expect(router.getSearchParams()).toEqual({});
 
   // 「N 批待提交」 is a ledger-wide count, so it drops out under a filter
   // rather than counting a pending batch inside a list of 已提交 ones (「1 批 · 1 批待提交」).
@@ -434,7 +467,26 @@ test('the header counts the batches and the status filter narrows the list throu
     { limit: 20, offset: 0, status: ['ready'] },
     { limit: 20, offset: 0, status: ['committed'] },
   ]);
-});
+}, SLICE_TEST_TIMEOUT);
+
+test('the slice survives leaving the page and coming back (imports.status view state)', async () => {
+  seed();
+  const router = renderHistory();
+
+  fireEvent.press(await screen.findByTestId('imports-filter-committed'));
+  await waitFor(() => expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull());
+
+  // Away to the upload page — the history unmounts under the flat Slot — and back.
+  fireEvent.press(screen.getByTestId('imports-new'));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/new'));
+  expect(screen.queryByTestId('imports-history-screen')).toBeNull();
+  act(() => expoRouter.back());
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
+
+  expect(await screen.findByTestId(`import-batch-${PASTED_ID}`)).toBeTruthy();
+  expect(screen.queryByTestId(`import-batch-${BATCH_ID}`)).toBeNull();
+  expect(listRequests().at(-1)).toEqual({ limit: 20, offset: 0, status: ['committed'] });
+}, SLICE_TEST_TIMEOUT);
 
 test('changing the filter goes back to page 1 instead of keeping the old offset', async () => {
   const many = Array.from({ length: 20 }, (_, i) =>

@@ -8,6 +8,10 @@
  * hand. No CSV export first (decision §14.52 A1).
  *
  * A member sees the card with 退出账本 alone: decision §2 grants them nothing else here.
+ *
+ * Leaving or deleting the current ledger lands on another one's `/home` — the tab switches
+ * to it (decision §14.66 c/d) — or, with none left, on the `/ledgers` onboarding. Either
+ * way the step replaces this page, so back never returns to a ledger that is gone.
  */
 import React from 'react';
 import { Pressable, View } from 'react-native';
@@ -25,6 +29,7 @@ import {
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
+import { useLedgerContext } from '@/store';
 import { Button, Icon, type IconName, ListCard, Select, Text, confirm, toast } from '@/ui';
 import type { TintTone } from '@/ui';
 
@@ -107,6 +112,7 @@ export function DangerZone({
   const { t } = useTranslation();
   const router = useRouter();
   const wide = useIsWide();
+  const { ledgers, switchTo } = useLedgerContext();
   const transfer = useTransferOwnership(ledgerId);
   const leave = useLeaveLedger(ledgerId);
   const remove = useDeleteLedger(ledgerId);
@@ -117,6 +123,17 @@ export function DangerZone({
 
   const others = members.filter((m) => !m.is_me);
   const name = detail?.name ?? ledgerName;
+
+  /** This ledger is gone for us: on to another one's home, or to the onboarding. */
+  const landElsewhere = (): void => {
+    const next = ledgers.find((l) => l.id !== ledgerId);
+    if (next === undefined) {
+      router.replace(routes.ledgers() as Href);
+      return;
+    }
+    switchTo(next.id);
+    router.replace(routes.home() as Href);
+  };
 
   const onTransfer = (): void => {
     const target = members.find((m) => m.user_id === transferTo);
@@ -157,7 +174,7 @@ export function DangerZone({
       leave.mutate(undefined, {
         onSuccess: () => {
           toast.success(t('ledger:settings.danger.left_toast', { name }));
-          router.replace(routes.ledgers() as Href);
+          landElsewhere();
         },
       });
     })();
@@ -176,7 +193,7 @@ export function DangerZone({
       onSuccess: () => {
         setDeleteOpen(false);
         toast.success(t('ledger:settings.danger.deleted_toast', { name: detail.name }));
-        router.replace(routes.ledgers() as Href);
+        landElsewhere();
       },
     });
   };

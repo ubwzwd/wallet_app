@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/settings` — ledger settings (04 §4.12), rebuilt against 屏幕稿 12.
+ * `/ledger` — ledger settings (04 §4.12), rebuilt against 屏幕稿 12.
  *
  * Wide: the ledger's own page head — square avatar, name, 「建于 … · N 笔交易 · 基准币种 CNY」
  * and 「改名字」 — over two columns at roughly 1.25 : 1. Left holds the members table with

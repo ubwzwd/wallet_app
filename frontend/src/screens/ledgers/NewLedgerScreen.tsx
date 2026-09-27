@@ -8,16 +8,15 @@
  * primary button at the bottom.
  *
  * `useCreateLedger` already invalidates the ledger list on success, so this screen only
- * has to navigate into the ledger it just made.
+ * has to enter the ledger it just made: it becomes the tab's current ledger and the page is
+ * `/home` (`useEnterLedger`, decision §14.66).
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { type Href, useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 
-import { routes } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import { useCurrencyNames } from '@/i18n/currencyNames';
@@ -35,12 +34,13 @@ import { CurrencyPicker } from '@/ui';
 
 import { LedgerPageHead } from './LedgerPageHead';
 import { MAX_LEDGERS } from './ledgerLimits';
+import { useEnterLedger } from './useEnterLedger';
 
 const CARD_MAX_WIDTH = 520;
 
 export default function NewLedgerScreen(): React.JSX.Element {
   const { t } = useTranslation();
-  const router = useRouter();
+  const enterLedger = useEnterLedger();
   const { user } = useAuth();
   const currencies = useCurrencies();
   // 屏幕稿 09 / 13 / 17 read 「CNY 人民币」, not the server's ISO English name.
@@ -75,13 +75,13 @@ export default function NewLedgerScreen(): React.JSX.Element {
         {
           onSuccess: (ledger) => {
             toast.success(t('ledger:create.success_toast', { name: ledger.name }));
-            router.replace(routes.l(ledger.id).home() as Href);
+            enterLedger(ledger);
           },
           onError: (err) => toast.error(errorMessage(t, err)),
         },
       );
     },
-    [create, router, t],
+    [create, enterLedger, t],
   );
 
   const submit = handleSubmit(onSubmit);

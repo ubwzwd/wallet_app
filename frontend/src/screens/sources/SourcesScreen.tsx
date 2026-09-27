@@ -14,8 +14,10 @@
  * The list is always fetched with `include_archived=1`: the folded section has to name how
  * many archived accounts there are before it is opened, and the server leaves archived
  * accounts out of the three numbers regardless of whether they were fetched. The
- * `?include_archived=1` **URL** parameter therefore only decides whether the section is
- * open, and is kept in sync so the state survives a reload or a shared link.
+ * `?include_archived=1` **URL** parameter is an entry parameter only (decision §14.66 j):
+ * the home page's 「不含 N 个已归档账户」 opens the page with the section unfolded, the page
+ * reads it once, and folding or unfolding it afterwards is component state — the address
+ * is never rewritten, so it leaves no history entry.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -71,7 +73,8 @@ export default function SourcesScreen(): React.JSX.Element {
   const rawFlag = Array.isArray(params.include_archived)
     ? params.include_archived[0]
     : params.include_archived;
-  const showArchived = rawFlag === '1';
+  // Read on entry, then the page's own (§14.66 j).
+  const [showArchived, setShowArchived] = React.useState(() => rawFlag === '1');
 
   const query = useMySources({ include_archived: true });
   const ledgers = useLedgers();
@@ -87,10 +90,7 @@ export default function SourcesScreen(): React.JSX.Element {
     (source: FinanceSource) => router.push(routes.accountEdit(source.id) as Href),
     [router],
   );
-  const toggleArchived = React.useCallback(
-    () => router.replace(routes.accounts(!showArchived) as Href),
-    [router, showArchived],
-  );
+  const toggleArchived = React.useCallback(() => setShowArchived((open) => !open), []);
 
   const onDelete = React.useCallback(
     async (source: FinanceSource): Promise<void> => {

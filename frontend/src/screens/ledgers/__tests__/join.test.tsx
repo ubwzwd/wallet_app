@@ -2,7 +2,8 @@
  * `/ledgers/join` (04 §4.3, decisions §14.29 / §14.35 / §14.52 B17): auto-submit on the
  * sixth digit, shake-and-hold on a rejected code (屏幕稿 13 · 失效 keeps the digits and turns
  * the cells red; 「重新输入」 clears), and a rate-limit countdown that retries the very same
- * code once without ever consuming it.
+ * code once without ever consuming it. A joined ledger becomes the tab's current ledger and
+ * the page is `/home` (decision §14.66 c/d).
  */
 import React from 'react';
 import { Text as RNText } from 'react-native';
@@ -11,12 +12,21 @@ import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testi
 import i18next from 'i18next';
 
 import { setAuthToken } from '@/api';
+import type { Ledger } from '@/api/types';
 import { initI18n } from '@/i18n';
 import * as breakpoint from '@/theme/useBreakpoint';
-import { AuthProvider } from '@/store';
+import { AuthProvider, CurrentLedgerProvider, useOptionalLedgerContext } from '@/store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { ToastHost, toast } from '@/ui';
-import { makeLedger, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
+import {
+  apiUrl,
+  makeLedger,
+  makeUser,
+  mockApi,
+  mockGet,
+  mockPost,
+  type MockApi,
+} from '@/test';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import JoinLedgerScreen from '../JoinLedgerScreen';
@@ -29,7 +39,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
     <QueryClientProvider client={queryClient}>
       <ThemeProvider initialPref="light">
         <AuthProvider queryClient={queryClient}>
-          {children}
+          <CurrentLedgerProvider>{children}</CurrentLedgerProvider>
           <ToastHost />
         </AuthProvider>
       </ThemeProvider>
@@ -37,12 +47,28 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
   );
 }
 
+/** `/home` names no ledger: it shows the tab's current one, which this prints. */
+function HomeProbe(): React.JSX.Element {
+  const current = useOptionalLedgerContext();
+  return <RNText testID="home-probe">{`ledger home ${current?.ledgerId ?? 'none'}`}</RNText>;
+}
+
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
   'ledgers/index': () => <RNText>ledger list page</RNText>,
   'ledgers/join': JoinLedgerScreen,
-  'l/[ledgerId]/index': () => <RNText>ledger home</RNText>,
+  home: HomeProbe,
 };
+
+const FAMILY = makeLedger({ id: 'led-1', name: '家庭账本' });
+
+/** The join answers `ledger`, and from then on the ledger list has it too. */
+function joinAnswers(ledger: Ledger): void {
+  api.mock.onPost(apiUrl('/ledgers/join')).reply(() => {
+    mockGet('/ledgers', { items: [FAMILY, ledger], total: 2 });
+    return [200, ledger];
+  });
+}
 
 beforeEach(async () => {
   api = mockApi();
@@ -56,7 +82,7 @@ beforeEach(async () => {
   await setPref(PREF_NAMES.lastLedgerId, null);
   mockGet('/me', makeUser());
   // The head asks which ledger the chrome names — the home its back button returns to.
-  mockGet('/ledgers', { items: [makeLedger({ id: 'led-1', name: '家庭账本' })], total: 1 });
+  mockGet('/ledgers', { items: [FAMILY], total: 1 });
 });
 
 afterEach(() => {
@@ -86,12 +112,14 @@ function joinRequests(): string[] {
 }
 
 test('a pasted six-digit code is submitted exactly once and lands in the ledger', async () => {
-  mockPost('/ledgers/join', makeLedger({ id: 'joined-1', name: '家庭账本' }));
+  joinAnswers(makeLedger({ id: 'joined-1', name: '家庭账本' }));
   const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
   await pasteCode('123456');
 
-  await waitFor(() => expect(router.getPathname()).toBe('/l/joined-1'));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+  // The address names no ledger: the joined one is the tab's current ledger now.
+  expect(await screen.findByText('ledger home joined-1')).toBeTruthy();
   expect(joinRequests()).toEqual(['123456']);
   expect(await screen.findByTestId('toast-success')).toHaveTextContent('已加入《家庭账本》');
 });
@@ -170,7 +198,11 @@ test('429 counts down, keeps the code valid in the copy, then retries it once', 
     api.mock
       .onPost(/\/ledgers\/join$/)
       .replyOnce(429, { detail: 'Slow down', code: 'invite_rate_limited' }, { 'Retry-After': '2' });
-    api.mock.onPost(/\/ledgers\/join$/).reply(200, makeLedger({ id: 'joined-2', name: '合租账本' }));
+    const joined = makeLedger({ id: 'joined-2', name: '合租账本' });
+    api.mock.onPost(/\/ledgers\/join$/).reply(() => {
+      mockGet('/ledgers', { items: [FAMILY, joined], total: 2 });
+      return [200, joined];
+    });
 
     const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
     await pasteCode('654321');
@@ -184,7 +216,8 @@ test('429 counts down, keeps the code valid in the copy, then retries it once', 
     });
 
     await waitFor(() => expect(joinRequests()).toEqual(['654321', '654321']));
-    await waitFor(() => expect(router.getPathname()).toBe('/l/joined-2'));
+    await waitFor(() => expect(router.getPathname()).toBe('/home'));
+    expect(screen.getByText('ledger home joined-2')).toBeTruthy();
   } finally {
     jest.useRealTimers();
   }
@@ -238,20 +271,22 @@ test('宽屏 the join page is a sub-page: a crumb to home, the card, and no list
   expect(screen.queryByTestId('join-dialog', { includeHiddenElements: true })).toBeNull();
   expect(screen.queryByText('ledger list page', { includeHiddenElements: true })).toBeNull();
 
-  // A cold open has no history: the crumb goes to the recent ledger's home.
+  // A cold open has no history: the crumb goes to the current ledger's home.
   fireEvent.press(screen.getByTestId('join-header-back'));
-  await waitFor(() => expect(router.getPathname()).toBe('/l/led-1'));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+  expect(screen.getByText('ledger home led-1')).toBeTruthy();
   expect(joinRequests()).toEqual([]);
 });
 
 test('宽屏 a pasted code still auto-submits exactly once', async () => {
   jest.spyOn(breakpoint, 'useIsWide').mockReturnValue(true);
-  mockPost('/ledgers/join', makeLedger({ id: 'joined-3', name: '合租账本' }));
+  joinAnswers(makeLedger({ id: 'joined-3', name: '合租账本' }));
   const router = renderRouter(ROUTES, { initialUrl: '/ledgers/join', wrapper: Wrapper });
 
   await pasteCode('123456');
 
-  await waitFor(() => expect(router.getPathname()).toBe('/l/joined-3'));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+  expect(await screen.findByText('ledger home joined-3')).toBeTruthy();
   expect(joinRequests()).toEqual(['123456']);
 });
 

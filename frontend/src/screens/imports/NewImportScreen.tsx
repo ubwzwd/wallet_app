@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/imports/new` — the import page of 屏幕稿 10 (04 §4.10, decisions §5, §14.47,
+ * `/imports/new` — the import page of 屏幕稿 10 (04 §4.10, decisions §5, §14.47,
  * §14.56: the guide and the upload form are one page).
  *
  * Two columns on a wide screen, 1.15 : 1 — 「怎么做」 on the left (`ImportSteps`: the three
@@ -79,6 +79,20 @@ export function checkCsvFile(file: { name: string; size: number }): LocalFilePro
   return null;
 }
 
+/**
+ * Where a `guide_url` from the server leads. It is a same-site path or nothing; the server
+ * still spells it the pre-§14.66 way (`/l/<ledgerId>/imports/guide`), and the address no
+ * longer names a ledger, so that prefix is dropped. Anything else falls back to the guide.
+ */
+export function guideTarget(guideUrl: string | undefined): string {
+  if (!guideUrl || !guideUrl.startsWith('/') || guideUrl.startsWith('//')) {
+    return routes.importsGuide();
+  }
+  const legacy = /^\/l\/[^/?#]+(\/[^?#]*)?(.*)$/.exec(guideUrl);
+  if (legacy === null) return guideUrl;
+  return `${legacy[1] ?? routes.importsGuide()}${legacy[2]}`;
+}
+
 export default function NewImportScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const lang = useLang();
@@ -111,16 +125,9 @@ export default function NewImportScreen(): React.JSX.Element {
   const pending = upload.isPending || uploadText.isPending;
 
   const goGuide = React.useCallback(
-    (guideUrl?: string) => {
-      // The server hands back where the guide lives (decision §14.53f); anything that is
-      // not a same-site path falls back to this ledger's own guide route.
-      const target =
-        guideUrl && guideUrl.startsWith('/') && !guideUrl.startsWith('//')
-          ? guideUrl
-          : routes.l(ledgerId).importsGuide();
-      router.push(target as Href);
-    },
-    [ledgerId, router],
+    // The server hands back where the guide lives (decision §14.53f).
+    (guideUrl?: string) => router.push(guideTarget(guideUrl) as Href),
+    [router],
   );
 
   const reset = React.useCallback((): void => {
@@ -143,9 +150,9 @@ export default function NewImportScreen(): React.JSX.Element {
 
   const toReview = React.useCallback(
     (batchId: Uuid): void => {
-      router.replace(routes.l(ledgerId).importBatch(batchId) as Href);
+      router.replace(routes.importBatch(batchId) as Href);
     },
-    [ledgerId, router],
+    [router],
   );
 
   const submit = React.useCallback((): void => {
@@ -283,7 +290,7 @@ export default function NewImportScreen(): React.JSX.Element {
 
       <RecentImports
         batches={recentQuery.data?.items ?? []}
-        onPress={(batchId) => router.push(routes.l(ledgerId).importBatch(batchId) as Href)}
+        onPress={(batchId) => router.push(routes.importBatch(batchId) as Href)}
       />
     </UploadCard>
   );

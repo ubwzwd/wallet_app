@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/imports/guide` — 「标准格式说明」, the reference page step 3 of the import
+ * `/imports/guide` — 「标准格式说明」, the reference page step 3 of the import
  * page links to (04 §4.10, §8.5 case 1; decisions §6, §14.52 A18, §14.56).
  *
  * The page is a pure projection of `GET /import-format`, so the tests below change the
@@ -71,13 +71,13 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/imports/guide': ImportGuideScreen,
-  'l/[ledgerId]/imports/new': () => <RNText>upload page</RNText>,
+  'imports/guide': ImportGuideScreen,
+  'imports/new': () => <RNText>upload page</RNText>,
 };
 
 function renderGuide(): ReturnType<typeof renderRouter> {
   return renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/imports/guide`,
+    initialUrl: '/imports/guide',
     wrapper: Wrapper,
   });
 }
@@ -201,5 +201,5 @@ test('the breadcrumb leads back to the import page, and no skill version of the 
   expect(screen.queryByTestId('upload-skill-meta')).toBeNull();
 
   fireEvent.press(screen.getByTestId('guide-header-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/new'));
 });

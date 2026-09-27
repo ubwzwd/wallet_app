@@ -1,7 +1,7 @@
 /**
- * `/l/:ledgerId/settings` (04 §4.12, §8.3): what each role may do, the base-currency
- * warning, the one-shot invite code with its countdown and revoke, transferring
- * ownership, and the type-the-name delete.
+ * `/ledger` (04 §4.12, §8.3): what each role may do, the base-currency warning, the
+ * one-shot invite code with its countdown and revoke, transferring ownership, the
+ * type-the-name delete, and where leaving or deleting lands (decision §14.66 c/d).
  */
 import React from 'react';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
@@ -37,12 +37,15 @@ const mockRouter = {
 
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
-  usePathname: () => '/l/8f0f7b2e-1111-4222-8333-444455556666/settings',
-  useGlobalSearchParams: () => ({ ledgerId: '8f0f7b2e-1111-4222-8333-444455556666' }),
-  useSegments: () => ['l', '[ledgerId]', 'settings'],
+  usePathname: () => '/ledger',
+  useGlobalSearchParams: () => ({}),
+  useSegments: () => ['ledger'],
 }));
 
 const OTHER_ID = '11112222-3333-4444-8555-666677778888';
+/** A second ledger of the same user, for the "land on another one" cases. */
+const SECOND_LEDGER_ID = '22223333-4444-4555-8666-777788889999';
+const mockSwitchTo = jest.fn();
 
 function makeDetail(over: Partial<LedgerDetail> = {}): LedgerDetail {
   return {
@@ -93,6 +96,7 @@ beforeEach(() => {
   mockRouter.replace.mockClear();
   mockRouter.back.mockClear();
   mockRouter.canGoBack.mockReturnValue(false);
+  mockSwitchTo.mockClear();
   mockGet('/rates/currencies', { currencies: { CNY: 'Chinese Yuan', SGD: 'Singapore Dollar' } });
 });
 
@@ -108,12 +112,14 @@ async function renderSettings(
   detail: LedgerDetail = makeDetail(),
   /** Left undefined the window keeps its default width; the two layout tests pin it. */
   wide?: boolean,
+  /** Further ledgers the user belongs to, after this one. */
+  more: Ledger[] = [],
 ): Promise<Awaited<ReturnType<typeof renderWithProviders>>> {
   mockGet(`/ledgers/${LEDGER_ID}`, detail);
   mockGet(`/ledgers/${LEDGER_ID}/members`, { items: members, total: members.length });
-  const ledgers = [makeLedger({ role })];
+  const ledgers = [makeLedger({ role }), ...more];
   return renderWithProviders(
-    <LedgerProvider ledgerId={LEDGER_ID} ledgers={ledgers}>
+    <LedgerProvider ledgerId={LEDGER_ID} ledgers={ledgers} switchTo={mockSwitchTo}>
       <LedgerSettingsScreen />
     </LedgerProvider>,
     { auth: { status: 'authenticated', user: makeUser() }, wide },
@@ -274,7 +280,7 @@ test('removing a member asks first and keeps their entries', async () => {
   expect(api.mock.history.delete[0].url).toContain(`/members/${OTHER_ID}`);
 });
 
-test('a member leaving lands back on the ledger list', async () => {
+test('a member leaving their only ledger lands on the onboarding', async () => {
   await renderSettings('member', [makeMember({ role: 'member' }), { ...BOB, role: 'owner' }]);
   mockPost(`/ledgers/${LEDGER_ID}/leave`, undefined, 204);
 
@@ -282,6 +288,28 @@ test('a member leaving lands back on the ledger list', async () => {
   fireEvent.press(await screen.findByTestId('confirm-accept'));
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
+  expect(mockSwitchTo).not.toHaveBeenCalled();
+});
+
+test('leaving with another ledger left switches the tab to it and lands on /home', async () => {
+  await renderSettings(
+    'member',
+    [makeMember({ role: 'member' }), { ...BOB, role: 'owner' }],
+    makeDetail(),
+    undefined,
+    [makeLedger({ id: SECOND_LEDGER_ID, name: '旅行' })],
+  );
+  mockPost(`/ledgers/${LEDGER_ID}/leave`, undefined, 204);
+
+  fireEvent.press(await screen.findByTestId('leave-ledger'));
+  fireEvent.press(await screen.findByTestId('confirm-accept'));
+
+  // §14.66 c/d: the current ledger changes in the tab, the address is just `/home` — and
+  // the step replaces this page, so back never reopens a ledger that is gone.
+  await waitFor(() => expect(mockSwitchTo).toHaveBeenCalledWith(SECOND_LEDGER_ID));
+  expect(mockRouter.replace).toHaveBeenCalledWith('/home');
+  expect(mockRouter.replace).not.toHaveBeenCalledWith('/ledgers');
+  expect(mockRouter.push).not.toHaveBeenCalled();
 });
 
 test('deleting the ledger lists the three counts and needs the name typed out', async () => {
@@ -314,6 +342,21 @@ test('deleting the ledger lists the three counts and needs the name typed out', 
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ledgers'));
   expect(api.mock.history.delete[0].url).toContain(`/ledgers/${LEDGER_ID}`);
+});
+
+test('deleting with another ledger left switches the tab to it and lands on /home', async () => {
+  await renderSettings('owner', [makeMember(), BOB], makeDetail(), undefined, [
+    makeLedger({ id: SECOND_LEDGER_ID, name: '旅行' }),
+  ]);
+  mockDelete(`/ledgers/${LEDGER_ID}`, undefined, 204);
+
+  fireEvent.press(await screen.findByTestId('delete-ledger'));
+  fireEvent.changeText(await screen.findByTestId('confirm-require-text'), '家庭账本');
+  fireEvent.press(screen.getByTestId('confirm-accept'));
+
+  await waitFor(() => expect(mockSwitchTo).toHaveBeenCalledWith(SECOND_LEDGER_ID));
+  expect(mockRouter.replace).toHaveBeenCalledWith('/home');
+  expect(mockRouter.replace).not.toHaveBeenCalledWith('/ledgers');
 });
 
 test('cancelling the delete dialog closes it and deletes nothing', async () => {
@@ -478,7 +521,7 @@ test('wide: 「首页 · 账本设置」 above the ledger head, and cold its bac
   expect(await screen.findByTestId('ledger-settings-crumb-back')).toBeTruthy();
   expect(screen.getByText('首页 · 账本设置')).toBeTruthy();
   fireEvent.press(screen.getByTestId('ledger-settings-crumb-back'));
-  expect(mockRouter.replace).toHaveBeenCalledWith(`/l/${LEDGER_ID}`);
+  expect(mockRouter.replace).toHaveBeenCalledWith('/home');
   expect(mockRouter.back).not.toHaveBeenCalled();
 });
 

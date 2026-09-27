@@ -133,13 +133,12 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
     void theme.setPref(next);
   };
 
-  // 屏幕稿 14: the row opens 「账本设置」 for the ledger the sidebar beside it is naming —
-  // which, off a ledger route, is the remembered one (the same answer `/` would land on).
-  // Only a user with no ledger at all has nothing to open, and then the row leads to the
-  // list, where they can make one.
+  // 屏幕稿 14: the row opens 「账本设置」 of the tab's current ledger — the one the sidebar
+  // beside it is naming (`/ledger` never names one itself, §14.66). Only a user with no
+  // ledger at all has nothing to open, and then the row leads to the onboarding, where they
+  // can make one.
   const goLedgerSettings = (): void => {
-    const target = ledgerContext?.ledgerId ?? null;
-    router.push((target === null ? routes.ledgers() : routes.l(target).settings()) as Href);
+    router.push((ledgerContext === null ? routes.ledgers() : routes.ledgerSettings()) as Href);
   };
 
   const signOut = (): void => {

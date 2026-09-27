@@ -46,7 +46,7 @@ const LEDGER = makeLedger({ base_currency: 'CNY' });
 const SOURCE = makeLedgerSource({ id: SOURCE_ID, name: '招行信用卡', default_currency: 'CNY' });
 const BATCH_PATH = `/ledgers/${LEDGER_ID}/imports/${BATCH_ID}`;
 const ROWS_PATH = `${BATCH_PATH}/rows`;
-const REVIEW_URL = `/l/${LEDGER_ID}/imports/${BATCH_ID}`;
+const REVIEW_URL = `/imports/${BATCH_ID}`;
 
 function row(over: Partial<ImportRow>): ImportRow {
   return makeImportRow({ batch_id: BATCH_ID, ...over });
@@ -79,7 +79,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/imports/[batchId]': ImportBatchScreen,
+  'imports/[batchId]': ImportBatchScreen,
 };
 
 function seed(rows: ImportRow[], tree = makeCategoryTree()): void {

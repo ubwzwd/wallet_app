@@ -50,7 +50,7 @@ const ARCHIVED = makeLedgerSource({ id: 'src-old', name: '旧卡', archived: tru
 const BATCH_PATH = `/ledgers/${LEDGER_ID}/imports/${BATCH_ID}`;
 const ROWS_PATH = `${BATCH_PATH}/rows`;
 const TX_PATH = `/ledgers/${LEDGER_ID}/transactions`;
-const REVIEW_URL = `/l/${LEDGER_ID}/imports/${BATCH_ID}`;
+const REVIEW_URL = `/imports/${BATCH_ID}`;
 
 const OTHER_LEG: Transaction = makeTransaction({
   id: 'tx-leg', source_id: SAVINGS.id, kind: 'transfer', amount: '-1000.0000',
@@ -94,7 +94,7 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/imports/[batchId]': ImportBatchScreen,
+  'imports/[batchId]': ImportBatchScreen,
 };
 
 function seed(rows: ImportRow[], sources: LedgerSource[] = [SOURCE, SAVINGS, ARCHIVED]): void {
