@@ -77,15 +77,35 @@ export interface ReviewSelection {
  * explicitly "finish the uncategorized rows and leave the rest for a computer". The wide
  * grid only lands there when there is something to fix (§4.11.6).
  */
+export interface ReviewSelectionOptions {
+  preferUncategorized?: boolean;
+  /**
+   * A slice the user picked on an earlier visit (the batch's view state, 04 §4.11.6). It
+   * wins over the first-paint default; `null` / absent means "decide on first paint".
+   */
+  initialSlice?: ReviewSlice | null;
+  /** Told about every slice change made through `setSlice` — not the first-paint default. */
+  onSliceChange?(next: ReviewSlice): void;
+}
+
+/** A stored value → a slice, or `null` for anything that is not one. */
+export function parseReviewSlice(value: unknown): ReviewSlice | null {
+  return REVIEW_SLICES.includes(value as ReviewSlice) ? (value as ReviewSlice) : null;
+}
+
 export function useReviewSelection(
   rows: readonly ImportRow[],
-  options: { preferUncategorized?: boolean } = {},
+  options: ReviewSelectionOptions = {},
 ): ReviewSelection {
   const preferUncategorized = options.preferUncategorized === true;
-  const [slice, setSliceState] = React.useState<ReviewSlice | null>(null);
+  const [slice, setSliceState] = React.useState<ReviewSlice | null>(
+    () => options.initialSlice ?? null,
+  );
   const [selected, setSelected] = React.useState<ReadonlySet<Uuid>>(() => new Set<Uuid>());
   const anchor = React.useRef<number | null>(null);
-  const didInit = React.useRef(false);
+  const didInit = React.useRef(slice !== null);
+  const onSliceChange = React.useRef(options.onSliceChange);
+  onSliceChange.current = options.onSliceChange;
 
   const counts = React.useMemo(() => sliceCounts(rows), [rows]);
 
@@ -109,7 +129,10 @@ export function useReviewSelection(
   const setSlice = React.useCallback((next: ReviewSlice): void => {
     // Deliberately does not touch `selected` (04 §4.11.6).
     anchor.current = null;
+    // A slice chosen before the first paint settled it is final, not a default to replace.
+    didInit.current = true;
     setSliceState(next);
+    onSliceChange.current?.(next);
   }, []);
 
   const toggle = React.useCallback((row: ImportRow, index: number): void => {

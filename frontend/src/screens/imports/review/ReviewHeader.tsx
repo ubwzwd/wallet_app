@@ -72,9 +72,9 @@ export function ReviewHeader({
         return; // the global error toast already explained the failure (04 §3.9)
       }
       toast.success(t('import:history.discarded_toast'));
-      router.replace(routes.l(ledgerId).imports() as Href);
+      router.replace(routes.imports() as Href);
     })();
-  }, [batch, discard, lang, ledgerId, router, t]);
+  }, [batch, discard, lang, router, t]);
 
   // The batch's own count, not the page at hand (03 §5.40). The two derived counts are
   // dropped when they are zero rather than shown as 「0 行待归类」.
@@ -112,7 +112,7 @@ export function ReviewHeader({
               testID="import-batch-change-file"
               variant="secondary"
               label={t('import:review.change_file')}
-              onPress={() => router.push(routes.l(ledgerId).importsNew() as Href)}
+              onPress={() => router.push(routes.importsNew() as Href)}
             />
             <Button
               testID="import-batch-discard"

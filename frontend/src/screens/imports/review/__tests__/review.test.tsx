@@ -51,7 +51,7 @@ const SOURCE = makeLedgerSource({ id: SOURCE_ID, name: '招行信用卡', defaul
 const OTHER_SOURCE = makeLedgerSource({ id: 'src-other', name: '招行储蓄卡' });
 const BATCH_PATH = `/ledgers/${LEDGER_ID}/imports/${BATCH_ID}`;
 const ROWS_PATH = `${BATCH_PATH}/rows`;
-const REVIEW_URL = `/l/${LEDGER_ID}/imports/${BATCH_ID}`;
+const REVIEW_URL = `/imports/${BATCH_ID}`;
 
 function row(over: Partial<ImportRow>): ImportRow {
   return makeImportRow({ batch_id: BATCH_ID, ...over });
@@ -84,10 +84,10 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/imports/index': () => <RNText>history</RNText>,
-  'l/[ledgerId]/imports/new': () => <RNText>upload</RNText>,
-  'l/[ledgerId]/imports/[batchId]': ImportBatchScreen,
-  'l/[ledgerId]/transactions/index': () => <RNText>transactions</RNText>,
+  'imports/index': () => <RNText>history</RNText>,
+  'imports/new': () => <RNText>upload</RNText>,
+  'imports/[batchId]': ImportBatchScreen,
+  'transactions/index': () => <RNText>transactions</RNText>,
 };
 
 /** Describe the server, then mount the review route. */
@@ -452,7 +452,7 @@ test('the wide header names the step, counts the batch and leads back to the upl
 
   // 「换个文件」 is step one of the flow again (04 §4.10).
   fireEvent.press(screen.getByTestId('import-batch-change-file'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/new'));
 });
 
 test('a batch that cannot be read still has the wide way back, to the history', async () => {
@@ -468,7 +468,7 @@ test('a batch that cannot be read still has the wide way back, to the history', 
   expect(await screen.findByTestId('import-batch-error')).toBeTruthy();
   expect(screen.getByText('导入 · 逐行确认')).toBeTruthy();
   fireEvent.press(screen.getByTestId('import-batch-header-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
 });
 
 test('while the batch is loading, the wide way back is already there', async () => {
@@ -501,7 +501,7 @@ test('「放弃本次导入」 confirms once, deletes the draft and leaves for t
   fireEvent.press(screen.getByTestId('confirm-accept'));
   await waitFor(() => expect(api.mock.history.delete).toHaveLength(1));
   // This URL 404s once the batch is gone, so the screen does not stay on it.
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
 });
 
 test('the bulk strip and the submit button share one bar inside the grid card (屏幕稿 03)', async () => {
@@ -1029,7 +1029,7 @@ test('undoing from the committed panel dry-runs, double-taps and leaves for the 
   await waitFor(() => expect(api.mock.history.delete).toHaveLength(2));
   expect(api.mock.history.delete[1].params).toBeUndefined();
   // This screen's own URL 404s once the batch is gone, so it leaves for the list (§14.22).
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
 });
 
 // ------------------------------------------------------------ the way back (§14.64)
@@ -1042,7 +1042,7 @@ test('wide review: 「导入 · 逐行确认」 over the title, and cold its bac
   expect(await screen.findByTestId('import-batch-header-back')).toBeTruthy();
   expect(screen.getByText('导入 · 逐行确认')).toBeTruthy();
   fireEvent.press(screen.getByTestId('import-batch-header-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
 });
 
 test('wide committed batch: the trail names the account, and cold its back goes to the history', async () => {
@@ -1053,7 +1053,7 @@ test('wide committed batch: the trail names the account, and cold its back goes 
   expect(await screen.findByTestId('import-committed')).toBeTruthy();
   expect(screen.getByText('导入 · 招行信用卡')).toBeTruthy();
   fireEvent.press(screen.getByTestId('import-batch-header-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
 });
 
 test('narrow review: no back of the page’s own — the shell’s top bar has it', async () => {

@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/imports/new` — the merged import page (04 §4.10, §8.5 cases 1–6; decisions
+ * `/imports/new` — the merged import page (04 §4.10, §8.5 cases 1–6; decisions
  * §5, §14.30, §14.47, §14.52 A18, §14.53d/f, §14.56).
  *
  * Since the guide and the upload form became one page, the skill text lives here: the two
@@ -114,15 +114,15 @@ function Wrapper({ children }: { children: React.ReactNode }): React.JSX.Element
 
 const ROUTES = {
   index: () => <RNText>landing</RNText>,
-  'l/[ledgerId]/imports/index': () => <RNText>import history</RNText>,
-  'l/[ledgerId]/imports/new': NewImportScreen,
-  'l/[ledgerId]/imports/guide': () => <RNText>guide page</RNText>,
-  'l/[ledgerId]/imports/[batchId]': () => <RNText>review table</RNText>,
+  'imports/index': () => <RNText>import history</RNText>,
+  'imports/new': NewImportScreen,
+  'imports/guide': () => <RNText>guide page</RNText>,
+  'imports/[batchId]': () => <RNText>review table</RNText>,
 };
 
 function renderUpload(): ReturnType<typeof renderRouter> {
   return renderRouter(ROUTES, {
-    initialUrl: `/l/${LEDGER_ID}/imports/new`,
+    initialUrl: '/imports/new',
     wrapper: Wrapper,
   });
 }
@@ -222,7 +222,7 @@ test('a successful upload goes straight to review without a second request', asy
 
   fireEvent.press(screen.getByTestId('upload-submit'));
   await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${result.batch.id}`),
+    expect(router.getPathname()).toBe(`/imports/${result.batch.id}`),
   );
 
   // Batch and rows were seeded from the 201 (decision §5) …
@@ -255,7 +255,7 @@ test('pasted CSV posts a JSON body and lands on the same review screen', async (
   fireEvent.press(screen.getByTestId('upload-submit'));
 
   await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${result.batch.id}`),
+    expect(router.getPathname()).toBe(`/imports/${result.batch.id}`),
   );
   const sent = api.mock.history.post[0];
   expect(JSON.parse(String(sent.data))).toEqual({
@@ -311,7 +311,7 @@ test('a structural failure lists file line numbers, copies the same list, and ma
   );
 
   // No batch: the page stayed put and nothing was written into the cache.
-  expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/new`);
+  expect(router.getPathname()).toBe('/imports/new');
   expect(queryClient.getQueryData(qk.ledger(LEDGER_ID).importB(BATCH_ID))).toBeUndefined();
   expect(queryClient.getQueryState(qk.ledger(LEDGER_ID).imports())).toBeUndefined();
   // The card renders the failure itself, so the global error toast stayed silent.
@@ -344,6 +344,7 @@ test('an outdated skill shows both versions and navigates to the guide_url from 
       code: 'skill_outdated',
       current_version: '2026-09-10',
       file_version: '2026-08-20',
+      // The server still names the pre-§14.66 address; the page drops the ledger prefix.
       guide_url: `/l/${LEDGER_ID}/imports/guide?from=upload`,
     },
     400,
@@ -363,7 +364,7 @@ test('an outdated skill shows both versions and navigates to the guide_url from 
   expect(screen.queryByText('忽略并继续')).toBeNull();
 
   fireEvent.press(screen.getByTestId('upload-error-guide'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/guide`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/guide'));
   // The target came out of the response, not out of the component.
   expect(router.getSearchParams().from).toBe('upload');
 });
@@ -478,7 +479,7 @@ test('the batch fixture id is what review is opened with', async () => {
   await chooseFile(csvFile());
   fireEvent.press(screen.getByTestId('upload-submit'));
 
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${BATCH_ID}`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/imports/${BATCH_ID}`));
 });
 
 test('the two tabs show skill_markdown and skill_text, and copy writes the shown one', async () => {
@@ -546,7 +547,7 @@ test('the three steps are on the page and step 3 links to the standard format', 
   expect(screen.getByTestId('import-step-3')).toBeTruthy();
 
   fireEvent.press(screen.getByTestId('upload-format-link'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/guide`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/guide'));
 });
 
 test('the recent imports list names the last batches and opens one', async () => {
@@ -560,7 +561,7 @@ test('the recent imports list names the last batches and opens one', async () =>
   expect(screen.getByText('cmb-08.csv')).toBeTruthy();
 
   fireEvent.press(screen.getByTestId(`upload-recent-${BATCH_ID}`));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports/${BATCH_ID}`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/imports/${BATCH_ID}`));
 });
 
 // ------------------------------------------------------------ the way back (§14.64)
@@ -571,7 +572,7 @@ test('wide: the header carries 「导入 · 上传账单」, and cold its back g
   expect(await screen.findByTestId('import-new-header-back')).toBeTruthy();
   expect(screen.getByText('导入 · 上传账单')).toBeTruthy();
   fireEvent.press(screen.getByTestId('import-new-header-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER_ID}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
 });
 
 test('narrow: the page leaves the ‹ to the shell’s top bar', async () => {

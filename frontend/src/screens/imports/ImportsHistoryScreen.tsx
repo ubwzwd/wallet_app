@@ -1,5 +1,5 @@
 /**
- * `/l/:ledgerId/imports` — the batch history of 屏幕稿 11 (04 §4.10, decisions §14.22,
+ * `/imports` — the batch history of 屏幕稿 11 (04 §4.10, decisions §14.22,
  * §14.52 A17/B24, §14.56).
  *
  * The header carries the history's numbers inline (「4 批 · 1 批待提交」) and, on
@@ -10,8 +10,9 @@
  * batches, never their rows — so it is not drawn until the server carries a ledger-level
  * count (§14.59 f); summing the committed batches client-side would mean reading every one
  * of them on each visit. The filter
- * lives in the URL (`?status=`), so a filtered history is shareable and the back button is
- * right, and it is sent to the *server* as `status=`: the pager pages 20 batches at a time,
+ * is browsing state (decision §14.66 j: `imports.status`, one per ledger, in memory) — never
+ * in the address, so switching it leaves no history entry — and it is sent to the *server*
+ * as `status=`: the pager pages 20 batches at a time,
  * so a filter applied to the page in hand would silently hide matching batches on every
  * other page while the pager still counted the unfiltered list. The rows, the pager and
  * the batch count in the header therefore all describe one list — the filtered history.
@@ -26,7 +27,7 @@
  */
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { ImportBatchListItem, Paged } from '@/api/types';
@@ -34,7 +35,7 @@ import { routes } from '@/domain/routes';
 import { useLang } from '@/i18n';
 import { useTopBar } from '@/navigation';
 import { useImports, useMemberNames } from '@/queries';
-import { useLedgerContext } from '@/store';
+import { useLedgerContext, useLedgerViewState } from '@/store';
 import { space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useIsWide } from '@/theme/useBreakpoint';
@@ -64,11 +65,11 @@ export { totalFlags };
 /** 04 §4.10: the history pages 20 batches at a time. */
 export const IMPORTS_PAGE_SIZE = 20;
 
-/** The three segments of 屏幕稿 11; `all` is the absence of a `?status=`. */
+/** The three segments of 屏幕稿 11; `all` sends no `status=` to the server. */
 export const HISTORY_FILTERS = ['all', 'ready', 'committed'] as const;
 export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
 
-/** `?status=` → a segment; anything else is 「全部」. */
+/** A stored slice → a segment; anything else is 「全部」. */
 export function resolveFilter(raw: string | string[] | undefined): HistoryFilter {
   const value = Array.isArray(raw) ? raw[0] : raw;
   return HISTORY_FILTERS.includes(value as HistoryFilter) ? (value as HistoryFilter) : 'all';
@@ -101,8 +102,9 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const { ledgerId } = useLedgerContext();
   useTopBar(t('import:history.title'));
 
-  const params = useLocalSearchParams<{ status?: string }>();
-  const filter = resolveFilter(params.status);
+  // Browsing state, not the address (decision §14.66 j): a reload starts on 全部.
+  const [stored, setStored] = useLedgerViewState<HistoryFilter>('imports.status', 'all');
+  const filter = resolveFilter(stored);
 
   // Page 1 of the new filter, not page 3 of the old one — derived rather than chased in an
   // effect, so no request is ever sent with an offset that belonged to the previous filter.
@@ -129,17 +131,14 @@ export default function ImportsHistoryScreen(): React.JSX.Element {
   const memberNames = useMemberNames(ledgerId);
 
   const goNew = React.useCallback(
-    () => router.push(routes.l(ledgerId).importsNew() as Href),
-    [ledgerId, router],
-  );
-  const goGuide = React.useCallback(
-    () => router.push(routes.l(ledgerId).importsGuide() as Href),
-    [ledgerId, router],
-  );
-  const setFilter = React.useCallback(
-    (next: HistoryFilter) => router.setParams({ status: next === 'all' ? undefined : next }),
+    () => router.push(routes.importsNew() as Href),
     [router],
   );
+  const goGuide = React.useCallback(
+    () => router.push(routes.importsGuide() as Href),
+    [router],
+  );
+  const setFilter = React.useCallback((next: HistoryFilter) => setStored(next), [setStored]);
 
   const items: readonly ImportBatchListItem[] = query.data?.items ?? [];
   const total = query.data?.total ?? 0;

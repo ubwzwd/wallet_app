@@ -4,9 +4,9 @@
  * address stays, because the no-ledger onboarding, the landing after deleting or leaving a
  * ledger, and several fallbacks all point at it:
  *
- *   - with a ledger     → a redirect to that ledger's home, chosen exactly the way `/`
- *                         chooses it (`useLandingTarget`: the remembered ledger, else the
- *                         first);
+ *   - with a ledger     → a redirect to `/home`, exactly as `/` does (`useLandingTarget`);
+ *                         which ledger it shows is the tab's current one (decision §14.66 b:
+ *                         this tab's, else the remembered one, else the first);
  *   - with none         → screen 15's onboarding (`NoLedgerGuide`), full-bleed;
  *   - list still loading → placeholder cards; list failed → the error with a retry.
  */

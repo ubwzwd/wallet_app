@@ -19,11 +19,9 @@
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { isApiClientError } from '@/api/errors';
-import { routes } from '@/domain/routes';
 import { errorMessage } from '@/i18n/errorCodes';
 import { useTopBar } from '@/navigation';
 import { useJoinLedger } from '@/queries';
@@ -35,6 +33,7 @@ import { toast } from '@/ui';
 import { CODE_LENGTH, CodeInput } from './CodeInput';
 import { JoinBenefits } from './JoinBenefits';
 import { LedgerPageHead } from './LedgerPageHead';
+import { useEnterLedger } from './useEnterLedger';
 
 /** Used when a 429 arrives without a usable `Retry-After` header; the limit is 1 QPS. */
 const DEFAULT_RETRY_AFTER = 5;
@@ -46,7 +45,7 @@ const KEY_TILE = 48;
 export default function JoinLedgerScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const colors = useColors();
-  const router = useRouter();
+  const enterLedger = useEnterLedger();
   const { mutate, isPending } = useJoinLedger({ silent: true });
 
   const [code, setCode] = React.useState('');
@@ -64,7 +63,7 @@ export default function JoinLedgerScreen(): React.JSX.Element {
         {
           onSuccess: (ledger) => {
             toast.success(t('ledger:join.success_toast', { name: ledger.name }));
-            router.replace(routes.l(ledger.id).home() as Href);
+            enterLedger(ledger);
           },
           onError: (err) => {
             setMessage(errorMessage(t, err));
@@ -81,7 +80,7 @@ export default function JoinLedgerScreen(): React.JSX.Element {
         },
       );
     },
-    [mutate, router, t],
+    [enterLedger, mutate, t],
   );
 
   // Kept in a ref so the countdown effect does not restart whenever `submit`'s closure
