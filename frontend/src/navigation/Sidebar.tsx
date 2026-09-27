@@ -6,10 +6,11 @@
  * ledger's own settings), five destinations, the permanent "add a transaction" button, and
  * — pushed to the foot — the signed-in member.
  *
- * The column is the same on every page (§14.64 c): outside a ledger route (`/settings`,
- * `/accounts*`, `/ledgers*`) it names the ledger the user last had open. On `/ledgers*` none of the five
- * is lit. The card's switcher lists every ledger, the ways to add one, and — last — the
- * ledger's settings (§14.65 a); there is no ledger-list page.
+ * The column is the same on every page (§14.64 c): it names the tab's current ledger
+ * (§14.66 b) on the ledger pages and on `/settings`, `/accounts*` and `/ledgers*` alike. On
+ * `/ledgers*` none of the five is lit. The card's switcher lists every ledger, the ways to add
+ * one, and — last — the ledger's settings (§14.65 a, `/ledger`); there is no ledger-list page.
+ * Picking a ledger there changes the context, never the address (§14.66 d).
  *
  * "Ledger settings" is deliberately not a destination (§14.56): the card's chevron and the
  * personal-settings page are the two ways in. Neither is "reports" or "members" (§14.52
@@ -23,7 +24,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import type { User, Uuid } from '@/api/types';
+import type { User } from '@/api/types';
 import { type RouteHref, routes } from '@/domain/routes';
 import { density, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
@@ -33,9 +34,9 @@ import { Avatar, Button, Icon, type IconName, Text } from '@/ui';
 
 import { isActivePath } from './isActivePath';
 import { useGuardedNavigate } from './leaveGuard';
-import { LedgerSwitcherPopover } from './LedgerSwitcher';
-import { LedgerCard, LedgerCardPlaceholder } from './SidebarCards';
-import { useChromeLedger } from './useChromeLedger';
+import { isLedgerRoute } from './ledgerRoute';
+import { LedgerSwitcherPopover, usePickLedger } from './LedgerSwitcher';
+import { LedgerCard } from './SidebarCards';
 
 /**
  * Screen 01 at 1440. The mockup's column is `width:252px;padding:20px 14px` with no
@@ -68,20 +69,19 @@ export interface NavDestination {
 /**
  * The sidebar destinations, in order (§14.56): home, transactions, accounts, imports, me.
  * Accounts belong to the user, not to a ledger (decision §14.62), so that entry is always
- * `/accounts`. Without a ledger to scope them to, the three ledger-scoped entries lead to
- * `/ledgers` — which lands on a ledger, or is the onboarding page for a user with none.
+ * `/accounts`. For a user with no ledger at all, the three ledger pages would only bounce
+ * to the onboarding page `/ledgers`, so they lead there directly.
  */
-export function useSidebarDestinations(ledgerId: string | null): NavDestination[] {
+export function useSidebarDestinations(hasLedger: boolean): NavDestination[] {
   const { t } = useTranslation();
-  const l = ledgerId === null ? null : routes.l(ledgerId);
-  const inLedger = (href: RouteHref | undefined): RouteHref => href ?? routes.ledgers();
+  const inLedger = (href: RouteHref): RouteHref => (hasLedger ? href : routes.ledgers());
   return [
-    { key: 'home', label: t('common:nav.home'), icon: 'home', href: inLedger(l?.home()) },
+    { key: 'home', label: t('common:nav.home'), icon: 'home', href: inLedger(routes.home()) },
     {
       key: 'transactions',
       label: t('common:nav.transactions'),
       icon: 'list',
-      href: inLedger(l?.transactions()),
+      href: inLedger(routes.transactions()),
     },
     {
       key: 'sources',
@@ -93,7 +93,7 @@ export function useSidebarDestinations(ledgerId: string | null): NavDestination[
       key: 'imports',
       label: t('common:nav.imports'),
       icon: 'upload',
-      href: inLedger(l?.imports()),
+      href: inLedger(routes.imports()),
     },
     // Personal settings — labelled "me", the same word the narrow tab bar uses.
     { key: 'settings', label: t('common:nav.me'), icon: 'user', href: routes.settings() },
@@ -151,31 +151,23 @@ export function Sidebar(): React.JSX.Element {
   // `/accounts*` (where 「账户」 is lit) and on `/ledgers*`, where none of the destinations
   // is the page the user is on.
   const onLedgerPages = isActivePath(pathname, routes.ledgers(), false);
-  const chrome = useChromeLedger();
-  const ledger = chrome.ledger ?? undefined;
-  const ledgerId = chrome.ledgerId;
-  const destinations = useSidebarDestinations(ledgerId);
-  const homeHref = ledgerId === null ? null : routes.l(ledgerId).home();
+  const ledger = ledgerContext?.ledger;
+  const destinations = useSidebarDestinations(ledger !== undefined);
+  const pick = usePickLedger();
 
   const cardRef = React.useRef<View | null>(null);
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
 
-  const pickLedger = (id: Uuid): void => {
+  const pickLedger = (id: string): void => {
     setSwitcherOpen(false);
-    // The ledger already open is no page change, so nothing to ask about.
-    if (ledgerContext?.ledgerId === id) return;
-    // Inside a ledger, switching keeps the page you are on (04 §2.2). Outside one there is
-    // no page to keep, so picking a ledger opens it.
-    guarded(() => {
-      if (ledgerContext) ledgerContext.switchTo(id);
-      else router.navigate(routes.l(id).home());
-    });
+    pick(id);
   };
 
   const me = userLabel(user);
-  const role = ledgerContext?.myRole;
-  // Mockup 14: outside a ledger there is no ledger to take a role from, and the second line
-  // is the signed-in email instead — the row never shrinks to one line mid-navigation.
+  // The role is the member's standing in the ledger the page shows, so only a ledger page
+  // names it. Mockup 14: on the personal pages (`/settings`, `/accounts*`, `/ledgers*`) the
+  // second line is the signed-in email instead — the row never shrinks to one line.
+  const role = isLedgerRoute(pathname) ? ledgerContext?.myRole : undefined;
   const userSubtitle = role
     ? t(role === 'owner' ? 'ledger:list.card.role_owner' : 'ledger:list.card.role_member')
     : (user?.email ?? '');
@@ -188,13 +180,13 @@ export function Sidebar(): React.JSX.Element {
         <LedgerCard
           ledger={ledger}
           onOpenSwitcher={() => setSwitcherOpen(true)}
-          onOpenSettings={() => guarded(() => router.navigate(routes.l(ledger.id).settings()))}
+          onOpenSettings={() => guarded(() => router.navigate(routes.ledgerSettings()))}
         />
         <LedgerSwitcherPopover
           open={switcherOpen}
           onClose={() => setSwitcherOpen(false)}
           anchorRef={cardRef}
-          ledgers={chrome.ledgers}
+          ledgers={ledgerContext?.ledgers ?? []}
           currentId={ledger.id}
           onPick={pickLedger}
         />
@@ -203,29 +195,31 @@ export function Sidebar(): React.JSX.Element {
 
   return (
     <View testID="sidebar" style={[styles.root, { backgroundColor: colors['bg.surface'] }]}>
-      {/* The placeholder holds the card's slot while the answer is still in flight (a cold
-          `/settings` or `/ledgers`), so the chrome never names the wrong ledger first. */}
-      {chrome.pending ? <LedgerCardPlaceholder /> : ledgerCard}
+      {/* The current ledger is settled before the shell renders (`CurrentLedgerProvider`),
+          so the card never has to hold its slot or guess. */}
+      {ledgerCard}
 
       <View style={styles.nav}>
         {destinations.map((item) => (
           <NavRow
             key={item.key}
             item={item}
-            active={!onLedgerPages && isActivePath(pathname, item.href, item.href === homeHref)}
+            active={
+              !onLedgerPages && isActivePath(pathname, item.href, item.href === routes.home())
+            }
             onPress={() => guarded(() => router.navigate(item.href))}
           />
         ))}
       </View>
 
-      {/* Nothing to add to until a ledger is known (and never for a user with none). */}
-      {ledgerId === null ? null : (
+      {/* Nothing to add to for a user with no ledger. */}
+      {ledger === undefined ? null : (
         <Button
           label={t('common:nav.add')}
           icon="plus"
           size="lg"
           fullWidth
-          onPress={() => guarded(() => router.navigate(routes.l(ledgerId).transactionNew()))}
+          onPress={() => guarded(() => router.navigate(routes.transactionNew()))}
           testID="sidebar-add"
         />
       )}

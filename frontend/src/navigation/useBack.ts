@@ -1,11 +1,16 @@
 /**
- * The back button every sub-page carries (decision §14.64 e / f): the narrow top bar's
- * round ‹, and the wide page header's round button with its grey breadcrumb.
+ * The back button every sub-page carries (decision §14.64 e / f, §14.66 g): the narrow top
+ * bar's round ‹, and the wide page header's round button with its grey breadcrumb.
  *
  * With in-app history it steps back one page; without it (a deep link in a new tab, a
  * reload) it goes to the page's fixed parent from `backTargetFor`. Pages with a return
  * address of their own (the forms' `?next=`) register it with `useBackOverride`; the shell's
  * narrow ‹ then runs that instead (§14.65 h), and it too falls back to this table.
+ *
+ * Every signed-in page is a direct child of one `Slot` (§14.66 g), so a plain
+ * `router.back()` is always the right step — there is no nested navigator whose history
+ * could be lost on the way. Switching ledger or changing a filter never made a history
+ * entry, so the step is always to the previous *page*.
  *
  * `goBack` is one of the shell's exits, so it asks a registered leave guard first
  * (`useGuardedNavigate`, §14.65 g).
@@ -17,9 +22,8 @@ import { useTranslation } from 'react-i18next';
 import { useIsWide } from '@/theme/useBreakpoint';
 
 import { type BackParentKey, backTargetFor } from './backTarget';
-import { useChromeLedger, useHasNoLedgers } from './useChromeLedger';
-import { stepBackRestoringLedger } from './ledgerHistory';
 import { useGuardedNavigate } from './leaveGuard';
+import { useHasNoLedgers } from './useHasNoLedgers';
 
 export interface BackControl {
   /** Whether this page is a sub-page, i.e. whether a back button belongs on it. */
@@ -44,24 +48,16 @@ export function useBack(): BackControl {
   const router = useRouter();
   const pathname = usePathname();
   const wide = useIsWide();
-  const { ledgerId } = useChromeLedger();
   const noLedgers = useHasNoLedgers();
 
-  const target = backTargetFor(pathname, {
-    wide,
-    chromeLedgerId: ledgerId,
-    hasLedgers: !noLedgers,
-  });
+  const target = backTargetFor(pathname, { wide, hasLedgers: !noLedgers });
   const href = target?.href ?? null;
   const guarded = useGuardedNavigate();
 
   const goBack = React.useCallback((): void => {
     guarded(() => {
-      if (router.canGoBack()) {
-        // Crossing back into a ledger from `/ledgers*` has to restore the ledger's own
-        // history, which its unmounted navigator lost (see ledgerHistory.ts).
-        if (!stepBackRestoringLedger()) router.back();
-      } else if (href !== null) router.replace(href);
+      if (router.canGoBack()) router.back();
+      else if (href !== null) router.replace(href);
     });
   }, [guarded, href, router]);
 

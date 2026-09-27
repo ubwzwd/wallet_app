@@ -11,6 +11,8 @@ import { Platform } from 'react-native';
 
 export const PREF_NAMES = {
   lastLedgerId: 'last_ledger_id',
+  /** The tab's own current ledger (decision §14.66 b) — a session pref, see below. */
+  currentLedgerId: 'current_ledger_id',
   lang: 'lang',
   theme: 'theme',
   categories: 'categories',
@@ -88,4 +90,49 @@ export function getJsonPrefSync<T>(name: string): T | null {
 
 export async function setJsonPref(name: string, value: unknown | null): Promise<void> {
   await setPref(name, value === null ? null : JSON.stringify(value));
+}
+
+// ------------------------------------------------------------ per-tab (session) prefs
+
+function webSessionStorage(): Storage | null {
+  if (Platform.OS !== 'web') return null;
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Synchronous read of a per-tab preference (decision §14.66 b): web `sessionStorage` under
+ * the same `wallet:<name>` key, so a reload keeps it and a second tab has its own. Native
+ * has no tabs and no synchronous storage, so there it degrades to an ordinary preference and
+ * this read is always `null` (like `getPrefSync`) — the caller falls back to the persistent
+ * one it keeps beside it.
+ */
+export function getSessionPrefSync(name: string): string | null {
+  if (Platform.OS !== 'web') return getPrefSync(name);
+  const s = webSessionStorage();
+  if (!s) return null;
+  try {
+    return s.getItem(prefKey(name));
+  } catch {
+    return null;
+  }
+}
+
+/** Write (or with `null`, remove) a per-tab preference; failures are swallowed like `setPref`. */
+export async function setSessionPref(name: string, value: string | null): Promise<void> {
+  if (Platform.OS !== 'web') {
+    await setPref(name, value);
+    return;
+  }
+  const s = webSessionStorage();
+  if (!s) return;
+  try {
+    if (value === null) s.removeItem(prefKey(name));
+    else s.setItem(prefKey(name), value);
+  } catch {
+    /* ignore */
+  }
 }

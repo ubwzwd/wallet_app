@@ -16,14 +16,13 @@ jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 import RootLayout from '../../../../../app/_layout';
 import AppGroupLayout from '../../../../../app/(app)/_layout';
-import LedgerLayout from '../../../../../app/(app)/l/[ledgerId]/_layout';
-import TransactionDetailRoute from '../../../../../app/(app)/l/[ledgerId]/transactions/[txId]/index';
-import TransferDetailRoute from '../../../../../app/(app)/l/[ledgerId]/transfers/[pairId]/index';
+import TransactionDetailRoute from '../../../../../app/(app)/transactions/[txId]/index';
+import TransferDetailRoute from '../../../../../app/(app)/transfers/[pairId]/index';
 
 import { setAuthToken } from '@/api/client';
 import type { Transaction, TransactionListResponse, TransferPair } from '@/api/types';
 import { initI18n } from '@/i18n';
-import { resetLedgerGone } from '@/navigation';
+import { resetLedgerUnavailable } from '@/navigation';
 import { queryClient } from '@/queries';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
@@ -48,7 +47,6 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers</RNText>,
-  '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': () => <RNText>home</RNText>,
   '(app)/l/[ledgerId]/transactions/index': () => <RNText>transactions-page</RNText>,
   '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
@@ -146,7 +144,7 @@ beforeEach(async () => {
     ...defaults,
     queries: { ...defaults.queries, retry: false, gcTime: 0 },
   });
-  resetLedgerGone();
+  resetLedgerUnavailable();
   toast.clear();
   await initI18n();
   await i18next.changeLanguage('zh');

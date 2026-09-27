@@ -1,30 +1,32 @@
 /**
  * Where a page's back button leads when there is no in-app history to step back through
- * (decisions §14.64 d / f, §14.65 d) — a deep link opened in a new tab, a reload.
+ * (decisions §14.64 d / f, §14.65 d, §14.66 g) — a deep link opened in a new tab, a reload.
  *
- * A top-level page (one the navigation reaches directly) has no back button at all and
+ * A top-level page (one the navigation reaches directly: `/home`, `/transactions`,
+ * `/imports`, `/settings`, and `/accounts` on a wide screen) has no back button at all and
  * answers `null`. Everything else is a sub-page with a fixed parent:
  *
- *   transaction / transfer detail  → the transaction list
- *   transaction / transfer edit    → its detail
- *   new transaction                → the transaction list
- *   `/accounts/new`, `/accounts/:sid/edit` → `/accounts`, my account list
- *   `/accounts` (narrow only)      → home of the ledger the chrome names (while that is
- *                                    still unknown, no button)
- *   import upload, import batch    → the import history
- *   import format guide            → the import upload
- *   ledger settings                → home
- *   `/ledgers/new`, `/ledgers/join`→ home of the ledger the chrome names (§14.65 d; while
- *                                    that is still unknown, no button); for a user with no
- *                                    ledger at all, the onboarding page `/ledgers`
- *   `/settings`                    → `/ledgers`, but only for a user with no ledger at all
+ *   /transactions/:id, /transfers/:id      → /transactions
+ *   /transactions/:id/edit                 → /transactions/:id
+ *   /transfers/:id/edit                    → /transfers/:id
+ *   /transactions/new                      → /transactions
+ *   /accounts/new, /accounts/:sid/edit     → /accounts
+ *   /accounts (narrow only)                → /home (no button for a user with no ledger)
+ *   /imports/new, /imports/:batchId        → /imports
+ *   /imports/guide                         → /imports/new
+ *   /ledger                                → /home
+ *   /ledgers/new, /ledgers/join            → /home; for a user with no ledger at all, the
+ *                                            onboarding page `/ledgers`
+ *   /settings                              → `/ledgers`, but only for a user with no ledger
  *
- * `/ledgers` itself is not a page any more (§14.65 c): with a ledger it redirects to that
- * ledger's home, and without one it is the onboarding page, which has nowhere to go back to.
+ * `/ledgers` itself is not a page any more (§14.65 c): with a ledger it redirects to `/home`,
+ * and without one it is the onboarding page, which has nowhere to go back to.
  *
  * Pure: no React, no router — `useBack` feeds it the live answers.
  */
 import { type RouteHref, routes } from '@/domain/routes';
+
+import { barePath } from './ledgerRoute';
 
 export type BackParentKey = 'home' | 'transactions' | 'sources' | 'imports' | 'ledgers';
 
@@ -33,75 +35,59 @@ export type BackTarget = { href: RouteHref; parentKey: BackParentKey };
 export interface BackTargetOptions {
   /** Wide layouts reach `/accounts` from the sidebar, so it is top-level there. */
   wide: boolean;
-  /** The ledger the chrome names outside a ledger route (`useChromeLedger`). */
-  chromeLedgerId: string | null;
   /** Whether the user belongs to at least one ledger. */
   hasLedgers: boolean;
 }
 
-/**
- * `/l/`, derived from the route builder rather than spelled out. Slicing on it only picks
- * the candidate ledger id; every match below still goes through `routes.l(id)`.
- */
-export const LEDGER_PREFIX: string = routes.l('').home();
-
-/** The path alone: no query string, no trailing slash. */
-export function barePath(pathname: string): string {
-  const path = pathname.split('?')[0].split('#')[0];
-  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
-}
+const to = (href: RouteHref, parentKey: BackParentKey): BackTarget => ({ href, parentKey });
 
 /**
- * My accounts (decision §14.62) live outside any ledger. The list is one of the sidebar's
- * five on a wide screen; the narrow tab bar has no slot for it (the "me" sheet leads there),
- * so there it is a sub-page of the home the chrome aims at — screen 09 at 375 is
- * 「‹ 账户」. The form is a sub-page of the list at both widths.
+ * My accounts (decision §14.62). The list is one of the sidebar's five on a wide screen; the
+ * narrow tab bar has no slot for it (the "me" sheet leads there), so there it is a sub-page
+ * of home — screen 09 at 375 is 「‹ 账户」. The form is a sub-page of the list at both widths.
  */
 function inAccounts(path: string, opts: BackTargetOptions): BackTarget | null {
   const list = routes.accounts();
   if (path === list) {
-    if (opts.wide || opts.chromeLedgerId === null) return null;
-    return { href: routes.l(opts.chromeLedgerId).home(), parentKey: 'home' };
+    return opts.wide || !opts.hasLedgers ? null : to(routes.home(), 'home');
   }
-  if (path === routes.accountNew()) return { href: list, parentKey: 'sources' };
+  if (path === routes.accountNew()) return to(list, 'sources');
   const [resourceId] = path.slice(list.length + 1).split('/');
-  if (resourceId && path === routes.accountEdit(resourceId)) {
-    return { href: list, parentKey: 'sources' };
-  }
+  if (resourceId && path === routes.accountEdit(resourceId)) return to(list, 'sources');
   return null;
 }
 
-function inLedger(path: string, wide: boolean): BackTarget | null {
-  const ledgerId = path.slice(LEDGER_PREFIX.length).split('/')[0];
-  if (!ledgerId) return null;
-  const l = routes.l(ledgerId);
-  const to = (href: RouteHref, parentKey: BackParentKey): BackTarget => ({ href, parentKey });
-
+/** The ledger pages: `/home` … `/ledger` (§14.66 a). */
+function inLedger(path: string): BackTarget | null {
   // Top-level pages: the sidebar's five and the tab bar's four.
-  if (path === l.home() || path === l.transactions() || path === l.imports()) return null;
+  if (path === routes.home() || path === routes.transactions() || path === routes.imports()) {
+    return null;
+  }
 
   // Fixed sub-pages.
-  if (path === l.transactionNew()) return to(l.transactions(), 'transactions');
-  if (path === l.importsNew()) return to(l.imports(), 'imports');
-  if (path === l.importsGuide()) return to(l.importsNew(), 'imports');
-  if (path === l.settings()) return to(l.home(), 'home');
+  if (path === routes.transactionNew()) return to(routes.transactions(), 'transactions');
+  if (path === routes.importsNew()) return to(routes.imports(), 'imports');
+  if (path === routes.importsGuide()) return to(routes.importsNew(), 'imports');
+  if (path === routes.ledgerSettings()) return to(routes.home(), 'home');
 
-  // Sub-pages that carry a resource id: `<section>/<id>` and `<section>/<id>/edit`.
-  const [section, resourceId] = path.slice(l.home().length + 1).split('/');
+  // Sub-pages that carry a resource id: `/<section>/<id>` and `/<section>/<id>/edit`.
+  const [section, resourceId] = path.split('/').filter(Boolean);
   if (!resourceId) return null;
   switch (section) {
     case 'transactions':
-      if (path === l.transaction(resourceId)) return to(l.transactions(), 'transactions');
-      if (path === l.transactionEdit(resourceId)) {
-        return to(l.transaction(resourceId), 'transactions');
+      if (path === routes.transaction(resourceId)) return to(routes.transactions(), 'transactions');
+      if (path === routes.transactionEdit(resourceId)) {
+        return to(routes.transaction(resourceId), 'transactions');
       }
       return null;
     case 'transfers':
-      if (path === l.transfer(resourceId)) return to(l.transactions(), 'transactions');
-      if (path === l.transferEdit(resourceId)) return to(l.transfer(resourceId), 'transactions');
+      if (path === routes.transfer(resourceId)) return to(routes.transactions(), 'transactions');
+      if (path === routes.transferEdit(resourceId)) {
+        return to(routes.transfer(resourceId), 'transactions');
+      }
       return null;
     case 'imports':
-      return path === l.importBatch(resourceId) ? to(l.imports(), 'imports') : null;
+      return path === routes.importBatch(resourceId) ? to(routes.imports(), 'imports') : null;
     default:
       return null;
   }
@@ -111,20 +97,14 @@ export function backTargetFor(pathname: string, opts: BackTargetOptions): BackTa
   const path = barePath(pathname);
 
   if (path === routes.settings()) {
-    return opts.hasLedgers ? null : { href: routes.ledgers(), parentKey: 'ledgers' };
+    return opts.hasLedgers ? null : to(routes.ledgers(), 'ledgers');
   }
   if (path === routes.ledgers()) return null;
   if (path === routes.ledgersNew() || path === routes.ledgersJoin()) {
-    if (!opts.hasLedgers) return { href: routes.ledgers(), parentKey: 'ledgers' };
-    return opts.chromeLedgerId === null
-      ? null
-      : { href: routes.l(opts.chromeLedgerId).home(), parentKey: 'home' };
+    return opts.hasLedgers ? to(routes.home(), 'home') : to(routes.ledgers(), 'ledgers');
   }
   if (path === routes.accounts() || path.startsWith(`${routes.accounts()}/`)) {
     return inAccounts(path, opts);
   }
-  if (path.startsWith(LEDGER_PREFIX)) {
-    return inLedger(path, opts.wide);
-  }
-  return null;
+  return inLedger(path);
 }

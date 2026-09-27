@@ -1,0 +1,80 @@
+/**
+ * Decision §14.66 a / c / d: which paths are the ledger pages, and where a ledger switch
+ * leaves the page it happens on.
+ */
+import { routes } from '@/domain/routes';
+
+import { barePath, isLedgerRoute, ledgerSwitchTarget } from '../ledgerRoute';
+
+describe('isLedgerRoute — the pages RequireLedger guards', () => {
+  test.each([
+    routes.home(),
+    routes.transactions(),
+    routes.transactionNew({ kind: 'income' }),
+    routes.transaction('tx-1'),
+    routes.transactionEdit('tx-1'),
+    routes.transfer('pair-1'),
+    routes.transferEdit('pair-1'),
+    routes.imports(),
+    routes.importsNew(),
+    routes.importsGuide(),
+    routes.importBatch('b-1'),
+    routes.ledgerSettings(),
+    `${routes.home()}/`,
+  ])('%s is a ledger page', (path) => {
+    expect(isLedgerRoute(path)).toBe(true);
+  });
+
+  test.each([
+    '/',
+    routes.settings(),
+    routes.accounts(),
+    routes.accountNew('ledger-a'),
+    routes.accountEdit('src-1'),
+    routes.ledgers(),
+    routes.ledgersNew(),
+    routes.ledgersJoin(),
+    routes.login('/home'),
+    '/homes',
+    '/transactionsx',
+    '/nowhere',
+  ])('%s opens with no ledger at all', (path) => {
+    expect(isLedgerRoute(path)).toBe(false);
+  });
+});
+
+describe('ledgerSwitchTarget — a switch keeps the page unless it names an old record', () => {
+  test.each([
+    [routes.transaction('tx-1'), routes.transactions()],
+    [routes.transactionEdit('tx-1'), routes.transactions()],
+    // There is no transfer list: the transaction list is the closest one.
+    [routes.transfer('pair-1'), routes.transactions()],
+    [routes.transferEdit('pair-1'), routes.transactions()],
+    [routes.importBatch('b-1'), routes.imports()],
+  ])('%s falls back to %s', (path, list) => {
+    expect(ledgerSwitchTarget(path)).toBe(list);
+  });
+
+  test.each([
+    routes.home(),
+    routes.transactions(),
+    routes.transactionNew(),
+    routes.transactionNew({ kind: 'income', source_id: 's-1' }),
+    routes.imports(),
+    routes.importsNew(),
+    routes.importsGuide(),
+    routes.ledgerSettings(),
+    routes.settings(),
+    routes.accounts(),
+    routes.accountEdit('src-1'),
+    routes.ledgersNew(),
+  ])('%s stays put', (path) => {
+    expect(ledgerSwitchTarget(path)).toBeNull();
+  });
+});
+
+test('barePath drops the query, the hash and a trailing slash — but never the root', () => {
+  expect(barePath('/transactions/new?kind=income#top')).toBe('/transactions/new');
+  expect(barePath('/home/')).toBe('/home');
+  expect(barePath('/')).toBe('/');
+});

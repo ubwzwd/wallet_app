@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import '@/pwa/registerSW';
 import { APP_NAME } from '@/constants/config';
 import { initI18n } from '@/i18n';
-import { AppSkeleton, markLedgerGone, useSwUpdateToast } from '@/navigation';
+import { AppSkeleton, markLedgerUnavailable, useSwUpdateToast } from '@/navigation';
 import { BottomTabInsetProvider, useBottomTabInset } from '@/navigation/AppShell';
 import { queryClient, registerQueryHandlers } from '@/queries';
 import { AuthProvider } from '@/store';
@@ -157,9 +157,10 @@ export default function RootLayout(): React.JSX.Element {
   useAppFonts();
   useDocumentTitle(APP_NAME);
 
-  // 04 §2.4 / §1.5 rule 4: a 404 on a ledger detail query flags that ledger as gone, and
-  // `RequireLedger` picks the flag up. (The 401 handler is registered by `AuthProvider`.)
-  React.useEffect(() => registerQueryHandlers({ onLedgerGone: markLedgerGone }), []);
+  // 04 §2.4 / §1.5 rule 4: a 404 on a ledger detail query flags that ledger as unavailable,
+  // and `CurrentLedgerProvider` moves the tab off it (§14.66 c). (The 401 handler is
+  // registered by `AuthProvider`.)
+  React.useEffect(() => registerQueryHandlers({ onLedgerGone: markLedgerUnavailable }), []);
 
   return (
     <SafeAreaProvider>

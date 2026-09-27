@@ -16,7 +16,6 @@ jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 import RootLayout from '../../../../app/_layout';
 import AppGroupLayout from '../../../../app/(app)/_layout';
-import LedgerLayout from '../../../../app/(app)/l/[ledgerId]/_layout';
 
 import { setAuthToken } from '@/api/client';
 import type { Transaction, TransactionListParams, TransactionSummary } from '@/api/types';
@@ -36,7 +35,7 @@ import {
   type MockApi,
 } from '@/test';
 import { toast } from '@/ui';
-import { resetLedgerGone } from '@/navigation';
+import { resetLedgerUnavailable } from '@/navigation';
 
 import TransactionsScreen from '../TransactionsScreen';
 
@@ -48,7 +47,6 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers</RNText>,
-  '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': () => <RNText>home</RNText>,
   '(app)/l/[ledgerId]/transactions/index': TransactionsScreen,
   '(app)/l/[ledgerId]/transactions/new': () => <RNText>new transaction</RNText>,
@@ -130,7 +128,7 @@ beforeEach(async () => {
   api = mockApi();
   listRequests = [];
   queryClient.clear();
-  resetLedgerGone();
+  resetLedgerUnavailable();
   toast.clear();
   await initI18n();
   await i18next.changeLanguage('zh');

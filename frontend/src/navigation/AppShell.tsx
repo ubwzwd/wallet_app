@@ -5,10 +5,10 @@
  *   narrow → a top bar above the content and a five-slot tab bar below it
  *
  * Decision §14.64: this is the one shell of every signed-in page — the ledger pages,
- * my accounts (`/accounts*`, decision §14.62), `/ledgers*` (in practice `/ledgers/new` and `/ledgers/join`: `/ledgers` itself only
- * redirects to a ledger, §14.65 c) and `/settings` alike. Outside a ledger route it aims at the ledger the user
- * last had open (`useChromeLedger`), so the column, the tab bar and the sheets behave the
- * same everywhere.
+ * my accounts (`/accounts*`, decision §14.62), `/ledgers*` (in practice `/ledgers/new` and
+ * `/ledgers/join`: `/ledgers` itself only redirects to `/home`, §14.65 c) and `/settings`
+ * alike. It is mounted once, by the signed-in layout, inside `CurrentLedgerProvider`, so the
+ * column, the tab bar and the sheets name the tab's current ledger everywhere (§14.66 b).
  *
  * The narrow top bar takes one of two forms (§14.64 e): a top-level page gets the ledger
  * pill and the member disc (`TopBarSurface`); a sub-page gets a round back button and a
@@ -50,7 +50,7 @@ import {
   TopBarSurface,
 } from './TopBar';
 import { useBack } from './useBack';
-import { useHasNoLedgers } from './useChromeLedger';
+import { useHasNoLedgers } from './useHasNoLedgers';
 
 // ------------------------------------------------ how much bar is at the bottom
 
@@ -119,9 +119,8 @@ function Chrome({ children }: AppShellProps): React.JSX.Element {
   const showTabs = narrowChrome && !isFormRoute(pathname);
   usePublishBottomTabInset(showTabs ? TAB_BAR_HEIGHT : 0);
 
-  // `/ledgers*` is always a sub-page; new / join are one even while the ledger their
-  // button returns to is still loading, so the bar keeps its shape through the cold load.
-  // `/accounts` is one on a narrow screen for the same reason (its parent is that home).
+  // `/ledgers*` is always a sub-page, and so is `/accounts` on a narrow screen (its parent is
+  // `/home`) — for a user with no ledger too, where the bar's ‹ slot then stays empty.
   const onAccountPages = isActivePath(pathname, routes.accounts(), false);
   const subPage = back.show || onLedgerPages || (onAccountPages && !noLedgers);
 

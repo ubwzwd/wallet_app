@@ -1,4 +1,7 @@
 {
+  "unavailable": {
+    "switched": "账本不可用，已切到 {{name}}"
+  },
   "list": {
     "card": {
       "role_owner": "创建者",

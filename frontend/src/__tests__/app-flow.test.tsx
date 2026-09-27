@@ -3,22 +3,24 @@
  *
  * Every other integration test mounts the routes it needs and stubs the rest. This one
  * stubs nothing: the map below is the actual `app/` directory, every route module of it,
- * so the root layout's provider stack, both group layouts, the ledger layout, the three
- * guards, the shell chrome and the five screens under test all run exactly as they do in
- * the browser. Only the server is fake. (Keep it that way: a tab or sidebar link whose
- * module is missing from the map lands on `+not-found` instead of failing loudly.)
+ * so the root layout's provider stack, both group layouts, the current-ledger provider, the
+ * guards, the shell chrome and the screens under test all run exactly as they do in the
+ * browser. Only the server is fake. (Keep it that way: a tab or sidebar link whose module is
+ * missing from the map lands on `+not-found` instead of failing loudly.)
+ *
+ * The paths name pages only (decision §14.66): the ledger is the tab's current one.
  *
  * The journey is the one a new user takes on their first deep link:
  *
- *   /l/<id>  (anonymous)  →  /login?next=/l/<id>  →  sign in  →  /l/<id>
- *       →  bottom tab 交易  →  /l/<id>/transactions
- *       →  bottom tab ＋     →  /l/<id>/transactions/new
+ *   /home  (anonymous)  →  /login?next=/home  →  sign in  →  /home
+ *       →  bottom tab 交易  →  /transactions
+ *       →  bottom tab ＋     →  /transactions/new
  *
  * The second journey is the import flow of 04 §4.10 / §8.5, every step of it on the same
  * real route tree:
  *
- *   /l/<id>/imports  (history, empty)  →  /l/<id>/imports/guide  →  /l/<id>/imports/new
- *       →  pick the account, paste a CSV  →  /l/<id>/imports/<batch>  (review)
+ *   /imports  (history, empty)  →  /imports/new
+ *       →  pick the account, paste a CSV  →  /imports/<batch>  (review)
  *       →  fill the one blank category in  →  commit  →  the committed panel
  *
  * The assertions are on what the server was asked for (POST /auth/login, GET /me,
@@ -42,29 +44,28 @@ import RegisterRoute from '../../app/(auth)/register';
 import AppGroupLayout from '../../app/(app)/_layout';
 import LedgersRoute from '../../app/(app)/ledgers/index';
 import PersonalSettingsRoute from '../../app/(app)/settings';
-import LedgerLayout from '../../app/(app)/l/[ledgerId]/_layout';
-import LedgerHomeRoute from '../../app/(app)/l/[ledgerId]/index';
-import TransactionsRoute from '../../app/(app)/l/[ledgerId]/transactions/index';
-import NewTransactionRoute from '../../app/(app)/l/[ledgerId]/transactions/new';
+import LedgerHomeRoute from '../../app/(app)/home';
+import TransactionsRoute from '../../app/(app)/transactions/index';
+import NewTransactionRoute from '../../app/(app)/transactions/new';
 import SourcesRoute from '../../app/(app)/accounts/index';
-import ImportsRoute from '../../app/(app)/l/[ledgerId]/imports/index';
-import ImportsGuideRoute from '../../app/(app)/l/[ledgerId]/imports/guide';
-import NewImportRoute from '../../app/(app)/l/[ledgerId]/imports/new';
-import ImportBatchRoute from '../../app/(app)/l/[ledgerId]/imports/[batchId]';
-import LedgerSettingsRoute from '../../app/(app)/l/[ledgerId]/settings';
+import ImportsRoute from '../../app/(app)/imports/index';
+import ImportsGuideRoute from '../../app/(app)/imports/guide';
+import NewImportRoute from '../../app/(app)/imports/new';
+import ImportBatchRoute from '../../app/(app)/imports/[batchId]';
+import LedgerSettingsRoute from '../../app/(app)/ledger';
 import NewSourceRoute from '../../app/(app)/accounts/new';
 import EditSourceRoute from '../../app/(app)/accounts/[sourceId]/edit';
-import TransactionDetailRoute from '../../app/(app)/l/[ledgerId]/transactions/[txId]/index';
-import EditTransactionRoute from '../../app/(app)/l/[ledgerId]/transactions/[txId]/edit';
-import TransferDetailRoute from '../../app/(app)/l/[ledgerId]/transfers/[pairId]/index';
-import EditTransferRoute from '../../app/(app)/l/[ledgerId]/transfers/[pairId]/edit';
+import TransactionDetailRoute from '../../app/(app)/transactions/[txId]/index';
+import EditTransactionRoute from '../../app/(app)/transactions/[txId]/edit';
+import TransferDetailRoute from '../../app/(app)/transfers/[pairId]/index';
+import EditTransferRoute from '../../app/(app)/transfers/[pairId]/edit';
 import JoinLedgerRoute from '../../app/(app)/ledgers/join';
 import NewLedgerRoute from '../../app/(app)/ledgers/new';
 
 import { clearAuthToken, setAuthToken } from '@/api/client';
 import type { ImportRow, Transaction, TransactionListResponse } from '@/api/types';
 import { initI18n } from '@/i18n';
-import { resetLedgerGone } from '@/navigation';
+import { resetLedgerUnavailable } from '@/navigation';
 import { queryClient } from '@/queries';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
@@ -109,22 +110,21 @@ const APP_ROUTES = {
   '(app)/_layout': AppGroupLayout,
   '(app)/settings': PersonalSettingsRoute,
   '(app)/ledgers/index': LedgersRoute,
-  '(app)/l/[ledgerId]/_layout': LedgerLayout,
-  '(app)/l/[ledgerId]/index': LedgerHomeRoute,
-  '(app)/l/[ledgerId]/transactions/index': TransactionsRoute,
-  '(app)/l/[ledgerId]/transactions/new': NewTransactionRoute,
+  '(app)/home': LedgerHomeRoute,
+  '(app)/transactions/index': TransactionsRoute,
+  '(app)/transactions/new': NewTransactionRoute,
   '(app)/accounts/index': SourcesRoute,
-  '(app)/l/[ledgerId]/imports/index': ImportsRoute,
-  '(app)/l/[ledgerId]/imports/guide': ImportsGuideRoute,
-  '(app)/l/[ledgerId]/imports/new': NewImportRoute,
-  '(app)/l/[ledgerId]/imports/[batchId]': ImportBatchRoute,
-  '(app)/l/[ledgerId]/settings': LedgerSettingsRoute,
+  '(app)/imports/index': ImportsRoute,
+  '(app)/imports/guide': ImportsGuideRoute,
+  '(app)/imports/new': NewImportRoute,
+  '(app)/imports/[batchId]': ImportBatchRoute,
+  '(app)/ledger': LedgerSettingsRoute,
   '(app)/accounts/new': NewSourceRoute,
   '(app)/accounts/[sourceId]/edit': EditSourceRoute,
-  '(app)/l/[ledgerId]/transactions/[txId]/index': TransactionDetailRoute,
-  '(app)/l/[ledgerId]/transactions/[txId]/edit': EditTransactionRoute,
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': TransferDetailRoute,
-  '(app)/l/[ledgerId]/transfers/[pairId]/edit': EditTransferRoute,
+  '(app)/transactions/[txId]/index': TransactionDetailRoute,
+  '(app)/transactions/[txId]/edit': EditTransactionRoute,
+  '(app)/transfers/[pairId]/index': TransferDetailRoute,
+  '(app)/transfers/[pairId]/edit': EditTransferRoute,
   '(app)/ledgers/join': JoinLedgerRoute,
   '(app)/ledgers/new': NewLedgerRoute,
 };
@@ -237,7 +237,7 @@ beforeEach(async () => {
     ...defaults,
     queries: { ...defaults.queries, retry: false, gcTime: 0 },
   });
-  resetLedgerGone();
+  resetLedgerUnavailable();
   toast.clear();
   await initI18n();
   await i18next.changeLanguage('zh');
@@ -284,11 +284,11 @@ afterEach(() => {
 });
 
 test('a deep link, a sign-in, and the walk from home to the new-transaction form', async () => {
-  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/home' });
 
   // ── 1. anonymous deep link → the sign-in page, with the destination kept ──────────
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
-  expect(router.getSearchParams().next).toBe(`/l/${LEDGER}`);
+  expect(router.getSearchParams().next).toBe('/home');
   expect(await screen.findByTestId('login-screen')).toBeTruthy();
   // Nothing was fetched on the user's behalf while they were anonymous.
   expect(requestedPaths('get')).not.toContain(`/ledgers/${LEDGER}/stats/summary`);
@@ -306,7 +306,7 @@ test('a deep link, a sign-in, and the walk from home to the new-transaction form
   });
 
   // ── 3. back at the destination, with the session bootstrapped ────────────────────
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
   const afterLogin = requestedPaths('get');
   expect(afterLogin).toContain('/me');
   expect(afterLogin).toContain('/ledgers');
@@ -323,7 +323,7 @@ test('a deep link, a sign-in, and the walk from home to the new-transaction form
 
   // ── 4. the bottom tab bar takes us to the transaction list ───────────────────────
   fireEvent.press(screen.getByTestId('tab-transactions'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
 
   expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
   expect(await screen.findByTestId('tx-row-tx-lunch')).toHaveTextContent(/瑞幸咖啡/);
@@ -333,7 +333,7 @@ test('a deep link, a sign-in, and the walk from home to the new-transaction form
   // ── 5. ＋ opens the new-transaction form ─────────────────────────────────────────
   fireEvent.press(screen.getByTestId('tab-add'));
   await waitFor(() =>
-    expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`),
+    expect(router.getPathname()).toBe('/transactions/new'),
   );
   expect(router.getSearchParams().kind).toBe('expense');
 
@@ -362,7 +362,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
       paired_existing_transfers: 0, linked_refunds: 0, skipped_rows: 0,
     }),
   );
-  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/imports` });
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/imports' });
 
   // ── 1. no session yet, so the guard sends us through sign-in first ────────────────
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
@@ -370,13 +370,13 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
   fireEvent.press(screen.getByTestId('login-submit'));
 
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
   expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
   expect(await screen.findByTestId('imports-empty')).toBeTruthy();
 
   // ── 2. the empty state's action is the import page, step one of the flow ─────────
   fireEvent.press(screen.getByTestId('imports-empty-primary'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports/new'));
   expect(await screen.findByTestId('guide-skill-text')).toBeTruthy();
 
   // ── 3. pick the target account, paste the statement, send it ─────────────────────
@@ -386,7 +386,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   fireEvent.press(screen.getByTestId('upload-submit'));
 
   // ── 4. review, on the batch the 201 came back with ────────────────────────────────
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`));
+  await waitFor(() => expect(router.getPathname()).toBe(`/imports/${BATCH}`));
   expect(requestedPaths('post')).toEqual(['/auth/login', IMPORTS_PATH]);
   expect(JSON.parse(String(api.mock.history.post[1].data))).toEqual({
     source_id: CREDIT.id,
@@ -425,7 +425,7 @@ test('the import tab walks guide → paste → review → commit (04 §4.10, §8
   expect(requestedPaths('post')).toContain(`${BATCH_PATH}/commit`);
   // The review table is gone; the URL is the same batch it always was.
   expect(screen.queryByTestId('review-commit-submit')).toBeNull();
-  expect(router.getPathname()).toBe(`/l/${LEDGER}/imports/${BATCH}`);
+  expect(router.getPathname()).toBe(`/imports/${BATCH}`);
 });
 
 test('the wide shell walks its five destinations, the ledger card and 「＋ 记一笔」', async () => {
@@ -440,7 +440,7 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
     counts: { transactions: 1, sources: 2, import_batches: 0 },
   });
 
-  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/home' });
 
   // ── sign in first: the shell only exists behind the session guard ────────────────
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
@@ -448,7 +448,7 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
   fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
   fireEvent.press(screen.getByTestId('login-submit'));
 
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
 
   // ── the wide chrome, not the narrow one ─────────────────────────────────────────
   expect(await screen.findByTestId('app-shell-wide')).toBeTruthy();
@@ -461,12 +461,12 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
 
   // ── the ledger card's chevron: 账本设置 is not a nav entry (§14.56) ──────────────
   fireEvent.press(screen.getByTestId('sidebar-ledger-settings'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledger'));
   expect(await screen.findByTestId('ledger-settings-screen')).toBeTruthy();
 
   // ── 交易 ─────────────────────────────────────────────────────────────────────────
   fireEvent.press(screen.getByTestId('sidebar-transactions'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
   expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
 
   // ── 账户: a global page since §14.62 (屏幕稿 09) ─────────────────────────────────
@@ -476,12 +476,12 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
 
   // ── 导入 ─────────────────────────────────────────────────────────────────────────
   fireEvent.press(screen.getByTestId('sidebar-imports'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/imports`));
+  await waitFor(() => expect(router.getPathname()).toBe('/imports'));
   expect(await screen.findByTestId('imports-history-screen')).toBeTruthy();
 
   // ── 「＋ 记一笔」 is permanent chrome on every ledger page ────────────────────────
   fireEvent.press(screen.getByTestId('sidebar-add'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions/new'));
   expect(await screen.findByTestId('tx-new')).toBeTruthy();
 
   // ── 我的 = personal settings, the only nav entry that leaves the ledger ──────────
@@ -492,7 +492,7 @@ test('the wide shell walks its five destinations, the ledger card and 「＋ 记
   // and its 「账本设置」 row leads back to the ledger the column is still naming.
   expect(screen.getByTestId('sidebar')).toBeTruthy();
   fireEvent.press(screen.getByTestId('settings-ledger-settings'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledger'));
 });
 
 test('the switcher is the way to new / join / 账本设置, and /ledgers only lands (§14.65)', async () => {
@@ -504,13 +504,13 @@ test('the switcher is the way to new / join / 账本设置, and /ledgers only la
     ...makeLedger({ id: LEDGER, name: '家庭账本', base_currency: 'CNY' }),
     counts: { transactions: 1, sources: 2, import_batches: 0 },
   });
-  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}` });
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/home' });
 
   await waitFor(() => expect(router.getPathname()).toBe('/login'));
   fireEvent.changeText(await screen.findByTestId('login-email'), EMAIL);
   fireEvent.changeText(screen.getByTestId('login-password'), PASSWORD);
   fireEvent.press(screen.getByTestId('login-submit'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
 
   // ── ledger pill → switcher → 新建账本: the shell's bar replaces the page's header ──
   fireEvent.press(await screen.findByTestId('top-bar-ledger'));
@@ -523,7 +523,7 @@ test('the switcher is the way to new / join / 账本设置, and /ledgers only la
 
   // ── back: history, straight to the ledger home it was opened from ────────────────
   fireEvent.press(screen.getByTestId('top-bar-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
   expect(await screen.findByTestId('top-bar-ledger')).toBeTruthy();
 
   // ── 加入账本, then back: same story ───────────────────────────────────────────────
@@ -532,24 +532,24 @@ test('the switcher is the way to new / join / 账本设置, and /ledgers only la
   await waitFor(() => expect(router.getPathname()).toBe('/ledgers/join'));
   await waitFor(() => expect(screen.getByTestId('top-bar-title')).toHaveTextContent('加入账本'));
   fireEvent.press(screen.getByTestId('top-bar-back'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
 
   // ── the switcher's last row is this ledger's settings ────────────────────────────
   fireEvent.press(await screen.findByTestId('top-bar-ledger'));
   fireEvent.press(await screen.findByTestId('ledger-switcher-settings'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/settings`));
+  await waitFor(() => expect(router.getPathname()).toBe('/ledger'));
   expect(await screen.findByTestId('ledger-settings-screen')).toBeTruthy();
 
   // ── `/ledgers` (a fallback link, an old bookmark) is not a page: it lands home ────
   act(() => expoRouter.navigate('/ledgers'));
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}`));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
   expect(screen.queryByTestId('ledgers-screen')).toBeNull();
 });
 
 test('a half-filled 记一笔 has no tab bar on a phone, and every way out asks first (§14.65 f / g)', async () => {
   // Signed in already: this walk is about the form and the chrome around it.
   await setAuthToken(FRESH_TOKEN);
-  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/transactions` });
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/transactions' });
   expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
 
   // ── ＋ opens the form: the ‹ bar stays, the tab bar goes (屏幕稿 04 at 375) ──────
@@ -566,7 +566,7 @@ test('a half-filled 记一笔 has no tab bar on a phone, and every way out asks 
     fireEvent.press(screen.getByTestId('confirm-cancel'));
   });
   await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
-  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`);
+  expect(router.getPathname()).toBe('/transactions/new');
   expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
 
   // ── leaving is asked once, and lands where the form was opened from ─────────────
@@ -574,7 +574,7 @@ test('a half-filled 记一笔 has no tab bar on a phone, and every way out asks 
   await act(async () => {
     fireEvent.press(await screen.findByTestId('confirm-accept'));
   });
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
   expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   expect(await screen.findByTestId('bottom-tab-bar')).toBeTruthy();
 });
@@ -583,7 +583,7 @@ test('a half-filled 记一笔 on a wide screen: the sidebar asks before it leave
   wideSpy.mockReturnValue(true);
   mockGet(`/ledgers/${LEDGER}/members`, { items: [], total: 0 });
   await setAuthToken(FRESH_TOKEN);
-  const router = renderRouter(APP_ROUTES, { initialUrl: `/l/${LEDGER}/transactions/new` });
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/transactions/new' });
 
   fireEvent.changeText(await screen.findByTestId('tx-amount'), '38');
   fireEvent.press(screen.getByTestId('sidebar-transactions'));
@@ -592,14 +592,110 @@ test('a half-filled 记一笔 on a wide screen: the sidebar asks before it leave
     fireEvent.press(screen.getByTestId('confirm-cancel'));
   });
   await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
-  expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions/new`);
+  expect(router.getPathname()).toBe('/transactions/new');
   expect(screen.getByTestId('tx-amount').props.value).toBe('38.00');
 
   fireEvent.press(screen.getByTestId('sidebar-transactions'));
   await act(async () => {
     fireEvent.press(await screen.findByTestId('confirm-accept'));
   });
-  await waitFor(() => expect(router.getPathname()).toBe(`/l/${LEDGER}/transactions`));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
   expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
   expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+});
+
+// ── decision §14.66: the back button walks pages, never ledgers or months ───────────────
+
+const TRIP = 'ledger-trip';
+
+interface StateLike {
+  index?: number;
+  routes: { state?: StateLike }[];
+}
+
+/** How many entries the history holds: every route on the focused path's stacks. */
+function historyLength(router: ReturnType<typeof renderRouter>): number {
+  let count = 0;
+  let state = router.getRouterState() as StateLike | undefined;
+  while (state) {
+    count += state.routes.length;
+    state = state.routes[state.index ?? state.routes.length - 1]?.state;
+  }
+  return count;
+}
+
+/** A second ledger with the same data behind it, so every page renders in either. */
+function mockTripLedger(): void {
+  mockGet('/ledgers', {
+    items: [
+      makeLedger({ id: LEDGER, name: '家庭账本', base_currency: 'CNY' }),
+      makeLedger({ id: TRIP, name: '旅行账本', base_currency: 'CNY' }),
+    ],
+    total: 2,
+  });
+  mockGet(`/ledgers/${TRIP}/sources`, { items: [CHECKING, CREDIT], total: 2 });
+  mockGet(`/ledgers/${TRIP}/stats/summary`, makeStatsSummary());
+  mockGet(`/ledgers/${TRIP}/stats/trend`, makeStatsTrend());
+  mockGet(`/ledgers/${TRIP}/transactions`, TX_PAGE);
+}
+
+test('switching ledgers back and forth keeps the address and the history (§14.66 d)', async () => {
+  // The user's case: on a ledger page, flip between two ledgers a few times, then press
+  // back — it has to leave the page, not step back through the ledgers.
+  mockTripLedger();
+  await setAuthToken(FRESH_TOKEN);
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/home' });
+  expect(await screen.findByTestId('home-networth')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('tab-transactions'));
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
+  const depth = historyLength(router);
+  expect(expoRouter.canGoBack()).toBe(true);
+
+  for (const [row, name] of [
+    [TRIP, '旅行账本'],
+    [LEDGER, '家庭账本'],
+    [TRIP, '旅行账本'],
+  ] as const) {
+    fireEvent.press(screen.getByTestId('top-bar-ledger'));
+    fireEvent.press(await screen.findByTestId(`ledger-switcher-row-${row}`));
+    await waitFor(() => expect(screen.getByTestId('top-bar-ledger')).toHaveTextContent(name));
+    expect(router.getPathname()).toBe('/transactions');
+    expect(historyLength(router)).toBe(depth);
+    expect(expoRouter.canGoBack()).toBe(true);
+  }
+  // The list now reads the other ledger's endpoint.
+  await waitFor(() => expect(requestedPaths('get')).toContain(`/ledgers/${TRIP}/transactions`));
+
+  // Back leaves the page for the one before it, and the ledger stays the one picked last.
+  act(() => expoRouter.back());
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+  expect(await screen.findByTestId('top-bar-ledger')).toHaveTextContent('旅行账本');
+  expect(expoRouter.canGoBack()).toBe(false);
+});
+
+test('changing the home month is not a history entry: back leaves the page (§14.66 e)', async () => {
+  await setAuthToken(FRESH_TOKEN);
+  const router = renderRouter(APP_ROUTES, { initialUrl: '/transactions' });
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('tab-home'));
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+  const depth = historyLength(router);
+
+  const labelText = (): string =>
+    String(screen.getByTestId('home-month-label').props.children ?? '');
+  fireEvent.press(await screen.findByTestId('home-month-prev'));
+  const before = labelText();
+  fireEvent.press(await screen.findByTestId('home-month-prev'));
+  await waitFor(() => expect(labelText()).not.toBe(before));
+  // The home page still keeps its month in the query until it moves to view state; what
+  // matters here is that the path and the history did not move with it.
+  await waitFor(() => expect(router.getPathname()).toBe('/home'));
+  expect(historyLength(router)).toBe(depth);
+
+  act(() => expoRouter.back());
+  await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
+  expect(await screen.findByTestId('transactions-screen')).toBeTruthy();
 });

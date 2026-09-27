@@ -1,6 +1,6 @@
 /**
  * Decision §14.62: accounts belong to the user, so `/accounts*` lives outside any ledger and
- * wears the shell the way `/settings` does — the chrome names the recent ledger, the
+ * wears the shell the way `/settings` does — the chrome names the tab's current ledger, the
  * sidebar's 「账户」 leads here and is lit here, and the "me" sheet has a row for it.
  * On a narrow screen `/accounts` is a sub-page with the tab bar (nothing lit), and the
  * account form is a form page: a back button, no tab bar (§14.64 b, §14.65 f).
@@ -16,8 +16,6 @@ jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 import RootLayout from '../../../app/_layout';
 import AppGroupLayout from '../../../app/(app)/_layout';
-import AccountsLayout from '../../../app/(app)/accounts/_layout';
-import LedgerLayout from '../../../app/(app)/l/[ledgerId]/_layout';
 
 import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
@@ -28,8 +26,7 @@ import * as breakpoint from '@/theme/useBreakpoint';
 import { PageHeader, toast } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
-import { resetLedgerHistory } from '../ledgerHistory';
-import { resetLedgerGone } from '../RequireLedger';
+import { resetLedgerUnavailable } from '@/store';
 import { useTopBar } from '../TopBar';
 import { useBack } from '../useBack';
 
@@ -67,13 +64,12 @@ const ROUTES = {
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': page('开始'),
   '(app)/settings': page('个人设置'),
-  '(app)/accounts/_layout': AccountsLayout,
+  // No `accounts/_layout`: every signed-in page sits directly under `(app)` (§14.66 g).
   '(app)/accounts/index': page('账户'),
   '(app)/accounts/new': page('新建账户'),
   '(app)/accounts/[sourceId]/edit': page('编辑账户'),
-  '(app)/l/[ledgerId]/_layout': LedgerLayout,
-  '(app)/l/[ledgerId]/index': page('首页'),
-  '(app)/l/[ledgerId]/transactions/index': page('交易'),
+  '(app)/home': page('首页'),
+  '(app)/transactions/index': page('交易'),
 };
 
 let api: MockApi;
@@ -86,11 +82,10 @@ function setWide(wide: boolean): void {
 beforeEach(async () => {
   api = mockApi();
   queryClient.clear();
-  resetLedgerGone();
-  resetLedgerHistory();
+  resetLedgerUnavailable();
   await initI18n();
   await i18next.changeLanguage('zh');
-  // The ledger the user last had open — the one the chrome names outside a ledger route.
+  // The ledger the user last had open — the tab's current ledger, on every page (§14.66 b).
   await setPref(PREF_NAMES.lastLedgerId, LEDGER_B);
   await setAuthToken('test-access-token');
   mockGet('/me', makeUser({ display_name: '阿狸' }));
@@ -143,8 +138,8 @@ describe('narrow (<1024)', () => {
   });
 
   test.each([
-    ['inside a ledger', `/l/${LEDGER_A}`],
-    ['outside a ledger', '/settings'],
+    ['on a ledger page', '/home'],
+    ['on a personal page', '/settings'],
   ])('the "me" sheet’s 账户 row opens /accounts (%s)', async (_name, url) => {
     const router = renderRouter(ROUTES, { initialUrl: url });
 
@@ -159,14 +154,14 @@ describe('narrow (<1024)', () => {
 describe('wide (>=1024)', () => {
   beforeEach(() => setWide(true));
 
-  test('the sidebar’s 账户 leads to /accounts, not into the ledger', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `/l/${LEDGER_A}` });
+  test('the sidebar’s 账户 leads to /accounts, not to a ledger page', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/home' });
 
     fireEvent.press(await router.findByTestId('sidebar-sources'));
     await waitFor(() => expect(router.getPathname()).toBe('/accounts'));
   });
 
-  test('/accounts: 账户 lit, the card names the recent ledger, no back button', async () => {
+  test('/accounts: 账户 lit, the card names the current ledger, no back button', async () => {
     const router = renderRouter(ROUTES, { initialUrl: '/accounts' });
 
     expect(await router.findByTestId('sidebar-ledger')).toBeTruthy();

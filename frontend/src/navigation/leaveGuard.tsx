@@ -135,7 +135,17 @@ export function useRunBackOverride(): () => boolean {
   }, [registry]);
 }
 
-export type GuardedNavigate = (go: () => void) => void;
+export interface GuardedNavigateOptions {
+  /**
+   * `false` when `go` does not navigate — switching ledger on a page that stays put
+   * (§14.66 d). The question is still asked, but the answer is not turned into a free pass
+   * for the form's own route-removal check: no navigation would come to use it up, and the
+   * next real exit would then go through unasked.
+   */
+  navigates?: boolean;
+}
+
+export type GuardedNavigate = (go: () => void, options?: GuardedNavigateOptions) => void;
 
 /**
  * Wrap a page change: with a guard registered, ask first and go only on a "yes";
@@ -144,14 +154,16 @@ export type GuardedNavigate = (go: () => void) => void;
 export function useGuardedNavigate(): GuardedNavigate {
   const registry = React.useContext(LeaveGuardContext);
   return React.useCallback(
-    (go) => {
+    (go, options) => {
       const guard = registry?.guard.get() ?? null;
       if (!guard) {
         go();
         return;
       }
       void guard.confirm().then((ok) => {
-        if (ok) guard.pass(go);
+        if (!ok) return;
+        if (options?.navigates === false) go();
+        else guard.pass(go);
       });
     },
     [registry],
