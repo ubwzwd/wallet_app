@@ -61,6 +61,7 @@ const ROUTES = {
   '(app)/ledgers/index': () => <Text>ledgers-page</Text>,
   '(app)/home': probe('home-page'),
   '(app)/transactions/index': probe('transactions-page'),
+  '(app)/transactions/new': probe('form-page'),
   '(app)/transactions/[txId]/index': probe('detail-page'),
   '(app)/imports/index': probe('imports-page'),
   '(app)/imports/[batchId]': probe('batch-page'),
@@ -221,6 +222,31 @@ describe('switchTo (§14.66 d)', () => {
     fireEvent.press(router.getByTestId('switch-to-b'));
 
     await waitFor(async () => expect(await getPref(PREF_NAMES.lastLedgerId)).toBe(LEDGER_B));
+  });
+
+  test('on 记一笔 opened with one of the old ledger’s accounts, only that parameter goes', async () => {
+    const router = renderRouter(ROUTES, {
+      initialUrl: '/transactions/new?kind=income&source_id=src-1&next=%2Fhome',
+    });
+    await router.findByTestId('probe-id');
+
+    fireEvent.press(router.getByTestId('switch-to-b'));
+
+    await waitFor(() => expect(router.getByTestId('probe-id')).toHaveTextContent(LEDGER_B));
+    await waitFor(() =>
+      expect(router.getPathnameWithParams()).toBe('/transactions/new?kind=income'),
+    );
+    expect(router.getByText('form-page')).toBeTruthy();
+  });
+
+  test('on 记一笔 with nothing of the old ledger’s in the address, the address stays', async () => {
+    const router = renderRouter(ROUTES, { initialUrl: '/transactions/new?kind=transfer' });
+    await router.findByTestId('probe-id');
+
+    fireEvent.press(router.getByTestId('switch-to-b'));
+
+    await waitFor(() => expect(router.getByTestId('probe-id')).toHaveTextContent(LEDGER_B));
+    expect(router.getPathnameWithParams()).toBe('/transactions/new?kind=transfer');
   });
 
   test.each([
