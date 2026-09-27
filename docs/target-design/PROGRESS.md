@@ -17,6 +17,7 @@
 
 ## 环境备忘
 
+- **手机联调（2026-09-27）**：WSL 是镜像网络（`.wslconfig` `networkingMode=mirrored`），和 Windows 共用局域网 IP（当前 `192.168.31.240`，会变）。后端守护脚本 `--host 0.0.0.0`，`ALLOWED_ORIGINS` 含 `http://<局域网 IP>:8081`；预览守护脚本 `EXPO_PUBLIC_API_BASE_URL=http://{host}:8000/api/v1`（`{host}` 运行时换成页面主机名）。Windows 侧已加四条入站放行（`wallet dev 8081/8000` 普通防火墙 + `wallet-dev-8081/8000` WSL Hyper-V 防火墙，脚本 `C:\temp\wallet-fw.ps1`）——这台机的 WiFi 是「公用网络」，不放行手机连不上。手机打开 `http://<局域网 IP>:8081`。
 - 前端：`cd frontend && npm ci`（Node 24；`frontend/node_modules` 不入库）；`npx tsc --noEmit`、`npx jest`（jest-expo 预设，能真实渲染组件）、`npm run build:web`（`expo export -p web` 约 1 分钟 + workbox）。编排工作流的每个 worktree 要先 `ln -sfn /home/ubwzwd/Code/wallet_app/frontend/node_modules <worktree>/frontend/node_modules`（已被 .gitignore 忽略）。
 - 后端测试用系统 Python（3.12，已装 fastapi / sqlalchemy 2.0.49 / alembic 1.18.4 / psycopg2）：`cd backend && DEBUG=false SECRET_KEY=test-secret python3 -m pytest -q`。仓库里没有 poetry。
 - Postgres 迁移测试用本机 docker 里的 `wallet_db` 容器（`postgresql://wallet_user:wallet_password@localhost:5432/wallet_db`，超级用户，可 `CREATE DATABASE`），通过环境变量 `TEST_POSTGRES_URL` 传入；不设则自动跳过。
