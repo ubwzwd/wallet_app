@@ -13,6 +13,7 @@ import { AUTH_TOKEN_KEY } from '@/constants/config';
 import * as i18n from '@/i18n';
 import { AuthProvider, useAuth } from '@/store/AuthContext';
 import { apiUrl, makeUser, mockApi, mockGet, mockPost, type MockApi } from '@/test';
+import * as prefs from '@/utils/prefs';
 import { PREF_NAMES, prefKey, setPref } from '@/utils/prefs';
 
 let api: MockApi;
@@ -67,6 +68,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   api.restore();
   queryClient.clear();
 });
@@ -196,7 +198,7 @@ test('register signs in the same way as login', async () => {
   await expectProbe('authenticated:carol@example.com');
 });
 
-test('logout clears the token, the query cache and the last-ledger preference', async () => {
+test('logout clears the token, the query cache and the last- and current-ledger preferences', async () => {
   await setAuthToken('stored-token');
   mockGet('/me', makeUser());
   await setPref(PREF_NAMES.lastLedgerId, 'ledger-42');
@@ -205,6 +207,7 @@ test('logout clears the token, the query cache and the last-ledger preference', 
 
   queryClient.setQueryData(['global', 'ledgers'], [{ id: 'ledger-42' }]);
   const clearSpy = jest.spyOn(queryClient, 'clear');
+  const sessionSpy = jest.spyOn(prefs, 'setSessionPref');
 
   await act(async () => {
     await captured!.logout();
@@ -215,6 +218,8 @@ test('logout clears the token, the query cache and the last-ledger preference', 
   expect(queryClient.getQueryData(['global', 'ledgers'])).toBeUndefined();
   expect(await AsyncStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
   expect(await AsyncStorage.getItem(prefKey(PREF_NAMES.lastLedgerId))).toBeNull();
+  // This tab's current ledger (sessionStorage on the web) is dropped too.
+  expect(sessionSpy).toHaveBeenCalledWith(PREF_NAMES.currentLedgerId, null);
 });
 
 test('a 401 on any protected request moves the session to anonymous exactly once', async () => {

@@ -1,7 +1,8 @@
 /**
  * The ledger switcher (04 §1.4, screens 01 and 13): every ledger the user belongs to, plus
  * the two ways to get another one. Picking a ledger keeps the page you are on — that is
- * `LedgerContext.switchTo` (04 §2.2), not a jump home.
+ * `LedgerContext.switchTo` (04 §2.2, decision §14.66 d): the path stays and no history entry
+ * is made, on a ledger page or off one alike, so the back button never walks ledgers.
  *
  * Two shells over one list of rows, because screen 01 draws two:
  *   wide   → `LedgerSwitcherPopover`, a small panel anchored under the sidebar's ledger
@@ -10,15 +11,15 @@
  *
  * A row is a square letter tile, the ledger's name, its base currency and member count
  * beneath, and a tick on the current one; then "create a ledger", "join a ledger" and —
- * last — the current ledger's settings (§14.65 a; outside a ledger, the one the chrome
- * names). There is no ledger-list page to point at any more: this list is that page.
+ * last — the current ledger's settings (§14.65 a, `/ledger`). There is no ledger-list page
+ * to point at any more: this list is that page.
  *
  * Every row changes page, so every row asks a form's leave guard first (§14.65 g); the
  * wide panel's ledger rows go through the sidebar's `onPick`, which asks there.
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import type { Ledger, Uuid } from '@/api/types';
@@ -29,7 +30,23 @@ import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { Avatar, Divider, Icon, type IconName, Popover, Sheet, Text } from '@/ui';
 
 import { useGuardedNavigate } from './leaveGuard';
-import { useChromeLedger } from './useChromeLedger';
+import { ledgerSwitchTarget } from './ledgerRoute';
+
+/**
+ * What picking a ledger in either switcher does: nothing for the current one; otherwise ask
+ * a dirty form first and `switchTo` it. Only a page naming one of the old ledger's records
+ * actually navigates (to its list), and the leave guard is told which case it is.
+ */
+export function usePickLedger(): (id: Uuid) => void {
+  const ledgerContext = useOptionalLedgerContext();
+  const guarded = useGuardedNavigate();
+  const pathname = usePathname();
+  return (id) => {
+    if (!ledgerContext || ledgerContext.ledgerId === id) return;
+    const navigates = ledgerSwitchTarget(pathname) !== null;
+    guarded(() => ledgerContext.switchTo(id), { navigates });
+  };
+}
 
 export interface LedgerSwitcherProps {
   open: boolean;
@@ -153,7 +170,7 @@ function SwitcherRows({
         <ActionRow
           label={t('common:nav.ledger_settings')}
           icon="settings"
-          onPress={() => onNavigate(routes.l(currentId).settings())}
+          onPress={() => onNavigate(routes.ledgerSettings())}
           testID="ledger-switcher-settings"
         />
       )}
@@ -162,16 +179,15 @@ function SwitcherRows({
 }
 
 /**
- * Narrow layouts: the shared bottom sheet. Inside a ledger, picking one keeps the page
- * (`switchTo`); outside one (`/settings`, `/ledgers*`, §14.64 b) there is no page to keep,
- * so picking a ledger opens its home.
+ * Narrow layouts: the shared bottom sheet, opened from the top bar's ledger pill. Picking a
+ * ledger keeps the page, wherever the sheet was opened (`/settings` and `/ledgers*` too).
  */
 export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const guarded = useGuardedNavigate();
   const ledgerContext = useOptionalLedgerContext();
-  const { ledgerId, ledgers } = useChromeLedger();
+  const pickLedger = usePickLedger();
 
   return (
     <Sheet
@@ -183,16 +199,11 @@ export function LedgerSwitcher({ open, onClose }: LedgerSwitcherProps): React.JS
     >
       <SwitcherRows
         scroll
-        ledgers={ledgers}
-        currentId={ledgerId}
+        ledgers={ledgerContext?.ledgers ?? []}
+        currentId={ledgerContext?.ledgerId ?? null}
         onPick={(id) => {
           onClose();
-          // The ledger already open is no page change, so nothing to ask about.
-          if (ledgerContext?.ledgerId === id) return;
-          guarded(() => {
-            if (ledgerContext) ledgerContext.switchTo(id);
-            else router.navigate(routes.l(id).home());
-          });
+          pickLedger(id);
         }}
         onNavigate={(href) => {
           onClose();
@@ -214,9 +225,8 @@ export interface LedgerSwitcherPopoverProps {
 }
 
 /**
- * Wide layouts: mockup 01's small dropdown under the ledger card. It takes its list as a
- * prop rather than reading the ledger context, because `/settings` renders the sidebar
- * outside any ledger and still shows the card (mockup 14).
+ * Wide layouts: mockup 01's small dropdown under the ledger card. The sidebar that owns it
+ * hands in the list, the current id and what a pick does (`usePickLedger`).
  */
 export function LedgerSwitcherPopover({
   open,

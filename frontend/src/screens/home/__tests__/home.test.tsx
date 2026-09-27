@@ -21,8 +21,7 @@ jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 import RootLayout from '../../../../app/_layout';
 import AppGroupLayout from '../../../../app/(app)/_layout';
-import LedgerLayout from '../../../../app/(app)/l/[ledgerId]/_layout';
-import HomeRoute from '../../../../app/(app)/l/[ledgerId]/index';
+import HomeRoute from '../../../../app/(app)/home';
 
 import type {
   FinanceSource,
@@ -36,7 +35,7 @@ import type {
 import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
 import { queryClient } from '@/queries';
-import { resetLedgerGone } from '@/navigation';
+import { resetLedgerUnavailable } from '@/navigation';
 import * as breakpoint from '@/theme/useBreakpoint';
 import {
   makeCategoryTree,
@@ -74,7 +73,6 @@ const ROUTES = {
   index: () => <RNText>landing</RNText>,
   '(app)/_layout': AppGroupLayout,
   '(app)/ledgers/index': () => <RNText>ledgers-page</RNText>,
-  '(app)/l/[ledgerId]/_layout': LedgerLayout,
   '(app)/l/[ledgerId]/index': HomeRoute,
   '(app)/l/[ledgerId]/transactions/index': () => <RNText>transactions-page</RNText>,
   '(app)/l/[ledgerId]/transactions/new': () => <RNText>new-transaction-page</RNText>,
@@ -255,7 +253,7 @@ beforeEach(async () => {
     ...defaults,
     queries: { ...defaults.queries, retry: false, gcTime: 0 },
   });
-  resetLedgerGone();
+  resetLedgerUnavailable();
   await initI18n();
   await i18next.changeLanguage('zh');
   await setPref(PREF_NAMES.lastLedgerId, null);

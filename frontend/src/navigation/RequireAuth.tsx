@@ -16,7 +16,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
 import { Skeleton } from '@/ui';
 
-/** `['l', '[ledgerId]', 'transactions']` → `{'ledgerId'}`. */
+/** `['transactions', '[txId]', 'edit']` → `{'txId'}`. */
 function dynamicParamNames(segments: readonly string[]): Set<string> {
   const names = new Set<string>();
   for (const segment of segments) {
@@ -30,12 +30,12 @@ function dynamicParamNames(segments: readonly string[]): Set<string> {
 const NON_URL_PARAMS = new Set(['screen', 'params']);
 
 /**
- * The current location as a relative URL — `/l/<id>/transactions?kind=expense`.
+ * The current location as a relative URL — `/transactions/new?kind=expense`.
  *
  * `usePathname()` already has the dynamic segments substituted, so the params that came
- * from the path (`ledgerId`, ...) are dropped here and only the query string is rebuilt.
- * Note this reads `useGlobalSearchParams()` rather than `useLocalSearchParams()`: both
- * callers sit in a *layout*, where the local bag does not carry the child route's query.
+ * from the path (`txId`, ...) are dropped here and only the query string is rebuilt.
+ * Note this reads `useGlobalSearchParams()` rather than `useLocalSearchParams()`: its
+ * caller sits in a *layout*, where the local bag does not carry the child route's query.
  */
 export function useCurrentUrl(): string {
   const pathname = usePathname();

@@ -1,37 +1,26 @@
 /**
- * The landing redirect of 04 §1.5 rule 2: `/` (and `/login` while signed in) lands on the
- * last ledger the device used, else the first ledger, else the no-ledger onboarding page.
+ * The landing redirect of 04 §1.5 rule 2 (decision §14.66 h): `/` (and `/login` while signed
+ * in) goes to `/home` when the user has a ledger, and to the onboarding page `/ledgers` when
+ * they have none.
  *
- * `/ledgers` asks the same question (decision §14.65 c: with a ledger it is not a page, only
- * a redirect), so the answer lives in one hook, `useLandingTarget`, and both use it.
- *
- * The stored `last_ledger_id` is a convenience, not state (04 §2.2): everything after this
- * redirect takes the ledger id from the URL. `useLastLedgerId` is the one module that reads
- * it — the chrome uses the same hook, for the same reason.
+ * Which ledger `/home` shows is not decided here: the address does not name one, and
+ * `CurrentLedgerProvider` picks it with `pickCurrentLedger` (this tab's, else the device's
+ * last, else the first). `/ledgers` asks the same question as `/` (§14.65 c: with a ledger it
+ * is not a page, only a redirect), so the answer lives in one hook, `useLandingTarget`, and
+ * both use it.
  */
 import React from 'react';
 import { Redirect } from 'expo-router';
 
-import type { Ledger } from '@/api/types';
 import { type RouteHref, routes } from '@/domain/routes';
 import { useLedgers } from '@/queries';
 import { useAuth } from '@/store/AuthContext';
 
 import { AppSkeleton } from './RequireAuth';
-import { useLastLedgerId } from './useLastLedgerId';
-
-/** The ledger `/` should open: the remembered one if it is still ours, else the first. */
-export function pickLandingLedger(
-  ledgers: readonly Ledger[],
-  lastLedgerId: string | null,
-): Ledger | null {
-  if (ledgers.length === 0) return null;
-  return ledgers.find((l) => l.id === lastLedgerId) ?? ledgers[0];
-}
 
 /** Where a signed-in user lands, once that is known. */
 export type LandingTarget =
-  /** The ledger list (or its re-read) or the remembered id is still on its way — never guess. */
+  /** The ledger list (or its re-read) is still on its way — never guess. */
   | { kind: 'pending' }
   /** `GET /ledgers` failed: that is not a "no ledgers" answer. */
   | { kind: 'error'; retry(): void }
@@ -44,22 +33,19 @@ export type LandingTarget =
  * `GET /ledgers`.
  *
  * A list that is being re-read is not an answer to redirect on: deleting or leaving the
- * current ledger invalidates the list and goes to `/ledgers` at once, while the cache (and
- * `last_ledger_id`) still name the ledger that is gone — trusting them would land straight
- * back in it. So a ledger destination waits for the re-read. "No ledgers" does not: showing
- * the onboarding a moment longer is harmless, and it must not flash a skeleton on every
- * background refetch.
+ * last ledger invalidates the list and goes to `/ledgers` at once, while the cache still
+ * names the ledger that is gone — trusting it would land straight back in `/home`. So a
+ * ledger destination waits for the re-read. "No ledgers" does not: showing the onboarding a
+ * moment longer is harmless, and it must not flash a skeleton on every background refetch.
  */
 export function useLandingTarget(): LandingTarget {
   const { data, isPending, isFetching, isError, refetch } = useLedgers();
-  const lastLedgerId = useLastLedgerId();
 
   if (isError) return { kind: 'error', retry: () => void refetch() };
-  if (isPending || lastLedgerId === undefined) return { kind: 'pending' };
-  const target = pickLandingLedger(data.items, lastLedgerId);
-  if (!target) return { kind: 'none' };
+  if (isPending) return { kind: 'pending' };
+  if (data.items.length === 0) return { kind: 'none' };
   if (isFetching) return { kind: 'pending' };
-  return { kind: 'ledger', href: routes.l(target.id).home() };
+  return { kind: 'ledger', href: routes.home() };
 }
 
 /** Signed-in half, split out so `GET /ledgers` is never requested while anonymous. */

@@ -19,7 +19,6 @@ jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 import RootLayout from '../../../app/_layout';
 import AppGroupLayout from '../../../app/(app)/_layout';
-import LedgerLayout from '../../../app/(app)/l/[ledgerId]/_layout';
 
 import { setAuthToken } from '@/api/client';
 import { initI18n } from '@/i18n';
@@ -32,14 +31,12 @@ import { PageHeader, toast } from '@/ui';
 import { PREF_NAMES, setPref } from '@/utils/prefs';
 
 import { useBottomTabInset } from '../AppShell';
-import { resetLedgerHistory } from '../ledgerHistory';
-import { resetLedgerGone } from '../RequireLedger';
+import { resetLedgerUnavailable } from '@/store';
 import { useTopBar } from '../TopBar';
 import { useBack } from '../useBack';
 
 const LEDGER_A = 'ledger-a';
 const LEDGER_B = 'ledger-b';
-const L = `/l/${LEDGER_A}`;
 const TYPED = '38';
 
 /** A page: its title, the wide breadcrumb the real pages draw, and the published inset. */
@@ -93,17 +90,16 @@ const ROUTES = {
   '(app)/accounts/index': page('账户'),
   '(app)/accounts/new': formPage('新建账户'),
   '(app)/accounts/[sourceId]/edit': formPage('编辑账户'),
-  '(app)/l/[ledgerId]/_layout': LedgerLayout,
-  '(app)/l/[ledgerId]/index': page('首页'),
-  '(app)/l/[ledgerId]/transactions/index': page('交易'),
-  '(app)/l/[ledgerId]/transactions/new': formPage('记一笔'),
-  '(app)/l/[ledgerId]/transactions/[txId]/index': page('交易详情'),
-  '(app)/l/[ledgerId]/transactions/[txId]/edit': formPage('编辑'),
-  '(app)/l/[ledgerId]/transfers/[pairId]/index': page('转账详情'),
-  '(app)/l/[ledgerId]/transfers/[pairId]/edit': formPage('编辑转账'),
-  '(app)/l/[ledgerId]/imports/index': page('导入'),
+  '(app)/home': page('首页'),
+  '(app)/transactions/index': page('交易'),
+  '(app)/transactions/new': formPage('记一笔'),
+  '(app)/transactions/[txId]/index': page('交易详情'),
+  '(app)/transactions/[txId]/edit': formPage('编辑'),
+  '(app)/transfers/[pairId]/index': page('转账详情'),
+  '(app)/transfers/[pairId]/edit': formPage('编辑转账'),
+  '(app)/imports/index': page('导入'),
   // Not a form route, but a page that can hold unsaved changes and keeps the tab bar.
-  '(app)/l/[ledgerId]/settings': formPage('账本设置'),
+  '(app)/ledger': formPage('账本设置'),
 };
 
 type Router = ReturnType<typeof renderRouter>;
@@ -118,8 +114,7 @@ function setWide(wide: boolean): void {
 beforeEach(async () => {
   api = mockApi();
   queryClient.clear();
-  resetLedgerGone();
-  resetLedgerHistory();
+  resetLedgerUnavailable();
   await initI18n();
   await i18next.changeLanguage('zh');
   await setPref(PREF_NAMES.lastLedgerId, LEDGER_A);
@@ -185,9 +180,9 @@ describe('narrow (<1024)', () => {
   beforeEach(() => setWide(false));
 
   test.each([
-    ['记一笔', `${L}/transactions/new?kind=income`],
-    ['编辑', `${L}/transactions/tx-1/edit`],
-    ['编辑转账', `${L}/transfers/pair-1/edit`],
+    ['记一笔', '/transactions/new?kind=income'],
+    ['编辑', '/transactions/tx-1/edit'],
+    ['编辑转账', '/transfers/pair-1/edit'],
     ['新建账户', '/accounts/new'],
     ['编辑账户', '/accounts/src-1/edit'],
   ])('%s: the ‹ bar but no tab bar, and no inset for it (§14.65 f)', async (title, url) => {
@@ -200,24 +195,24 @@ describe('narrow (<1024)', () => {
   });
 
   test('a detail page keeps its tab bar', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `${L}/transactions/tx-1` });
+    const router = renderRouter(ROUTES, { initialUrl: '/transactions/tx-1' });
 
     expect(await router.findByTestId('bottom-tab-bar')).toBeTruthy();
     await waitFor(() => expect(router.getByTestId('probe-inset')).not.toHaveTextContent('0'));
   });
 
   test('a dirty 记一笔: the top bar’s ‹ asks', async () => {
-    const router = await openDirty(`${L}/transactions/new`);
+    const router = await openDirty('/transactions/new');
 
     await expectGuardedExit(
       router,
       async () => fireEvent.press(router.getByTestId('top-bar-back')),
-      exact(`${L}/transactions`),
+      exact('/transactions'),
     );
   });
 
   test('a dirty page: 「我的」 → 个人设置 asks', async () => {
-    const router = await openDirty(`${L}/settings`);
+    const router = await openDirty('/ledger');
 
     await expectGuardedExit(
       router,
@@ -230,17 +225,17 @@ describe('narrow (<1024)', () => {
   });
 
   test('a dirty page: a tab asks', async () => {
-    const router = await openDirty(`${L}/settings`);
+    const router = await openDirty('/ledger');
 
     await expectGuardedExit(
       router,
       async () => fireEvent.press(router.getByTestId('tab-transactions')),
-      exact(`${L}/transactions`),
+      exact('/transactions'),
     );
   });
 
   test('a dirty page: a kind from the long-pressed ＋ asks', async () => {
-    const router = await openDirty(`${L}/settings`);
+    const router = await openDirty('/ledger');
 
     await expectGuardedExit(
       router,
@@ -248,16 +243,16 @@ describe('narrow (<1024)', () => {
         fireEvent(router.getByTestId('tab-add'), 'longPress');
         fireEvent.press(await router.findByTestId('kind-sheet-income'));
       },
-      exact(`${L}/transactions/new`),
+      exact('/transactions/new'),
     );
     expect(router.getSearchParams().kind).toBe('income');
   });
 
   test('a clean form leaves at once, without a question', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `${L}/transactions/new` });
+    const router = renderRouter(ROUTES, { initialUrl: '/transactions/new' });
 
     fireEvent.press(await router.findByTestId('top-bar-back'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/transactions`));
+    await waitFor(() => expect(router.getPathname()).toBe('/transactions'));
     expect(router.queryByTestId('confirm-dialog')).toBeNull();
   });
 });
@@ -266,34 +261,66 @@ describe('wide (>=1024)', () => {
   beforeEach(() => setWide(true));
 
   test('the column is untouched on a form page', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `${L}/transactions/new` });
+    const router = renderRouter(ROUTES, { initialUrl: '/transactions/new' });
 
     expect(await router.findByTestId('sidebar')).toBeTruthy();
     expect(router.getByTestId('sidebar-add')).toBeTruthy();
   });
 
   test('a dirty 记一笔: the sidebar’s 首页 asks', async () => {
-    const router = await openDirty(`${L}/transactions/new`);
+    const router = await openDirty('/transactions/new');
 
     await expectGuardedExit(
       router,
       async () => fireEvent.press(router.getByTestId('sidebar-home')),
-      exact(L),
+      exact('/home'),
     );
   });
 
   test('a dirty 记一笔: the ledger card’s arrow asks', async () => {
-    const router = await openDirty(`${L}/transactions/new`);
+    const router = await openDirty('/transactions/new');
 
     await expectGuardedExit(
       router,
       async () => fireEvent.press(await router.findByTestId('sidebar-ledger-settings')),
-      exact(`${L}/settings`),
+      exact('/ledger'),
     );
   });
 
-  test('a dirty 记一笔: picking another ledger in the switcher asks', async () => {
-    const router = await openDirty(`${L}/transactions/new`);
+  test('a dirty 记一笔: picking another ledger asks, and the page stays (§14.66 d)', async () => {
+    const router = await openDirty('/transactions/new');
+    const pick = async (): Promise<void> => {
+      fireEvent.press(await router.findByTestId('sidebar-ledger'));
+      fireEvent.press(await router.findByTestId(`ledger-switcher-row-${LEDGER_B}`));
+    };
+
+    // "Stay": same ledger, same page, what was typed is still there.
+    await pick();
+    expect(await router.findByTestId('confirm-dialog')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(router.getByTestId('confirm-cancel'));
+    });
+    await waitFor(() => expect(router.queryByTestId('confirm-dialog')).toBeNull());
+    expect(router.getByTestId('sidebar-ledger')).toHaveTextContent(/家庭账本/);
+    expect(router.getByTestId('probe-input').props.value).toBe(TYPED);
+
+    // "Leave": the ledger changes, the path does not — a switch is no page change.
+    await pick();
+    await act(async () => {
+      fireEvent.press(await router.findByTestId('confirm-accept'));
+    });
+    await waitFor(() => expect(router.getByTestId('sidebar-ledger')).toHaveTextContent(/旅行账本/));
+    expect(router.getPathname()).toBe('/transactions/new');
+    expect(router.queryByTestId('confirm-dialog')).toBeNull();
+
+    // No free pass is left behind by the switch: the next real exit still asks.
+    fireEvent.press(router.getByTestId('sidebar-home'));
+    expect(await router.findByTestId('confirm-dialog')).toBeTruthy();
+    expect(router.getPathname()).toBe('/transactions/new');
+  });
+
+  test('a dirty edit: picking another ledger asks once, then leaves for the list', async () => {
+    const router = await openDirty('/transactions/tx-1/edit');
 
     await expectGuardedExit(
       router,
@@ -301,12 +328,13 @@ describe('wide (>=1024)', () => {
         fireEvent.press(await router.findByTestId('sidebar-ledger'));
         fireEvent.press(await router.findByTestId(`ledger-switcher-row-${LEDGER_B}`));
       },
-      new RegExp(`^/l/${LEDGER_B}`),
+      exact('/transactions'),
     );
+    expect(router.getByTestId('sidebar-ledger')).toHaveTextContent(/旅行账本/);
   });
 
   test('a dirty 记一笔: the switcher’s 新建账本 asks', async () => {
-    const router = await openDirty(`${L}/transactions/new`);
+    const router = await openDirty('/transactions/new');
 
     await expectGuardedExit(
       router,
@@ -319,15 +347,15 @@ describe('wide (>=1024)', () => {
   });
 
   test('a dirty edit: 「＋ 记一笔」 and the member row ask', async () => {
-    let router = await openDirty(`${L}/transactions/tx-1/edit`);
+    let router = await openDirty('/transactions/tx-1/edit');
     await expectGuardedExit(
       router,
       async () => fireEvent.press(router.getByTestId('sidebar-add')),
-      exact(`${L}/transactions/new`),
+      exact('/transactions/new'),
     );
     router.unmount();
 
-    router = await openDirty(`${L}/transactions/tx-1/edit`);
+    router = await openDirty('/transactions/tx-1/edit');
     await expectGuardedExit(
       router,
       async () => fireEvent.press(router.getByTestId('sidebar-user')),
@@ -336,20 +364,20 @@ describe('wide (>=1024)', () => {
   });
 
   test('a dirty 记一笔: the breadcrumb asks once', async () => {
-    const router = await openDirty(`${L}/transactions/new`);
+    const router = await openDirty('/transactions/new');
 
     await expectGuardedExit(
       router,
       async () => fireEvent.press(router.getByTestId('page-header-back')),
-      exact(`${L}/transactions`),
+      exact('/transactions'),
     );
   });
 
   test('a clean page changes page at once', async () => {
-    const router = renderRouter(ROUTES, { initialUrl: `${L}/transactions/new` });
+    const router = renderRouter(ROUTES, { initialUrl: '/transactions/new' });
 
     fireEvent.press(await router.findByTestId('sidebar-imports'));
-    await waitFor(() => expect(router.getPathname()).toBe(`${L}/imports`));
+    await waitFor(() => expect(router.getPathname()).toBe('/imports'));
     expect(router.queryByTestId('confirm-dialog')).toBeNull();
   });
 });

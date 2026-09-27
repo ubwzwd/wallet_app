@@ -13,7 +13,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useBack, useChromeLedger, useHasNoLedgers, useShellDrawsTopBar } from '@/navigation';
+import { useBack, useHasNoLedgers, useShellDrawsTopBar } from '@/navigation';
 import { useIsWide } from '@/theme/useBreakpoint';
 import { PageHeader } from '@/ui';
 
@@ -31,13 +31,8 @@ export function LedgerPageHead({ title, testID }: LedgerPageHeadProps): React.JS
   const back = useBack();
   const shellBar = useShellDrawsTopBar();
   const noLedgers = useHasNoLedgers();
-  // On a cold open the ledger the button returns to is a round trip away. Its parent is
-  // always 首页, so the crumb row is drawn from the first frame rather than popping in and
-  // pushing the title down; until the target is known the button has nowhere to go.
-  const chromePending = useChromeLedger().pending;
-
   if (wide && !noLedgers) {
-    const showCrumb = back.show || chromePending;
+    const showCrumb = back.show;
     const parent = back.show ? back.parentLabel : t('common:nav.home');
     return (
       <PageHeader

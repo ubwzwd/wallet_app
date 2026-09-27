@@ -1,4 +1,7 @@
 {
+  "unavailable": {
+    "switched": "That ledger is no longer available — switched to {{name}}"
+  },
   "list": {
     "card": {
       "role_owner": "Owner",

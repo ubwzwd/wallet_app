@@ -8,9 +8,9 @@
  * top-level reports or members page; §14.62 — accounts belong to the user). Switching ledger is the top bar's ledger pill, and only that
  * (§14.65 b).
  *
- * Decision §14.64 b: the bar is on every page of the shell, not only inside a ledger. Outside
- * one it aims at the ledger the chrome names (`useChromeLedger`); 「我的」 is lit on
- * `/settings`, and nothing is lit on `/accounts` or `/ledgers*`, which none of the five
+ * Decision §14.64 b: the bar is on every page of the shell, not only on the ledger pages. Its
+ * slots are ledger-free paths (§14.66 a) that show the tab's current ledger; 「我的」 is lit
+ * on `/settings`, and nothing is lit on `/accounts` or `/ledgers*`, which none of the five
  * slots leads to.
  *
  * Every slot, sheet row and kind that changes page asks a form's leave guard first
@@ -29,11 +29,11 @@ import { type RouteHref, routes } from '@/domain/routes';
 import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { useAuth } from '@/store/AuthContext';
+import { useOptionalLedgerContext } from '@/store/LedgerContext';
 import { Icon, type IconName, KIND_ICON, Sheet, Text } from '@/ui';
 
 import { isActivePath } from './isActivePath';
 import { useGuardedNavigate } from './leaveGuard';
-import { useChromeLedger } from './useChromeLedger';
 
 /**
  * Screen 01 at 375: 8 above, a 49 tall slot, 14 below.
@@ -86,8 +86,8 @@ function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.J
   const router = useRouter();
   const guarded = useGuardedNavigate();
   const { logout } = useAuth();
-  // Outside a ledger this is the ledger the chrome names — the one the other tabs open.
-  const { ledgerId } = useChromeLedger();
+  // 账本设置 is the current ledger's, so there is no such row for a user with none.
+  const hasLedger = useOptionalLedgerContext() !== null;
   const colors = useColors();
 
   const rows: { key: string; label: string; icon: IconName; run(): void }[] = [
@@ -97,16 +97,16 @@ function MeSheet({ open, onClose }: { open: boolean; onClose(): void }): React.J
       icon: 'user',
       run: () => router.navigate(routes.settings()),
     },
-    ...(ledgerId === null
-      ? []
-      : [
+    ...(hasLedger
+      ? [
           {
             key: 'ledger-settings',
             label: t('common:nav.ledger_settings'),
             icon: 'users' as const,
-            run: () => router.navigate(routes.l(ledgerId).settings()),
+            run: () => router.navigate(routes.ledgerSettings()),
           },
-        ]),
+        ]
+      : []),
     // My accounts are not scoped to a ledger, so the row is there inside a ledger or not.
     {
       key: 'accounts',
@@ -196,23 +196,22 @@ export function BottomTabBar(): React.JSX.Element {
   const router = useRouter();
   const guarded = useGuardedNavigate();
   const pathname = usePathname();
-  const { ledgerId } = useChromeLedger();
+  const hasLedger = useOptionalLedgerContext() !== null;
   const bottom = React.useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
   const [meOpen, setMeOpen] = React.useState(false);
   const [kindOpen, setKindOpen] = React.useState(false);
 
-  // `null` only while a cold page outside a ledger is still learning which ledger to name;
-  // like the sidebar, the slots lead to `/ledgers` until then, which lands on a ledger.
-  const l = ledgerId === null ? null : routes.l(ledgerId);
-  const scoped = (href: RouteHref | undefined): RouteHref => href ?? routes.ledgers();
+  // The shell draws no tab bar for a user with no ledger; should one be drawn anyway, the
+  // ledger pages would only bounce to the onboarding page, so the slots go there directly.
+  const scoped = (href: RouteHref): RouteHref => (hasLedger ? href : routes.ledgers());
   const left: TabSpec[] = [
-    { key: 'home', label: t('common:nav.home'), icon: 'home', href: scoped(l?.home()), exact: true },
+    { key: 'home', label: t('common:nav.home'), icon: 'home', href: scoped(routes.home()), exact: true },
     {
       key: 'transactions',
       label: t('common:nav.transactions'),
       icon: 'list',
-      href: scoped(l?.transactions()),
+      href: scoped(routes.transactions()),
       exact: false,
     },
   ];
@@ -221,7 +220,7 @@ export function BottomTabBar(): React.JSX.Element {
       key: 'imports',
       label: t('common:nav.imports'),
       icon: 'upload',
-      href: scoped(l?.imports()),
+      href: scoped(routes.imports()),
       exact: false,
     },
   ];
@@ -231,7 +230,7 @@ export function BottomTabBar(): React.JSX.Element {
     !onLedgerPages && isActivePath(pathname, spec.href, spec.exact);
 
   const openAdd = (kind: TxKind): void =>
-    guarded(() => router.navigate(l ? l.transactionNew({ kind }) : routes.ledgers()));
+    guarded(() => router.navigate(scoped(routes.transactionNew({ kind }))));
 
   return (
     <>

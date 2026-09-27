@@ -3,8 +3,8 @@
  *
  *   top-level page → `TopBarSurface`: the ledger as a tappable pill on the left, the
  *                    signed-in member as a round disc on the right, the page title beneath
- *                    (screen 01 at 375). Outside a ledger (`/settings`) the pill names the
- *                    ledger the chrome aims at (`useChromeLedger`).
+ *                    (screen 01 at 375). The pill names the tab's current ledger on every
+ *                    page, `/settings` included (§14.66 b).
  *   sub-page       → `SubPageTopBar`: a round ‹ on the left, the page title centred, and a
  *                    spacer of the button's width on the right (screens 07 / 08 / 09 / 12 /
  *                    13 at 375).
@@ -27,11 +27,11 @@ import { density, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 import { Avatar, BACK_BUTTON_SIZE, BackButton, Icon, Text } from '@/ui';
 import { useAuth } from '@/store/AuthContext';
+import { useOptionalLedgerContext } from '@/store/LedgerContext';
 
 import { useGuardedNavigate, useRunBackOverride } from './leaveGuard';
 import { userLabel } from './Sidebar';
 import { useBack } from './useBack';
-import { useChromeLedger } from './useChromeLedger';
 
 interface TopBarState {
   title: string | null;
@@ -67,10 +67,10 @@ export function useTopBarTitle(): string | null {
 }
 
 /**
- * Whether the calling page is the navigator's current screen. Today every navigator under
- * `(app)` is a `Slot` that renders only its focused route, so this is defensive: a stacked
- * navigator added later must not let a covered page own the top bar. Outside any navigator
- * (unit tests) a page is always current.
+ * Whether the calling page is the navigator's current screen. Every signed-in page is a
+ * direct child of the one `(app)` `Slot`, which renders only its focused route (§14.66 g),
+ * so this is defensive: a stacked navigator added later must not let a covered page own the
+ * top bar. Outside any navigator (unit tests) a page is always current.
  */
 function useScreenFocused(): boolean {
   const navigation = React.useContext(NavigationContext);
@@ -142,7 +142,7 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
   const router = useRouter();
   const guarded = useGuardedNavigate();
   const title = useTopBarTitle();
-  const { ledger } = useChromeLedger();
+  const ledger = useOptionalLedgerContext()?.ledger;
   const { user } = useAuth();
   const top = useTopInset();
   const me = userLabel(user);
@@ -163,7 +163,6 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
             { backgroundColor: pressed ? colors['bg.hover'] : colors['bg.raised'] },
           ]}
         >
-          {/* Empty only for the frame or two a cold `/settings` spends learning the ledger. */}
           <Text weight={700} style={styles.pillLabel} numberOfLines={1}>
             {ledger?.name ?? ''}
           </Text>
@@ -194,9 +193,8 @@ export function TopBarSurface({ onPressLedger }: TopBarSurfaceProps): React.JSX.
  * The sub-page form: round ‹, centred title, and a spacer as wide as the button so the
  * title lands dead centre. The button goes where `useBack` says — unless the page has a
  * way out of its own (`useBackOverride`: a form's `?next=`, §14.65 h), in which case it
- * leaves exactly as the page's wide breadcrumb does. On `/ledgers/new` or `/ledgers/join`
- * while the ledger it would return to is still loading, the slot is held empty rather than
- * letting the bar change shape a frame later.
+ * leaves exactly as the page's wide breadcrumb does. A page the shell draws as a sub-page
+ * but that has nowhere to go back to (the onboarding's own pages) keeps the slot, empty.
  */
 export function SubPageTopBar(): React.JSX.Element {
   const colors = useColors();

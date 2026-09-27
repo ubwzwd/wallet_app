@@ -1,9 +1,9 @@
 /**
- * The card at the top of the wide sidebar (mockups 01 / 14 at 1440), and the empty slot it
- * holds while the ledger it names is still loading.
+ * The card at the top of the wide sidebar (mockups 01 / 14 at 1440).
  *
- * It is the same card on every page (§14.64 c) — inside a ledger, on `/settings` and on
- * `/ledgers*`: the body opens the switcher, the chevron goes to that ledger's own settings.
+ * It is the same card on every page (§14.64 c) — the ledger pages, `/settings`, `/accounts*`
+ * and `/ledgers*`: it names the tab's current ledger, the body opens the switcher, the
+ * chevron goes to that ledger's settings (`/ledger`).
  *
  * Split out of `Sidebar.tsx` to keep both files inside the project's 400-line rule.
  */
@@ -89,15 +89,6 @@ export function LedgerCard({
       </Pressable>
     </View>
   );
-}
-
-/**
- * The card's slot, held empty while it is not yet known which ledger belongs there (the
- * remembered id and the ledger list both arrive a frame or two late). Holding it is what
- * keeps the chrome from changing identity mid-load.
- */
-export function LedgerCardPlaceholder(): React.JSX.Element {
-  return <View testID="sidebar-ledger-pending" style={styles.card} />;
 }
 
 const styles = StyleSheet.create({

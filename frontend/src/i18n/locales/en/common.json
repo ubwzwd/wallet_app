@@ -47,12 +47,6 @@
     "body": "The address you visited doesn't exist, or it's been moved.",
     "action": "Back to home"
   },
-  "ledger_unavailable": {
-    "title": "This ledger doesn't exist, or you're not a member of it",
-    "body": "It may have been deleted, or you may have been removed from it.",
-    "switch_last": "Switch to {{name}}",
-    "back_home": "Back to home"
-  },
   "toast": {
     "show_detail": "Show details"
   },
