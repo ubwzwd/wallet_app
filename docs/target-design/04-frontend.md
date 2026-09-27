@@ -2226,6 +2226,7 @@ formatDateTimeShort(iso)             // '09-08 07:12'（操作记录）
 |---|---|
 | `web` | `expo start --web` |
 | `build:web` | `EXPO_PUBLIC_API_BASE_URL=/api/v1 expo export -p web && npx workbox generateSW workbox-config.cjs` |
+| 本机联调（含同一 Wi-Fi 的手机） | `EXPO_PUBLIC_API_BASE_URL=http://{host}:8000/api/v1 expo start --web`：`{host}` 在运行时换成页面自己的主机名（`src/constants/config.ts` 的 `resolveApiBaseUrl`），电脑上是 `localhost`、手机上是电脑的局域网 IP，一个包两边都能连；后端要 `--host 0.0.0.0` 并把 `http://<局域网 IP>:8081` 加进 `ALLOWED_ORIGINS`（2026-09-27 补） |
 | `test` | `jest` |
 | `typecheck` | `tsc --noEmit` |
 | `lint` | `eslint . --max-warnings 0`（本阶段未配置 eslint，见 PROGRESS；同步 2026-09-12） |
