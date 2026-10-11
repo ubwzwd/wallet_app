@@ -7,9 +7,12 @@
 # The db and caddy containers keep running; only api is stopped, so nothing writes while the
 # database is being replaced.
 #
-# The dump contains the alembic_version table, so after a restore the schema is at the revision
-# the dump was taken at. If the code was updated since then, run the migration again:
-#     docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml run --rm migrate
+# The dump contains the alembic_version table, so right after pg_restore the schema is at the
+# revision the dump was taken at. `compose start api` also starts api's dependencies, which
+# includes the one-shot migrate service (`alembic upgrade head`), so a dump older than the code
+# is upgraded automatically before the api comes back. A dump NEWER than the deployed code
+# (a revision this code does not know) makes migrate fail; the api then stays stopped and the
+# script says so: deploy the matching code first, or restore an older dump.
 #
 # Env (same contract as deploy.sh / backup.sh):
 #   WALLET_REMOTE_DIR (default /opt/wallet_app), WALLET_COMPOSE_PROJECT (default wallet),
@@ -123,8 +126,14 @@ if ! REV="$(compose exec -T db psql -U "$PGUSER_NAME" -d "$PGDB_NAME" -tA -c 'SE
 fi
 echo "restore.sh: restored schema revision: ${REV:-<none>}"
 
-echo "restore.sh: starting api ..."
-compose start api
+echo "restore.sh: starting api (this re-runs the migrate service first) ..."
+if ! compose start api; then
+  compose logs --no-color --tail=30 migrate >&2 || true
+  err "the api could not be started. If migrate failed above, the dump's revision (${REV:-<none>}) is not"
+  err "known to the deployed code: deploy the code the dump was taken with, or restore an older dump."
+  err "the api was left STOPPED"
+  exit 1
+fi
 
 # Probe /health from inside the api container (nothing is published on the host).
 healthy=0
@@ -140,4 +149,5 @@ if [ "$healthy" -ne 1 ]; then
   exit 1
 fi
 
-echo "restore.sh: done. If the code is newer than this dump, run the migrate service once (see the header of this script)."
+NOW_REV="$(compose exec -T db psql -U "$PGUSER_NAME" -d "$PGDB_NAME" -tA -c 'SELECT version_num FROM alembic_version' 2>/dev/null | tr -d '\r' || true)"
+echo "restore.sh: done (schema revision now: ${NOW_REV:-<unknown>})."
