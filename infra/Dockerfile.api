@@ -1,80 +1,59 @@
 # syntax=docker/dockerfile:1.6
 #
-# Production backend image for Wallet App (Phase 4, plan 04-01).
+# Production backend image for Wallet App.
 #
-# Strategy B (locked by 04-CONTEXT.md D-07/D-08, 04-RESEARCH.md):
-#   builder stage uses Poetry only to EXPORT a hash-free requirements file
-#   from poetry.lock, then uv installs the resolved deps into the system
-#   site-packages. Runtime stage carries only the resolved deps + app code,
-#   no Poetry, no uv, no pip cache, no .env.
+# Build context is the REPO ROOT (infra/docker-compose.prod.yml uses
+# `context: ..` + `dockerfile: infra/Dockerfile.api`), so every COPY path below
+# is relative to the repo root:
+#   docker build -f infra/Dockerfile.api -t wallet-app/api:local .
+# The image carries skills/ next to backend/ because GET /api/v1/import-format
+# reads skills/wallet-import from disk (app/api/import_format.py probes
+# `<backend dir>/skills/wallet-import`); without it the import guide is blank.
+# The repo-root .dockerignore keeps frontend/, docs/, infra/, tests etc. out
+# of the context.
 #
-# Target platform is Oracle A1.Flex (Ampere ARM64) — D-09, OPS-04.
-# Platform is NOT pinned in this Dockerfile; pass --platform at build time:
-#   docker build --platform linux/arm64 ...   (CI / Oracle VM deploy)
-#   docker build ...                          (local dev, uses host arch)
+# Dependencies come from backend/requirements.txt, which pins the exact
+# versions the backend test suite runs against. All of them ship cp312 wheels
+# for amd64 and aarch64 (psycopg2-binary bundles libpq), so the builder needs
+# no compiler and the same Dockerfile builds natively on Oracle A1.Flex (ARM64)
+# and on an amd64 laptop. The platform is deliberately not pinned here.
 #
-# Build context is the REPO ROOT (set by infra/docker-compose.prod.yml:
-# `context: ..` + `dockerfile: infra/Dockerfile.api`). All COPY paths below are
-# therefore relative to the repo root, not to `backend/`.
-# It used to be `backend/`, but the image must also carry the import-skill
-# deliverables in `skills/wallet-import/` — GET /import-format reads them from
-# disk (05 §5.5) and they are the import-guide page's only data source (04
-# §4.10 step 0), so with a `backend/`-only context that page rendered blank in
-# production. Repo-root noise (frontend/, docs/, tooling state) is held out of
-# the context by the repo-root `.dockerignore`.
+# uvicorn runs with --proxy-headers --forwarded-allow-ips=* (decision 14.44):
+# rate limiting counts per first X-Forwarded-For hop, and without these flags
+# every client would look like the Caddy container and 10 failed logins would
+# lock out everybody. `*` is safe because api:8000 is never published; only
+# Caddy can reach it.
+#
+# Do NOT add --workers or run a second api replica: the rate limiter is an
+# in-process token bucket, so a single uvicorn process is a design premise
+# (03 section 8.1). The backend keeps no state on disk, so no volume either.
 
 # ---------------------------------------------------------------------------
-# Builder stage: resolve deps with Poetry-export + uv, install into /usr/local
+# Builder: install pinned dependencies into /install
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && rm -rf /var/lib/apt/lists/*
-
-# uv binary lifted from the official astral-sh image (no pip install needed).
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# Poetry only used to export the lock; never installed into the runtime image.
-# NB: poetry-plugin-export>=1.8 (locked by plan) requires Poetry>=1.8 — the
-# plan's `poetry==1.7.1` pin was internally inconsistent (plugin-export 1.8+
-# depends on poetry>=1.8). Using poetry==1.8.5 (newest 1.x) is the minimum-
-# drift fix that preserves the plugin pin and the `poetry export` invocation.
-RUN pip install --no-cache-dir poetry==1.8.5 "poetry-plugin-export>=1.8"
-
-WORKDIR /app
-
-COPY backend/pyproject.toml backend/poetry.lock ./
-
-RUN poetry export -f requirements.txt --without-hashes --only main -o /tmp/requirements.txt
-RUN uv pip install --system --no-cache -r /tmp/requirements.txt
-
-# Strip the Poetry binary + its site-packages from the builder image so they
-# do NOT travel to the runtime stage via COPY --from=builder /usr/local/bin
-# (T-04-01 / must_have: "Image contains NO Poetry / pip dev tooling"). The
-# resolved app deps already live in /usr/local/lib/python3.11/site-packages
-# from `uv pip install --system` above and are unaffected.
-RUN pip uninstall -y poetry poetry-plugin-export poetry-core || true \
-    && rm -f /usr/local/bin/poetry /usr/local/bin/poetry-* /bin/uv /bin/uvx
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt
 
 # ---------------------------------------------------------------------------
-# Runtime stage: python:3.11-slim + libpq5 + non-root user + app code
+# Runtime: slim Python + dependencies + app code, non-root
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends libpq5 && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Non-root runtime user (Pitfall 7 ordering: useradd -> WORKDIR -> COPY --from=builder
-# -> COPY --chown=appuser:appuser -> USER appuser). Do NOT flip USER before the
-# final COPY: that produces a partial-ownership mix bug.
+# Order matters: useradd -> WORKDIR -> COPY --from=builder -> COPY --chown ->
+# USER. Flipping USER before the final COPY leaves a mix of owners.
 RUN useradd -m -u 1000 appuser
 
 WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /install /usr/local
 
-# App code lands at /app (so modules stay importable as `app.main`), and the
-# skill deliverables at /app/skills/wallet-import — the path
-# app/api/import_format.py probes as `<backend dir>/skills/wallet-import`.
+# App code lands at /app so modules stay importable as `app.main`; skills land
+# at /app/skills/wallet-import.
 COPY --chown=appuser:appuser backend/ .
 COPY --chown=appuser:appuser skills/ ./skills/
 
@@ -82,8 +61,7 @@ USER appuser
 
 EXPOSE 8000
 
-# Healthcheck uses stdlib urllib so we do NOT carry the `requests` package into
-# the runtime image purely for liveness probing (T-04-04 mitigation).
+# Liveness probe via stdlib urllib, so no extra package is needed in the image.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
