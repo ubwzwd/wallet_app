@@ -37,6 +37,10 @@ Env: WALLET_VM_USER (default ubuntu), WALLET_REMOTE_DIR (default /opt/wallet_app
 USAGE
 }
 
+# sudo's env_reset drops DEBIAN_FRONTEND, so pass it (and needrestart's non-interactive mode)
+# on the sudo command line for every apt-get call.
+apt_get() { sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get "$@"; }
+
 log() { printf '==> %s\n' "$*"; }
 
 # Insert one ACCEPT rule at INPUT position $1 unless an identical rule already exists.
@@ -54,11 +58,11 @@ ensure_iptables_rule() {
 
 step_packages() {
   log "apt update + dist-upgrade"
-  sudo apt-get update
-  sudo apt-get -y \
+  apt_get update
+  apt_get -y \
     -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
     dist-upgrade
-  sudo apt-get -y install ca-certificates curl gnupg rsync unattended-upgrades
+  apt_get -y install ca-certificates curl gnupg rsync unattended-upgrades
 }
 
 step_docker() {
@@ -72,8 +76,8 @@ step_docker() {
     # Rewritten with identical content on every run, so re-runs are harmless.
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
       | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-    sudo apt-get update
-    sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    apt_get update
+    apt_get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
   # usermod -aG is a no-op when the user is already in the group.
   sudo usermod -aG docker "$APP_USER"
@@ -96,7 +100,7 @@ step_firewall() {
   fi
   log "opening tcp 80, tcp 443, udp 443 in the host firewall"
   if ! command -v netfilter-persistent >/dev/null 2>&1; then
-    sudo apt-get -y install netfilter-persistent iptables-persistent
+    apt_get -y install netfilter-persistent iptables-persistent
   fi
 
   # Position of the existing "--dport 22 ... ACCEPT" rule among the INPUT rules (the -P line
@@ -117,8 +121,11 @@ step_firewall() {
   ensure_iptables_rule "$pos"       -p tcp -m state --state NEW -m tcp --dport 80  -j ACCEPT
   ensure_iptables_rule $((pos + 1)) -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
   ensure_iptables_rule $((pos + 2)) -p udp -m state --state NEW -m udp --dport 443 -j ACCEPT
-  # Always save: harmless when nothing changed, and it repairs a rules.v4 that lags the live rules.
-  sudo netfilter-persistent save
+  # Save only when this run changed something; step_firewall runs before Docker is installed
+  # so the first save does not capture Docker's own chains.
+  if [ "$RULES_CHANGED" -eq 1 ]; then
+    sudo netfilter-persistent save
+  fi
   log "host firewall done (rules changed this run: ${RULES_CHANGED})"
 }
 
@@ -160,9 +167,9 @@ main() {
   sudo -n true 2>/dev/null || { echo "passwordless sudo is required" >&2; exit 1; }
 
   step_packages
+  step_firewall
   step_docker
   step_unattended_upgrades
-  step_firewall
   step_dirs
   step_summary
 }

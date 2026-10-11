@@ -39,6 +39,9 @@ Environment:
   WALLET_REMOTE_DIR       repo directory on the VM           (default: /opt/wallet_app)
   WALLET_COMPOSE_PROJECT  compose project name               (default: wallet)
 
+The final public /health check is advisory: if it fails (e.g. the certificate is still being
+issued on a first deploy) the script prints a warning and still exits 0, because the stack is up.
+
 The VM needs ${REMOTE_DIR}/infra/.env before the stack can start; see infra/RUNBOOK.md.
 USAGE
 }
@@ -141,8 +144,10 @@ rsync "${RSYNC_OPTS[@]}" "${COMMON_EXCLUDES[@]}" --exclude=/.env --exclude='/.en
 rsync "${RSYNC_OPTS[@]}" "${COMMON_EXCLUDES[@]}" \
   skills/ "$HOST:$REMOTE_DIR/skills/"
 # infra/: --exclude=/.env keeps the VM's real .env out of both the transfer and --delete
-# (rsync never deletes excluded files on the receiver); .env.example IS pushed.
+# (rsync never deletes excluded files on the receiver); /.env.* (backups, local copies) is
+# excluded too, but the include before it lets .env.example through (first match wins).
 rsync "${RSYNC_OPTS[@]}" "${COMMON_EXCLUDES[@]}" --exclude=/.env \
+  --include=/.env.example --exclude='/.env.*' \
   infra/ "$HOST:$REMOTE_DIR/infra/"
 rsync "${RSYNC_OPTS[@]}" \
   frontend/dist/ "$HOST:$REMOTE_DIR/frontend/dist/"
@@ -233,8 +238,8 @@ if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
     echo
   else
     warn "https://${DOMAIN}/health did not answer. First certificate issuance can take a minute;
-         also check DNS for ${DOMAIN}, the OCI Security List (80/443) and: on the VM run 'docker ps' and 'docker logs --tail=50 <the caddy container>' (see infra/RUNBOOK.md)"
-    exit 1
+         also check DNS for ${DOMAIN}, the OCI Security List (80/443) and: on the VM run 'docker ps' and 'docker logs --tail=50 <the caddy container>' (see infra/RUNBOOK.md).
+         The stack itself is up (compose --wait passed); only the public check failed, so this is not a deploy failure."
   fi
 else
   log "CADDY_DOMAIN is '${DOMAIN:-unset}'; skipping the public health check"
