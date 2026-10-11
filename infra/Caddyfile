@@ -1,33 +1,55 @@
+# infra/Caddyfile - TLS termination, API reverse proxy and SPA hosting.
+#
+# Both variables are always set by docker-compose.prod.yml, which owns the defaults
+# (CADDY_DOMAIN -> localhost, CADDY_ACME_CA -> Let's Encrypt production). The defaults
+# are NOT written here because Caddy's {$VAR:default} only applies when VAR is unset,
+# not when it is set to an empty string; compose's ${VAR:-default} covers both.
+#
+# TLS needs no directive: Caddy uses its internal CA for localhost / IP sites and
+# ACME for real domains. To test a new domain without burning Let's Encrypt rate
+# limits, set CADDY_ACME_CA in infra/.env to the staging directory
+#   https://acme-staging-v02.api.letsencrypt.org/directory
+# and recreate caddy; remove the line (and clear the caddy_data volume, which holds
+# the untrusted staging certificate) to switch to the production CA.
 {
-    acme_ca {$CADDY_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	acme_ca {$CADDY_ACME_CA}
 }
 
-{$CADDY_DOMAIN:localhost} {
-    tls {$CADDY_TLS_MODE:internal}
+{$CADDY_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
 
-    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# API and health probe go to the single uvicorn process. The interactive API docs
+	# and the OpenAPI schema are deliberately not proxied (smaller surface); they fall through to the SPA.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /health {
+		reverse_proxy api:8000
+	}
 
-    encode zstd gzip
+	# Everything else is the static Expo web export with SPA fallback.
+	handle {
+		root * /srv
 
-    handle /api/* {
-        reverse_proxy api:8000
-    }
+		# Content-hashed bundles under /_expo/ and /assets/ never change: cache forever.
+		@hashed path /_expo/* /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
 
-    handle /health {
-        reverse_proxy api:8000
-    }
+		# Everything else (index.html, sw.js, workbox-*.js, manifest.json, icons, and any
+		# deep link that falls back to index.html) must revalidate so a new deploy and
+		# the service worker update are picked up. Defined as the complement of @hashed
+		# because `header` runs before try_files rewrites the path, so a path-list
+		# matcher would miss a deep link such as /transactions/abc.
+		@shell not path /_expo/* /assets/*
+		header @shell Cache-Control "no-cache"
 
-    handle /docs* {
-        reverse_proxy api:8000
-    }
-
-    handle /openapi.json {
-        reverse_proxy api:8000
-    }
-
-    handle {
-        root * /srv
-        try_files {path} /index.html
-        file_server
-    }
+		try_files {path} /index.html
+		file_server
+	}
 }
