@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # infra/scripts/vm-bootstrap.sh -- one-time (re-runnable) initialisation of the deploy VM.
 #
-# Target: Canonical Ubuntu 24.04 on OCI (VM.Standard.A1.Flex / arm64), login user `ubuntu`.
+# Target: Canonical Ubuntu 24.04 (22.04 works too) on OCI (VM.Standard.A1.Flex / arm64), login user `ubuntu`.
 # Run it from the laptop:
 #     ssh wallet-vm 'bash -s' < infra/scripts/vm-bootstrap.sh
 # or let deploy.sh do it:   bash infra/scripts/deploy.sh --bootstrap
@@ -62,7 +62,8 @@ step_packages() {
   apt_get -y \
     -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
     dist-upgrade
-  apt_get -y install ca-certificates curl gnupg rsync unattended-upgrades
+  # cron is not guaranteed on Minimal images; deploy.sh schedules the nightly backup with it.
+  apt_get -y install ca-certificates curl gnupg rsync cron unattended-upgrades
 }
 
 step_docker() {

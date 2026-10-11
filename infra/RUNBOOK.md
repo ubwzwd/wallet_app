@@ -111,7 +111,7 @@ ssh wallet-vm 'bash -s' < infra/scripts/vm-bootstrap.sh
 
 脚本可以重复跑，按顺序做这些事：
 
-1. `apt update` 加 `dist-upgrade`，装 `ca-certificates curl gnupg rsync unattended-upgrades`。
+1. `apt update` 加 `dist-upgrade`，装 `ca-certificates curl gnupg rsync cron unattended-upgrades`。
 2. 放行主机防火墙：把 tcp 80、tcp 443、udp 443 插到 `/etc/iptables/rules.v4` 里 22 端口规则之后、末尾 REJECT 之前，并用 `netfilter-persistent save` 持久化。
 3. 从 Docker 官方 apt 源装 Docker CE 和 compose 插件（按 `dpkg --print-architecture` 取 arm64），已装则跳过；把 `ubuntu` 加进 `docker` 组；设置开机自启。
 4. 打开 unattended-upgrades（自动装安全补丁）。
