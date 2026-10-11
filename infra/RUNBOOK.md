@@ -29,7 +29,7 @@ migrate：每次 up 时先跑一次 alembic upgrade head，跑完退出；api �
 | `infra/scripts/vm-bootstrap.sh` | VM 一次性初始化（可重复跑） |
 | `infra/scripts/deploy.sh` | 笔记本上跑：构建前端、rsync、远端 `up -d --build` |
 | `infra/scripts/backup.sh` | VM 上跑：`pg_dump` 到 `backups/`，保留最近 14 份 |
-| `infra/scripts/restore.sh` | VM 上跑：把一份备份恢复进数据库 |
+| `infra/scripts/restore.sh` | VM 上跑：先留一份当前库的安全备份，再整库重建并恢复指定的 dump |
 | `infra/scripts/smoke.sh` | 笔记本上跑：本机用独立项目名和端口把整套栈跑一遍（不碰线上） |
 | `infra/scripts/env-coverage.sh` | 检查 `.env.example` 是否覆盖后端全部配置项 |
 
@@ -39,7 +39,7 @@ migrate：每次 up 时先跑一次 alembic upgrade head，跑完退出；api �
 2. 菜单 Compute → Instances → Create instance。
 3. Name：`wallet`。
 4. Image：Canonical Ubuntu 24.04，选 **aarch64** 版本。
-5. Shape：Ampere → `VM.Standard.A1.Flex`，**2 OCPU / 12 GB**。免费额度合计 4 OCPU / 24 GB，别超。
+5. Shape：Ampere → `VM.Standard.A1.Flex`，**1 OCPU / 6 GB** 起步（整套栈常驻不到 1 GB）。不够时在实例详情页 Edit 改 OCPU / 内存，重启生效。免费额度合计 4 OCPU / 24 GB，别超。
 6. Networking：新建 VCN 和公网子网，勾选「Assign a public IPv4 address」。
 7. Add SSH keys：选 Paste public keys，粘贴 `~/.ssh/wallet_app_oci.pub` 的内容（笔记本上 `cat ~/.ssh/wallet_app_oci.pub`）。
 8. Boot volume：保持默认 50 GB。
@@ -47,8 +47,8 @@ migrate：每次 up 时先跑一次 alembic upgrade head，跑完退出；api �
 
 提示：
 
-- 报 `Out of host capacity`：换个时段重试，或先缩成 1 OCPU / 6 GB。不用换区域。
-- （可选）把临时公网 IP 换成 Reserved IP（实例详情 → Attached VNICs → IPv4 Addresses），这样 stop/start 后 IP 不变。
+- 报 `Out of host capacity`：换个时段重试（深夜、清晨更容易成功）。不用换区域。
+- （可选）把临时公网 IP 换成 Reserved IP（实例详情 → Attached VNICs → IPv4 Addresses），这样 stop/start 后 IP 不变。OCI 不能原地转换，换的时候公网 IP 会变一次，所以要做就在第 2 步配域名之前做；已经配过的话，DuckDNS 和 `~/.ssh/config` 里的 IP 要跟着改。
 - OCI 可能回收长期空闲的免费实例。这套栈一直在跑，通常不会触发；收到 OCI 的警告邮件就检查一下实例。
 
 **放行 80 / 443（云端防火墙）**：
@@ -194,11 +194,11 @@ docker compose -p wallet logs -f caddy
 
 ```bash
 cd /opt/wallet_app
-echo 'REGISTRATION_OPEN=false' >> infra/.env
+sed -i 's/^REGISTRATION_OPEN=.*/REGISTRATION_OPEN=false/' infra/.env
 docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml up -d api
 ```
 
-如果 `.env` 里已有 `REGISTRATION_OPEN=true` 这一行，直接改它，不要重复写。
+以后要再开放，把同一行改回 `true` 再 `up -d api` 一次。
 
 ## 6. 日常
 
@@ -248,17 +248,13 @@ cd /opt/wallet_app
 bash infra/scripts/restore.sh backups/wallet-<时间>.dump --yes
 ```
 
-它会先停 api，用 `pg_restore --clean` 覆盖数据库，再启动 api 并等 `/health` 通过。db 和 caddy 不停。不加 `--yes` 会要求你输入 `yes` 确认。**备份之后写入的数据会丢。** 备份文件在笔记本上时，先用 `rsync` 传回 VM 的 `backups/` 再恢复。
+它会先停 api，把**当前**数据库先存一份到 `backups/pre-restore-<时间>.dump`（恢复错了可以用同一个命令倒回去），然后整库删掉重建、把 dump 灌进去，再启动 api 并等 `/health` 通过。db 和 caddy 不停。不加 `--yes` 会要求你输入 `yes` 确认。**备份之后写入的数据会丢。** 备份文件在笔记本上时，先用 `rsync` 传回 VM 的 `backups/` 再恢复。
 
-dump 里带着迁移版本。如果现在的代码比 dump 新，恢复后补跑一次迁移：
-
-```bash
-docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml run --rm migrate
-```
+dump 里带着迁移版本。api 启动时会先自动跑 migrate，所以 dump 比现在的代码旧没关系，会自动升到最新；dump 比代码新（比如从更新的版本回滚代码之后）时 migrate 会失败、api 保持停止，脚本会说明，这时要先部署与 dump 匹配的代码。
 
 **重启与补丁。**
 
-- VM 重启后，四个服务靠 restart policy 自动起来，不用操作。
+- VM 重启后，db / api / caddy 靠 restart policy 自动起来，不用操作（migrate 是一次性的，只在 `up` 时跑）。
 - 安全补丁由 unattended-upgrades 自动装。内核更新要手动 `sudo reboot` 才生效；登录时提示 `System restart required` 就挑个空闲时间重启。
 
 **看资源和磁盘。**
@@ -298,7 +294,14 @@ cd /opt/wallet_app
 docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml up -d caddy
 ```
 
-测试证书浏览器不信任，只用来确认流程通。确认后删掉这一行，再 `up -d caddy` 一次，回到正式证书。如果浏览器仍显示旧的不受信任证书，停掉 caddy 后删除它的卷 `wallet_caddy_data`，再 `up -d caddy`。
+测试证书浏览器不信任，只用来确认流程通。确认后删掉这一行，再 `up -d caddy` 一次，回到正式证书。如果浏览器仍显示旧的不受信任证书，把 caddy 容器连同它的证书卷一起删掉再起（只删 caddy 的卷，数据卷不动）：
+
+```bash
+cd /opt/wallet_app
+docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml rm -sf caddy
+docker volume rm wallet_caddy_data
+docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml up -d caddy
+```
 
 **注意：** 任何时候 `down` 都**不要**加 `-v`。`-v` 会删掉所有卷：`pgdata`（全部账本数据）和 `caddy_data`（证书与 ACME 账号）都会丢。
 

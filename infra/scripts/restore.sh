@@ -3,9 +3,16 @@
 #
 #     bash infra/scripts/restore.sh <dump> [--yes]
 #
-# Flow: confirm -> stop api -> pg_restore --clean --if-exists -> start api -> wait for /health.
+# Flow: confirm -> stop api -> safety dump of the current database -> drop and recreate the
+# database -> pg_restore --exit-on-error -> start api -> wait for /health.
 # The db and caddy containers keep running; only api is stopped, so nothing writes while the
-# database is being replaced.
+# database is being replaced. Recreating the database (instead of pg_restore --clean) means
+# the result is exactly the dump even when the live schema is newer than the dump, and any
+# error aborts the restore instead of being "ignored".
+#
+# Before dropping anything, the current database is dumped to
+# ${WALLET_BACKUP_DIR:-$REPO/backups}/pre-restore-<UTC timestamp>.dump, so a restore of the
+# wrong file can be undone with the same script.
 #
 # The dump contains the alembic_version table, so right after pg_restore the schema is at the
 # revision the dump was taken at. `compose start api` also starts api's dependencies, which
@@ -16,13 +23,14 @@
 #
 # Env (same contract as deploy.sh / backup.sh):
 #   WALLET_REMOTE_DIR (default /opt/wallet_app), WALLET_COMPOSE_PROJECT (default wallet),
-#   WALLET_ENV_FILE (default $REPO/infra/.env)
+#   WALLET_ENV_FILE (default $REPO/infra/.env), WALLET_BACKUP_DIR (default $REPO/backups)
 
 set -euo pipefail
 
 PROJECT="${WALLET_COMPOSE_PROJECT:-wallet}"
 REPO="${WALLET_REMOTE_DIR:-/opt/wallet_app}"
 ENV_FILE="${WALLET_ENV_FILE:-$REPO/infra/.env}"
+BACKUP_DIR="${WALLET_BACKUP_DIR:-$REPO/backups}"
 
 usage() {
   cat <<USAGE
@@ -30,9 +38,10 @@ Usage: bash infra/scripts/restore.sh <dump> [--yes]
 
 Replaces the contents of the wallet database (compose project '${PROJECT}') with the given
 pg_dump custom-format file (see backup.sh). Stops api during the restore and starts it again.
+A safety dump of the current database is written to ${BACKUP_DIR}/pre-restore-<UTC>.dump first.
   --yes   do not ask for confirmation (for scripts)
 
-Env: WALLET_REMOTE_DIR, WALLET_COMPOSE_PROJECT, WALLET_ENV_FILE
+Env: WALLET_REMOTE_DIR, WALLET_COMPOSE_PROJECT, WALLET_ENV_FILE, WALLET_BACKUP_DIR
 USAGE
 }
 
@@ -97,24 +106,34 @@ compose stop api
 OUT="$(mktemp)"
 trap 'rm -f "$OUT"' EXIT
 
-echo "restore.sh: restoring into '$PGDB_NAME' ..."
-set +e
-compose exec -T db pg_restore -U "$PGUSER_NAME" -d "$PGDB_NAME" --clean --if-exists --no-owner < "$DUMP" >"$OUT" 2>&1
-rc=$?
-set -e
+# Safety net: dump what is there now, so this restore itself can be undone.
+umask 077
+mkdir -p "$BACKUP_DIR"
+SAFETY="$BACKUP_DIR/pre-restore-$(date -u +%Y%m%dT%H%M%SZ).dump"
+echo "restore.sh: saving the current database to $SAFETY ..."
+if ! compose exec -T db pg_dump -U "$PGUSER_NAME" -Fc "$PGDB_NAME" > "$SAFETY"; then
+  rm -f "$SAFETY"
+  err "could not dump the current database; nothing was changed. The api was left STOPPED (start it with: docker compose -p $PROJECT start api)"
+  exit 1
+fi
 
-if [ "$rc" -ne 0 ]; then
-  # pg_restore exits 1 when it ignored errors ("errors ignored on restore: N") and keeps going.
-  # Anything else (cannot connect, bad archive, ...) is fatal.
-  if [ "$rc" -eq 1 ] && grep -q 'errors ignored on restore' "$OUT" \
-       && ! grep -Eqi 'FATAL|could not connect|connection to server' "$OUT"; then
-    echo "restore.sh: pg_restore finished with ignored errors (exit 1); they are listed below." >&2
-    cat "$OUT" >&2
-  else
-    cat "$OUT" >&2
-    err "pg_restore failed (exit $rc). The api was left STOPPED; fix the problem and re-run, or start it with: docker compose -p $PROJECT start api"
-    exit 1
-  fi
+# Drop and recreate, so the restore starts from an empty database. The api is stopped and
+# migrate only runs when api starts, so FORCE only has to clear stray sessions (psql etc.).
+echo "restore.sh: recreating database '$PGDB_NAME' ..."
+if ! compose exec -T db psql -U "$PGUSER_NAME" -d postgres -v ON_ERROR_STOP=1 -q \
+     -c "DROP DATABASE IF EXISTS \"$PGDB_NAME\" WITH (FORCE);" \
+     -c "CREATE DATABASE \"$PGDB_NAME\" OWNER \"$PGUSER_NAME\";" >"$OUT" 2>&1; then
+  cat "$OUT" >&2
+  err "could not recreate the database. The api was left STOPPED; the pre-restore dump is $SAFETY"
+  exit 1
+fi
+
+echo "restore.sh: restoring $DUMP into '$PGDB_NAME' ..."
+if ! compose exec -T db pg_restore -U "$PGUSER_NAME" -d "$PGDB_NAME" --no-owner --exit-on-error < "$DUMP" >"$OUT" 2>&1; then
+  cat "$OUT" >&2
+  err "pg_restore failed; the database is INCOMPLETE and the api was left STOPPED."
+  err "Restore the pre-restore dump to get back to where you were:  bash infra/scripts/restore.sh $SAFETY --yes"
+  exit 1
 fi
 
 # The restored database must carry a migration revision, otherwise this is not a wallet dump.

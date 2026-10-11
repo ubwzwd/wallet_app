@@ -6,10 +6,11 @@ FastAPI + SQLAlchemy 2 + Alembic. Python 3.12.
 
 ```bash
 cd backend
-# system Python 3.12 ...
+# an isolated environment with uv (works everywhere) ...
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
+# ... or the system Python 3.12 where it allows pip installs (Ubuntu 24.04 / Debian 12
+# refuse this with "externally-managed-environment"; use the uv line there)
 python3 -m pip install -r requirements-dev.txt
-# ... or an isolated environment with uv
-uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
 
 cp env.example .env        # set SECRET_KEY (required): python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 docker compose -f ../infra/docker-compose.dev.yml up -d db   # Postgres on :5432
@@ -31,9 +32,10 @@ cd backend && DEBUG=false SECRET_KEY=test-secret-key-for-tests-only python3 -m p
 ## Dependencies
 
 - `requirements.txt` holds the runtime dependencies, each pinned with `==` to the version the test suite actually runs against.
+- `constraints.txt` pins every transitive dependency as well (a `uv pip freeze` of a venv that passed the suite); the image and `requirements-dev.txt` install with `-c constraints.txt`, so a build on the VM resolves exactly the tested set. Regenerate it whenever `requirements.txt` changes.
 - `requirements-dev.txt` adds pytest and pytest-asyncio; it is never copied into the image.
 - `pyproject.toml` only carries project metadata and tool settings (pytest, black, ruff); nothing is packaged.
-- Upgrading: install the new version locally, run the whole test suite, then edit the pin.
+- Upgrading: edit the pin in `requirements.txt`, rebuild a fresh venv from it, run the whole test suite, then `uv pip freeze` that venv into `constraints.txt`.
 
 ## Migrations
 

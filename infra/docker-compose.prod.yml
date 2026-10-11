@@ -17,6 +17,10 @@
 # - Every service reads the same env file: ${WALLET_ENV_FILE:-./.env} (default infra/.env,
 #   resolved relative to this file's directory).
 
+# Default project name (used when -p is not given), so a bare `docker compose` in infra/
+# never collides with another project on the same host.
+name: wallet
+
 x-logging: &default-logging
   driver: json-file
   options:
@@ -32,13 +36,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    # Defaults are sized for a 12 GB VM (about 1/4 RAM, 1/4 to 1/2 RAM); override in .env.
+    # A family ledger is a few tens of MB, so the defaults stay small (Postgres' own default
+    # is 128MB). Override in .env for a bigger VM: about 1/4 RAM and 1/4 to 1/2 RAM.
     command:
       - "postgres"
       - "-c"
-      - "shared_buffers=${PG_SHARED_BUFFERS:-1GB}"
+      - "shared_buffers=${PG_SHARED_BUFFERS:-256MB}"
       - "-c"
-      - "effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-3GB}"
+      - "effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-1GB}"
       - "-c"
       - "max_connections=50"
     shm_size: 256m

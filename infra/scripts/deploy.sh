@@ -189,7 +189,9 @@ docker image prune -f
 
 # Daily backup at 19:00 UTC (= 03:00 Beijing time), added once.
 mkdir -p "$REMOTE_DIR/backups"
-CRON_LINE="0 19 * * * $REMOTE_DIR/infra/scripts/backup.sh >> $REMOTE_DIR/backups/backup.log 2>&1"
+# The contract variables are pinned on the cron line so a non-default directory or
+# project name is backed up, not the defaults.
+CRON_LINE="0 19 * * * WALLET_REMOTE_DIR=$REMOTE_DIR WALLET_COMPOSE_PROJECT=$PROJECT $REMOTE_DIR/infra/scripts/backup.sh >> $REMOTE_DIR/backups/backup.log 2>&1"
 if command -v crontab >/dev/null 2>&1; then
   if crontab -l 2>/dev/null | grep -qF backup.sh; then
     echo "==> backup cron entry already present"
@@ -223,7 +225,7 @@ ERROR: ${REMOTE_DIR}/infra/.env does not exist on ${HOST}. The files are synced;
 env file once, then re-run this script:
     ssh ${HOST}
     cd ${REMOTE_DIR}/infra && cp .env.example .env && nano .env && chmod 600 .env
-See infra/RUNBOOK.md ("首次部署") for which values to set (SECRET_KEY, POSTGRES_PASSWORD, CADDY_DOMAIN).
+See infra/RUNBOOK.md section 5 (第一次部署) for which values to set (SECRET_KEY, POSTGRES_PASSWORD, CADDY_DOMAIN).
 MSG
   exit 3
 elif [ "$rc" -ne 0 ]; then

@@ -87,6 +87,7 @@ trap 'exit 130' INT TERM
 # fetch <url> [curl args...]: status code into $CODE, headers into $S/h, body into $S/b.
 fetch() {
   local url="$1"; shift
+  : > "$S/b"; : > "$S/h"   # never let a failed request leave the previous response behind
   CODE="$(curl -ks --max-time 10 -o "$S/b" -D "$S/h" -w '%{http_code}' "$@" "$url" || true)"
   [ -n "$CODE" ] || CODE=000
 }
@@ -230,9 +231,11 @@ check "entry bundle Cache-Control is immutable"    header_has cache-control immu
 
 # --- the interactive API docs are not exposed
 fetch "$B/docs"
+check "GET /docs is 200"                           code_is 200
 check "/docs is the SPA shell (text/html)"         header_has content-type text/html
 check "/docs is not Swagger UI"                    body_lacks swagger
 fetch "$B/openapi.json"
+check "GET /openapi.json is 200 (SPA shell)"       code_is 200
 check "/openapi.json is not the OpenAPI schema"    body_lacks '"openapi"'
 
 # --- public API endpoints through the proxy
@@ -293,7 +296,14 @@ with socket.create_connection(("caddy", 443), timeout=10) as raw:
         s.sendall(b"POST /api/v1/auth/login HTTP/1.1\r\nHost: localhost\r\n"
                   b"Content-Type: application/json\r\nConnection: close\r\n"
                   b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
-        print(s.recv(64).split(b" ")[1].decode())
+        # Read until the end of the status line; one recv may return a partial record.
+        buf = b""
+        while b"\r\n" not in buf and len(buf) < 4096:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            buf += chunk
+        print(buf.split(b"\r\n", 1)[0].split(b" ")[1].decode())
 PY
 )"
 check "a different client IP still gets 401, not 429 (got ${OTHER_IP_CODE:-none})" test "$OTHER_IP_CODE" = 401

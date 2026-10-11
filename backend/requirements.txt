@@ -2,8 +2,9 @@
 #
 # Pin policy: every version below is the one the backend test suite actually
 # runs against (verified with `pip show`). Nothing here is a loose range.
-# Upgrade flow: install the new version locally, run the whole backend test
-# suite (see README.md), and only then edit the pin in this file.
+# Upgrade flow: edit the pin, rebuild a fresh venv from this file, run the
+# whole backend test suite (see README.md), then freeze that venv into
+# constraints.txt, which pins every transitive package the image installs.
 #
 # Not needed on purpose: passlib (security.py imports bcrypt directly) and
 # python-multipart (uploads are parsed by hand, there is no UploadFile).

@@ -121,9 +121,11 @@ step_firewall() {
   ensure_iptables_rule "$pos"       -p tcp -m state --state NEW -m tcp --dport 80  -j ACCEPT
   ensure_iptables_rule $((pos + 1)) -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
   ensure_iptables_rule $((pos + 2)) -p udp -m state --state NEW -m udp --dport 443 -j ACCEPT
-  # Save only when this run changed something; step_firewall runs before Docker is installed
-  # so the first save does not capture Docker's own chains.
-  if [ "$RULES_CHANGED" -eq 1 ]; then
+  # Save when this run changed something, or when a previous run inserted the live rules
+  # but never saved them. step_firewall runs before Docker is installed, so the first save
+  # does not capture Docker's own chains; a save on a later re-run does include them, which
+  # is harmless (they are restored at boot and then rewritten by dockerd).
+  if [ "$RULES_CHANGED" -eq 1 ] || ! sudo grep -q -- '--dport 443' /etc/iptables/rules.v4; then
     sudo netfilter-persistent save
   fi
   log "host firewall done (rules changed this run: ${RULES_CHANGED})"
