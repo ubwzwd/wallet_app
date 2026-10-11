@@ -67,3 +67,4 @@ README.md
 SPEC.md
 backend/README.md
 backend/tests/
+backend/requirements-dev.txt

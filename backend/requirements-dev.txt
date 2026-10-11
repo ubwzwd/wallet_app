@@ -1,0 +1,4 @@
+# Test tooling on top of the pinned runtime set. Never copied into the image.
+-r requirements.txt
+pytest==9.0.2
+pytest-asyncio==1.3.0
