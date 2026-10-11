@@ -19,6 +19,9 @@ Thumbs.db
 # Phase 4 infra
 infra/.env
 
+# infra/scripts/backup.sh default dump dir (<repo>/backups); dumps hold every user's data
+/backups/
+
 # Frontend web build artifacts
 frontend/dist/
 
