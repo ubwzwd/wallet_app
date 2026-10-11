@@ -18,7 +18,7 @@ v3.0 于 2026-09 按 [`docs/target-design/`](docs/target-design/README.md) 重�
 
 ## 本地运行
 
-后端（Python 3.12，系统解释器，无 poetry）：
+后端（Python 3.12，系统解释器，依赖见 `backend/requirements.txt`）：
 
 ```bash
 cd backend
@@ -47,4 +47,7 @@ cd frontend && CI=1 npm run verify   # tsc + jest + build:web + PWA / 触控目�
 
 ## 部署
 
-生产形态栈的定义在 `infra/`，目标是一台 Oracle Cloud Always Free 的 A1.Flex 虚拟机（Docker Compose + Caddy 自动签证书）。步骤见 [`infra/RUNBOOK.md`](infra/RUNBOOK.md)。第九阶段正在把它落地。
+生产形态栈（Postgres + 一次性迁移 + FastAPI + Caddy 自动签证书）定义在 `infra/`，目标是一台 Oracle Cloud Always Free 的 A1.Flex 虚拟机。从在 OCI 建 VM、配域名到日常运维，完整步骤见 [`infra/RUNBOOK.md`](infra/RUNBOOK.md)。
+
+- `bash infra/scripts/deploy.sh`：在笔记本上构建前端、rsync 到 VM、远端 `docker compose up -d --build`。
+- `bash infra/scripts/smoke.sh`：在本机用独立的项目名和端口把同一套生产形态栈真实跑一遍，不碰线上。
