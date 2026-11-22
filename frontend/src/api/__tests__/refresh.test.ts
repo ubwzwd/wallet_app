@@ -36,6 +36,13 @@ function issued(access: string, refresh: string): Record<string, unknown> {
   return { access_token: access, token_type: 'bearer', refresh_token: refresh, expires_in: 1800 };
 }
 
+/** A JWT-shaped token (unsigned) carrying `claims` as its payload. */
+function jwt(claims: Record<string, unknown>): string {
+  const b64url = (v: unknown): string =>
+    btoa(JSON.stringify(v)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(claims)}.sig`;
+}
+
 async function expectApiError(p: Promise<unknown>): Promise<ApiClientError> {
   try {
     await p;
@@ -171,6 +178,57 @@ describe('401 → refresh → replay (§14.67)', () => {
     expect(onUnauthorized).not.toHaveBeenCalled();
     expect(await getAuthToken()).toBe('access-other-tab');
     expect(await getRefreshToken()).toBe('refresh-other-tab');
+  });
+
+  it("refreshes with the other tab's refresh token when its access token expired too", async () => {
+    await setAuthTokens({ accessToken: 'access-old', refreshToken: 'refresh-old' });
+    // Another tab renewed the session, then both sat idle past that token's lifetime.
+    const expiredOtherTab = jwt({ sub: '1', exp: Math.floor(Date.now() / 1000) - 60 });
+    await AsyncStorage.setItem(AUTH_TOKEN_KEY, expiredOtherTab);
+    await AsyncStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-other-tab');
+    acceptOnly('/ledgers', 'access-new', { ok: 'replayed' });
+    api.mockPost('/auth/refresh', issued('access-new', 'refresh-new'));
+
+    const res = await apiClient.get('/ledgers');
+
+    expect(res.data).toEqual({ ok: 'replayed' });
+    const calls = refreshCalls();
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(String(calls[0].data))).toEqual({ refresh_token: 'refresh-other-tab' });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    const sent = api.mock.history.get.map((c) => header(c, 'Authorization'));
+    expect(sent).toEqual(['Bearer access-old', 'Bearer access-new']);
+    expect(await AsyncStorage.getItem(AUTH_TOKEN_KEY)).toBe('access-new');
+    expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBe('refresh-new');
+  });
+
+  it("still adopts another tab's JWT that has not expired yet", async () => {
+    await setAuthTokens({ accessToken: 'access-old', refreshToken: 'refresh-old' });
+    const liveOtherTab = jwt({ sub: '1', exp: Math.floor(Date.now() / 1000) + 600 });
+    await AsyncStorage.setItem(AUTH_TOKEN_KEY, liveOtherTab);
+    await AsyncStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-other-tab');
+    acceptOnly('/ledgers', liveOtherTab, { ok: 'replayed' });
+    api.mockPost('/auth/refresh', issued('never', 'never'));
+
+    const res = await apiClient.get('/ledgers');
+
+    expect(res.data).toEqual({ ok: 'replayed' });
+    expect(refreshCalls()).toHaveLength(0);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('a refresh refused with another 4xx (422) ends the session like a 401', async () => {
+    await setAuthTokens({ accessToken: 'access-old', refreshToken: 'x'.repeat(600) });
+    api.mockGet('/ledgers', UNAUTHORIZED, 401);
+    api.mockPost('/auth/refresh', { detail: 'Invalid body', code: 'validation_error' }, 422);
+
+    const err = await expectApiError(apiClient.get('/ledgers'));
+
+    expect(err.status).toBe(401);
+    expect(err.code).toBe('unauthorized');
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(refreshCalls()).toHaveLength(1);
+    expect(api.mock.history.get).toHaveLength(1);
   });
 
   it('a refresh refused with 401 ends the session once and rejects with the original 401', async () => {

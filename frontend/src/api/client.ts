@@ -6,10 +6,10 @@
  * tries to renew the session (decision §14.67): one single-flight `POST /auth/refresh`
  * shared by every concurrent 401, then the failed request is replayed once with the new
  * access token. On that success path the interceptor writes the new token pair to
- * storage itself. Only when the server rejects the refresh token is `AuthContext` told
- * through the registered callback — and clearing the tokens then stays its job
- * (04 §2.1 item 2). A refresh that fails for any other reason (offline, 5xx) leaves the
- * tokens alone and rejects the original request with that error.
+ * storage itself. Only when the server rejects the refresh token (any 4xx but 408/429)
+ * is `AuthContext` told through the registered callback — and clearing the tokens then
+ * stays its job (04 §2.1 item 2). A refresh that fails transiently (offline, timeout,
+ * 408, 429, 5xx) leaves the tokens alone and rejects the original request with that error.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, {
@@ -222,13 +222,57 @@ type RefreshOutcome =
 
 let refreshInFlight: Promise<RefreshOutcome> | null = null;
 
+/** A stored access token this close to its `exp` is treated as already expired. */
+const ADOPT_EXPIRY_MARGIN_MS = 5_000;
+
+/**
+ * The `exp` claim of a JWT as epoch milliseconds, or `null` when the token is not a
+ * readable JWT. Only used to avoid adopting another tab's token that has itself expired;
+ * the signature is the server's business.
+ */
+function jwtExpiresAtMs(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3 || typeof atob !== 'function') return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload: unknown = JSON.parse(atob(padded));
+    if (typeof payload !== 'object' || payload === null || !('exp' in payload)) return null;
+    const { exp } = payload;
+    return typeof exp === 'number' && Number.isFinite(exp) ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a stored access token is still worth replaying with (unknown expiry: yes). */
+function isAdoptable(token: string): boolean {
+  const exp = jwtExpiresAtMs(token);
+  return exp === null || exp > Date.now() + ADOPT_EXPIRY_MARGIN_MS;
+}
+
+/**
+ * Whether a refresh failure means "try again later" rather than "the session is over":
+ * no response at all (offline, timeout), 408, 429 and 5xx. Any other 4xx — 401 above all,
+ * but also a 422 for a mangled stored token — is the server refusing the refresh token.
+ */
+function isTransientRefreshFailure(error: ApiClientError): boolean {
+  return error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500;
+}
+
 async function runRefresh(failedToken: string | null, generation: number): Promise<RefreshOutcome> {
   try {
     const stored = await readStoredTokens();
     if (generation !== tokenGeneration) return { kind: 'superseded' };
 
-    // Another tab already renewed the session: adopt its pair instead of spending ours.
-    if (stored.accessToken && stored.accessToken !== failedToken) {
+    // Another tab already renewed the session: adopt its pair instead of spending ours —
+    // unless that token has itself expired since (both tabs idle past its lifetime); then
+    // fall through and spend the stored refresh token, which is the other tab's rotated one.
+    if (
+      stored.accessToken &&
+      stored.accessToken !== failedToken &&
+      isAdoptable(stored.accessToken)
+    ) {
       cachedToken = stored.accessToken;
       cachedRefreshToken = stored.refreshToken;
       tokensLoaded = true;
@@ -241,8 +285,11 @@ async function runRefresh(failedToken: string | null, generation: number): Promi
       res = await requestRefresh({ refresh_token: stored.refreshToken });
     } catch (err) {
       if (generation !== tokenGeneration) return { kind: 'superseded' };
-      const error = normalizeAxiosError(err);
-      return error.status === 401 ? { kind: 'expired' } : { kind: 'unavailable', error };
+      // requestRefresh already normalises its rejection; this only guards the type.
+      const error = err instanceof ApiClientError ? err : normalizeAxiosError(err);
+      return isTransientRefreshFailure(error)
+        ? { kind: 'unavailable', error }
+        : { kind: 'expired' };
     }
     if (generation !== tokenGeneration) return { kind: 'superseded' };
 
