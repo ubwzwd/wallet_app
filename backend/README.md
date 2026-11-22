@@ -55,3 +55,14 @@ docker build -f infra/Dockerfile.api -t wallet-app/api:local .
 ```
 
 The full production stack (Postgres, migrate, api, Caddy) is `infra/docker-compose.prod.yml`; see `infra/RUNBOOK.md`.
+
+## Resetting a password
+
+There is no self-service password reset; an administrator does it from the shell. The script replaces the password hash and revokes every refresh token of that user, so all of their devices are signed out (an access token already issued stays valid for up to 30 minutes):
+
+```bash
+# in backend/ (prompts twice); --password-stdin reads one line from stdin instead
+python scripts/reset_password.py user@example.com
+# on the server
+docker compose -p wallet exec api python scripts/reset_password.py user@example.com
+```
