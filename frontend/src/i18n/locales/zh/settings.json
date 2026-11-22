@@ -29,9 +29,17 @@
   "about_label": "关于",
   "entry": {
     "ledger_settings": "账本设置",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "logout_all": "登出所有设备"
   },
   "logout_hint": "退出后本地缓存会清掉，账本数据留在云端。下次用同一个邮箱登录就能回来。",
+  "logout_all_hint": "手机丢了或者在别人的电脑上登录过，用这个让所有设备都下线。其他设备最多 30 分钟内失效。",
+  "logout_all_confirm": {
+    "title": "登出所有设备？",
+    "body": "包括这台设备在内，所有登录都会失效，需要重新输入密码。账本数据不受影响。",
+    "confirm": "全部登出"
+  },
+  "logout_all_failed": "没能登出所有设备，请稍后再试",
   "section": {
     "profile": "关于我",
     "prefs": "偏好",

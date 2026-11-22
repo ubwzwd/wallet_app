@@ -29,9 +29,17 @@
   "about_label": "About",
   "entry": {
     "ledger_settings": "Ledger settings",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "logout_all": "Sign out everywhere"
   },
   "logout_hint": "Signing out clears the local cache. Ledger data stays in the cloud — sign in with the same email to come back.",
+  "logout_all_hint": "Lost a phone or signed in on someone else's computer? This signs every device out. Other devices stop working within 30 minutes.",
+  "logout_all_confirm": {
+    "title": "Sign out everywhere?",
+    "body": "Every sign-in, including this device, will end and need the password again. Your ledgers are not affected.",
+    "confirm": "Sign out everywhere"
+  },
+  "logout_all_failed": "Could not sign out everywhere. Try again later.",
   "section": {
     "profile": "About me",
     "prefs": "Preferences",

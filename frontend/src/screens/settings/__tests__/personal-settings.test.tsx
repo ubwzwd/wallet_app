@@ -16,6 +16,7 @@ import {
   mockApi,
   mockGet,
   mockPatch,
+  mockPost,
   renderWithProviders,
   type MockApi,
 } from '@/test';
@@ -210,6 +211,75 @@ test('logging out clears the session and lands on /login', async () => {
   fireEvent.press(await screen.findByTestId('settings-logout'));
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/login'));
+});
+
+/** How many `POST /auth/logout-all` calls this test has seen. */
+function logoutAllCalls(): number {
+  return api.mock.history.post.filter((r) => (r.url ?? '').endsWith('/auth/logout-all')).length;
+}
+
+test('the 登录 card offers 登出所有设备 under 退出登录, with its hint', async () => {
+  await renderSettings();
+
+  const card = await screen.findByTestId('session-card');
+  expect(within(card).getByTestId('settings-logout')).toBeTruthy();
+  expect(within(card).getByTestId('settings-logout-all')).toBeTruthy();
+  expect(within(card).getByText('登出所有设备')).toBeTruthy();
+  expect(within(card).getByTestId('settings-logout-all-hint')).toHaveTextContent(/30 分钟/);
+});
+
+test('登出所有设备 asks first, and cancelling does nothing', async () => {
+  mockPost('/auth/logout-all', undefined, 204);
+  await renderSettings();
+
+  fireEvent.press(await screen.findByTestId('settings-logout-all'));
+
+  const dialog = await screen.findByTestId('confirm-dialog');
+  expect(within(dialog).getByText('登出所有设备？')).toBeTruthy();
+  expect(within(dialog).getByText(/账本数据不受影响/)).toBeTruthy();
+  expect(within(dialog).getByText('全部登出')).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId('confirm-cancel'));
+
+  await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  expect(logoutAllCalls()).toBe(0);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+test('confirming 登出所有设备 revokes everything once and lands on /login like 退出登录', async () => {
+  mockPost('/auth/logout-all', undefined, 204);
+  await renderSettings();
+
+  fireEvent.press(await screen.findByTestId('settings-logout-all'));
+  fireEvent.press(await screen.findByTestId('confirm-accept'));
+
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/login'));
+  expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+  expect(logoutAllCalls()).toBe(1);
+});
+
+test('a failed 登出所有设备 says so, stays on the page and can be tried again', async () => {
+  mockPost('/auth/logout-all', { detail: 'boom', code: 'internal_error' }, 500);
+  await renderSettings();
+
+  fireEvent.press(await screen.findByTestId('settings-logout-all'));
+  fireEvent.press(await screen.findByTestId('confirm-accept'));
+
+  expect(await screen.findByTestId('toast-error')).toHaveTextContent(
+    /没能登出所有设备，请稍后再试/,
+  );
+  expect(logoutAllCalls()).toBe(1);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+  // Still signed in, and the button is live again rather than stuck on its spinner.
+  const button = screen.getByTestId('settings-logout-all');
+  await waitFor(() => expect(button.props.accessibilityState?.disabled).toBe(false));
+  expect(screen.getByTestId('settings-logout')).toBeTruthy();
+
+  mockPost('/auth/logout-all', undefined, 204);
+  fireEvent.press(button);
+  fireEvent.press(await screen.findByTestId('confirm-accept'));
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/login'));
+  expect(logoutAllCalls()).toBe(2);
 });
 
 test('re-picking the language already in use sends nothing', async () => {
