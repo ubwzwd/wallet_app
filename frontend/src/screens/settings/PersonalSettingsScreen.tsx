@@ -3,7 +3,8 @@
  *
  * Wide: a page head — 「我的」 + 「只影响你自己，不影响账本里的其他人」 + 「保存」 — over two
  * columns. Left is 关于我 (avatar, display name, default currency) and 语言; right is 外观,
- * the 关于 row and the 登录 card whose only control is the outlined 「退出登录」. Narrow
+ * the 关于 row and the 登录 card with the outlined 「退出登录」 and, below it, the quieter
+ * 「登出所有设备」 (§14.67). Narrow
  * stacks profile → 偏好 (默认币种 / 外观 / 语言) → 入口 → 关于 → 退出登录.
  *
  * Three of the four preferences live on the server (`display_name`, `base_currency`,
@@ -39,6 +40,7 @@ import {
   SegmentedControl,
   Select,
   Text,
+  confirm,
   toast,
 } from '@/ui';
 
@@ -63,7 +65,8 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
   const wide = useIsWide();
   const colors = useColors();
   const router = useRouter();
-  const { logout, setUser } = useAuth();
+  const { logout, logoutAll, setUser } = useAuth();
+  const [loggingOutAll, setLoggingOutAll] = React.useState(false);
   const theme = useTheme();
   const currencies = useCurrencies();
   // 屏幕稿 14 reads 「CNY 人民币」, not the server's English ISO name (see `currencyNames`).
@@ -141,10 +144,40 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
     router.push((ledgerContext === null ? routes.ledgers() : routes.ledgerSettings()) as Href);
   };
 
+  // What both exits share once the session is gone: the login page, replacing this one.
+  const leaveToLogin = (): void => {
+    router.replace(routes.login() as Href);
+  };
+
   const signOut = (): void => {
     void (async () => {
       await logout();
-      router.replace(routes.login() as Href);
+      leaveToLogin();
+    })();
+  };
+
+  // 「登出所有设备」: confirm first, then revoke server-side. `logoutAll` only cleans up the
+  // local session once the server said yes, so on failure the user stays signed in, here.
+  const signOutEverywhere = (): void => {
+    if (loggingOutAll) return;
+    void (async () => {
+      const ok = await confirm({
+        title: t('settings:logout_all_confirm.title'),
+        body: t('settings:logout_all_confirm.body'),
+        confirmLabel: t('settings:logout_all_confirm.confirm'),
+        tone: 'danger',
+        icon: 'log-out',
+      });
+      if (!ok) return;
+      setLoggingOutAll(true);
+      try {
+        await logoutAll();
+      } catch {
+        setLoggingOutAll(false);
+        toast.error(t('settings:logout_all_failed'));
+        return;
+      }
+      leaveToLogin();
     })();
   };
 
@@ -245,6 +278,21 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
         fullWidth
         onPress={signOut}
       />
+      <View style={{ gap: space['2'] }}>
+        <Button
+          testID="settings-logout-all"
+          label={t('settings:entry.logout_all')}
+          variant="ghost"
+          size="lg"
+          fullWidth
+          loading={loggingOutAll}
+          disabled={loggingOutAll}
+          onPress={signOutEverywhere}
+        />
+        <Text variant="caption" tone="muted" testID="settings-logout-all-hint">
+          {t('settings:logout_all_hint')}
+        </Text>
+      </View>
     </Card>
   );
 
