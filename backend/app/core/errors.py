@@ -16,6 +16,7 @@ class ErrorCode:
     VALIDATION_ERROR = "validation_error"
     UNAUTHORIZED = "unauthorized"
     INVALID_CREDENTIALS = "invalid_credentials"
+    REFRESH_INVALID = "refresh_invalid"
     NOT_FOUND = "not_found"
     FORBIDDEN = "forbidden"
     NOT_OWNER = "not_owner"

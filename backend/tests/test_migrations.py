@@ -22,7 +22,7 @@ from app.models import Base
 from tests.conftest import alembic_config
 
 # Last revision of the chain (§5.7) and the head this project migrated from.
-HEAD_REVISION = "b1f3c2a10d47"
+HEAD_REVISION = "b1f3c2a10d48"
 # The step before accounts moved from ledgers to their owners (§14.62).
 PRE_OWNER_REVISION = "b1f3c2a10d46"
 LEGACY_HEAD = "8a4f4d66d893"
@@ -39,6 +39,7 @@ TARGET_TABLES = {
     "import_batches",
     "import_rows",
     "exchange_rates",
+    "refresh_tokens",
 }
 
 NOW = datetime(2026, 9, 12, 10, 0, 0)
@@ -1413,3 +1414,97 @@ def test_downgrade_base_after_upgrade_head_on_sqlite(sqlite_migrated_db):
         tables = set(inspect(engine).get_table_names())
 
     assert tables <= {"alembic_version"}
+
+
+# ---------------------------------------------------------------------------
+# step 8 (b1f3c2a10d48, decision §14.67): refresh tokens
+# ---------------------------------------------------------------------------
+
+_REFRESH_INSERT = (
+    "INSERT INTO refresh_tokens (id, user_id, family_id, token_hash, created_at, "
+    "expires_at, used_at, revoked_at) VALUES (:id, :uid, :fid, :hash, :now, :expires, "
+    "NULL, NULL)"
+)
+
+
+@pytest.mark.postgres
+def test_refresh_tokens_constraints_are_enforced(head_engine):
+    """Unique hash, expires after created, and the rows die with their user."""
+    seed = _seed_at_head(head_engine)
+    row = {
+        "id": uuid.uuid4(),
+        "uid": seed["user"],
+        "fid": uuid.uuid4(),
+        "hash": "a" * 64,
+        "now": NOW,
+        "expires": NOW + timedelta(days=90),
+    }
+    with head_engine.begin() as conn:
+        conn.execute(text(_REFRESH_INSERT), row)
+
+    _reject(
+        head_engine,
+        _REFRESH_INSERT,
+        {**row, "id": uuid.uuid4()},
+        "ix_refresh_tokens_token_hash",
+    )
+    _reject(
+        head_engine,
+        _REFRESH_INSERT,
+        {**row, "id": uuid.uuid4(), "hash": "b" * 64, "expires": NOW},
+        "ck_refresh_tokens_expiry",
+    )
+
+    # users keep exactly the columns they had: the table is the only change
+    with head_engine.connect() as conn:
+        user_columns = {c["name"] for c in inspect(conn).get_columns("users")}
+    assert user_columns == {
+        "id",
+        "email",
+        "password_hash",
+        "display_name",
+        "base_currency",
+        "language",
+        "created_at",
+        "updated_at",
+    }
+
+    with head_engine.begin() as conn:
+        conn.execute(text("DELETE FROM ledger_sources"))
+        conn.execute(text("DELETE FROM finance_sources"))
+        conn.execute(text("DELETE FROM ledger_members"))
+        conn.execute(text("DELETE FROM ledgers"))
+        conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": seed["user"]})
+    with head_engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM refresh_tokens")).scalar_one() == 0
+
+
+def _check_refresh_tokens_step_round_trips(url: str) -> None:
+    """Down to step 7 removes only the table; back up restores its exact names."""
+    _upgrade(url)
+    _downgrade(url, "b1f3c2a10d47")
+    with _engine(url) as engine:
+        tables = set(inspect(engine).get_table_names())
+    assert "refresh_tokens" not in tables
+    assert TARGET_TABLES - {"refresh_tokens"} <= tables
+
+    _upgrade(url)
+    with _engine(url) as engine:
+        insp = inspect(engine)
+        indexes = {ix["name"]: bool(ix["unique"]) for ix in insp.get_indexes("refresh_tokens")}
+        checks = {ck["name"] for ck in insp.get_check_constraints("refresh_tokens")}
+    assert indexes == {
+        "ix_refresh_tokens_token_hash": True,
+        "ix_refresh_tokens_user_id": False,
+        "ix_refresh_tokens_family_id": False,
+    }
+    assert checks == {"ck_refresh_tokens_expiry"}
+
+
+@pytest.mark.postgres
+def test_refresh_tokens_step_round_trips(migrated_db):
+    _check_refresh_tokens_step_round_trips(migrated_db)
+
+
+def test_refresh_tokens_step_round_trips_on_sqlite(sqlite_migrated_db):
+    _check_refresh_tokens_step_round_trips(sqlite_migrated_db)

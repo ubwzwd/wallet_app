@@ -472,6 +472,13 @@ NEW_IMPORT_OPERATIONS = {
     ("POST", "/api/v1/ledgers/{id}/imports/{bid}/commit"),
 }
 
+# The refresh-token session routes (decision §14.67): two public, one signed in.
+NEW_SESSION_OPERATIONS = {
+    ("POST", "/api/v1/auth/refresh"),
+    ("POST", "/api/v1/auth/logout"),
+    ("POST", "/api/v1/auth/logout-all"),
+}
+
 EXPECTED_OPERATIONS = (
     PHASE_TWO_OPERATIONS
     | NEW_SOURCE_OPERATIONS
@@ -479,6 +486,7 @@ EXPECTED_OPERATIONS = (
     | NEW_STATS_OPERATIONS
     | NEW_IMPORT_FORMAT_OPERATIONS
     | NEW_IMPORT_OPERATIONS
+    | NEW_SESSION_OPERATIONS
 )
 
 
@@ -499,7 +507,8 @@ def test_openapi_route_inventory_is_exactly_phase_three(client):
     assert len(PHASE_TWO_OPERATIONS) == 23
     # +1: GET transfer/{pair_id} (03 §5.30a); +1: GET /import-format (§5.7);
     # +8: the import batch and draft-row routes (§5.37-§5.44), both phase six.
-    assert len(EXPECTED_OPERATIONS) == 23 + 21 + 1 + 8
+    # +3: /auth/refresh, /auth/logout, /auth/logout-all (decision §14.67).
+    assert len(EXPECTED_OPERATIONS) == 23 + 21 + 1 + 8 + 3
     assert actual_operations == EXPECTED_OPERATIONS
 
     all_paths = set(paths)

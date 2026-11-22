@@ -16,9 +16,10 @@ EXPECTED_TABLES = {
     "import_batches",
     "import_rows",
     "exchange_rates",
+    "refresh_tokens",
 }
 
-# §1.1 - §1.10, in DDL order.
+# §1.1 - §1.12, in DDL order.
 EXPECTED_COLUMNS = {
     "users": [
         "id",
@@ -124,6 +125,16 @@ EXPECTED_COLUMNS = {
         "updated_at",
     ],
     "exchange_rates": ["date", "base", "symbol", "rate", "fetched_at"],
+    "refresh_tokens": [
+        "id",
+        "user_id",
+        "family_id",
+        "token_hash",
+        "created_at",
+        "expires_at",
+        "used_at",
+        "revoked_at",
+    ],
 }
 
 # Final constraint names as they land in the database (§1, §5.0): the ck rule
@@ -181,6 +192,7 @@ EXPECTED_CHECKS = {
         "ck_exchange_rates_symbol_upper",
         "ck_exchange_rates_not_self",
     },
+    "refresh_tokens": {"ck_refresh_tokens_expiry"},
 }
 
 EXPECTED_INDEXES = {
@@ -202,6 +214,11 @@ EXPECTED_INDEXES = {
     "import_batches": {"ix_import_batches_ledger_created"},
     "import_rows": {"uq_import_rows_batch_row", "ix_import_rows_transaction_id"},
     "exchange_rates": {"ix_exchange_rates_pair_date"},
+    "refresh_tokens": {
+        "ix_refresh_tokens_token_hash",
+        "ix_refresh_tokens_user_id",
+        "ix_refresh_tokens_family_id",
+    },
 }
 
 # §1: table -> {fk constraint name: ON DELETE action}
@@ -252,10 +269,11 @@ EXPECTED_FOREIGN_KEYS = {
         "fk_import_rows_transaction_id_transactions": "SET NULL",
     },
     "exchange_rates": {},
+    "refresh_tokens": {"fk_refresh_tokens_user_id_users": "CASCADE"},
 }
 
 
-def test_create_all_builds_exactly_the_eleven_tables(db):
+def test_create_all_builds_exactly_the_twelve_tables(db):
     assert set(inspect(db.get_bind()).get_table_names()) == EXPECTED_TABLES
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
@@ -310,6 +328,15 @@ def test_ledger_invites_code_has_no_unique_index_or_constraint(db):
     assert [i["name"] for i in indexes] == ["ix_ledger_invites_ledger_id"]
     assert not any(i["unique"] for i in indexes)
     assert not inspector.get_unique_constraints("ledger_invites")
+
+
+def test_refresh_tokens_hash_is_unique_and_users_gained_nothing():
+    """§14.67: the hash index is the only unique one; only used_at / revoked_at may be NULL."""
+    table = Base.metadata.tables["refresh_tokens"]
+    unique = {i.name for i in table.indexes if i.unique}
+    assert unique == {"ix_refresh_tokens_token_hash"}
+    assert table.c.token_hash.type.length == 64
+    assert [c.name for c in table.c if c.nullable] == ["used_at", "revoked_at"]
 
 
 def test_ledger_sources_key_is_the_ledger_account_pair():
