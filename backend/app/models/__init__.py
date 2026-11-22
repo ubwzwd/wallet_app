@@ -8,6 +8,7 @@ from app.models.finance_source import FinanceSource
 from app.models.import_batch import ImportBatch, ImportRow
 from app.models.ledger import Ledger, LedgerInvite, LedgerMember
 from app.models.ledger_source import LedgerSource
+from app.models.refresh_token import RefreshToken
 from app.models.transaction import Transaction
 from app.models.transaction_event import TransactionEvent
 from app.models.user import User
@@ -25,4 +26,5 @@ __all__ = [
     "ImportBatch",
     "ImportRow",
     "ExchangeRate",
+    "RefreshToken",
 ]

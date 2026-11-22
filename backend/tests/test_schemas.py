@@ -112,7 +112,7 @@ def test_login_request_rejects_unknown_field():
 
 
 def test_token_response_defaults_bearer():
-    token = TokenResponse(access_token="eyJ...")
+    token = TokenResponse(access_token="eyJ...", refresh_token="opaque", expires_in=1800)
     assert token.token_type == "bearer"
 
 

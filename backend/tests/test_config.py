@@ -123,3 +123,13 @@ def test_join_qps_must_be_positive():
     with pytest.raises(ValidationError):
         Settings(_env_file=None, SECRET_KEY="x" * 32, RATE_LIMIT_JOIN_QPS=0)
     assert Settings(_env_file=None, SECRET_KEY="x" * 32, RATE_LIMIT_JOIN_QPS=2.5).RATE_LIMIT_JOIN_QPS == 2.5
+
+
+def test_refresh_token_expire_days_defaults_to_ninety_and_must_be_positive():
+    """§14.67: refresh tokens idle out after 90 days; 0 or less would never work."""
+    assert _settings().REFRESH_TOKEN_EXPIRE_DAYS == 90
+    assert _settings().ACCESS_TOKEN_EXPIRE_MINUTES == 30
+    for bad in (0, -1):
+        with pytest.raises(ValidationError):
+            _settings(REFRESH_TOKEN_EXPIRE_DAYS=bad)
+    assert _settings(REFRESH_TOKEN_EXPIRE_DAYS=7).REFRESH_TOKEN_EXPIRE_DAYS == 7

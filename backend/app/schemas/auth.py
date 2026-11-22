@@ -1,4 +1,4 @@
-"""Auth endpoint schemas (03-backend-api.md §5.1-§5.2)."""
+"""Auth endpoint schemas (03-backend-api.md §5.1-§5.2, decision §14.67)."""
 from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
@@ -48,7 +48,25 @@ class LoginRequest(ApiRequestModel):
 
 
 class TokenResponse(ApiModel):
-    """§5.1 and §5.2 response: a bearer access token."""
+    """§5.1, §5.2 and refresh response: an access token plus a refresh token.
+
+    ``expires_in`` is the access token's lifetime in seconds; the refresh token
+    is opaque and only ever exchanged at ``POST /auth/refresh`` (§14.67).
+    """
 
     access_token: str
     token_type: str = "bearer"
+    refresh_token: str
+    expires_in: int
+
+
+class RefreshRequest(ApiRequestModel):
+    """``POST /auth/refresh`` request body (§14.67)."""
+
+    refresh_token: str = Field(..., min_length=1, max_length=512)
+
+
+class LogoutRequest(ApiRequestModel):
+    """``POST /auth/logout`` request body: the refresh token whose sign-in ends."""
+
+    refresh_token: str = Field(..., min_length=1, max_length=512)
