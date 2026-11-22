@@ -15,17 +15,19 @@
 > - `§4.2` 的 code 清单仍是全仓库**唯一的错误 code 注册表**（决策 §14.4）：01 / 04 / 05 章引用的每个 code 都必须能在这里找到。本版删除了八个 code（分六类：三个 `llm_` 开头的、重启中断的那个 500、`batch_not_failed`、`import_in_progress`、`invite_used`，以及只收 CSV 之后不再需要的那个文件类型 code；逐条见 §4.2 末尾），把 `rows_exceed_limit` 从 422 改成 400，新增了 `skill_outdated`、`import_format_invalid`、`pair_invalid`、`unpair_invalid`、`currency_locked`、`repayment_target_not_credit`。
 > - auth 路由下的 `me` 别名（GET / PATCH 两条）与 `default_source_id` 按决策 §14.42「不做向后兼容」直接删除，`/me` 是唯一入口，并新增 `display_name`（§14.40）。
 > - **账户归人，按账本共享**（决策 §14.62，2026-09-16）：账户的增删改从账本下搬到个人的 `/sources*`（§5.20–§5.24，只对主人可见，`GET /sources` 带个人的资产 / 负债 / 净资产）；新增共享 / 取消共享两条端点（§5.24a、§5.24b）；`GET /ledgers/{id}/sources` 保留但语义改为"本账本里我能看到的账户"，每行带 `mine` / `usable`，非本人账户不带余额（§5.24c）；原账本下的账户增删改四条删除。所有引用账户的写接口改用同一个"对调用者在本账本内可用"判断（§3.2）；新增错误 code `source_limit_reached`（§4.2）；删账本不再删账户（§5.12），移除成员 / 退出时自动取消他的共享（§5.14、§5.15）。
+> - **登录状态：短访问令牌 + 可吊销的刷新令牌**（决策 §14.67，2026-11-23）：`register` / `login` 的响应多 `refresh_token` 与 `expires_in`（§5.1、§5.2）；新增 `POST /auth/refresh`、`POST /auth/logout`、`POST /auth/logout-all` 三条（§5.2a–§5.2c）；新表 `refresh_tokens`（[`02`](./02-database.md) §1.12）；新模块 `services/session_service.py`（§1.2）；新配置项 `REFRESH_TOKEN_EXPIRE_DAYS`（§2.1）；新错误码 `refresh_invalid`（§4.2）；管理员重置密码脚本 `scripts/reset_password.py` 补写并吊销全部刷新令牌（§1.2）。§3.1 不再是「不变」。
 
 ---
 
 ## 0. 与现状的差异总览
 
-现状一共 20 条注册路由（`backend/app/main.py:27-30` 挂了四个路由器）。目标是 **50 条业务路由**，其中 **5 条沿用现状路径**（3 条原样保留、2 条保留并增强）、**9 条改前缀**、**36 条新增**（决策 §14.62 把账户组从 5 条变成 8 条（2026-09-16 按决策 §14.62 同步））；另删除标签相关的全部行为，以及现状 auth 路由下的 `me` 两条别名（决策 §14.42：不保留别名）。下表的"变化"列可逐行核对这三个桶。
+现状一共 20 条注册路由（`backend/app/main.py:27-30` 挂了四个路由器）。目标是 **53 条业务路由**，其中 **5 条沿用现状路径**（3 条原样保留、2 条保留并增强）、**9 条改前缀**、**39 条新增**（决策 §14.62 把账户组从 5 条变成 8 条（2026-09-16 按决策 §14.62 同步）；决策 §14.67 在认证组加 3 条（2026-11-23 按决策 §14.67 同步））；另删除标签相关的全部行为，以及现状 auth 路由下的 `me` 两条别名（决策 §14.42：不保留别名）。下表的"变化"列可逐行核对这三个桶。
 
 | # | 现状端点 | 目标端点 | 变化 | 说明 |
 |---|---|---|---|---|
-| 1 | `POST /api/v1/auth/register` | `POST /api/v1/auth/register` | 保留 + 增强 | 受 `REGISTRATION_OPEN` 控制；注册时自动建默认账本（决策 §2、§9） |
-| 2 | `POST /api/v1/auth/login` | `POST /api/v1/auth/login` | 保留 + 增强 | 增加同 IP 每分钟 10 次限流（决策 §9） |
+| 1 | `POST /api/v1/auth/register` | `POST /api/v1/auth/register` | 保留 + 增强 | 受 `REGISTRATION_OPEN` 控制；注册时自动建默认账本（决策 §2、§9）；响应多 `refresh_token` 与 `expires_in`（决策 §14.67）（2026-11-23 同步） |
+| 2 | `POST /api/v1/auth/login` | `POST /api/v1/auth/login` | 保留 + 增强 | 增加同 IP 每分钟 10 次限流（决策 §9）；响应多 `refresh_token` 与 `expires_in`（决策 §14.67）（2026-11-23 同步） |
+| 2a–2c | — | `POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`、`POST /api/v1/auth/logout-all` | 新增 | 刷新令牌换新、登出（吊销令牌所在 family）、登出所有设备；前两条公开，第三条需登录；失败统一 401 `refresh_invalid`（决策 §14.67，§5.2a–§5.2c）（2026-11-23 按决策 §14.67 同步） |
 | 3 | — | `GET /api/v1/me` | 新增 | 决策 §11「我」组；含 `display_name`（决策 §14.40） |
 | 4 | — | `PATCH /api/v1/me` | 新增 | 默认币种、语言、显示名（决策 §11、§14.40） |
 | 5 | — | `GET /api/v1/categories` | 新增 | 公开、带 `version`、`Cache-Control: immutable`（决策 §1.3、§11） |
@@ -77,13 +79,14 @@
 | — | 现状 auth 路由下的 `me` 别名（GET 与 PATCH 两条） | **删除** | 删除 | `/me` 是唯一入口，不保留别名（决策 §14.42） |
 | — | `?tag=` 筛选、请求/响应里的 `tags` 字段 | **删除** | 删除 | `transaction_tags` 表与标签输入框全部移除（决策 §1.3） |
 
-按决策 §11 的分组核对端点数：认证 2 + 我 2 + 分类 1 + 配置 1 + 导入格式 1 + 账本 12 + 账户 8（个人 5 + 共享 2 + 账本内列表 1，决策 §14.62）+ 交易 10 + 统计 2 + 导入 8 + 汇率 3 = **50**（2026-09-16 按决策 §14.62 同步）。
+按决策 §11 的分组核对端点数：认证 5 + 我 2 + 分类 1 + 配置 1 + 导入格式 1 + 账本 12 + 账户 8（个人 5 + 共享 2 + 账本内列表 1，决策 §14.62）+ 交易 10 + 统计 2 + 导入 8 + 汇率 3 = **53**（2026-09-16 按决策 §14.62 同步；认证组 2 → 5 是 2026-11-23 按决策 §14.67 同步）。
 
 除路由外的行为差异（都在后面章节展开）：
 
 | 主题 | 现状 | 目标 | 决策 |
 |---|---|---|---|
 | 归属判定 | 每张表带 `user_id`，按 `user_id == current_user.id` 过滤 | 交易、导入等业务表带 `ledger_id`，按"当前用户是该账本成员"过滤；**账户带 `owner_id`**，个人接口按 `owner_id == current_user.id` 过滤，账本里用到账户时按"对调用者在本账本内可用"判断（§3.2）（2026-09-16 按决策 §14.62 同步） | §2、§14.62 |
+| 登录状态 | 只有一个 30 分钟的 JWT，过期即掉线，没有服务端注销 | 30 分钟访问令牌 + 闲置 90 天顺延、轮换、可在服务端吊销的刷新令牌；`logout` / `logout-all` | §14.67 |
 | 错误体 | `{"detail": "..."}` 或 FastAPI 的 422 数组 | 统一 `{"detail": "...", "code": "snake_case"}` | §9 |
 | 列表响应 | 裸数组、无总数（`../current-design/06-known-issues.md` H-07） | `{"items": [...], "total": n}`（交易列表另加 `summary`） | §4、§14.52 A14 |
 | 汇率 | 两套互相矛盾的公式，永远用当天汇率（H-02） | 一个函数；交易用发生日、余额用最新；缺行情回退最近交易日 | §8 |
@@ -112,7 +115,7 @@ backend/
       categories.py    [新]    冻结的分类常量表（含一级说明文字）+ 校验/查表函数（决策 §1.3）
       ratelimit.py     [新]    进程内令牌桶（决策 §14.43）
     api/
-      auth.py                  /auth/register、/auth/login（见 §5.1-§5.2）
+      auth.py                  /auth/register、/auth/login、/auth/refresh、/auth/logout、/auth/logout-all（见 §5.1-§5.2c）
       me.py            [新]    /me（GET / PATCH）
       categories.py    [新]    /categories
       config.py        [新]    /config（公开，决策 §14.46）、/import-format（公开，决策 §6）
@@ -149,11 +152,12 @@ backend/
       stats.py         [新]    汇总、趋势、账户余额与资产 / 负债 / 净资产的 SQL 聚合
       ledger_service.py [新]   账本 / 成员 / 邀请码的业务逻辑
       source_access.py [新]   "账户对用户 U 在账本 L 内可用"的唯一判断，所有校验与账本内账户列表共用（决策 §14.62）
+      session_service.py [新] 刷新令牌：哈希、签发、轮换（含 30 秒宽限与重放吊销）、按 family / 按用户吊销、清理（决策 §14.67）
     models/                    User、Ledger、LedgerMember、LedgerInvite、FinanceSource、LedgerSource（决策 §14.62）、
-                               Transaction、TransactionEvent、ImportBatch、ImportRow、ExchangeRate
+                               Transaction、TransactionEvent、ImportBatch、ImportRow、ExchangeRate、RefreshToken（决策 §14.67）
                                （表结构见 ./02-database.md）
   scripts/
-    reset_password.py  [新]    管理员重置密码（决策 §9）
+    reset_password.py  [新]    管理员重置密码，并吊销该用户全部刷新令牌（决策 §9、§14.67 h）
     gen_import_skill.py [新]   从 core/categories.py 生成 skills/wallet-import/ 的 skill 文本与示例 CSV（决策 §6）
   migrations/                  Alembic，新链条接在 head 8a4f4d66d893 之后（决策 §13）
   tests/                       pytest（§10）
@@ -177,6 +181,7 @@ class ErrorCode:
     FORBIDDEN = "forbidden"
     UNAUTHORIZED = "unauthorized"
     STALE_UPDATE = "stale_update"
+    REFRESH_INVALID = "refresh_invalid"      # 决策 §14.67
     # …完整清单见 §4.2
 
 class ApiError(Exception):
@@ -426,6 +431,48 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
 
 退款关联、转账配对"两条交易必须在同一账本"的规则不变——可用性只管账户，不管交易（2026-09-16 按决策 §14.62 同步）。
 
+#### `services/session_service.py`（决策 §14.67）
+
+刷新令牌的全部逻辑只在这一个模块里；路由只负责取请求、调它、提交事务。令牌是 `secrets.token_urlsafe(48)` 产生的不透明字符串，库里只存它的 SHA-256 十六进制（[`02`](./02-database.md) §1.12）。除 `rotate` 的重放分支外，本模块**不提交**——令牌行要和路由里的其他写入落在同一个事务里（注册时与 `users` / `ledgers` / `ledger_members` 同事务）。`now` 参数只给测试用，生产调用不传，取 `app.core.clock.utcnow()`。
+
+```python
+REFRESH_REUSE_GRACE_SECONDS = 30      # 已轮换过的令牌在这么多秒内再来，算良性并发
+
+def hash_token(token: str) -> str:
+    """hashlib.sha256(token.encode()).hexdigest()：表里存的就是这个，小写十六进制。"""
+
+def issue(db: Session, user_id: UUID, *, family_id: UUID | None = None,
+          now: datetime | None = None) -> str:
+    """新增一行并返回明文令牌（只此一次，不落库）。不给 family_id = 新 family（登录 / 注册）；
+    给了 = 沿用该 family（轮换）。expires_at = now + REFRESH_TOKEN_EXPIRE_DAYS 天。"""
+
+def rotate(db: Session, token: str, *, now: datetime | None = None) -> tuple[UUID, str]:
+    """POST /auth/refresh 的核心，返回 (user_id, 新刷新令牌)；失败一律 401 refresh_invalid。
+    顺序见 §5.2a 的 a–e；重放分支先自己提交 family 吊销再抛错（路由会回滚，吊销必须留下）。"""
+
+def revoke_family_of(db: Session, token: str, *, now: datetime | None = None) -> int:
+    """POST /auth/logout：吊销该令牌所在 family 全部未吊销的行，返回吊销行数；
+    查不到 / 已吊销返回 0，永不抛错（不泄露令牌是否存在）。"""
+
+def revoke_all_for_user(db: Session, user_id: UUID, *, now: datetime | None = None) -> int:
+    """POST /auth/logout-all 与重置密码脚本：吊销该用户全部未吊销的行，返回行数。"""
+
+def prune(db: Session, user_id: UUID, *, now: datetime | None = None) -> int:
+    """只清这个用户的行：expires_at < now，或 used_at < now - 1 天，或 revoked_at < now - 1 天。
+    refresh 成功与登录成功时在同一事务内调用，返回删除行数。"""
+```
+
+#### `scripts/reset_password.py`（决策 §9、§14.67 h）
+
+管理员重置密码，决策 §9 早已承诺、至今没写。在 `backend/` 目录（或镜像的 `/app`）下运行：`python scripts/reset_password.py <email>`。
+
+- 用 `getpass` 交互读两遍新密码；也接受 `--password-stdin` 从标准输入读一行，供自动化 / 测试。
+- 校验与注册相同：≥ 8 个字符，UTF-8 编码后 ≤ 72 字节。
+- 邮箱按小写查找；查不到 → 退出码 1，stderr 说明。
+- 一个事务内更新 `users.password_hash` 与 `updated_at`，并调 `revoke_all_for_user` **吊销该用户全部刷新令牌**；成功退出码 0，打印 `password reset for <email>; N session(s) revoked`。
+- 密码不得出现在任何输出里。
+- 线上用法：`docker compose -p wallet exec api python scripts/reset_password.py <email>`（镜像 `COPY backend/ .`，脚本在 `/app/scripts/`；见 `infra/RUNBOOK.md`）。已签发的访问令牌在其剩余寿命内（≤ 30 分钟）仍有效（决策 §14.67 g）。
+
 ### 1.3 路由挂载
 
 `main.py` 里挂十一个路由器（`app/api/__init__.py` 扫描模块级 `router` 自动注册）（2026-09-16 按决策 §14.62 同步），前缀仍硬编码为 `"/api/v1"`（现状写法见 `backend/app/main.py:27-30`）；`settings.API_V1_PREFIX` 依旧不参与（定义在 `backend/app/core/config.py:20`），本设计不改这一点。
@@ -458,7 +505,7 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
 
 ## 2. 配置
 
-加载规则沿用现状（`backend/app/core/config.py:33-38`：`env_file=".env"`、`case_sensitive=True`、`extra="allow"`；优先级为真实环境变量 > `.env` > 字段默认值）。下表把现有 10 个字段和新增 11 个字段列全（`MAX_SOURCES_PER_USER` 是决策 §14.62 加的（2026-09-16 按决策 §14.62 同步）），新增项都标 `[新]`。
+加载规则沿用现状（`backend/app/core/config.py:33-38`：`env_file=".env"`、`case_sensitive=True`、`extra="allow"`；优先级为真实环境变量 > `.env` > 字段默认值）。下表把现有 10 个字段和新增 12 个字段列全（`MAX_SOURCES_PER_USER` 是决策 §14.62 加的（2026-09-16 按决策 §14.62 同步），`REFRESH_TOKEN_EXPIRE_DAYS` 是决策 §14.67 加的（2026-11-23 按决策 §14.67 同步）），新增项都标 `[新]`。
 
 ### 2.1 字段表
 
@@ -467,7 +514,7 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
 | `DATABASE_URL` | str | `postgresql://wallet_user:wallet_password@localhost:5432/wallet_db` | engine、Alembic | — |
 | `SECRET_KEY` | str | 无默认，**必填**（见下） | JWT 签名 | §9 |
 | `ALGORITHM` | str | `HS256` | JWT | — |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | int | `30` | 令牌有效期 | §9 |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | int | `30` | 访问令牌有效期；`register` / `login` 响应的 `expires_in` = 它 × 60（默认值不变，决策 §14.67 a） | §9、§14.67 |
 | `API_V1_PREFIX` | str | `/api/v1` | 仍未被读取（前缀硬编码） | — |
 | `PROJECT_NAME` | str | `Wallet App API` | FastAPI `title` | — |
 | `DEBUG` | bool | `False` | FastAPI `debug=`、SQL echo | — |
@@ -485,6 +532,7 @@ def leave(db: Session, ledger: Ledger, user: User) -> None:
 | `MAX_LEDGERS_PER_USER` `[新]` | int | `10` | 软限制 | §2 |
 | `MAX_MEMBERS_PER_LEDGER` `[新]` | int | `10` | 软限制 | §2 |
 | `MAX_SOURCES_PER_USER` `[新]` | int | `50` | 每人账户数上限（含已归档），超出 409 `source_limit_reached`（2026-09-16 按决策 §14.62 同步） | §14.62 a |
+| `REFRESH_TOKEN_EXPIRE_DAYS` `[新]` | int | `90`（必须为正） | 刷新令牌闲置有效期（天）：签发与每次轮换都是 `expires_at = now + 这么多天`（2026-11-23 按决策 §14.67 同步） | §14.67 |
 
 `SECRET_KEY` 去掉默认值并在 `Settings` 上加校验器：值为空、或等于模板里的 `CHANGE_ME_*` 哨兵时直接在进程启动阶段抛异常退出（现状 `SECRET_KEY` 有一个可用的公开默认值，是 `../current-design/06-known-issues.md` H-08）。
 
@@ -515,6 +563,9 @@ RATE_LIMIT_IMPORTS_PER_HOUR=10
 MAX_LEDGERS_PER_USER=10
 MAX_MEMBERS_PER_LEDGER=10
 MAX_SOURCES_PER_USER=50
+
+# Refresh token idle lifetime in days (decision §14.67)
+REFRESH_TOKEN_EXPIRE_DAYS=90
 ```
 
 `infra/.env.example` 里 `SECRET_KEY` 已经是哨兵值（`infra/.env.example:20`）。`infra/scripts/env-coverage.sh` 会自动要求每个新字段都出现在 `infra/.env.example` 里，所以漏一行就会在校验脚本上失败；反过来，上面那七个被删掉的字段也要从模板里删干净，否则脚本会报出多余字段。
@@ -525,9 +576,26 @@ MAX_SOURCES_PER_USER=50
 
 ## 3. 鉴权与授权
 
-### 3.1 认证（不变）
+### 3.1 认证：访问令牌 + 刷新令牌（决策 §14.67）
 
-JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-37`）、`create_access_token({"sub": str(user.id)})`（`backend/app/core/security.py:40-60`）、`HTTPBearer` + `get_current_user`（`backend/app/core/security.py:83-144`）。仍然没有刷新令牌、没有服务端注销、没有找回密码（决策 §9）。
+（2026-11-23 按决策 §14.67 同步；此前本节标题是「认证（不变）」，现已推翻其中「没有刷新令牌、没有服务端注销」的部分。）
+
+登录状态由两种令牌组成：
+
+| | 访问令牌 | 刷新令牌 |
+|---|---|---|
+| 形态 | 现有 JWT：`sub` = 用户 id，带 `exp` / `iat`；沿用现状的 bcrypt 哈希（`backend/app/core/security.py:33-37`）、`create_access_token({"sub": str(user.id)})`（`backend/app/core/security.py:40-60`）、`HTTPBearer` + `get_current_user`（`backend/app/core/security.py:83-144`），**不变** | `secrets.token_urlsafe(48)` 产生的不透明字符串；服务端只存 `hashlib.sha256(token.encode()).hexdigest()`，库里没有明文（`refresh_tokens` 表，[`02`](./02-database.md) §1.12） |
+| 寿命 | `ACCESS_TOKEN_EXPIRE_MINUTES`，默认 30 分钟 | 闲置 `REFRESH_TOKEN_EXPIRE_DAYS`，默认 90 天；每次使用（轮换）都顺延 |
+| 用在哪 | `Authorization: Bearer` 调所有需要登录的接口；失效 → 401 `unauthorized`（`get_current_user` 完全不变） | 只用来换新令牌：`POST /auth/refresh`、`POST /auth/logout`，不进 `Authorization` 头 |
+| 服务端可吊销 | 否（见下方「已知残留」） | 是：轮换、重放、登出、登出所有设备、重置密码 |
+
+- **签发**：`register`、`login` 成功时新建一个 family（一次登录 = 一个 `family_id`），响应带 `access_token`、`token_type`、`refresh_token`、`expires_in`（§5.1、§5.2）。
+- **轮换**：`POST /auth/refresh` 换出**新的**访问令牌与**新的**刷新令牌，旧刷新令牌写 `used_at`，新令牌沿用同一个 `family_id`（§5.2a）。已轮换过的令牌在 30 秒宽限内再来照常签发；超出宽限判定为被盗重放，吊销整个 family。
+- **吊销**：`POST /auth/logout` 吊销令牌所在 family（§5.2b）；`POST /auth/logout-all` 吊销该用户全部未吊销的刷新令牌（§5.2c）；管理员重置密码脚本同样吊销全部（§1.2）。
+- **存放**：客户端把两把令牌都放本地存储（AsyncStorage，网页即 localStorage），**不用 Cookie**（决策 §14.67 b；前端见 [`04`](./04-frontend.md) §3.2）。
+- **已知残留**：`logout-all`（或重置密码）之后，已签发的访问令牌在其剩余寿命内（≤ 30 分钟）仍然有效；本轮**不做访问令牌的即时作废**，`users` 不加列（决策 §14.67 g）。
+
+仍然没有找回密码（决策 §9）。
 
 两个小修正：
 
@@ -598,6 +666,7 @@ JWT 部分完全沿用现状：bcrypt 哈希（`backend/app/core/security.py:33-
 | `validation_error` | 422 / 400 | **422**：请求体 / 查询参数 / 路径参数不满足 pydantic schema（由 §4.1 的 `RequestValidationError` 处理器统一产出）。**400**：schema 过了、但业务层校验没过且没有更专属的 code（币种不在支持列表、金额为 0、符号与 `kind` 冲突、非转账行却带了 `transfer_role` 等）。两种情形共用这一个 code，用状态码区分：422 = 形状不对，400 = 形状对但值不合法 |
 | `unauthorized` | 401 | 缺令牌、令牌无效或过期 |
 | `invalid_credentials` | 401 | 登录邮箱或密码错 |
+| `refresh_invalid` | 401 | `POST /auth/refresh` 失败：刷新令牌查不到、已吊销、已过期，或已轮换过且超出 30 秒宽限的重放（四种对外是同一个响应，决策 §14.67 d；§5.2a）（2026-11-23 按决策 §14.67 同步） |
 | `not_found` | 404 | 资源不存在，或对当前用户不可见（§3.3） |
 | `forbidden` | 403 | 通用权限拒绝（保留给未来） |
 | `not_owner` | 403 | 需要 owner 角色的操作由 member 发起 |
@@ -754,8 +823,18 @@ POST /api/v1/auth/register
 {"email": "alice@example.com", "password": "correct horse battery", "base_currency": "cny", "language": "zh"}
 
 -> 201
-{"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....", "token_type": "bearer"}
+{"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....", "token_type": "bearer",
+ "refresh_token": "Zm9vYmFyLWV4YW1wbGUtb3BhcXVlLXRva2Vu...", "expires_in": 1800}
 ```
+
+响应体字段（登录、刷新共用，决策 §14.67）：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `access_token` | str | JWT，沿用现状 |
+| `token_type` | str | 恒为 `bearer` |
+| `refresh_token` | str | 不透明令牌（`secrets.token_urlsafe(48)`），明文只在这一次响应里出现 |
+| `expires_in` | int | 访问令牌寿命秒数，`ACCESS_TOKEN_EXPIRE_MINUTES * 60`（默认 1800） |
 
 错误：
 
@@ -767,7 +846,7 @@ POST /api/v1/auth/register
 | 400 | `validation_error` | `base_currency` 不在 Frankfurter 支持列表里（与 §5.4、§5.9 同口径；实现同步 2026-09-12） |
 | 503 | `fx_unavailable` | 校验币种时汇率上游不可用且本进程还没有币种列表缓存（注册时没有"当前币种"可放行，实现同步 2026-09-12） |
 
-副作用（一个事务）：`INSERT users`（`display_name` 为 NULL，用户以后在个人设置里填，决策 §14.40）→ `INSERT ledgers`（名字 `我的账本`、`base_currency` = 用户填的币种、`created_by` = 该用户）→ `INSERT ledger_members`（role=`owner`）。返回令牌，前端随后调 `GET /me`。不建任何默认账户（用户自己去建）。
+副作用（一个事务）：`INSERT users`（`display_name` 为 NULL，用户以后在个人设置里填，决策 §14.40）→ `INSERT ledgers`（名字 `我的账本`、`base_currency` = 用户填的币种、`created_by` = 该用户）→ `INSERT ledger_members`（role=`owner`）→ 新建一个 family 并 `INSERT refresh_tokens` 一行（决策 §14.67；与前三张表**同一个事务**提交）。返回访问令牌与刷新令牌，前端随后调 `GET /me`。不建任何默认账户（用户自己去建）。
 
 ### 5.2 `POST /api/v1/auth/login`
 
@@ -780,8 +859,10 @@ POST /api/v1/auth/login
 {"email": "alice@example.com", "password": "correct horse battery"}
 
 -> 200
-{"access_token": "eyJ...", "token_type": "bearer"}
+{"access_token": "eyJ...", "token_type": "bearer", "refresh_token": "Zm9vYmFy...", "expires_in": 1800}
 ```
+
+响应体字段同 §5.1。
 
 错误：
 
@@ -790,7 +871,100 @@ POST /api/v1/auth/login
 | 401 | `invalid_credentials` | 邮箱不存在或密码错（两者响应完全一致） |
 | 429 | `login_rate_limited` | 同 IP 每分钟超过 `RATE_LIMIT_LOGIN_PER_MINUTE` 次（§8） |
 
-限流键是客户端 IP（取 `X-Forwarded-For` 的第一跳，需要 uvicorn 加 `--proxy-headers`，决策 §14.44 的 03-15；否则退回 `request.client.host`）。成功登录后 `ratelimit.reset("login", ip)`。不写库。
+限流键是客户端 IP（取 `X-Forwarded-For` 的第一跳，需要 uvicorn 加 `--proxy-headers`，决策 §14.44 的 03-15；否则退回 `request.client.host`）。成功登录后 `ratelimit.reset("login", ip)`。
+
+副作用（一个事务，决策 §14.67）：每次成功登录新建一个 family 并 `INSERT refresh_tokens` 一行；同一事务内顺手清理这个用户的过期 / 已用 / 已吊销行（`session_service.prune`，规则见 §5.2a 的 f）。失败的登录不写库。
+
+### 5.2a `POST /api/v1/auth/refresh`
+
+（2026-11-23 按决策 §14.67 新增。）
+
+鉴权：**无**（公开，不需要 `Authorization` 头——访问令牌此时多半已过期）。
+
+请求体（继承 `ApiRequestModel`，多余字段 422）：
+
+| 字段 | 类型 | 必填 | 校验 |
+|---|---|---|---|
+| `refresh_token` | str | 是 | 长度 1..512 |
+
+```json
+POST /api/v1/auth/refresh
+{"refresh_token": "Zm9vYmFyLWV4YW1wbGUtb3BhcXVlLXRva2Vu..."}
+
+-> 200
+{"access_token": "eyJ...", "token_type": "bearer", "refresh_token": "<新的>", "expires_in": 1800}
+```
+
+成功 200，响应体与登录相同（§5.1 的字段表）：新的访问令牌 + **新的**刷新令牌。客户端必须用新的刷新令牌替换旧的。
+
+处理顺序（`session_service.rotate`，一个事务）：
+
+- a. 按 `token_hash` 查行（`with_for_update()`，SQLite 上是空操作）。查不到 → 401 `refresh_invalid`。
+- b. `revoked_at` 非空 → 401 `refresh_invalid`。
+- c. `expires_at <= now` → 401 `refresh_invalid`。
+- d. `used_at` 非空（这枚令牌已经换过一次）：
+  - `now - used_at <= REFRESH_REUSE_GRACE_SECONDS`（模块常量 30 秒）→ 视为多标签页 / 重试的良性并发：**照常签发**一对新令牌（同 family 新增一行），不吊销任何东西，`used_at` 保持原值。
+  - 超出宽限 → 判定为被盗重放：把该 family 所有 `revoked_at IS NULL` 的行的 `revoked_at` 置为 now，提交，然后 401 `refresh_invalid`。
+- e. 正常路径：把这一行 `used_at = now`；同 family 新增一行（`expires_at = now + REFRESH_TOKEN_EXPIRE_DAYS` 天，即闲置期顺延）；签发新访问令牌；提交。
+- f. 顺手清理（同一事务内，只清这个用户的行）：`expires_at < now`，或 `used_at < now - 1 天`，或 `revoked_at < now - 1 天` 的行删除。登录成功时也做同样的清理（§5.2）。
+
+错误：
+
+| 状态码 | code | 条件 |
+|---|---|---|
+| 401 | `refresh_invalid` | 上面 a / b / c / d 四种失败：查不到、已吊销、已过期、宽限外重放。**对外是同一个响应** `{"detail": "Refresh token is invalid or expired", "code": "refresh_invalid"}`，调用方无法分辨是哪一种 |
+
+不做限流：令牌 384 位随机，无法枚举。本端点公开，所以 §5.0 的通用 401 `unauthorized` 在这里不会出现；`GET` 类接口与 `get_current_user` 的 401 `unauthorized` 完全不变。
+
+副作用：写 `refresh_tokens`（旧行 `used_at`、新增一行、清理）；重放分支额外写 `revoked_at`，并且这一步在抛 401 之前先提交（路由的会话在错误时回滚，吊销必须留下）。
+
+### 5.2b `POST /api/v1/auth/logout`
+
+（2026-11-23 按决策 §14.67 新增。）
+
+鉴权：**无**（公开）。公开是有意的：登出时访问令牌可能已经过期，客户端手里只剩刷新令牌。
+
+请求体（继承 `ApiRequestModel`）：`{"refresh_token": str}`，长度 1..512。
+
+```json
+POST /api/v1/auth/logout
+{"refresh_token": "Zm9vYmFyLWV4YW1wbGUtb3BhcXVlLXRva2Vu..."}
+
+-> 204（无响应体）
+```
+
+响应：**永远 204**，无响应体。
+
+处理：按哈希查到这枚令牌，就把它所在 family 全部 `revoked_at IS NULL` 的行置 `revoked_at = now`；查不到、已吊销、已过期一律**静默 204**——幂等，也不泄露令牌是否存在（`session_service.revoke_family_of`）。
+
+错误：除 §5.0 的 422 `validation_error`（请求体不合 schema）与 500 外没有业务错误；没有 401。
+
+副作用：写 `refresh_tokens.revoked_at`。
+
+### 5.2c `POST /api/v1/auth/logout-all`
+
+（2026-11-23 按决策 §14.67 新增。）
+
+鉴权：`Authorization: Bearer <access_token>`（`Depends(get_current_user)`）。无请求体。
+
+```json
+POST /api/v1/auth/logout-all
+Authorization: Bearer eyJ...
+
+-> 204（无响应体）
+```
+
+响应：204，无响应体。把该用户全部 `revoked_at IS NULL` 的刷新令牌行置 `revoked_at = now`（`session_service.revoke_all_for_user`）——所有设备的刷新令牌都不能再换新令牌。
+
+错误：
+
+| 状态码 | code | 条件 |
+|---|---|---|
+| 401 | `unauthorized` | 缺令牌、令牌无效或过期（§5.0 通用） |
+
+**已知残留**（决策 §14.67 g）：已签发的访问令牌在其剩余寿命内（≤ 30 分钟）仍然有效；本轮不做访问令牌的即时作废，`users` 不加列。
+
+副作用：写 `refresh_tokens.revoked_at`。
 
 ### 5.3 `GET /api/v1/me`
 
@@ -3694,7 +3868,8 @@ IP 的取法：`X-Forwarded-For` 的第一段（Caddy 会设），取不到则 `
 - 非成员访问账本一律 404，不泄露账本是否存在（§3.3）。
 - 邀请码是 6 位数字（10^6 个），靠**端点级全局 1 QPS** 的限流 + 10 分钟有效期 + 一次性使用（用掉即删）来防爆破（决策 §2、§14.29、§14.35）。1 QPS 意味着把码空间试一遍要 11 天，而任何一个码只活 10 分钟。
 - 注册开关 `REGISTRATION_OPEN=false` 时 `POST /auth/register` 返回 403 `registration_closed`，且**不**因为邮箱是否已存在而给出不同响应（不泄露谁注册过）。`GET /config`（§5.6）会把这个开关公开出去——这是有意的，它不含任何用户信息。
-- 密码规则只有"≥ 8 且 ≤ 72 字节"（决策 §9 不做找回密码，所以也别把规则搞复杂让人记不住）；管理员用 `backend/scripts/reset_password.py` 重置。
+- 密码规则只有"≥ 8 且 ≤ 72 字节"（决策 §9 不做找回密码，所以也别把规则搞复杂让人记不住）；管理员用 `backend/scripts/reset_password.py` 重置，重置同时吊销该用户全部刷新令牌（决策 §14.67 h，§1.2）。
+- **刷新令牌**（决策 §14.67，2026-11-23 同步）：库里只存 SHA-256 哈希，明文只在签发响应里出现一次；轮换后旧令牌只在 30 秒内可再用，超出即视为被盗重放、吊销整个 family；`refresh` 的四种失败对外同一个 401 `refresh_invalid`，`logout` 对任何令牌都静默 204，都不泄露令牌是否存在；不做限流（384 位随机无法枚举）。`logout-all` 之后已签发的访问令牌最多再活 30 分钟，本轮不做即时作废。
 - CORS 保持现状（`backend/app/main.py:18-24`），生产里前端与 API 同源，`ALLOWED_ORIGINS` 只留真实域名。
 - `X-Client`（§4.7）是**自称**，任何人都能伪造。它只用于展示，绝不参与鉴权、授权或限流。
 

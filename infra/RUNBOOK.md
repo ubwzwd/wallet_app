@@ -255,6 +255,32 @@ bash infra/scripts/restore.sh backups/wallet-<时间>.dump --yes
 
 dump 里带着迁移版本。api 启动时会先自动跑 migrate，所以 dump 比现在的代码旧没关系，会自动升到最新；dump 比代码新（比如从更新的版本回滚代码之后）时 migrate 会失败、api 保持停止，脚本会说明，这时要先部署与 dump 匹配的代码。
 
+**重置某个人的密码。** 应用没有「忘记密码」（决策 §9），有人忘了就由你重置：
+
+```bash
+ssh wallet-vm
+cd /opt/wallet_app && docker compose -p wallet exec api python scripts/reset_password.py <邮箱>
+```
+
+脚本会交互地让你输入两遍新密码（不回显，也不会出现在任何输出里；密码至少 8 个字符、UTF-8 不超过 72 字节），成功后打印 `password reset for <邮箱>; N session(s) revoked`。邮箱不存在时退出码是 1。重置的同时，这个人在**所有设备**上的刷新令牌都会被吊销，也就是所有设备都会下线；已经签发的访问令牌最多还能再用 30 分钟（决策 §14.67 g）。把新密码用别的渠道告诉他。
+
+**登录有效期。** 登录状态由两个令牌组成（决策 §14.67），各管一件事，都在 VM 的 `infra/.env` 里配：
+
+| 变量 | 默认 | 管什么 |
+| --- | --- | --- |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | 30 | 访问令牌的寿命。它过期后，网页会用刷新令牌静默换一个新的，用户无感 |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | 90 | 刷新令牌的**闲置**期限：连续这么多天没有用它，才需要重新输入密码；每次换新都从当天重新算 |
+
+改完 `.env` 后在 VM 上 `cd /opt/wallet_app && docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml up -d api` 生效（已经签发的令牌不受影响，按它们签发时的期限走）。
+
+**紧急让所有人下线。** 换掉 `.env` 里的 `SECRET_KEY`（`openssl rand -hex 32`）后 `up -d api`：所有访问令牌立刻失效。但**刷新令牌还在库里**，网页收到 401 会拿它换出新的访问令牌，人并不会真的下线。要彻底清，再把库里的刷新令牌全部吊销：
+
+```bash
+docker compose -p wallet exec db psql -U wallet -d wallet -c "UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL"
+```
+
+只想让某一个人下线，用上面的重置密码（它会吊销该用户全部刷新令牌）。
+
 **重启与补丁。**
 
 - VM 重启后，db / api / caddy 靠 restart policy 自动起来，不用操作（migrate 是一次性的，只在 `up` 时跑）。
@@ -280,7 +306,7 @@ docker image prune -f
 | `up` 时 migrate 失败 | `docker compose -p wallet logs db`；`docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml run --rm migrate` | `DATABASE_URL` 的口令或库名与 `POSTGRES_*` 不一致；首次建库后又改了 `POSTGRES_PASSWORD`；db 没起来 |
 | 登录总是 429（`login_rate_limited`） | `docker inspect --format '{{.Config.Cmd}}' $(docker compose -p wallet ps -q api)` | 命令里没有 `--proxy-headers`，所有人被算成 Caddy 的 IP；确认镜像是最新 build 的（重新 `deploy.sh`）。限流约一分钟后自动恢复 |
 | 磁盘满 | `df -h /`；`docker system df` | 旧镜像和 build cache：`docker image prune -f`、`docker builder prune -f`；备份目录也看一下大小 |
-| 忘了 `.env` 里的某个值 | `cat /opt/wallet_app/infra/.env` | 它就在 VM 上（权限 600），直接看。丢了 `SECRET_KEY` 只会让所有人重新登录 |
+| 忘了 `.env` 里的某个值 | `cat /opt/wallet_app/infra/.env` | 它就在 VM 上（权限 600），直接看。丢了 `SECRET_KEY` 只会让所有已签发的访问令牌失效（刷新令牌在库里，用户下次请求时会自动换新的） |
 | 部署脚本退出码 2 | `ssh wallet-vm` | ssh 连不上（IP 变了就改 `~/.ssh/config`）；或 docker 没装好 / 没开新会话（第 4 步） |
 | 部署脚本退出码 3 | `ls /opt/wallet_app/infra/.env` | VM 上还没有 `infra/.env`，按第 5 步 (b) 创建 |
 

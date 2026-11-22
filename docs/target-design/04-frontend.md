@@ -316,7 +316,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 
 | 层 | 内容 | 存放 |
 |---|---|---|
-| 认证 | `user`、令牌、登录/登出动作 | `AuthContext`（React state + AsyncStorage） |
+| 认证 | `user`、访问令牌与刷新令牌、登录/登出/登出所有设备动作 | `AuthContext`（React state + AsyncStorage；两把令牌的键见 §2.1，决策 §14.67） |
 | 账本上下文 | 当前 `ledgerId`、`ledger`、`myRole`、`baseCurrency` | `CurrentLedgerProvider`（本标签页 `sessionStorage` → `last_ledger_id` → `GET /ledgers` 第一本，§2.2）（2026-09-27 按决策 §14.66 同步） |
 | 浏览状态 | 首页月份、交易列表筛选与翻页、导入批次切片与定位行、导入历史切片 | `ViewStateProvider`（内存，按账本分桶，刷新即丢，§2.2.1）（2026-09-27 按决策 §14.66 同步） |
 | 服务端数据 | 一切来自接口的数据 | TanStack Query |
@@ -324,7 +324,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 
 **没有 Redux/Zustand**。除认证与账本上下文外，页面级状态（表单草稿、筛选栏的临时输入、review 表格的选中行）留在组件里；跨页面的走浏览状态（§2.2.1）或 Query 缓存，地址只写页面与资源 id。（2026-09-27 按决策 §14.66 同步）
 
-### 2.1 `AuthContext`（保留 + 一处修复）
+### 2.1 `AuthContext`（保留 + 修复 + 刷新令牌）
 
 状态机沿用现状（`frontend/src/store/AuthContext.tsx:11-19,30-31`，状态图见现状文档 §2.4）：
 
@@ -332,7 +332,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
    挂载
      │  getItem('@wallet_app:auth_token')
      ▼
-┌─────────────────┐  无 token / GET /me 抛错  ┌──────────────┐
+┌─────────────────┐  无 token / GET /me 失败  ┌──────────────┐
 │ BOOTSTRAPPING   │──────────────────────────▶│ ANONYMOUS    │
 │ status=loading  │                            │ user=null    │
 └────────┬────────┘                            └──┬────────▲──┘
@@ -344,11 +344,15 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 └─────────────────┘
 ```
 
-对现状的三处改动：
+对现状的七处改动（前三处是原有的，后四处是 2026-11-23 按决策 §14.67 加的）：
 
 1. **`login()` / `register()` 期间不再切 `isLoading`**。现状里它们一进来就 `setIsLoading(true)`（`frontend/src/store/AuthContext.tsx:71,98`），而 `AppContent` 在 `isLoading` 为真时把整棵树换成加载指示器（`frontend/App.tsx:16-23`），于是登录失败时表单被卸载重挂、错误提示打在已卸载的组件上、Web 上什么都看不见（现状文档 §2.5）。目标：`isLoading` 只表示**启动引导**；提交中的状态由页面自己的 mutation `isPending` 表达。
 2. **401 要通知 `AuthContext`**。拦截器不再直接动存储，而是调用一个注册进来的 `onUnauthorized()` 回调，由 `AuthContext` 清存储 + `setUser(null)`，路由守卫随即接管（§1.5 第 6 条；条目编号 2026-09-27 按决策 §14.66 同步）。`GET /me` 自身的 401 仍然走启动引导的那条路径。
 3. **接口路径**：`GET /me` / `PATCH /me`（决策 §11 的「我」分组），不是现状的 `/auth/me`。`POST /auth/register`、`POST /auth/login` 不变。**`/auth/me` 不再注册，也不保留别名**——应用尚未上线，目标设计里不留任何过渡兼容（决策 §14.42）。
+4. **两把令牌，401 先刷新再掉线**（决策 §14.67）。本地存储两把键：现有的 `AUTH_TOKEN_KEY = '@wallet_app:auth_token'`（访问令牌）与新增的 `REFRESH_TOKEN_KEY = '@wallet_app:refresh_token'`（刷新令牌），都放 AsyncStorage（网页即 `localStorage`），**不用 Cookie**。`login()` / `register()` 成功后两把一起写。请求得到 401 时由拦截器先单飞刷新、成功就透明重放（§3.2）；第 2 条的 `onUnauthorized()` 因此**只在刷新被服务端以 401 拒绝时**才被调用，由 `AuthContext` 清两把令牌 + `setUser(null)`。
+5. **启动自检只在 401 时清令牌**（决策 §14.67）。现状是任何失败（含离线、5xx）都清令牌，一次断网就毁掉 90 天的会话。改为：`GET /me` 返回 200 → `authenticated`；返回 **401**（此时拦截器已经试过刷新并被拒）→ 清令牌、`anonymous`；**其他失败**（离线、超时、5xx）→ 进入 `anonymous` 但**保留**本地令牌，下次刷新页面还能恢复。
+6. **`logout()` 先通知服务端**（决策 §14.67）：先尽力调一次 `POST /auth/logout`（带本地刷新令牌；失败、超时一律忽略，不阻塞登出），再做原有的本地清理。
+7. **新增 `logoutAll()`**（决策 §14.67）：调 `POST /auth/logout-all`（需要访问令牌）；**成功后**才做与 `logout()` 相同的本地清理（不必再调 `/auth/logout`，服务端已吊销全部）；失败则抛错、**保持登录**，由页面提示（§4.13）。
 
 上下文形状：
 
@@ -360,12 +364,13 @@ interface AuthContextValue {
   user: User | null;                       // status==='authenticated' 时非空
   login(body: LoginRequest): Promise<void>;
   register(body: RegisterRequest): Promise<void>;
-  logout(): Promise<void>;                 // 清令牌 + queryClient.clear() + 跳 /login
+  logout(): Promise<void>;                 // 先尽力 POST /auth/logout，再清两把令牌 + queryClient.clear() + 跳 /login
+  logoutAll(): Promise<void>;              // POST /auth/logout-all，成功后同 logout 的本地清理；失败抛错、保持登录
   refreshUser(): Promise<void>;
 }
 ```
 
-`logout()` 必须调 `queryClient.clear()`：现状没清，缓存里的上一个用户数据会留到下一次登录（也留在 service worker 的 `api-cache` 里，现状文档 §7.4）。
+`logout()` 与 `logoutAll()` 的本地清理都必须调 `queryClient.clear()`：现状没清，缓存里的上一个用户数据会留到下一次登录（也留在 service worker 的 `api-cache` 里，现状文档 §7.4）。
 
 ### 2.2 当前账本：`CurrentLedgerProvider`（决策 §2、§14.66 b–d）
 
@@ -473,7 +478,7 @@ useQuery({
 frontend/src/api/
   client.ts          axios 实例、拦截器、错误归一化、上传专用实例
   types.ts           全部 TypeScript 类型（本节 §3.3）
-  auth.ts            注册 / 登录
+  auth.ts            注册 / 登录 / 刷新 / 登出 / 登出所有设备（决策 §14.67）
   me.ts              GET/PATCH /me
   config.ts          GET /config（匿名，决策 §14.46）
   categories.ts      GET /categories
@@ -506,7 +511,18 @@ export const apiClient = axios.create({
 export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 60_000 });
 ```
 
-两个实例共享同一对拦截器：请求拦截器读令牌注入 `Authorization: Bearer <token>`（同 `frontend/src/api/client.ts:19-34`）；响应拦截器做 §3.5 的归一化。
+两个实例共享同一对拦截器：请求拦截器读令牌注入 `Authorization: Bearer <token>`（同 `frontend/src/api/client.ts:19-34`）；响应拦截器先做下面的 401 刷新，再做 §3.5 的归一化。
+
+**401 → 单飞刷新 → 重放一次**（2026-11-23 按决策 §14.67 同步；后端 [`03`](./03-backend-api.md) §3.1、§5.2a）：
+
+- **裸的刷新实例**：`POST /auth/refresh` 走一个**没有拦截器**的独立 axios 实例，所以刷新自己的 401 永远不会再触发刷新。
+- **触发条件**：请求得到 401，且路径**不是** `/auth/login`、`/auth/register`、`/auth/refresh`、`/auth/logout` 这四个之一，且这个请求**没有重试过**。
+- **成功**：刷新换回新的访问令牌与新的刷新令牌，两把一起写本地存储与内存缓存，然后用新访问令牌**原样重放一次**原请求；调用方无感。重放仍然 401 不再刷新，按 `onUnauthorized` 处理。
+- **单飞**：同一时刻并发的多个 401 **共用一次刷新**（模块里持有同一个进行中的 Promise），不会各发一次 `/auth/refresh`——后端把已轮换过的令牌再来视为重放（30 秒内宽限，超出整条 family 被吊销），并发多发既浪费也危险。
+- **多标签页**：刷新前先**绕过内存缓存重读存储**；如果存储里的访问令牌已经和失败请求用的那把不同（别的标签页刚刷新过），就直接采用存储里的那对令牌并重放，**不调** `/auth/refresh`。
+- **刷新被拒**：只有刷新被服务端以 **401**（`refresh_invalid`）拒绝才走 `onUnauthorized()`：清两把本地令牌、`AuthContext` 回 `anonymous`，路由守卫把人带回登录页。
+- **网络错误或 5xx 不登出**：刷新请求因网络错误或 5xx 失败时，原请求以该错误 reject，两把令牌**原样保留**，下次请求再试；一次断网或后端重启不会毁掉 90 天的会话。
+- **存放**：两把令牌都在 AsyncStorage（网页即 `localStorage`），键见 §2.1；不用 Cookie。
 
 ### 3.3 类型定义
 
@@ -551,7 +567,14 @@ export interface LoginRequest { email: string; password: string; }
 export interface RegisterRequest {
   email: string; password: string; base_currency: string; language?: 'zh' | 'en';
 }
-export interface AuthResponse { access_token: string; token_type: 'bearer'; }
+// POST /auth/register、/auth/login、/auth/refresh 的响应（决策 §14.67）
+export interface AuthResponse {
+  access_token: string; token_type: 'bearer';
+  refresh_token: string;             // 不透明令牌；每次刷新都换一枚新的，旧的要丢掉
+  expires_in: number;                // 访问令牌寿命（秒），后端 ACCESS_TOKEN_EXPIRE_MINUTES * 60
+}
+// POST /auth/refresh 与 POST /auth/logout 的请求体（1..512 个字符）
+export interface RefreshRequest { refresh_token: string; }
 
 // ---------- 分类（决策 §1.3）----------
 // GET /categories：children 永远是数组，没有二级时是空数组
@@ -950,6 +973,9 @@ export interface CurrencyList { currencies: Record<string, string>; }
 |---|---|
 | `POST /auth/register` | `authApi.register(b: RegisterRequest): Promise<AuthResponse>` |
 | `POST /auth/login` | `authApi.login(b: LoginRequest): Promise<AuthResponse>` |
+| `POST /auth/refresh` | `authApi.refresh(b: RefreshRequest): Promise<AuthResponse>`（走裸的刷新实例，§3.2；匿名，决策 §14.67） |
+| `POST /auth/logout` | `authApi.logout(b: RefreshRequest): Promise<void>`（匿名；永远 204；尽力而为，短超时，决策 §14.67） |
+| `POST /auth/logout-all` | `authApi.logoutAll(): Promise<void>`（需要访问令牌；204，决策 §14.67） |
 | `GET /config` | `configApi.get(): Promise<AppConfig>`（匿名可读，注册页启动时调，决策 §14.46） |
 | `GET /me` | `meApi.get(): Promise<User>` |
 | `PATCH /me` | `meApi.update(b: UserUpdate): Promise<User>`（`display_name` / `base_currency` / `language`） |
@@ -1122,13 +1148,14 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 | `network_error` | **非服务端 code**：请求没拿到响应（超时 / 离线 / CORS），拦截器置 `status=0` | 网络连接失败，请检查网络后重试 | Can't reach the server. Check your connection. |
 | `unknown` | **非服务端 code**：`errorMessage()` 的兜底 key，服务端新增了前端还没翻译的 code 时命中 | 出错了（{{detail}}） | Something went wrong ({{detail}}) |
 
-下面是注册表里的 45 个服务端 code，顺序与 03 §4.2 完全一致：
+下面是注册表里的 46 个服务端 code，顺序与 03 §4.2 完全一致：
 
 | code | HTTP | zh | en |
 |---|---|---|---|
 | `validation_error` | 422 / 400 | 有几项填得不对，请检查标红的字段 | Some fields need fixing |
 | `unauthorized` | 401 | 登录已过期，请重新登录 | Your session expired. Please sign in again. |
 | `invalid_credentials` | 401 | 邮箱或密码不正确 | Incorrect email or password |
+| `refresh_invalid` | 401 | 登录已过期，请重新登录 | Your session expired. Please sign in again. |
 | `not_found` | 404 | 找不到这条记录，它可能已经被删除，或者你不在这个账本里 | Not found — it may have been deleted, or you're not a member of this ledger |
 | `forbidden` | 403 | 你没有权限做这个操作 | You don't have permission to do that |
 | `not_owner` | 403 | 只有账本创建者（owner）可以做这个操作 | Only the ledger owner can do that |
@@ -1932,13 +1959,14 @@ export function errorMessage(t: TFunction, e: ApiClientError): string {
 
 屏幕稿 `mockups/屏幕 14 · 个人设置.dc.html`。**没有 LLM 设置页**（决策 §5、§6、§14.25：应用不接入大模型，`/settings/llm` 整条路由取消）。
 
-- **构图**（屏幕稿 14 · 1440）：页头只有「我的」（屏幕稿的副标题与右上「保存」按 2026-09-16 用户决定去掉，决策 §14.61：副标题多余；「保存」只管显示名，所以放在显示名字段正下方，只在显示名改动时可用；默认币种 / 语言 / 外观仍即时生效）；下面是 **1.15 : 1 的两栏**：左栏「关于我」（头像、显示名、默认币种）与「语言」，右栏「外观」、「关于」一行与只放着描边「退出登录」的登录卡。窄屏竖排：个人资料 → 偏好（默认币种 / 外观 / 语言）→ 入口 → 关于 → 退出登录。（2026-09-15 按屏幕稿同步，决策 §14.56）
+- **构图**（屏幕稿 14 · 1440）：页头只有「我的」（屏幕稿的副标题与右上「保存」按 2026-09-16 用户决定去掉，决策 §14.61：副标题多余；「保存」只管显示名，所以放在显示名字段正下方，只在显示名改动时可用；默认币种 / 语言 / 外观仍即时生效）；下面是 **1.15 : 1 的两栏**：左栏「关于我」（头像、显示名、默认币种）与「语言」，右栏「外观」、「关于」一行与登录卡（描边「退出登录」，下面是「登出所有设备」，2026-11-23 按决策 §14.67 同步）。窄屏竖排：个人资料 → 偏好（默认币种 / 外观 / 语言）→ 入口 → 关于 → 退出登录 → 登出所有设备。（2026-09-15 按屏幕稿同步，决策 §14.56）
 - **端点**：`GET /me`、`PATCH /me`（`display_name` / `base_currency` / `language`）；币种列表 `GET /rates/currencies`。
 - **只读**：邮箱、注册时间。**没有头像**（决策 §14.52 B22）。
 - **显示名 `display_name`**（决策 §14.6、§14.40 的 01-7）：文本框，≤40 字，可留空。下面一行说明「账本成员列表、记账人、操作记录里显示它；留空就显示你邮箱 `@` 前面的部分（`ubwzwd`）」。留空提交的是显式 `null`。
 - **默认币种**（`base_currency`）：一行说明「新建账本时的默认值，也是你的净资产与账户折算余额用的币种；已有账本的基准币种在各自的账本设置里改」（决策 §2、§14.62 f）。（2026-09-16 按决策 §14.62 同步）
 - **语言**：跟随系统 / 中文 / English（决策 §0.4）。切换立即生效（`i18n.changeLanguage`）并 `PATCH /me` 持久化；选「跟随系统」时把 `language` 置为显式 `null`（决策 §14.6）。
 - **外观**（决策 §14.52 A23）：跟随系统 / 浅色 / 深色三选一。**只存本机，不上服务器**（`localStorage['wallet:theme']`，原生端 `AsyncStorage` 的 `@wallet_app:theme`）——同一个人在电脑上想要浅色、手机上想要深色是常态，同步反而添乱。三种取值直接喂给 §6 的 `ThemeProvider`；「跟随系统」时监听 `Appearance.addChangeListener`（Web 上是 `prefers-color-scheme` 的 `matchMedia` 监听），跟着实时切。深色的样子见 `mockups/屏幕 16 · 深色模式三屏.dc.html`。
+- **登出所有设备**（2026-11-23 按决策 §14.67 同步）：「登录」卡片里、「退出登录」**下面**加一个「登出所有设备」。点击先弹**确认对话框**（§3.9 的确认框）；确认后调 `AuthContext.logoutAll()`（§2.1），**成功后**与「退出登录」走同一条跳转（清缓存、回 `/login`）；**失败**时提示错误（Toast，§3.7 的归一化文案）并**保持登录**，页面不动。没有设备列表（决策 §14.67 b）。已签发的访问令牌在其剩余寿命内（≤ 30 分钟）仍然有效，这是已知残留（决策 §14.67 g）。
 - **入口**：账本设置、登出。§14.63 加的「账本管理」（testID `settings-switch-ledger`，进 `/ledgers`）那一行去掉——没有账本列表页了，换账本用账本药丸 / 侧栏账本卡片的切换器。（2026-09-26 按决策 §14.65 同步）
 - **框架**：`/settings` 是一级页，窄屏顶栏是账本药丸（当前账本）+ 头像 + 标题，底栏高亮「我的」；宽屏侧栏同账本里（账本卡片 + 五项 + 记一笔，高亮「我的」）。一本账都没有时没有底栏，顶栏是子页形态，返回去 `/ledgers`（§1.4.1）。（2026-09-26 按决策 §14.64 同步）（2026-09-27 按决策 §14.66 同步：「最近那本账」即 `CurrentLedgerProvider` 的当前账本，首页是 `/home`）
 - **不做**（决策 §14.52）：通知（B21）、换头像（B22）、导出我的数据 / 导出 CSV（A1）。

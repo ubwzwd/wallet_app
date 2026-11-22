@@ -15,9 +15,10 @@
 > - **没有任何文件系统状态**：不保存上传的账单文件，上传目录、上传卷、目录清理全部取消（决策 §14.28）。
 > - **转账配对 / 拆开**（决策 §14.34）落在 `transactions` 的 `transfer_pair_id` 与 `counterparty` 两列上，**不加新列、不加新约束**：既有的 `UNIQUE (transfer_pair_id, transfer_role)` 挡住"两腿方向相同"、互斥 CHECK 挡住"忘了清 `counterparty`"，而"两腿必须都还是单腿"数据库管不到，只能由应用层加行锁后断言（§1.6.3、§3.2）。
 > - **账户归人，按账本共享**（决策 §14.62）：`finance_sources` 删 `ledger_id`、加 `owner_id → users`；新表 `ledger_sources(ledger_id, source_id, shared_by, shared_at)`；删账本不再级联删账户，只级联删共享关系；迁移链加第 7 步 `b1f3c2a10d47_sources_belong_to_users`（§1.5、§1.5.1、§1.6.2、§2、§3、§4、§5.7、§6.4、§6.7）（2026-09-16 按决策 §14.62 同步）。
-> - 02 章原有的待决七条（D-3 至 D-9）已由决策 §14.29、§14.40、§14.41 全部裁定或作废，本章不再有待决项。
+> - **新表 `refresh_tokens`**（决策 §14.67，2026-11-23）：登录状态改为 30 分钟访问令牌 + 可吊销的刷新令牌，服务端只存刷新令牌的 SHA-256 哈希；`users` 不加任何列；迁移链加第 8 步 `b1f3c2a10d48_refresh_tokens`（只建表，无回填）（§0、§1.12、§2、§3、§4、§5.7a、§5.8）（同步 2026-11-23）。
+- 02 章原有的待决七条（D-3 至 D-9）已由决策 §14.29、§14.40、§14.41 全部裁定或作废，本章不再有待决项。
 >
-> 关于篇幅：本文长于最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十一张表的完整 DDL、七步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
+> 关于篇幅：本文长于最初给写作者的 500–800 行参考区间，这是**有意保留**而不是漏了裁剪——决策 §14.8 明确"各章的行数目标只是参考，不作为验收项"，且不得为压行数删除被点名要求的内容、也不要拆附录。十二张表的完整 DDL、八步迁移的可运行代码与 Postgres 迁移测试方案必须一次给全，读者才能照着实现。
 
 技术栈不变：SQLAlchemy 2.0 同步引擎 + Alembic + Postgres 15，测试用 SQLite 内存库（backend/pyproject.toml:13-14,21）。
 
@@ -25,7 +26,7 @@
 
 ## 0. 总览：目标表清单与对现状的差异
 
-目标 schema 共十一张表：决策 §10 列出的九张，加上决策 §14.51 新增的 `transaction_events` 与决策 §14.62 新增的 `ledger_sources`（决策 §14.25 取消了上一版的模型配置表）（2026-09-16 按决策 §14.62 同步）。
+目标 schema 共十二张表：决策 §10 列出的九张，加上决策 §14.51 新增的 `transaction_events`、决策 §14.62 新增的 `ledger_sources` 与决策 §14.67 新增的 `refresh_tokens`（决策 §14.25 取消了上一版的模型配置表）（2026-09-16 按决策 §14.62 同步；2026-11-23 按决策 §14.67 同步）。
 
 | # | 表 | 现状 | 说明 |
 |---|---|---|---|
@@ -40,6 +41,7 @@
 | 9 | `import_rows` | **新增** | 导入草稿行（决策 §5）；含 `counterparty`（决策 §14.10），日期列叫 `occurred_at`（决策 §14.41） |
 | 10 | `transaction_events` | **新增** | 交易操作记录，只追加、随交易级联删除（决策 §14.51） |
 | 11 | `exchange_rates` | **新建（重建）** | Frankfurter 日汇率缓存。现状这张表已被迁移 `5ca7fe6e37db` 删除，目标态按决策 §14.1 用**新形状**重建，不是沿用现状（§1.10） |
+| 12 | `refresh_tokens` | **新增** | 刷新令牌：一行 = 一枚不透明令牌的 SHA-256 哈希；同一次登录 / 注册的令牌共用一个 `family_id`；轮换、重放吊销、登出都落在这张表上；`users` 不加列（决策 §14.67，§1.12）（2026-11-23 按决策 §14.67 同步） |
 
 删除的表：`transaction_tags`（决策 §1.3"现有 `transaction_tags` 表、`?tag=` 筛选、标签输入框全部移除"）。现状模型见 backend/app/models/transaction_tag.py:11-20。
 
@@ -702,6 +704,50 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 
 原因：直接用 `JSONB` 会让 `Base.metadata.create_all` 在 SQLite 上失败（`JSONB` 是 Postgres 方言专有类型，SQLite 方言不知道怎么编译它），而测试库正是 SQLite 内存库（backend/tests/conftest.py:45-50,67）。`with_variant` 让同一列在 Postgres 上编译成 `JSONB`（可建 GIN 索引、比较高效），在 SQLite 上编译成 `JSON`（实际按 TEXT 存，SQLAlchemy 负责序列化/反序列化）。上面 DDL 里写的 `JSON` 是给 SQLite 看的通用形状，生产迁移里写 `postgresql.JSONB`。本版本对三列都不建 GIN 索引：`flags` 的筛选（review 里的"全部 / 待归类 / 有标记"，决策 §14.52 A4）永远发生在"某个批次的几百行"范围内，先按 `batch_id` 收窄即可；`warnings` 与 `changes` 只按主键 / 外键取回后整体读出，从不作为查询条件。
 
+### 1.12 `refresh_tokens`
+
+（2026-11-23 按决策 §14.67 新增。）
+
+```sql
+CREATE TABLE refresh_tokens (
+    id          UUID       NOT NULL,
+    user_id     UUID       NOT NULL,
+    family_id   UUID       NOT NULL,
+    token_hash  CHAR(64)   NOT NULL,
+    created_at  TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    expires_at  TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    used_at     TIMESTAMP WITHOUT TIME ZONE,
+    revoked_at  TIMESTAMP WITHOUT TIME ZONE,
+    CONSTRAINT pk_refresh_tokens PRIMARY KEY (id),
+    CONSTRAINT fk_refresh_tokens_user_id_users
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT ck_refresh_tokens_expiry CHECK (expires_at > created_at)
+);
+CREATE UNIQUE INDEX ix_refresh_tokens_token_hash ON refresh_tokens (token_hash);
+CREATE INDEX ix_refresh_tokens_user_id ON refresh_tokens (user_id);
+CREATE INDEX ix_refresh_tokens_family_id ON refresh_tokens (family_id);
+```
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | `UUID` PK | `default=uuid.uuid4` |
+| `user_id` | `UUID` NOT NULL | FK `users.id` `ON DELETE CASCADE`，约束名 `fk_refresh_tokens_user_id_users` |
+| `family_id` | `UUID` NOT NULL | 一次登录 / 注册 = 一个 family；轮换出的新令牌沿用同一个 `family_id` |
+| `token_hash` | `CHAR(64)` NOT NULL | 明文令牌的 SHA-256 十六进制小写；**库里永远不存明文** |
+| `created_at` | `TIMESTAMP` NOT NULL | 朴素 UTC（`app.core.clock.utcnow()`，与全库一致，§7.2） |
+| `expires_at` | `TIMESTAMP` NOT NULL | `created_at + REFRESH_TOKEN_EXPIRE_DAYS` 天（默认 90） |
+| `used_at` | `TIMESTAMP` NULL | 这枚令牌被拿去换过新令牌的时刻 |
+| `revoked_at` | `TIMESTAMP` NULL | 被吊销的时刻 |
+
+列语义：
+
+- **一行 = 一枚刷新令牌**。令牌本身是 `secrets.token_urlsafe(48)` 产生的不透明字符串，只在签发那一次的响应里出现；库里存 `hashlib.sha256(token.encode()).hexdigest()`（小写十六进制，恰好 64 个字符，所以是 `CHAR(64)`）。
+- **`family_id` 把同一次登录的整条轮换链串起来**：登录 / 注册新建一个 family；每次 `POST /auth/refresh` 换出的新令牌沿用旧令牌的 `family_id`，旧行留着（`used_at` 被写上）。这样"同一个已用过的令牌被拿来重放"可以一把吊销整条链（§3.2，03 §5.2a）。`family_id` **不是**外键，没有 family 表。
+- **`used_at` 与 `revoked_at` 是两件事**：`used_at` 表示这枚令牌已经换过一次（正常轮换，不是失败）；`revoked_at` 表示它被吊销（登出、登出所有设备、重放吊销、管理员重置密码）。
+- **`ck_refresh_tokens_expiry`** 只保证有效期晚于创建时刻；`expires_at <= now()` 的判断在应用层（`now()` 不是不可变函数，进不了 CHECK，与 `ledger_invites` 同理，§1.4）。
+- 本版本没有删用户的接口（§6.9）；`ON DELETE CASCADE` 只是让将来真有删用户时令牌行不成为孤儿。`users` 表**不加任何列**。
+- 模型里 CHECK 只写后缀（`name="expiry"` → `ck_refresh_tokens_expiry`，§5.0）；唯一索引写成 `Index("ix_refresh_tokens_token_hash", ..., unique=True)`，与 `ix_users_email` 同写法。
+
 ---
 
 ## 2. ER 图
@@ -715,6 +761,7 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
    |        ledger_invites, finance_sources, ledger_sources, transactions,
    |        import_batches, transaction_events)
    | finance_sources.owner_id -> users.id（NO ACTION，账户主人，决策 §14.62）
+   | refresh_tokens.user_id -> users.id（CASCADE，刷新令牌，决策 §14.67，见图尾）
    v
  +-------------------------+          N +----------------------------------+
  | ledgers                 |<-----------| ledger_members                   |
@@ -811,6 +858,17 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
  |    client          VC(16)           |
  +-------------------------------------+
 
+ +-------------------------------------------+
+ | refresh_tokens  （决策 §14.67）            |
+ |-------------------------------------------|
+ | PK id           UUID                      |
+ | FK user_id ---> users  NN (CASCADE)       |  N : 1  users
+ |    family_id    UUID NN  (无 FK)          |
+ |    token_hash   CHAR(64) NN  UNIQUE       |
+ |    created_at / expires_at  TS NN         |
+ |    used_at / revoked_at     TS            |
+ +-------------------------------------------+
+
  图例：NN = NOT NULL；VC(n) = VARCHAR(n)；CHR(3) = CHAR(3)；NUM(p,s) = NUMERIC(p,s)；
       TS = TIMESTAMP WITHOUT TIME ZONE（naive UTC）；NOACT = NO ACTION。
       每条连线都是一条外键。**方向以线两端的 1 / N 标记为准，不以箭头头部为准**
@@ -825,7 +883,8 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
       transfer_pair_id 没有外键，是两条转账腿共用的自由 UUID（决策 §1.2）；
       配对 = 两腿写同一个值并清空 counterparty，拆开 = 两腿写回 NULL（§1.6.3、决策 §14.34）。
       唯一 / 主键约束：transactions(transfer_pair_id, transfer_role)（唯一）、
-      import_rows(batch_id, row_no)（唯一）、exchange_rates(date, base, symbol)（主键，决策 §14.1）、
+      import_rows(batch_id, row_no)（唯一）、refresh_tokens(token_hash)（唯一索引，决策 §14.67）、
+      exchange_rates(date, base, symbol)（主键，决策 §14.1）、
       ledger_sources(ledger_id, source_id)（主键，决策 §14.62）。
       finance_sources 不挂在 ledgers 下面：它只经 owner_id 指向 users，与账本的关系全在
       ledger_sources 里，所以删账本的级联链里没有它（决策 §14.62，2026-09-16 同步）。
@@ -875,6 +934,9 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 批次行号从 1 起 | `ck_import_rows_row_no` | 决策 §14.5 |
 | 操作记录的事件名七选一 | `ck_transaction_events_event` | 决策 §14.51 |
 | 删交易级联删它的操作记录 | `transaction_events.transaction_id ON DELETE CASCADE` | 决策 §14.51 |
+| 刷新令牌的哈希全表唯一 | `ix_refresh_tokens_token_hash`（唯一索引） | 决策 §14.67 |
+| 刷新令牌的有效期晚于创建时刻 | `ck_refresh_tokens_expiry` | 决策 §14.67 |
+| 刷新令牌必属于某个用户；用户删除时令牌随之删除 | `fk_refresh_tokens_user_id_users`（`ON DELETE CASCADE`） | 决策 §14.67 |
 | 汇率 (date, base, symbol) 唯一且为正、币种大写、base ≠ symbol | 主键 `pk_exchange_rates (date, base, symbol)` + `ck_exchange_rates_rate_positive` / `_base_upper` / `_symbol_upper` / `_not_self` | 决策 §8、§14.1 |
 
 ### 3.2 应用层保证（数据库不管）
@@ -909,6 +971,10 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | 撤销导入时先删交易再删批次 | 见 §6.6 | 决策 §5 |
 | 币种是真实 ISO 代码 | 对照 Frankfurter 币种列表校验（现状不校验，backend/app/schemas/currency.py:9 只有正则） | 决策 §8 |
 | 邮箱小写归一化 | 注册 / 登录前 `email.lower()` | — |
+| 刷新令牌明文不落库 | 令牌由 `secrets.token_urlsafe(48)` 产生，只返回给客户端；库里只写 `hashlib.sha256(token.encode()).hexdigest()`；查找也先对入参取哈希再按 `token_hash` 等值（`services/session_service.py`，03 §1.2）（2026-11-23 按决策 §14.67 同步） | 决策 §14.67 |
+| family 轮换与重放吊销 | 同一个 `family_id` 贯穿一次登录的整条轮换链；`POST /auth/refresh` 按哈希取行（`with_for_update()`）后依次判：已吊销 / 已过期 → 失败；`used_at` 非空且在 30 秒宽限内 → 照常再签一对（不吊销）；超出宽限 → 把该 family 所有 `revoked_at IS NULL` 的行置 `revoked_at = now` 并失败；正常路径写 `used_at`、同 family 新增一行、`expires_at` 顺延（03 §5.2a）。`POST /auth/logout` 吊销令牌所在 family 的全部未吊销行；`POST /auth/logout-all` 与管理员重置密码脚本吊销该用户全部未吊销行（2026-11-23 按决策 §14.67 同步） | 决策 §14.67 |
+| 刷新令牌行的清理 | 每次 `refresh` 成功与每次登录成功时，在同一事务内只清这个用户的行：`expires_at < now`，或 `used_at < now - 1 天`，或 `revoked_at < now - 1 天` 的删除（2026-11-23 按决策 §14.67 同步） | 决策 §14.67 |
+| 注册时刷新令牌与建用户同事务 | `POST /auth/register` 里 `INSERT users` / `ledgers` / `ledger_members` / `refresh_tokens` 一个事务提交（§6.1） | 决策 §14.67 |
 
 ### 3.3 无人保证（目标态残留）
 
@@ -948,6 +1014,9 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 | `ix_transaction_events_transaction_at (transaction_id, at DESC)` | 交易详情的操作记录：`SELECT ... WHERE transaction_id = ? ORDER BY at DESC`（决策 §14.51）；删交易时 `ON DELETE CASCADE` 的反查也走它 | 前导列等值 + 第二列有序，一次索引扫描取完一条交易的全部事件（个位数行） |
 | `ix_exchange_rates_pair_date (base, symbol, date DESC)` | 发生日汇率 `WHERE base=? AND symbol=? AND date <= ? ORDER BY date DESC LIMIT 1`；最新汇率 `WHERE base=? AND symbol=? ORDER BY date DESC LIMIT 1`（决策 §8、§14.1）；节流判断"这个货币对上次抓取是什么时候"也走同一条路径取最新行的 `fetched_at` | 前导两列等值、第三列有序，两条查询都只读一行。**不是**沿用初始迁移那个单列 `ix_exchange_rates_date`（e533c88884b7:35）——那张旧表已被删除，本表按决策 §14.1 重建 |
 | `pk_exchange_rates (date, base, symbol)`（主键） | upsert 的冲突目标（`ON CONFLICT (date, base, symbol)`）；按整天批量取汇率 | 决策 §14.1 直接指定的主键。前导列是 `date`，帮不上"按货币对回退"的查询，那条靠上一行的索引 |
+| `ix_refresh_tokens_token_hash`（唯一） | 刷新与登出的入口查询：`WHERE token_hash = ?`（`POST /auth/refresh` 带 `FOR UPDATE`）；同时是令牌哈希的全表唯一约束 | 每次访问令牌过期都会命中一次；等值查找至多一行（决策 §14.67） |
+| `ix_refresh_tokens_user_id` | "这个用户的全部令牌行"：`POST /auth/logout-all` 与重置密码脚本的 `UPDATE ... WHERE user_id = ? AND revoked_at IS NULL`；登录 / 刷新时顺手清理 `DELETE ... WHERE user_id = ? AND (...)`；删用户时 `ON DELETE CASCADE` 的反查 | 决策 §14.67 |
+| `ix_refresh_tokens_family_id` | "这一次登录的整条轮换链"：重放吊销与 `POST /auth/logout` 的 `UPDATE ... WHERE family_id = ? AND revoked_at IS NULL` | 决策 §14.67 |
 | `ix_ledgers_created_by` | 运维 / 迁移回填时按创建者找账本 | 低频 |
 
 ---
@@ -956,7 +1025,7 @@ changes  = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
 
 ### 5.0 前置约定
 
-- 起点是当前 head `8a4f4d66d893`（backend/migrations/versions/8a4f4d66d893_add_transfer_pair_id_to_transactions.py:16）。前六步是决策 §13 的六个步骤，第 7 步是决策 §14.62（账户归人）追加的一步，一步一个 revision，链式串联（2026-09-16 按决策 §14.62 同步）。
+- 起点是当前 head `8a4f4d66d893`（backend/migrations/versions/8a4f4d66d893_add_transfer_pair_id_to_transactions.py:16）。前六步是决策 §13 的六个步骤，第 7 步是决策 §14.62（账户归人）追加的一步，第 8 步是决策 §14.67（刷新令牌）追加的一步，一步一个 revision，链式串联（2026-09-16 按决策 §14.62 同步；2026-11-23 按决策 §14.67 同步）。
 - 下面的 revision id 是**占位**（真实 id 由 `alembic revision` 随机生成），有意义的是文件 slug 与顺序。
 - **迁移里不 import 任何 `app.*` 模块**。需要的表结构在迁移文件内用 `sa.table(...)` / `sa.column(...)` 现场声明，需要的常量（默认账本名、分类 code）直接写字面量。允许 import 标准库（`uuid`、`datetime`、`logging`）与 `sqlalchemy`。理由：迁移必须能在任意历史版本的应用代码下重放，一旦 import 应用模型，模型的后续演进会让旧迁移报错。
 - 回填里凡是**删行**的地方都不静默执行：先 `SELECT count(*)`，非零就打一条 warning 日志再删。下面第 3、4 步与第 7 步的 downgrade 用到的 `delete_and_warn` 就是写在各自迁移文件顶部的这么一段（每个用到的迁移文件各复制一份，共三份，不做成共享模块——迁移之间不互相 import）（2026-09-16 按决策 §14.62 同步）：
@@ -1653,6 +1722,45 @@ def downgrade() -> None:
 - **有数据可运行**：是。第 3 步之后每个账户都有非空的 `ledger_id` 与 `created_by`，② 的 `INSERT ... SELECT` 与 ③ 的 `UPDATE` 必然取到值；`(ledger_id, id)` 在 `finance_sources` 里本来就唯一，② 不会撞 `pk_ledger_sources`。
 - **测试**（`backend/tests/test_migrations.py`）：`HEAD_REVISION` 改为 `b1f3c2a10d47`；`TARGET_TABLES` 加 `ledger_sources`；在第 7 步之前灌账户的 INSERT（`_SOURCE_INSERT`）仍带 `ledger_id`，之后的改带 `owner_id`；`test_legacy_indexes_are_dropped` 改为断言 `ix_finance_sources_ledger_id` **不在**、`ix_finance_sources_owner_id` 在；新增"升级后每个账户恰有一行 `ledger_sources` 且等于原 `ledger_id`、`owner_id = created_by`"与"downgrade 后 `ledger_id` 回到原账本"两条（§8.2）。
 
+### 5.7a 第 8 步：刷新令牌（决策 §14.67）
+
+（2026-11-23 按决策 §14.67 同步）
+
+**revision** `b1f3c2a10d48_refresh_tokens`，`down_revision = 'b1f3c2a10d47'`。
+
+只建 `refresh_tokens` 一张表和它的三个索引，DDL 按 §1.12；**没有任何数据回填**（新表），**不动 `users`**。`downgrade()` 删表（索引随表消失）。
+
+```python
+def upgrade() -> None:
+    op.create_table(
+        "refresh_tokens",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("user_id", sa.Uuid(), nullable=False),
+        sa.Column("family_id", sa.Uuid(), nullable=False),
+        sa.Column("token_hash", sa.CHAR(64), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("expires_at", sa.DateTime(), nullable=False),
+        sa.Column("used_at", sa.DateTime(), nullable=True),
+        sa.Column("revoked_at", sa.DateTime(), nullable=True),
+        sa.PrimaryKeyConstraint("id", name="pk_refresh_tokens"),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"],
+                                name="fk_refresh_tokens_user_id_users", ondelete="CASCADE"),
+        sa.CheckConstraint("expires_at > created_at", name="expiry"),   # -> ck_refresh_tokens_expiry
+    )
+    op.create_index("ix_refresh_tokens_token_hash", "refresh_tokens", ["token_hash"], unique=True)
+    op.create_index("ix_refresh_tokens_user_id", "refresh_tokens", ["user_id"])
+    op.create_index("ix_refresh_tokens_family_id", "refresh_tokens", ["family_id"])
+
+
+def downgrade() -> None:
+    op.drop_table("refresh_tokens")
+```
+
+要点：
+
+- **空 SQLite 与真实 Postgres 上正反向都能跑**，且 `backend/tests/test_migrations.py` 的 `compare_metadata` 与反射比对零漂移；`HEAD_REVISION` 改为 `b1f3c2a10d48`。
+- 一步只做这一件事，不夹带其他改动。
+
 ### 5.8 迁移链总览
 
 | 步 | revision（占位 id）| slug | 关键动作 | 空库可跑 | 有数据可跑 |
@@ -1664,6 +1772,7 @@ def downgrade() -> None:
 | 5 | `b1f3c2a10d45` | drop_transaction_tags | 删 `transaction_tags` | 是 | 是 |
 | 6 | `b1f3c2a10d46` | users_base_currency_as_ledger_default | `display_name`（决策 §14.40）/ `language`（决策 §14.6）/ `updated_at`；删 `default_source_id`（决策 §14.6，外键名有分叉，见 §5.6）| 是 | 是 |
 | 7 | `b1f3c2a10d47` | sources_belong_to_users | 建 `ledger_sources` 并按原 `ledger_id` 一比一回填共享行；`finance_sources` 加 `owner_id`（= `created_by`）、删 `ledger_id`（索引、外键、列）；建 `ix_transactions_source_occurred`（决策 §14.62，§5.7）（2026-09-16 按决策 §14.62 同步） | 是 | 是 |
+| 8 | `b1f3c2a10d48` | refresh_tokens | 建 `refresh_tokens` 与 `ix_refresh_tokens_token_hash`（唯一）/ `ix_refresh_tokens_user_id` / `ix_refresh_tokens_family_id`；不动 `users`，无回填（决策 §14.67，§5.7a）（2026-11-23 按决策 §14.67 同步） | 是 | 是 |
 
 每步的 `downgrade()` 策略（**只用于开发环境**；生产回退靠恢复备份）：
 
@@ -1676,6 +1785,7 @@ def downgrade() -> None:
 | 5 | `op.create_table("transaction_tags", ...)` 重建空表 | 有损：标签数据不可恢复（这正是决策 §13 允许删表的前提） |
 | 6 | 加回 `default_source_id`（值全为 NULL）与外键 `fk_users_default_source`（只在 Postgres 分支上按名字建，与 upgrade 的写法 A 对称），删掉 `display_name` / `language` / `updated_at` 与三条 CHECK | 有损：`default_source_id` 与 `display_name` 的值不可恢复 |
 | 7 | 删 `ix_transactions_source_occurred`；加回 `ledger_id`（取 `shared_at` 最早的共享行，没有共享行的取主人是成员的账本里 `created_at` 最早的一本），NOT NULL + 原外键 / 索引；删 `owner_id`；删 `ledger_sources` | 有损：多本账的共享关系只留下一本；主人已不在任何账本、又从没共享过的账户被 `delete_and_warn` 删掉（2026-09-16 按决策 §14.62 同步） |
+| 8 | `op.drop_table("refresh_tokens")`，索引随表消失（2026-11-23 按决策 §14.67 同步） | 有损：令牌行丢失，已登录的人在访问令牌过期后需重新登录 |
 
 ---
 
@@ -1685,7 +1795,7 @@ def downgrade() -> None:
 
 ### 6.1 注册
 
-`POST /auth/register`（受 `REGISTRATION_OPEN` 控制，决策 §9）→ 一个事务内：`INSERT users` → `INSERT ledgers`（name `"我的账本"`、`base_currency = users.base_currency`）→ `INSERT ledger_members (role='owner')`（决策 §2）。不再自动建账户，也不再有 `default_source_id` 的自动赋值（现状 backend/app/api/finance_sources.py:43-49 的那段逻辑消失）。用户随后必须先建一个资金账户才能记账；账户属于他本人，建一次就能在他所在的每本账里用（决策 §14.62 b、k）（2026-09-16 按决策 §14.62 同步）。
+`POST /auth/register`（受 `REGISTRATION_OPEN` 控制，决策 §9）→ 一个事务内：`INSERT users` → `INSERT ledgers`（name `"我的账本"`、`base_currency = users.base_currency`）→ `INSERT ledger_members (role='owner')`（决策 §2）→ `INSERT refresh_tokens`（新 family 的第一枚，决策 §14.67，§1.12）。不再自动建账户，也不再有 `default_source_id` 的自动赋值（现状 backend/app/api/finance_sources.py:43-49 的那段逻辑消失）。用户随后必须先建一个资金账户才能记账；账户属于他本人，建一次就能在他所在的每本账里用（决策 §14.62 b、k）（2026-09-16 按决策 §14.62 同步）。
 
 ### 6.2 建账本 / 加入 / 退出 / 转让
 
@@ -1928,7 +2038,7 @@ UPDATE transactions
 
 沿用现状：`backend/tests/conftest.py:10` 在导入任何 `app` 模块前把 `DATABASE_URL` 设成 `sqlite:///:memory:`，`conftest.py:47-50` 建专用引擎，`conftest.py:58-69` 的 session 级 fixture 调 `Base.metadata.create_all` / `drop_all`。目标态对这条路径的要求：
 
-1. **`create_all` 必须能建出全部十一张表和全部 CHECK**（十一张表含 `transaction_events`、`ledger_sources` 与 `exchange_rates`（2026-09-16 按决策 §14.62 同步），模型里必须有它们，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致（`ck_finance_sources_archived_at` 的 `archived = (archived_at IS NOT NULL)` 与 `ck_transactions_transfer_role` 属于同一类布尔等价写法，两边都成立）。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 §1 里没有任何一条 CHECK 用裸 `LIKE`；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.4）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
+1. **`create_all` 必须能建出全部十二张表和全部 CHECK**（十二张表含 `transaction_events`、`ledger_sources`、`exchange_rates`（2026-09-16 按决策 §14.62 同步）与 `refresh_tokens`（2026-11-23 按决策 §14.67 同步），模型里必须有它们，否则 §8.2 的 `compare_metadata` 断言会失败）。这就是 §1 里每条 CHECK 都避开 Postgres 专有语法的原因：不用 `~` 正则、不用 `ILIKE`、不用 `::` 转型、不用 `ANY(ARRAY[...])`；`length()`、`trim()`、`upper()`、`replace()`、`IN`、`BETWEEN`、布尔等价比较在两个方言里语义一致（`ck_finance_sources_archived_at` 的 `archived = (archived_at IS NOT NULL)` 与 `ck_transactions_transfer_role` 属于同一类布尔等价写法，两边都成立）。另一个必须绕开的坑是**裸 `LIKE` 的大小写敏感性两边不同**（SQLite 对 ASCII 不敏感、Postgres 敏感），所以 §1 里没有任何一条 CHECK 用裸 `LIKE`；同理 `code` 的"6 位数字"用嵌套 `replace` 而不是字符串区间（§1.4）。JSON 列用 `with_variant`（§1.11）。`exchange_rates` 用复合主键、没有自增列，因此不需要旧表那种 `BigInteger().with_variant(Integer, "sqlite")` 的自增主键写法（决策 §14.1 去掉了旧表的 `BIGSERIAL id`，§1.10）。
 2. **CHECK 在 SQLite 上是真的生效的**，所以约束测试可以全部跑在内存库上：插入 `kind='expense', amount=100` 必须抛 `IntegrityError`。这是把不变量写进数据库而不是只写在 pydantic 里的最大回报——现状的 `finance_sources.type` 只有注释没有 CHECK（backend/app/models/finance_source.py:19），SQLite 上根本测不到。
 3. **外键在 SQLite 上默认不生效**，现状没有任何 `PRAGMA foreign_keys=ON`（`../current-design/02-database.md` §1.2）。目标态在测试引擎上挂一个连接事件把它打开，否则 `ON DELETE CASCADE` / `SET NULL` 的行为在测试里完全测不到：
 
