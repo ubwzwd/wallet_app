@@ -47,7 +47,7 @@ cd frontend && CI=1 npm run verify   # tsc + jest + build:web + PWA / 触控目�
 
 ## 部署
 
-生产形态栈（Postgres + 一次性迁移 + FastAPI + Caddy 自动签证书）定义在 `infra/`，目标是一台 Oracle Cloud Always Free 的 A1.Flex 虚拟机。从在 OCI 建 VM、配域名到日常运维，完整步骤见 [`infra/RUNBOOK.md`](infra/RUNBOOK.md)。
+生产形态栈（Postgres + 一次性迁移 + FastAPI + Caddy 自动签证书）定义在 `infra/`，目标是一台 AWS Lightsail 的小虚拟机（Ubuntu 24.04，1 GB 起）。从建 VM、配域名到日常运维，完整步骤见 [`infra/RUNBOOK.md`](infra/RUNBOOK.md)。
 
 - `bash infra/scripts/deploy.sh`：在笔记本上构建前端、rsync 到 VM、远端 `docker compose up -d --build`。
 - `bash infra/scripts/smoke.sh`：在本机用独立的项目名和端口把同一套生产形态栈真实跑一遍，不碰线上。

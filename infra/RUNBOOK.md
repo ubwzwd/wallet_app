@@ -1,8 +1,8 @@
 # 部署与运维手册
 
-目标：把 Wallet App 部署到一台 Oracle Cloud（OCI）Always Free 虚拟机，用一个 HTTPS 域名访问。
+目标：把 Wallet App 部署到一台 AWS Lightsail 虚拟机（Ubuntu 24.04，1 GB 内存起），用一个 HTTPS 域名访问。
 
-分工约定：**浏览器里的操作由你做**（OCI 控制台、域名网站），**笔记本和 VM 上的命令由 Claude 代跑**。文中 `<域名>`、`<ip>` 是占位，换成你自己的值。
+分工约定：**浏览器里的操作由你做**（Lightsail 控制台、域名网站），**笔记本和 VM 上的命令由 Claude 代跑**。文中 `<域名>`、`<ip>` 是占位，换成你自己的值。
 
 ## 0. 这套东西长什么样
 
@@ -15,7 +15,7 @@
 migrate：每次 up 时先跑一次 alembic upgrade head，跑完退出；api 等它成功后才启动
 ```
 
-- 镜像在 VM 上原生 build（ARM64），笔记本不做 ARM 模拟。
+- 镜像在 VM 上原生 build（x86 或 ARM 都行，Dockerfile 不钉平台）。1 GB 的机器靠初始化脚本建的 2 GB swap 撑过 build 的内存峰值。
 - 前端在笔记本上 build，把 `frontend/dist/` rsync 到 VM。VM 上不需要 git，也不需要 Node。
 - api 只有一个 uvicorn 进程（限流是进程内的），不要加 `--workers`，也不要起第二个副本。
 - api 不对外开端口，不挂数据卷；数据只在 Postgres 的卷 `pgdata` 里。
@@ -33,34 +33,36 @@ migrate：每次 up 时先跑一次 alembic upgrade head，跑完退出；api �
 | `infra/scripts/smoke.sh` | 笔记本上跑：本机用独立项目名和端口把整套栈跑一遍（不碰线上） |
 | `infra/scripts/env-coverage.sh` | 检查 `.env.example` 是否覆盖后端全部配置项 |
 
-## 1. 在 OCI 控制台建 VM（你做）
+## 1. 在 Lightsail 控制台建 VM（你做）
 
-1. 右上角确认区域是租户的**主区域**（新加坡）。Always Free 的资源只能建在主区域。
-2. 菜单 Compute → Instances → Create instance。
-3. Name：`wallet`。
-4. Image：Canonical Ubuntu 24.04，选 **aarch64** 版本。
-5. Shape：Ampere → `VM.Standard.A1.Flex`，**1 OCPU / 6 GB** 起步（整套栈常驻不到 1 GB）。不够时在实例详情页 Edit 改 OCPU / 内存，重启生效。免费额度合计 4 OCPU / 24 GB，别超。
-6. Networking：新建 VCN 和公网子网，勾选「Assign a public IPv4 address」。
-7. Add SSH keys：选 Paste public keys，粘贴 `~/.ssh/wallet_app_oci.pub` 的内容（笔记本上 `cat ~/.ssh/wallet_app_oci.pub`）。
-8. Boot volume：保持默认 50 GB。
-9. Create。等状态变成 Running，记下 **Public IP**。
+打开 lightsail.aws.amazon.com（用 AWS 账户登录），点 Create instance：
+
+1. Instance location：选离你们最近的区域（例如 Singapore 或 Tokyo）。
+2. Platform 选 **Linux/Unix**，Blueprint 选 **OS Only → Ubuntu 24.04 LTS**。不要选带应用的蓝图。
+3. SSH key pair：点 Change SSH key pair → Upload new，上传笔记本上的 `~/.ssh/wallet_app_oci.pub`（文件名里的 oci 只是历史名字，密钥通用）。WSL 里的文件在 Windows 资源管理器地址栏输入 `\\wsl$` 可以找到；也可以先 `cp ~/.ssh/wallet_app_oci.pub /mnt/c/Users/<你的用户名>/Desktop/` 再上传。
+4. Network type：选 **Dual-stack**（带公网 IPv4）。IPv6-only 的套餐便宜一点，但很多网络访问不了，不要选。
+5. Instance plan：**1 GB 内存**那一档就够（整套栈常驻不到 1 GB，初始化脚本会加 swap）。价格以页面为准。之后不够可以做快照再用更大的套餐恢复。
+6. Instance name：`wallet`。
+7. Create instance。等状态变成 Running。
+
+**固定公网 IP**（建好后马上做，在第 2 步配域名之前）：
+
+1. 点进实例 → Networking → Attach static IP → 起个名字（例如 `wallet-ip`）→ Create and attach。
+2. 记下这个 **Static IP**。静态 IP 挂在实例上时不另收费；不挂的话实例每次停止再启动 IP 都会变。
+
+**放行 443（云端防火墙）**：
+
+1. 同一个 Networking 页，IPv4 Firewall → Add rule，加两条：
+   - Application 选 HTTPS（TCP 443）
+   - Application 选 Custom，Protocol UDP，Port `443`（HTTP/3 用）
+2. SSH（22）和 HTTP（80）默认已经有，确认一下在列表里。
+3. 如果启用了 IPv6，在 IPv6 Firewall 里加同样两条。
 
 提示：
 
-- 报 `Out of host capacity`：换个时段重试（深夜、清晨更容易成功）。不用换区域。
-- （可选）把临时公网 IP 换成 Reserved IP（实例详情 → Attached VNICs → IPv4 Addresses），这样 stop/start 后 IP 不变。OCI 不能原地转换，换的时候公网 IP 会变一次，所以要做就在第 2 步配域名之前做；已经配过的话，DuckDNS 和 `~/.ssh/config` 里的 IP 要跟着改。
-- OCI 可能回收长期空闲的免费实例。这套栈一直在跑，通常不会触发；收到 OCI 的警告邮件就检查一下实例。
-
-**放行 80 / 443（云端防火墙）**：
-
-1. Networking → Virtual Cloud Networks → 点你的 VCN → 点公网子网 → 点 Default Security List。
-2. Add Ingress Rules，加三条，Source CIDR 都填 `0.0.0.0/0`：
-   - IP Protocol TCP，Destination Port Range `80`
-   - IP Protocol TCP，Destination Port Range `443`
-   - IP Protocol UDP，Destination Port Range `443`（HTTP/3 用）
-3. 22 端口默认已经有。
-
-VM 自己的 iptables 也要开 80 / 443，这由第 4 步的初始化脚本处理。两处都开了才通。
+- Lightsail 的 Ubuntu 镜像主机上没有额外的 iptables 规则，只有上面这一层云端防火墙要开。
+- 删除实例才停止计费，只是 Stop 仍然收费。删除前先确认备份已经拷出来（第 6 步）。
+- 换别家 VPS（或 OCI）也能用同一套脚本，要求是：Ubuntu 24.04、登录用户 `ubuntu` 且免密 sudo、公网 IPv4、云端防火墙放行 tcp 80 / tcp 443 / udp 443。登录用户不是 `ubuntu` 时设 `WALLET_VM_USER`。
 
 ## 2. 域名（你做）
 
@@ -99,7 +101,7 @@ Host wallet-vm
 ssh wallet-vm
 ```
 
-OCI 的 Ubuntu 镜像默认只允许密钥登录，不用再改 SSH 配置。登录后 `exit` 回到笔记本。
+Lightsail 的 Ubuntu 镜像默认只允许密钥登录，不用再改 SSH 配置。登录后 `exit` 回到笔记本。
 
 ## 4. 初始化 VM
 
@@ -112,10 +114,11 @@ ssh wallet-vm 'bash -s' < infra/scripts/vm-bootstrap.sh
 脚本可以重复跑，按顺序做这些事：
 
 1. `apt update` 加 `dist-upgrade`，装 `ca-certificates curl gnupg rsync cron unattended-upgrades`。
-2. 放行主机防火墙：把 tcp 80、tcp 443、udp 443 插到 `/etc/iptables/rules.v4` 里 22 端口规则之后、末尾 REJECT 之前，并用 `netfilter-persistent save` 持久化。
-3. 从 Docker 官方 apt 源装 Docker CE 和 compose 插件（按 `dpkg --print-architecture` 取 arm64），已装则跳过；把 `ubuntu` 加进 `docker` 组；设置开机自启。
+2. 主机防火墙：主机上有 `/etc/iptables/rules.v4` 时（只有 OCI 的镜像有），把 tcp 80、tcp 443、udp 443 插到 22 端口规则之后、末尾 REJECT 之前并持久化；Lightsail 上没有这个文件，这一步自动跳过。
+3. 从 Docker 官方 apt 源装 Docker CE 和 compose 插件（架构按 `dpkg --print-architecture` 自动取），已装则跳过；把 `ubuntu` 加进 `docker` 组；设置开机自启。
 4. 打开 unattended-upgrades（自动装安全补丁）。
-5. 建 `/opt/wallet_app` 和 `/opt/wallet_app/backups`，属主 `ubuntu`。
+5. 内存不到 2 GB 且还没有 swap 时，建一个 2 GB 的 `/swapfile` 并写进 `/etc/fstab`，`vm.swappiness=10`。
+6. 建 `/opt/wallet_app` 和 `/opt/wallet_app/backups`，属主 `ubuntu`。
 
 结束时脚本会打印 Docker 版本；如果提示 `a reboot is pending`，现在重启一次：
 
@@ -271,7 +274,7 @@ docker image prune -f
 
 | 症状 | 排查 | 常见原因 |
 | --- | --- | --- |
-| 网页打不开 / 证书错误 | `getent hosts <域名>`；`docker compose -p wallet logs --tail=100 caddy`；`sudo iptables -S INPUT` | 域名没解析到 VM IP；OCI Security List 没放行 80 / 443（第 1 步）；VM 的 iptables 没开（重跑 `vm-bootstrap.sh`）；`CADDY_DOMAIN` 写错 |
+| 网页打不开 / 证书错误 | `getent hosts <域名>`；`docker compose -p wallet logs --tail=100 caddy`；| 域名没解析到 VM IP；Lightsail 的 IPv4 Firewall 没放行 80 / 443（第 1 步）；`CADDY_DOMAIN` 写错 |
 | caddy 日志里有 ACME 错误 | 同上，在日志里找 `obtain`、`rateLimited` | 80 端口没通，Let's Encrypt 验证不了；签发次数超过 Let's Encrypt 限额。见下方「临时切测试证书」 |
 | `/health` 通，但页面里 API 报错 | `docker compose -p wallet logs --tail=200 api` | 看日志里的异常；`.env` 的 `ALLOWED_ORIGINS` 与域名不一致；改了 `.env` 但没 `up -d api` |
 | `up` 时 migrate 失败 | `docker compose -p wallet logs db`；`docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml run --rm migrate` | `DATABASE_URL` 的口令或库名与 `POSTGRES_*` 不一致；首次建库后又改了 `POSTGRES_PASSWORD`；db 没起来 |

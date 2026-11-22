@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # infra/scripts/vm-bootstrap.sh -- one-time (re-runnable) initialisation of the deploy VM.
 #
-# Target: Canonical Ubuntu 24.04 (22.04 works too) on OCI (VM.Standard.A1.Flex / arm64), login user `ubuntu`.
+# Target: Ubuntu 24.04 (22.04 works too), amd64 or arm64, login user `ubuntu` with passwordless
+# sudo. Written for AWS Lightsail; also fine on OCI and other VPS images of the same shape.
 # Run it from the laptop:
 #     ssh wallet-vm 'bash -s' < infra/scripts/vm-bootstrap.sh
 # or let deploy.sh do it:   bash infra/scripts/deploy.sh --bootstrap
@@ -12,11 +13,13 @@
 #   c. `ubuntu` joins the docker group, docker service enabled
 #   d. unattended-upgrades switched on
 #   e. host firewall: tcp 80 / tcp 443 / udp 443 inserted before the REJECT rule in
-#      /etc/iptables/rules.v4 and persisted (OCI Ubuntu images ship that file)
-#   f. /opt/wallet_app/{,backups} owned by ubuntu
+#      /etc/iptables/rules.v4 and persisted. Only OCI Ubuntu images ship that file; on
+#      Lightsail and most other providers the host has no such rules and the step is skipped
+#   f. a 2 GB swap file when the machine has less than 2 GB of RAM and no swap yet
+#   g. /opt/wallet_app/{,backups} owned by ubuntu
 #
-# NOTE: the OCI VCN Security List (cloud-side firewall) is NOT touched here; 80/443 must be
-# opened there too, in the OCI console.
+# NOTE: the provider's cloud-side firewall (Lightsail instance firewall, OCI Security List, ...)
+# is NOT touched here; tcp 80, tcp 443 and udp 443 must be opened there too, in its console.
 
 set -euo pipefail
 
@@ -30,8 +33,9 @@ Usage: ssh wallet-vm 'bash -s' < infra/scripts/vm-bootstrap.sh
        bash vm-bootstrap.sh [--help]
 
 Initialises an Ubuntu 24.04 VM for the wallet stack: Docker CE + compose plugin, docker
-group, unattended-upgrades, iptables 80/443 (persisted), and ${APP_DIR}.
-Safe to run repeatedly. Needs passwordless sudo (default on OCI's ubuntu user).
+group, unattended-upgrades, iptables 80/443 where the image ships rules, a swap file on
+small machines, and ${APP_DIR}.
+Safe to run repeatedly. Needs passwordless sudo (default for the ubuntu user on Lightsail / OCI).
 
 Env: WALLET_VM_USER (default ubuntu), WALLET_REMOTE_DIR (default /opt/wallet_app)
 USAGE
@@ -96,7 +100,7 @@ step_unattended_upgrades() {
 
 step_firewall() {
   if [ ! -f /etc/iptables/rules.v4 ]; then
-    log "no /etc/iptables/rules.v4 on this host (not an OCI Ubuntu image?); skipping host firewall"
+    log "no /etc/iptables/rules.v4 on this host (normal outside OCI); nothing to open in the host firewall"
     return 0
   fi
   log "opening tcp 80, tcp 443, udp 443 in the host firewall"
@@ -132,6 +136,36 @@ step_firewall() {
   log "host firewall done (rules changed this run: ${RULES_CHANGED})"
 }
 
+# Small VMs (1 GB) run the stack fine at rest, but an image build or a pg_restore next to the
+# running stack can push them into the OOM killer. A swap file makes those peaks survivable.
+step_swap() {
+  local mem_kb swap_kb
+  mem_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+  swap_kb="$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)"
+  if [ "$mem_kb" -ge 1900000 ]; then
+    log "RAM is $((mem_kb / 1024)) MB; no swap file needed"
+    return 0
+  fi
+  if [ "$swap_kb" -gt 0 ]; then
+    log "swap already active ($((swap_kb / 1024)) MB); leaving it alone"
+  elif [ -e /swapfile ]; then
+    log "/swapfile exists but is not active; enabling it"
+    sudo swapon /swapfile
+  else
+    log "RAM is $((mem_kb / 1024)) MB; creating a 2 GB swap file"
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile >/dev/null
+    sudo swapon /swapfile
+  fi
+  if [ -e /swapfile ] && ! grep -q '^/swapfile ' /etc/fstab; then
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+  fi
+  # Prefer RAM; swap is for peaks only. Same content on every run.
+  echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-wallet-swap.conf >/dev/null
+  sudo sysctl -q -p /etc/sysctl.d/99-wallet-swap.conf
+}
+
 step_dirs() {
   log "preparing ${APP_DIR}"
   sudo mkdir -p "${APP_DIR}/backups"
@@ -151,8 +185,9 @@ step_summary() {
 Next steps:
   * Log out and back in (open a new ssh session) so the '${APP_USER}' docker group
     membership takes effect.
-  * In the OCI console, add Ingress rules to the VCN Security List for tcp 80, tcp 443 and
-    udp 443 (source 0.0.0.0/0). The host firewall is open now, the cloud firewall is not.
+  * In the provider's console, open tcp 80, tcp 443 and udp 443 to 0.0.0.0/0 in the
+    cloud-side firewall (Lightsail: instance -> Networking -> IPv4 Firewall; OCI: the VCN
+    Security List). This script does not touch it.
 MSG
 }
 
@@ -173,6 +208,7 @@ main() {
   step_firewall
   step_docker
   step_unattended_upgrades
+  step_swap
   step_dirs
   step_summary
 }

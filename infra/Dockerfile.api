@@ -17,8 +17,8 @@
 # (every transitive package, frozen from a venv that passed the suite), so a
 # build on the VM resolves exactly the tested set. All of them ship cp312 wheels
 # for amd64 and aarch64 (psycopg2-binary bundles libpq), so the builder needs
-# no compiler and the same Dockerfile builds natively on Oracle A1.Flex (ARM64)
-# and on an amd64 laptop. The platform is deliberately not pinned here.
+# no compiler and the same Dockerfile builds natively on an arm64 VM, an amd64 VM
+# and an amd64 laptop. The platform is deliberately not pinned here.
 #
 # uvicorn runs with --proxy-headers --forwarded-allow-ips=* (decision 14.44):
 # rate limiting counts per first X-Forwarded-For hop, and without these flags

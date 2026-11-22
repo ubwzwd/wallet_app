@@ -80,7 +80,7 @@ ERROR: cannot reach '${HOST}' over ssh (non-interactive, 10 s timeout).
   - Check the '${HOST}' entry in ~/.ssh/config (HostName = the VM's public IP, User ubuntu,
     IdentityFile ~/.ssh/wallet_app_oci), or set WALLET_SSH_HOST to a working alias.
   - Try it by hand:  ssh ${HOST}
-  - Check the VM is running and the OCI Security List allows tcp 22.
+  - Check the VM is running and the provider's cloud firewall allows tcp 22.
 MSG
   exit 2
 fi
@@ -240,7 +240,7 @@ if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
     echo
   else
     warn "https://${DOMAIN}/health did not answer. First certificate issuance can take a minute;
-         also check DNS for ${DOMAIN}, the OCI Security List (80/443) and: on the VM run 'docker ps' and 'docker logs --tail=50 <the caddy container>' (see infra/RUNBOOK.md).
+         also check DNS for ${DOMAIN}, the provider's cloud firewall (80/443) and: on the VM run 'docker ps' and 'docker logs --tail=50 <the caddy container>' (see infra/RUNBOOK.md).
          The stack itself is up (compose --wait passed); only the public check failed, so this is not a deploy failure."
   fi
 else
