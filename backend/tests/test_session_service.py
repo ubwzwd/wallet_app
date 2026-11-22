@@ -5,11 +5,16 @@ injected ``now``, so the time-dependent branches (grace window, expiry,
 pruning) are pinned to exact instants instead of to the wall clock.
 """
 import hashlib
+import threading
+import time
 import uuid
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+
+from app.core.clock import utcnow
 
 from app.core.config import settings
 from app.core.errors import ApiError, ErrorCode
@@ -305,3 +310,107 @@ def test_prune_with_nothing_dead_deletes_nothing(db, user_factory):
 
     assert session_service.prune(db, user.id, now=T0 + timedelta(days=1)) == 0
     assert len(_rows(db)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Revocation racing an in-flight rotation (Postgres, READ COMMITTED)
+# ---------------------------------------------------------------------------
+
+
+def _revoke_all(b, user_id, *, token, newest):
+    session_service.revoke_all_for_user(b, user_id)
+
+
+def _revoke_family(b, user_id, *, token, newest):
+    session_service.revoke_family_of(b, token)
+
+
+def _replay(b, user_id, *, token, newest):
+    # ``token`` was rotated long ago: presenting it again is a replay, which
+    # revokes the family (and commits) before raising.
+    with pytest.raises(ApiError) as excinfo:
+        session_service.rotate(
+            b, token, now=utcnow() + timedelta(seconds=REFRESH_REUSE_GRACE_SECONDS + 60)
+        )
+    _assert_refresh_invalid(excinfo)
+
+
+@pytest.mark.postgres
+@pytest.mark.parametrize(
+    "revoke",
+    [_revoke_all, _revoke_family, _replay],
+    ids=["revoke_all_for_user", "revoke_family_of", "replay"],
+)
+def test_revocation_catches_the_row_a_concurrent_rotate_inserts(migrated_db, revoke):
+    """A revocation that waited on a rotate's row lock still revokes its child.
+
+    Session A rotates the family's newest token and holds its transaction open;
+    session B revokes meanwhile and has to wait on A's row lock. Once A
+    commits, the child A inserted must end up revoked as well: a single UPDATE
+    cannot see it, which would leave a working session behind.
+    """
+    from app.core.security import get_password_hash
+    from app.models import Base
+    from app.models.user import User
+
+    engine = create_engine(migrated_db)
+    try:
+        Base.metadata.create_all(engine)
+        make = sessionmaker(bind=engine, autoflush=False)
+
+        with make() as setup:
+            now = utcnow()
+            user = User(
+                email="race@example.test",
+                password_hash=get_password_hash("correct horse battery"),
+                base_currency="CNY",
+                language="zh",
+                created_at=now,
+                updated_at=now,
+            )
+            setup.add(user)
+            setup.flush()
+            user_id = user.id
+            # ``old`` was rotated well outside the grace window; ``newest`` is
+            # the family's live token, which A is about to rotate.
+            old = session_service.issue(setup, user_id, now=now - timedelta(hours=1))
+            _, newest = session_service.rotate(setup, old, now=now - timedelta(hours=1))
+            setup.commit()
+
+        a = make()
+        b = make()
+        try:
+            _, child = session_service.rotate(a, newest)  # holds newest FOR UPDATE
+
+            errors: list[BaseException] = []
+
+            def run_b() -> None:
+                try:
+                    revoke(b, user_id, token=old, newest=newest)
+                    b.commit()
+                except BaseException as exc:  # surfaced in the main thread
+                    errors.append(exc)
+                    b.rollback()
+
+            thread = threading.Thread(target=run_b)
+            thread.start()
+            time.sleep(0.5)
+            assert thread.is_alive(), "B should be waiting on A's row lock"
+
+            a.commit()
+            thread.join(timeout=10)
+            assert not thread.is_alive()
+            assert not errors, errors
+        finally:
+            a.close()
+            b.close()
+
+        with make() as check:
+            rows = check.execute(select(RefreshToken)).scalars().all()
+            assert len(rows) == 3
+            assert all(r.revoked_at is not None for r in rows)
+            with pytest.raises(ApiError) as excinfo:
+                session_service.rotate(check, child)
+            _assert_refresh_invalid(excinfo)
+    finally:
+        engine.dispose()

@@ -19,7 +19,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import ColumnElement, delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.clock import utcnow
@@ -93,13 +93,34 @@ def issue(
     return token
 
 
+def _revoke_where(db: Session, condition: ColumnElement[bool], now: datetime) -> int:
+    """Revoke every live row matching ``condition``, repeating until none is left.
+
+    One ``UPDATE`` is not enough on Postgres. Under READ COMMITTED, an UPDATE
+    that has to wait on the ``FOR UPDATE`` lock an in-flight :func:`rotate`
+    holds on its presented row re-checks that row once the rotate commits, but
+    it cannot see the child row the rotate inserted: the statement's snapshot
+    predates it. That child would stay live in an otherwise revoked family, and
+    nothing would ever revoke it later. Each further statement takes a fresh
+    snapshot, so another pass picks the child up. The loop ends because any
+    rotate still in flight holds a lock on a live row matching ``condition``,
+    which the previous pass must have waited on; once a pass changes nothing,
+    no such rotate is left. On SQLite the second pass is always a no-op.
+    """
+    total = 0
+    while True:
+        result = db.execute(
+            update(RefreshToken)
+            .where(condition, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        if not result.rowcount:
+            return total
+        total += result.rowcount
+
+
 def _revoke_family(db: Session, family_id: uuid.UUID, now: datetime) -> int:
-    result = db.execute(
-        update(RefreshToken)
-        .where(RefreshToken.family_id == family_id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=now)
-    )
-    return result.rowcount
+    return _revoke_where(db, RefreshToken.family_id == family_id, now)
 
 
 def rotate(db: Session, token: str, *, now: datetime | None = None) -> tuple[uuid.UUID, str]:
@@ -156,12 +177,7 @@ def revoke_family_of(db: Session, token: str, *, now: datetime | None = None) ->
 def revoke_all_for_user(db: Session, user_id: uuid.UUID, *, now: datetime | None = None) -> int:
     """Revoke every live refresh token of ``user_id`` (log out everywhere)."""
     now = now or utcnow()
-    result = db.execute(
-        update(RefreshToken)
-        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=now)
-    )
-    return result.rowcount
+    return _revoke_where(db, RefreshToken.user_id == user_id, now)
 
 
 def prune(db: Session, user_id: uuid.UUID, *, now: datetime | None = None) -> int:
