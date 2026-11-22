@@ -4,6 +4,7 @@
   "validation_error": "有几项填得不对，请检查标红的字段",
   "unauthorized": "登录已过期，请重新登录",
   "invalid_credentials": "邮箱或密码不正确",
+  "refresh_invalid": "登录已过期，请重新登录",
   "not_found": "找不到这条记录，它可能已经被删除，或者你不在这个账本里",
   "forbidden": "你没有权限做这个操作",
   "not_owner": "只有账本创建者（owner）可以做这个操作",

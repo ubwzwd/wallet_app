@@ -4,6 +4,7 @@
   "validation_error": "Some fields need fixing",
   "unauthorized": "Your session expired. Please sign in again.",
   "invalid_credentials": "Incorrect email or password",
+  "refresh_invalid": "Your session expired. Please sign in again.",
   "not_found": "Not found — it may have been deleted, or you're not a member of this ledger",
   "forbidden": "You don't have permission to do that",
   "not_owner": "Only the ledger owner can do that",

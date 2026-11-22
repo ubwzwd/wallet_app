@@ -318,6 +318,28 @@ test('logout revokes the refresh token server-side before forgetting it', async 
   expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
 });
 
+test('logout sends the freshest stored refresh token when it differs from the cached one', async () => {
+  await setAuthTokens({ accessToken: 'stored-token', refreshToken: 'cached-refresh' });
+  mockGet('/me', makeUser());
+  mockPost('/auth/logout', undefined, 204);
+  renderAuth();
+  await expectProbe('authenticated:alice@example.com');
+
+  // Another tab rotated the refresh token behind this tab's in-memory copy.
+  await AsyncStorage.setItem(REFRESH_TOKEN_KEY, 'rotated-refresh');
+
+  await act(async () => {
+    await captured!.logout();
+  });
+
+  expect(probeText()).toBe('anonymous:none');
+  await waitFor(() => expect(postsTo('/auth/logout')).toHaveLength(1));
+  expect(JSON.parse(String(postsTo('/auth/logout')[0].data))).toEqual({
+    refresh_token: 'rotated-refresh',
+  });
+  expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
+});
+
 test.each([
   ['fails', () => api.mockNetworkError('/auth/logout')],
   [

@@ -273,6 +273,8 @@ cd /opt/wallet_app && docker compose -p wallet exec api python scripts/reset_pas
 
 改完 `.env` 后在 VM 上 `cd /opt/wallet_app && docker compose -p wallet --env-file infra/.env -f infra/docker-compose.prod.yml up -d api` 生效（已经签发的令牌不受影响，按它们签发时的期限走）。
 
+**一次性：部署带刷新令牌的这一版时。** 先在 VM 的 `/opt/wallet_app/infra/.env` 里设好 `ACCESS_TOKEN_EXPIRE_MINUTES=30`，再照常 `up -d api`。这一版之前签发的登录状态没有刷新令牌，所以每个人要在旧访问令牌过期时重新登录一次（或者马上退出再登录）。
+
 **紧急让所有人下线。** 换掉 `.env` 里的 `SECRET_KEY`（`openssl rand -hex 32`）后 `up -d api`：所有访问令牌立刻失效。但**刷新令牌还在库里**，网页收到 401 会拿它换出新的访问令牌，人并不会真的下线。要彻底清，再把库里的刷新令牌全部吊销：
 
 ```bash

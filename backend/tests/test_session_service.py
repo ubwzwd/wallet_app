@@ -15,10 +15,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.clock import utcnow
-
 from app.core.config import settings
 from app.core.errors import ApiError, ErrorCode
+from app.core.security import get_password_hash
+from app.models import Base
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
 from app.services import session_service
 from app.services.session_service import REFRESH_REUSE_GRACE_SECONDS
 
@@ -349,10 +351,6 @@ def test_revocation_catches_the_row_a_concurrent_rotate_inserts(migrated_db, rev
     commits, the child A inserted must end up revoked as well: a single UPDATE
     cannot see it, which would leave a working session behind.
     """
-    from app.core.security import get_password_hash
-    from app.models import Base
-    from app.models.user import User
-
     engine = create_engine(migrated_db)
     try:
         Base.metadata.create_all(engine)

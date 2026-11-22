@@ -1,8 +1,9 @@
 """Password hashing, JWT issuing and the authenticated-user dependency.
 
-Authentication itself is unchanged from the previous version (bcrypt hashes,
-``sub`` carries the user id, no refresh tokens, no server side logout — see
-docs/target-design/03-backend-api.md §3.1). What changed is the failure shape:
+Passwords are bcrypt hashes and ``sub`` carries the user id (see
+docs/target-design/03-backend-api.md §3.1). Access tokens are short-lived JWTs
+paired with rotating, server-side revocable refresh tokens (see
+app/services/session_service.py, decision §14.67). The failure shape is unified:
 ``HTTPBearer(auto_error=False)`` plus an explicit check, so a missing, invalid
 or expired token is always ``401`` with ``code=unauthorized`` instead of
 FastAPI's default ``403 "Not authenticated"``.

@@ -11,11 +11,12 @@
  */
 import type { TFunction } from 'i18next';
 
-/** Order matches 03 §4.2 exactly — 44 codes. */
+/** Order matches 03 §4.2 exactly — 45 codes. */
 export const BACKEND_ERROR_CODES = [
   'validation_error',
   'unauthorized',
   'invalid_credentials',
+  'refresh_invalid',
   'not_found',
   'forbidden',
   'not_owner',

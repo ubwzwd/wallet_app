@@ -23,6 +23,7 @@ import {
   getAuthToken,
   getRefreshToken,
   meApi,
+  readStoredTokens,
   setAuthTokens,
   setOnUnauthorized,
   type AuthResponse,
@@ -215,8 +216,9 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
   const logout = React.useCallback(async (): Promise<void> => {
     // Revoke this device's refresh token server-side. The token is read and the request
     // sent before the local wipe below; its outcome is never awaited, so a slow or failed
-    // call cannot hold logout up (§14.67).
-    const refreshToken = await getRefreshToken();
+    // call cannot hold logout up (§14.67). The stored token is preferred over the in-memory
+    // one: another tab may have rotated it since this tab last looked.
+    const refreshToken = (await readStoredTokens()).refreshToken ?? (await getRefreshToken());
     if (refreshToken) {
       void authApi.logout({ refresh_token: refreshToken }).catch(() => undefined);
     }

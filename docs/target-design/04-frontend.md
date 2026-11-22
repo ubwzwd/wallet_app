@@ -349,7 +349,7 @@ v3.0 前端是一次**结构性重写**，不是增量改造：账本（ledger�
 1. **`login()` / `register()` 期间不再切 `isLoading`**。现状里它们一进来就 `setIsLoading(true)`（`frontend/src/store/AuthContext.tsx:71,98`），而 `AppContent` 在 `isLoading` 为真时把整棵树换成加载指示器（`frontend/App.tsx:16-23`），于是登录失败时表单被卸载重挂、错误提示打在已卸载的组件上、Web 上什么都看不见（现状文档 §2.5）。目标：`isLoading` 只表示**启动引导**；提交中的状态由页面自己的 mutation `isPending` 表达。
 2. **401 要通知 `AuthContext`**。拦截器不再直接动存储，而是调用一个注册进来的 `onUnauthorized()` 回调，由 `AuthContext` 清存储 + `setUser(null)`，路由守卫随即接管（§1.5 第 6 条；条目编号 2026-09-27 按决策 §14.66 同步）。`GET /me` 自身的 401 仍然走启动引导的那条路径。
 3. **接口路径**：`GET /me` / `PATCH /me`（决策 §11 的「我」分组），不是现状的 `/auth/me`。`POST /auth/register`、`POST /auth/login` 不变。**`/auth/me` 不再注册，也不保留别名**——应用尚未上线，目标设计里不留任何过渡兼容（决策 §14.42）。
-4. **两把令牌，401 先刷新再掉线**（决策 §14.67）。本地存储两把键：现有的 `AUTH_TOKEN_KEY = '@wallet_app:auth_token'`（访问令牌）与新增的 `REFRESH_TOKEN_KEY = '@wallet_app:refresh_token'`（刷新令牌），都放 AsyncStorage（网页即 `localStorage`），**不用 Cookie**。`login()` / `register()` 成功后两把一起写。请求得到 401 时由拦截器先单飞刷新、成功就透明重放（§3.2）；第 2 条的 `onUnauthorized()` 因此**只在刷新被服务端以 401 拒绝时**才被调用，由 `AuthContext` 清两把令牌 + `setUser(null)`。
+4. **两把令牌，401 先刷新再掉线**（决策 §14.67）。本地存储两把键：现有的 `AUTH_TOKEN_KEY = '@wallet_app:auth_token'`（访问令牌）与新增的 `REFRESH_TOKEN_KEY = '@wallet_app:refresh_token'`（刷新令牌），都放 AsyncStorage（网页即 `localStorage`），**不用 Cookie**。`login()` / `register()` 成功后两把一起写。请求得到 401 时由拦截器先单飞刷新、成功就透明重放（§3.2）；第 2 条的 `onUnauthorized()` 因此**只在会话确实结束时**才被调用——刷新被服务端拒绝（§3.2 的规则），或重放后的请求仍然 401——由 `AuthContext` 清两把令牌 + `setUser(null)`。
 5. **启动自检只在 401 时清令牌**（决策 §14.67）。现状是任何失败（含离线、5xx）都清令牌，一次断网就毁掉 90 天的会话。改为：`GET /me` 返回 200 → `authenticated`；返回 **401**（此时拦截器已经试过刷新并被拒）→ 清令牌、`anonymous`；**其他失败**（离线、超时、5xx）→ 进入 `anonymous` 但**保留**本地令牌，下次刷新页面还能恢复。
 6. **`logout()` 先通知服务端**（决策 §14.67）：先尽力调一次 `POST /auth/logout`（带本地刷新令牌；失败、超时一律忽略，不阻塞登出），再做原有的本地清理。
 7. **新增 `logoutAll()`**（决策 §14.67）：调 `POST /auth/logout-all`（需要访问令牌）；**成功后**才做与 `logout()` 相同的本地清理（不必再调 `/auth/logout`，服务端已吊销全部）；失败则抛错、**保持登录**，由页面提示（§4.13）。
@@ -519,9 +519,9 @@ export const uploadClient = axios.create({ baseURL: API_BASE_URL, timeout: 60_00
 - **触发条件**：请求得到 401，且路径**不是** `/auth/login`、`/auth/register`、`/auth/refresh`、`/auth/logout` 这四个之一，且这个请求**没有重试过**。
 - **成功**：刷新换回新的访问令牌与新的刷新令牌，两把一起写本地存储与内存缓存，然后用新访问令牌**原样重放一次**原请求；调用方无感。重放仍然 401 不再刷新，按 `onUnauthorized` 处理。
 - **单飞**：同一时刻并发的多个 401 **共用一次刷新**（模块里持有同一个进行中的 Promise），不会各发一次 `/auth/refresh`——后端把已轮换过的令牌再来视为重放（30 秒内宽限，超出整条 family 被吊销），并发多发既浪费也危险。
-- **多标签页**：刷新前先**绕过内存缓存重读存储**；如果存储里的访问令牌已经和失败请求用的那把不同（别的标签页刚刷新过），就直接采用存储里的那对令牌并重放，**不调** `/auth/refresh`。
-- **刷新被拒**：只有刷新被服务端以 **401**（`refresh_invalid`）拒绝才走 `onUnauthorized()`：清两把本地令牌、`AuthContext` 回 `anonymous`，路由守卫把人带回登录页。
-- **网络错误或 5xx 不登出**：刷新请求因网络错误或 5xx 失败时，原请求以该错误 reject，两把令牌**原样保留**，下次请求再试；一次断网或后端重启不会毁掉 90 天的会话。
+- **多标签页**：刷新前先**绕过内存缓存重读存储**；如果存储里的访问令牌已经和失败请求用的那把不同（别的标签页刚刷新过），就直接采用存储里的那对令牌并重放，**不调** `/auth/refresh`。但只有存储里那把访问令牌的 JWT `exp` **仍在未来**（留 5 秒余量：距过期不足 5 秒按已过期算；读不出 `exp` 则照采用）才采用；若它自己也已过期（两个标签页都闲置过了它的寿命），就不采用，转而用存储里的刷新令牌（那是另一个标签页轮换出来的）去刷新。
+- **刷新被拒**：刷新请求得到 **401**（`refresh_invalid`）或其他任何 4xx（408、429 除外，例如存储里的令牌被改坏而得到 422）都视为服务端拒绝了这枚刷新令牌，走 `onUnauthorized()`：清两把本地令牌、`AuthContext` 回 `anonymous`，路由守卫把人带回登录页。存储里根本没有刷新令牌时同样走 `onUnauthorized()`。
+- **暂时失败不登出**：刷新请求没有收到响应（断网、超时）、得到 408、429 或 5xx 时，原请求以该错误 reject，两把令牌**原样保留**，下次请求再试；一次断网或后端重启不会毁掉 90 天的会话。
 - **存放**：两把令牌都在 AsyncStorage（网页即 `localStorage`），键见 §2.1；不用 Cookie。
 
 ### 3.3 类型定义

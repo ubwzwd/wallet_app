@@ -276,6 +276,7 @@ export default function PersonalSettingsScreen(): React.JSX.Element {
         variant="danger"
         size="lg"
         fullWidth
+        disabled={loggingOutAll}
         onPress={signOut}
       />
       <View style={{ gap: space['2'] }}>

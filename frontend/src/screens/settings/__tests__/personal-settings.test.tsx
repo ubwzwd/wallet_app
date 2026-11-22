@@ -11,6 +11,7 @@ import { AppShell } from '@/navigation';
 import { CurrentLedgerProvider } from '@/store';
 import { PREF_NAMES, getPref, setPref } from '@/utils/prefs';
 import {
+  apiUrl,
   makeLedger,
   makeUser,
   mockApi,
@@ -256,6 +257,21 @@ test('confirming 登出所有设备 revokes everything once and lands on /login 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/login'));
   expect(mockRouter.replace).toHaveBeenCalledTimes(1);
   expect(logoutAllCalls()).toBe(1);
+});
+
+test('退出登录 is disabled while 登出所有设备 is pending', async () => {
+  api.mock.onPost(apiUrl('/auth/logout-all')).reply(() => new Promise(() => undefined));
+  await renderSettings();
+
+  expect(screen.getByTestId('settings-logout').props.accessibilityState?.disabled).toBe(false);
+
+  fireEvent.press(await screen.findByTestId('settings-logout-all'));
+  fireEvent.press(await screen.findByTestId('confirm-accept'));
+
+  await waitFor(() =>
+    expect(screen.getByTestId('settings-logout').props.accessibilityState?.disabled).toBe(true),
+  );
+  expect(screen.getByTestId('settings-logout-all').props.accessibilityState?.disabled).toBe(true);
 });
 
 test('a failed 登出所有设备 says so, stays on the page and can be tried again', async () => {

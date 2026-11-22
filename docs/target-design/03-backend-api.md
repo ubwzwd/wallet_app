@@ -27,7 +27,7 @@
 |---|---|---|---|---|
 | 1 | `POST /api/v1/auth/register` | `POST /api/v1/auth/register` | 保留 + 增强 | 受 `REGISTRATION_OPEN` 控制；注册时自动建默认账本（决策 §2、§9）；响应多 `refresh_token` 与 `expires_in`（决策 §14.67）（2026-11-23 同步） |
 | 2 | `POST /api/v1/auth/login` | `POST /api/v1/auth/login` | 保留 + 增强 | 增加同 IP 每分钟 10 次限流（决策 §9）；响应多 `refresh_token` 与 `expires_in`（决策 §14.67）（2026-11-23 同步） |
-| 2a–2c | — | `POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`、`POST /api/v1/auth/logout-all` | 新增 | 刷新令牌换新、登出（吊销令牌所在 family）、登出所有设备；前两条公开，第三条需登录；失败统一 401 `refresh_invalid`（决策 §14.67，§5.2a–§5.2c）（2026-11-23 按决策 §14.67 同步） |
+| 2a–2c | — | `POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`、`POST /api/v1/auth/logout-all` | 新增 | 刷新令牌换新、登出（吊销令牌所在 family）、登出所有设备；前两条公开，第三条需登录；只有 `/auth/refresh` 失败时回 401 `refresh_invalid`，`/auth/logout` 永远 204，`/auth/logout-all` 未登录时回 401 `unauthorized`（决策 §14.67，§5.2a–§5.2c）（2026-11-23 按决策 §14.67 同步） |
 | 3 | — | `GET /api/v1/me` | 新增 | 决策 §11「我」组；含 `display_name`（决策 §14.40） |
 | 4 | — | `PATCH /api/v1/me` | 新增 | 默认币种、语言、显示名（决策 §11、§14.40） |
 | 5 | — | `GET /api/v1/categories` | 新增 | 公开、带 `version`、`Cache-Control: immutable`（决策 §1.3、§11） |
@@ -666,7 +666,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=90
 | `validation_error` | 422 / 400 | **422**：请求体 / 查询参数 / 路径参数不满足 pydantic schema（由 §4.1 的 `RequestValidationError` 处理器统一产出）。**400**：schema 过了、但业务层校验没过且没有更专属的 code（币种不在支持列表、金额为 0、符号与 `kind` 冲突、非转账行却带了 `transfer_role` 等）。两种情形共用这一个 code，用状态码区分：422 = 形状不对，400 = 形状对但值不合法 |
 | `unauthorized` | 401 | 缺令牌、令牌无效或过期 |
 | `invalid_credentials` | 401 | 登录邮箱或密码错 |
-| `refresh_invalid` | 401 | `POST /auth/refresh` 失败：刷新令牌查不到、已吊销、已过期，或已轮换过且超出 30 秒宽限的重放（四种对外是同一个响应，决策 §14.67 d；§5.2a）（2026-11-23 按决策 §14.67 同步） |
+| `refresh_invalid` | 401 | `POST /auth/refresh` 失败：刷新令牌查不到、已吊销、已过期，或已轮换过且超出 30 秒宽限的重放（四种对外是同一个响应，决策 §14.67 e；§5.2a）（2026-11-23 按决策 §14.67 同步） |
 | `not_found` | 404 | 资源不存在，或对当前用户不可见（§3.3） |
 | `forbidden` | 403 | 通用权限拒绝（保留给未来） |
 | `not_owner` | 403 | 需要 owner 角色的操作由 member 发起 |
@@ -913,6 +913,7 @@ POST /api/v1/auth/refresh
 | 状态码 | code | 条件 |
 |---|---|---|
 | 401 | `refresh_invalid` | 上面 a / b / c / d 四种失败：查不到、已吊销、已过期、宽限外重放。**对外是同一个响应** `{"detail": "Refresh token is invalid or expired", "code": "refresh_invalid"}`，调用方无法分辨是哪一种 |
+| 422 | `validation_error` | 请求体不合 schema（`refresh_token` 缺失或长度不在 1..512，或带了未知字段）；见 §5.0 |
 
 不做限流：令牌 384 位随机，无法枚举。本端点公开，所以 §5.0 的通用 401 `unauthorized` 在这里不会出现；`GET` 类接口与 `get_current_user` 的 401 `unauthorized` 完全不变。
 

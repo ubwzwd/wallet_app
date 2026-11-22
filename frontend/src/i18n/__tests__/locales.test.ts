@@ -45,19 +45,19 @@ function interpVars(s: string): string[] {
 describe('errors.json <-> backend error-code registry (03 §4.2, 04 §3.7)', () => {
   const expected = new Set<string>([...BACKEND_ERROR_CODES, ...LOCAL_ERROR_CODES]);
 
-  test('registry has exactly 44 backend codes and 2 local codes (46 total)', () => {
-    expect(BACKEND_ERROR_CODES.length).toBe(44);
+  test('registry has exactly 45 backend codes and 2 local codes (47 total)', () => {
+    expect(BACKEND_ERROR_CODES.length).toBe(45);
     expect(LOCAL_ERROR_CODES.length).toBe(2);
-    expect(expected.size).toBe(46);
+    expect(expected.size).toBe(47);
   });
 
   for (const lang of ['zh', 'en'] as const) {
-    test(`${lang}/errors.json has exactly the 46 registry keys, no more, no less`, () => {
+    test(`${lang}/errors.json has exactly the 47 registry keys, no more, no less`, () => {
       const keys = new Set(Object.keys(resources[lang].errors));
       const missing = [...expected].filter((k) => !keys.has(k));
       const extra = [...keys].filter((k) => !expected.has(k));
       expect({ missing, extra }).toEqual({ missing: [], extra: [] });
-      expect(keys.size).toBe(46);
+      expect(keys.size).toBe(47);
     });
 
     test(`${lang}/errors.json has no empty strings`, () => {
