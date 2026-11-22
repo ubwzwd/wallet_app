@@ -26,6 +26,9 @@ export const API_BASE_URL: string = resolveApiBaseUrl(
 /** AsyncStorage key for the JWT — unchanged from v2 so existing sessions survive. */
 export const AUTH_TOKEN_KEY = '@wallet_app:auth_token';
 
+/** AsyncStorage key for the opaque refresh token (decision §14.67; localStorage on web). */
+export const REFRESH_TOKEN_KEY = '@wallet_app:refresh_token';
+
 /** Value sent as the `X-Client` header on every request (03 §4.7; ≤16 chars). */
 export const CLIENT_NAME = 'web';
 

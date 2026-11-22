@@ -15,8 +15,12 @@ export {
   uploadClient,
   clearAuthToken,
   getAuthToken,
+  getRefreshToken,
+  readStoredTokens,
   setAuthToken,
+  setAuthTokens,
   setOnUnauthorized,
+  type AuthTokens,
 } from './client';
 export { normalizeParams, serializeParams, toSearchParams } from './params';
 

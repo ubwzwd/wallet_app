@@ -6,8 +6,8 @@
  *  1. `login()` / `register()` never move the status back to `bootstrapping`; the
  *     submitting state belongs to the form's own mutation, so the form is not
  *     unmounted while it is showing an error.
- *  2. A 401 from any request reaches us through `setOnUnauthorized()` — the axios
- *     interceptor no longer touches storage itself.
+ *  2. A 401 the axios interceptor could not cure with a refresh (decision §14.67)
+ *     reaches us through `setOnUnauthorized()`; clearing the tokens then is our job.
  *  3. The profile lives at `GET /me`, not `/auth/me` (decision §14.42).
  *
  * The `QueryClient` arrives as a prop instead of through `useQueryClient()`, so this
@@ -17,12 +17,15 @@ import React from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
+  ApiClientError,
   authApi,
   clearAuthToken,
   getAuthToken,
+  getRefreshToken,
   meApi,
-  setAuthToken,
+  setAuthTokens,
   setOnUnauthorized,
+  type AuthResponse,
   type LoginRequest,
   type RegisterRequest,
   type User,
@@ -41,6 +44,11 @@ export interface AuthContextValue {
   login(body: LoginRequest): Promise<void>;
   register(body: RegisterRequest): Promise<void>;
   logout(): Promise<void>;
+  /**
+   * Sign out every device (`POST /auth/logout-all`), then clean up locally exactly like
+   * `logout()`. A failure is thrown to the caller and leaves this session untouched.
+   */
+  logoutAll(): Promise<void>;
   refreshUser(): Promise<void>;
   /** Write a freshly returned profile (e.g. after `PATCH /me`) without a round trip. */
   setUser(user: User | null): void;
@@ -130,12 +138,16 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
       }
       try {
         await loadProfile();
-      } catch {
-        // Any failure — 401, 5xx or offline — lands on anonymous. See the note in
-        // the task report: we prefer a login screen over a permanently stuck splash.
+      } catch (err) {
+        // Any failure lands on anonymous — a login screen beats a permanently stuck
+        // splash — but only a 401 (the interceptor's refresh was refused too) forgets the
+        // tokens. Offline or a 5xx keeps them, so a reload once the network is back
+        // restores the session instead of one outage costing 90 days of it (§14.67).
         if (cancelled) return;
-        await clearAuthToken();
-        if (cancelled) return;
+        if (err instanceof ApiClientError && err.status === 401) {
+          await clearAuthToken();
+          if (cancelled) return;
+        }
         goAnonymous();
       }
     })();
@@ -155,8 +167,12 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
   }, [goAnonymous, queryClient]);
 
   const finishSignIn = React.useCallback(
-    async (token: string): Promise<void> => {
-      await setAuthToken(token);
+    async (res: AuthResponse): Promise<void> => {
+      // `?? null` guards a reply from a backend that predates refresh tokens.
+      await setAuthTokens({
+        accessToken: res.access_token,
+        refreshToken: res.refresh_token ?? null,
+      });
       try {
         await loadProfile();
       } catch (err) {
@@ -172,7 +188,7 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
     async (body: LoginRequest): Promise<void> => {
       // Note: no `setStatus('bootstrapping')` here — the form owns the pending state.
       const res = await authApi.login(body);
-      await finishSignIn(res.access_token);
+      await finishSignIn(res);
     },
     [finishSignIn],
   );
@@ -180,12 +196,13 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
   const register = React.useCallback(
     async (body: RegisterRequest): Promise<void> => {
       const res = await authApi.register(body);
-      await finishSignIn(res.access_token);
+      await finishSignIn(res);
     },
     [finishSignIn],
   );
 
-  const logout = React.useCallback(async (): Promise<void> => {
+  /** The local half of every sign-out: tokens, state, caches and ledger prefs. */
+  const clearLocalSession = React.useCallback(async (): Promise<void> => {
     await clearAuthToken();
     goAnonymous();
     queryClient.clear();
@@ -193,8 +210,27 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
     await setPref(PREF_NAMES.lastLedgerId, null);
     // This tab's current ledger (§14.66 b) goes too, so the next account starts fresh.
     await setSessionPref(PREF_NAMES.currentLedgerId, null);
-    // Navigating to /login is the caller's job (04 §1.5 rule 5).
   }, [goAnonymous, queryClient]);
+
+  const logout = React.useCallback(async (): Promise<void> => {
+    // Revoke this device's refresh token server-side. The token is read and the request
+    // sent before the local wipe below; its outcome is never awaited, so a slow or failed
+    // call cannot hold logout up (§14.67).
+    const refreshToken = await getRefreshToken();
+    if (refreshToken) {
+      void authApi.logout({ refresh_token: refreshToken }).catch(() => undefined);
+    }
+    await clearLocalSession();
+    // Navigating to /login is the caller's job (04 §1.5 rule 5).
+  }, [clearLocalSession]);
+
+  const logoutAll = React.useCallback(async (): Promise<void> => {
+    // A failure propagates before anything local is touched: the session stays as it was.
+    await authApi.logoutAll();
+    // Every refresh token is already revoked, this device's included — no /auth/logout.
+    await clearLocalSession();
+    // Navigating to /login is the caller's job, as for logout().
+  }, [clearLocalSession]);
 
   const refreshUser = React.useCallback(async (): Promise<void> => {
     await loadProfile();
@@ -207,8 +243,8 @@ export function AuthProvider({ queryClient, children }: AuthProviderProps): Reac
   }, []);
 
   const value = React.useMemo<AuthContextValue>(
-    () => ({ status, user, login, register, logout, refreshUser, setUser }),
-    [status, user, login, register, logout, refreshUser, setUser],
+    () => ({ status, user, login, register, logout, logoutAll, refreshUser, setUser }),
+    [status, user, login, register, logout, logoutAll, refreshUser, setUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

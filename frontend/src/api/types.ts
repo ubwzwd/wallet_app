@@ -38,7 +38,13 @@ export interface LoginRequest { email: string; password: string; }
 export interface RegisterRequest {
   email: string; password: string; base_currency: string; language?: 'zh' | 'en';
 }
-export interface AuthResponse { access_token: string; token_type: 'bearer'; }
+// POST /auth/register、/auth/login、/auth/refresh 共用（决策 §14.67）
+// expires_in = 访问令牌寿命秒数；refresh_token 是不透明字符串，每次刷新都换新
+export interface AuthResponse {
+  access_token: string; token_type: 'bearer'; refresh_token: string; expires_in: number;
+}
+// POST /auth/refresh、/auth/logout
+export interface RefreshRequest { refresh_token: string; }
 
 // ---------- 分类（决策 §1.3）----------
 // GET /categories：children 永远是数组，没有二级时是空数组
