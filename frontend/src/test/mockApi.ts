@@ -1,14 +1,21 @@
 /**
  * axios-mock-adapter harness shared by every test that touches the API layer (04 §8.2).
  *
- * One adapter serves both `apiClient` and `uploadClient`: the adapter function that
- * `MockAdapter` installs on `apiClient` is copied onto `uploadClient`, so a single
- * `mock` object holds all handlers and one `history` records both instances.
+ * One adapter serves `apiClient`, `uploadClient` and the interceptor-free
+ * `authRefreshClient` (`POST /auth/refresh`): the adapter function that `MockAdapter`
+ * installs on `apiClient` is copied onto the other two, so a single `mock` object holds
+ * all handlers and one `history` records every instance.
  */
 import type { AxiosAdapter } from 'axios';
 import MockAdapter from 'axios-mock-adapter';
 
-import { apiClient, resetAuthTokenCache, setOnUnauthorized, uploadClient } from '@/api/client';
+import {
+  apiClient,
+  authRefreshClient,
+  resetAuthTokenCache,
+  setOnUnauthorized,
+  uploadClient,
+} from '@/api/client';
 import { API_BASE_URL } from '@/constants/config';
 
 export interface MockApi {
@@ -16,7 +23,7 @@ export interface MockApi {
   mock: MockAdapter;
   /** Forget handlers and history, but stay installed. */
   reset(): void;
-  /** Uninstall from both instances and drop the auth/401 state the client holds. */
+  /** Uninstall from every instance and drop the auth/401 state the client holds. */
   restore(): void;
   mockGet(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
   mockPost(path: string, body?: unknown, status?: number, headers?: Record<string, string>): void;
@@ -36,11 +43,13 @@ let active: MockApi | null = null;
  */
 const ORIGINAL_API_ADAPTER = apiClient.defaults.adapter;
 const ORIGINAL_UPLOAD_ADAPTER = uploadClient.defaults.adapter;
+const ORIGINAL_REFRESH_ADAPTER = authRefreshClient.defaults.adapter;
 
-/** Put both instances back on their as-built adapters. Safe to call at any time. */
+/** Put every instance back on their as-built adapters. Safe to call at any time. */
 function uninstall(): void {
   apiClient.defaults.adapter = ORIGINAL_API_ADAPTER;
   uploadClient.defaults.adapter = ORIGINAL_UPLOAD_ADAPTER;
+  authRefreshClient.defaults.adapter = ORIGINAL_REFRESH_ADAPTER;
 }
 
 /** Absolute URL for a path written relative to the API base, e.g. `/ledgers`. */
@@ -58,6 +67,7 @@ export function mockApi(): MockApi {
   uninstall();
   const mock = new MockAdapter(apiClient);
   uploadClient.defaults.adapter = apiClient.defaults.adapter as AxiosAdapter;
+  authRefreshClient.defaults.adapter = apiClient.defaults.adapter as AxiosAdapter;
 
   const reply =
     (verb: 'onGet' | 'onPost' | 'onPut' | 'onPatch' | 'onDelete') =>

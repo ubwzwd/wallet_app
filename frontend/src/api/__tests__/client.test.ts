@@ -2,14 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   apiClient,
+  authRefreshClient,
   clearAuthToken,
+  getAuthToken,
+  getRefreshToken,
+  readStoredTokens,
   resetAuthTokenCache,
   setAuthToken,
+  setAuthTokens,
   setOnUnauthorized,
   uploadClient,
 } from '@/api/client';
 import { ApiClientError, isApiClientError, isClientError, normalizeAxiosError } from '@/api/errors';
-import { AUTH_TOKEN_KEY, CLIENT_NAME } from '@/constants/config';
+import { AUTH_TOKEN_KEY, CLIENT_NAME, REFRESH_TOKEN_KEY } from '@/constants/config';
 import { mockApi, type MockApi } from '@/test/mockApi';
 
 /** axios 1.x hands back `AxiosHeaders`; history entries may hold a plain object. */
@@ -79,6 +84,61 @@ describe('api client', () => {
     });
   });
 
+  describe('token storage (§14.67)', () => {
+    it('setAuthTokens() writes both keys and both in-memory copies', async () => {
+      await setAuthTokens({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+      expect(await AsyncStorage.getItem(AUTH_TOKEN_KEY)).toBe('access-1');
+      expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBe('refresh-1');
+      expect(await getAuthToken()).toBe('access-1');
+      expect(await getRefreshToken()).toBe('refresh-1');
+    });
+
+    it('hydrates the refresh token from storage on first use', async () => {
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, 'access-stored');
+      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-stored');
+      resetAuthTokenCache();
+      expect(await getRefreshToken()).toBe('refresh-stored');
+      expect(await getAuthToken()).toBe('access-stored');
+    });
+
+    it('clearAuthToken() forgets both tokens', async () => {
+      await setAuthTokens({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+      await clearAuthToken();
+      expect(await AsyncStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+      expect(await AsyncStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
+      expect(await getAuthToken()).toBeNull();
+      expect(await getRefreshToken()).toBeNull();
+    });
+
+    it('setAuthToken() replaces the access token alone', async () => {
+      await setAuthTokens({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+      await setAuthToken('access-2');
+      expect(await AsyncStorage.getItem(AUTH_TOKEN_KEY)).toBe('access-2');
+      expect(await getRefreshToken()).toBe('refresh-1');
+    });
+
+    it('readStoredTokens() bypasses the in-memory copies', async () => {
+      await setAuthTokens({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+      // Another tab writes storage; this tab's memory is not told.
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, 'access-tab2');
+      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-tab2');
+      expect(await getAuthToken()).toBe('access-1');
+      expect(await readStoredTokens()).toEqual({
+        accessToken: 'access-tab2',
+        refreshToken: 'refresh-tab2',
+      });
+    });
+
+    it('authRefreshClient carries no interceptors', () => {
+      const count = (manager: { handlers?: ReadonlyArray<unknown> }): number =>
+        (manager.handlers ?? []).filter(Boolean).length;
+      expect(count(authRefreshClient.interceptors.request)).toBe(0);
+      expect(count(authRefreshClient.interceptors.response)).toBe(0);
+      expect(count(apiClient.interceptors.response)).toBe(1);
+      expect(count(uploadClient.interceptors.response)).toBe(1);
+    });
+  });
+
   describe('401 handling (04 §2.1)', () => {
     it('fires onUnauthorized exactly once for two concurrent 401s', async () => {
       const cb = jest.fn();
@@ -91,7 +151,7 @@ describe('api client', () => {
       expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    it('does not touch storage itself — the callback owns that', async () => {
+    it('does not clear storage itself on a 401 — the callback owns that', async () => {
       await setAuthToken('jwt-abc');
       setOnUnauthorized(jest.fn());
       api.mockGet('/me', { detail: 'Not authenticated', code: 'unauthorized' }, 401);
